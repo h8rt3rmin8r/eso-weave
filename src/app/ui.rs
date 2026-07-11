@@ -8,7 +8,7 @@
 //! content, an optional log section, and an inline settings view), keeping to a
 //! small, stable set of egui widgets.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 
@@ -82,6 +82,7 @@ pub struct EsoWeaveApp {
     settings_open: bool,
     settings_draft: Option<SettingsForm>,
     confirm_uninstall: bool,
+    toast: Option<widgets::Toast>,
 }
 
 impl EsoWeaveApp {
@@ -96,6 +97,7 @@ impl EsoWeaveApp {
             settings_open: false,
             settings_draft: None,
             confirm_uninstall: false,
+            toast: None,
         }
     }
 
@@ -170,6 +172,26 @@ impl eframe::App for EsoWeaveApp {
         for intent in intents {
             self.model.apply_intent(intent);
         }
+
+        // Coalesced auto-save: flush any settled changes and confirm with a toast.
+        let now = Instant::now();
+        if self.model.maybe_flush(now) {
+            self.toast = Some(widgets::Toast::new(strings::SAVED_TOAST, now));
+        }
+        let mut clear_toast = false;
+        if let Some(toast) = &self.toast {
+            if toast.expired(now) {
+                clear_toast = true;
+            } else {
+                let palette = crate::app::theme::palette(self.ui_prefs.theme);
+                toast.show(&ctx, &palette, now);
+                ctx.request_repaint();
+            }
+        }
+        if clear_toast {
+            self.toast = None;
+        }
+
         if exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }

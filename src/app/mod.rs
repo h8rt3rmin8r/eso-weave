@@ -18,9 +18,10 @@ pub mod widgets;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
+use crate::config::state::{SessionState, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState};
 use crate::input::InputEngine;
@@ -311,6 +312,66 @@ pub struct AppView {
     pub log_filter: LevelName,
 }
 
+/// Coalesces persistence so a continuous edit results in a single settle-write.
+///
+/// A change marks the config and/or session store dirty and records the time.
+/// [`should_flush`](SaveScheduler::should_flush) becomes true once the store is
+/// dirty and the most recent change has settled for the configured interval.
+#[derive(Debug)]
+pub struct SaveScheduler {
+    dirty_config: bool,
+    dirty_session: bool,
+    last_change: Option<Instant>,
+    settle: Duration,
+}
+
+impl SaveScheduler {
+    /// Creates a scheduler that flushes once a change has settled for `settle`.
+    pub fn new(settle: Duration) -> Self {
+        Self {
+            dirty_config: false,
+            dirty_session: false,
+            last_change: None,
+            settle,
+        }
+    }
+
+    /// Marks the configuration store dirty as of `now`.
+    pub fn mark_config(&mut self, now: Instant) {
+        self.dirty_config = true;
+        self.last_change = Some(now);
+    }
+
+    /// Marks the session store dirty as of `now`.
+    pub fn mark_session(&mut self, now: Instant) {
+        self.dirty_session = true;
+        self.last_change = Some(now);
+    }
+
+    /// Whether anything is pending a write.
+    pub fn is_dirty(&self) -> bool {
+        self.dirty_config || self.dirty_session
+    }
+
+    /// Whether a flush is due: dirty and settled for the configured interval.
+    pub fn should_flush(&self, now: Instant) -> bool {
+        match self.last_change {
+            Some(t) => self.is_dirty() && now.duration_since(t) >= self.settle,
+            None => false,
+        }
+    }
+
+    /// Clears the dirty flags and returns which stores need writing
+    /// `(config, session)`.
+    pub fn take(&mut self) -> (bool, bool) {
+        let flags = (self.dirty_config, self.dirty_session);
+        self.dirty_config = false;
+        self.dirty_session = false;
+        self.last_change = None;
+        flags
+    }
+}
+
 /// The application model: holds the shared subsystem handles, derives the view,
 /// and applies UI intents.
 pub struct AppModel {
@@ -325,6 +386,7 @@ pub struct AppModel {
     beacon_prefs: BeaconPrefs,
     log_panel_open: bool,
     log_filter: LevelName,
+    scheduler: SaveScheduler,
 }
 
 impl AppModel {
@@ -353,6 +415,7 @@ impl AppModel {
             beacon_prefs,
             log_panel_open: false,
             log_filter,
+            scheduler: SaveScheduler::new(Duration::from_millis(400)),
         }
     }
 
@@ -408,6 +471,7 @@ impl AppModel {
             UiIntent::ToggleSuspend => {
                 let now = self.input.is_suspended();
                 self.input.set_suspended(!now);
+                self.scheduler.mark_session(Instant::now());
                 Vec::new()
             }
             UiIntent::SetFishing(enabled) => {
@@ -416,6 +480,7 @@ impl AppModel {
                     .lock()
                     .unwrap()
                     .set_enabled(enabled, now, self.fishing_sink.as_mut());
+                self.scheduler.mark_session(Instant::now());
                 Vec::new()
             }
             UiIntent::InstallBeacon => {
@@ -428,6 +493,7 @@ impl AppModel {
             }
             UiIntent::EditSkill(index, edit) => {
                 self.edit_skill(index, edit);
+                self.scheduler.mark_config(Instant::now());
                 Vec::new()
             }
             UiIntent::ApplySettings(form) => self.apply_settings(*form),
@@ -516,12 +582,77 @@ impl AppModel {
     fn apply_settings(&mut self, form: SettingsForm) -> Vec<Notice> {
         form.apply(&mut self.settings);
         let notices = self.reload_from_settings();
-        if let Some(dir) = &self.config_dir {
-            if let Err(err) = config::save(dir, &self.settings) {
-                tracing::warn!(target: "eso_weave::config", "could not save settings: {err}");
+        // Persistence is coalesced: mark the config store dirty and let the
+        // scheduler flush a single settle-write. There is no explicit save.
+        self.scheduler.mark_config(Instant::now());
+        notices
+    }
+
+    /// Restores the persisted session state (suspend and fishing intents) on
+    /// launch. Restoring a running or fishing-on state performs no input while
+    /// the game window is unfocused, because synthesis and suppression are scoped
+    /// to the focused game window by the input backend.
+    pub fn restore_session(&mut self, state: SessionState) {
+        if state.suspended != self.input.is_suspended() {
+            self.input.set_suspended(state.suspended);
+        }
+        if state.fishing {
+            let now = self.now_ms();
+            self.fishing
+                .lock()
+                .unwrap()
+                .set_enabled(true, now, self.fishing_sink.as_mut());
+        }
+    }
+
+    /// The current session state to persist (suspend flag and fishing on/off
+    /// intent, never a transient fishing sub-state).
+    pub fn current_session_state(&self) -> SessionState {
+        let fishing_on = self.fishing.lock().unwrap().state() != FishingState::Disabled;
+        SessionState {
+            schema_version: CURRENT_STATE_VERSION,
+            suspended: self.input.is_suspended(),
+            fishing: fishing_on,
+        }
+    }
+
+    /// Flushes any pending coalesced writes if they have settled. Returns whether
+    /// a write occurred (so the caller can show a save confirmation).
+    pub fn maybe_flush(&mut self, now: Instant) -> bool {
+        if !self.scheduler.should_flush(now) {
+            return false;
+        }
+        let (write_config, write_session) = self.scheduler.take();
+        let Some(dir) = self.config_dir.clone() else {
+            return false;
+        };
+        let mut saved = false;
+        if write_config {
+            self.store_live_into_settings();
+            match config::save(&dir, &self.settings) {
+                Ok(()) => saved = true,
+                Err(err) => {
+                    tracing::warn!(target: "eso_weave::config", "could not save settings: {err}");
+                }
             }
         }
-        notices
+        if write_session {
+            let state = self.current_session_state();
+            match config::state::save(&dir, &state) {
+                Ok(()) => saved = true,
+                Err(err) => {
+                    tracing::warn!(target: "eso_weave::config", "could not save session state: {err}");
+                }
+            }
+        }
+        saved
+    }
+
+    /// Syncs the live weave engine configuration back into the settings so
+    /// main-window skill edits are persisted.
+    fn store_live_into_settings(&mut self) {
+        let weave = self.weave.lock().unwrap();
+        weave.store(&mut self.settings);
     }
 
     /// Reloads the live subsystems from the current settings, returning fallback

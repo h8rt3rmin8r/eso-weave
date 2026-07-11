@@ -142,7 +142,12 @@ fn main() {
 
     // GUI on the main thread.
     let gui_sink = Box::new(RealFishingSink::new(SharedBackend(backend.clone())));
-    let model = AppModel::new(
+    // Load persisted session state before the config directory is moved into the
+    // model, so the live suspend and fishing intents can be restored on launch.
+    let session = config_dir
+        .as_ref()
+        .map(|dir| eso_weave::config::state::load(dir));
+    let mut model = AppModel::new(
         input.clone(),
         weave.clone(),
         fishing.clone(),
@@ -151,6 +156,12 @@ fn main() {
         settings,
         config_dir,
     );
+    if let Some((state, notices)) = session {
+        for notice in &notices {
+            tracing::warn!(target: "eso_weave::config", "{}", notice.message);
+        }
+        model.restore_session(state);
+    }
 
     // The GUI is about to take over the main thread; from here on a panic is
     // logged but no longer raises a dialog (a mid-session worker panic should not

@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+pub mod state;
+
 /// Current settings schema version.
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
