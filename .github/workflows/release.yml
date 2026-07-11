@@ -1,0 +1,161 @@
+# Release pipeline for ESO Weave.
+# Pinned artifact. Do not modify without a dated decision recorded in CHANGELOG.md.
+#
+# Contract: a release is cut by pushing a tag of the form vX.Y.Z. The changelog rollover and
+# version bump happen locally as part of `cargo release` BEFORE the tag is pushed (see
+# docs/releasing.md), so this workflow never writes back to main. It only verifies, builds
+# assets, and publishes.
+#
+# Assets: Windows x64 MSI (cargo-wix), Linux x86_64 .deb (cargo-deb), AppImage
+# (packaging/appimage/), and tarball, plus a combined SHA256SUMS. No container images.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  BIN_NAME: eso-weave
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Tag matches Cargo.toml version
+        run: |
+          cargo_ver="$(grep -m1 -E '^version\s*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ "$cargo_ver" != "${{ steps.v.outputs.version }}" ]; then
+            echo "Tag ${{ steps.v.outputs.version }} does not match Cargo.toml version $cargo_ver" >&2
+            exit 1
+          fi
+
+      - name: Changelog section exists and is non-empty
+        run: |
+          body="$(scripts/changelog-section.sh "${{ steps.v.outputs.version }}")"
+          if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
+            echo "CHANGELOG.md has no content under [${{ steps.v.outputs.version }}]" >&2
+            exit 1
+          fi
+
+  build-windows:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release --locked --bin $env:BIN_NAME
+
+      - name: Install cargo-wix
+        run: cargo install cargo-wix --locked
+
+      - name: Build MSI
+        run: cargo wix --no-build --nocapture
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          $dist = "${env:BIN_NAME}-${ver}-x86_64-windows"
+          $msi = Get-ChildItem -Path "target/wix" -Filter "*.msi" | Select-Object -First 1
+          Copy-Item $msi.FullName "${dist}.msi"
+          $hash = (Get-FileHash -Algorithm SHA256 "${dist}.msi").Hash.ToLower()
+          "$hash  ${dist}.msi" | Out-File -Encoding ascii "${dist}.msi.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows-x86_64
+          path: |
+            *.msi
+            *.msi.sha256
+
+  build-linux:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: sudo scripts/linux-build-deps.sh
+
+      - name: Build
+        run: cargo build --release --locked --bin "$BIN_NAME"
+
+      - name: Build .deb
+        run: |
+          cargo install cargo-deb --locked
+          cargo deb --no-build --locked
+
+      - name: Build AppImage
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          curl -fsSL -o appimagetool \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          appdir="packaging/appimage/AppDir"
+          install -Dm755 "target/release/${BIN_NAME}" "${appdir}/usr/bin/${BIN_NAME}"
+          ./appimagetool "$appdir" "${BIN_NAME}-${ver}-x86_64.AppImage"
+
+      - name: Package
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          dist="${BIN_NAME}-${ver}-x86_64-linux"
+          mkdir -p "$dist"
+          cp "target/release/${BIN_NAME}" "$dist/"
+          cp README.md LICENSE "$dist/" 2>/dev/null || true
+          tar -czf "${dist}.tar.gz" "$dist"
+          cp target/debian/*.deb "${BIN_NAME}-${ver}-x86_64.deb"
+          for f in "${dist}.tar.gz" "${BIN_NAME}-${ver}-x86_64.deb" "${BIN_NAME}-${ver}-x86_64.AppImage"; do
+            sha256sum "$f" > "${f}.sha256"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-x86_64
+          path: |
+            *.tar.gz
+            *.deb
+            *.AppImage
+            *.sha256
+
+  release:
+    needs: [verify, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble checksums and notes
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          cat artifacts/*.sha256 > SHA256SUMS
+          scripts/changelog-section.sh "$ver" > RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file RELEASE_NOTES.md \
+            artifacts/*.msi artifacts/*.tar.gz artifacts/*.deb artifacts/*.AppImage SHA256SUMS
