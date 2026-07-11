@@ -157,7 +157,9 @@ fn main() {
     // pop a message box).
     gui_started.store(true, std::sync::atomic::Ordering::SeqCst);
 
-    let mut viewport = eframe::egui::ViewportBuilder::default();
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_inner_size([600.0, 720.0])
+        .with_min_inner_size([480.0, 420.0]);
     if let Some(icon) = window_icon() {
         viewport = viewport.with_icon(icon);
     }

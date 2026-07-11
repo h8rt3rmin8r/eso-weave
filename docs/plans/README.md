@@ -22,3 +22,4 @@ add one row to the table below. No other files need to change.
 | --- | --- | --- |
 | [plan-001.md](plan-001.md) | Active | Initial decomposition of the master specification into ten build slices, from foundations through packaging, preceded by the constitution prerequisite. |
 | [plan-002.md](plan-002.md) | Active | Brand and UX polish (slice 012): a documented brand standard applied across the app UI, the runtime and executable icon, and the Windows and Linux installers. |
+| [plan-003.md](plan-003.md) | Active | GUI overhaul and weapon-bar-aware timing: a GUI ergonomics, information-design, and auto-save slice (013), and a weapon-bar-aware adaptive-timing slice (014) that also closes research item R1. |

@@ -14,7 +14,7 @@ use eframe::egui;
 
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
-use crate::app::{AppModel, SkillEdit, UiIntent};
+use crate::app::{override_edit_for, strings, widgets, AppModel, SkillEdit, StatusLine, UiIntent};
 use crate::config::{LevelName, Theme};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
@@ -123,26 +123,36 @@ impl eframe::App for EsoWeaveApp {
         let mut exit = false;
 
         egui::CentralPanel::default().show(ui, |ui| {
-            // Menu row.
-            ui.horizontal(|ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Settings").clickable().clicked() {
+            // Menu bar.
+            egui::MenuBar::new().ui(ui, |ui| {
+                ui.menu_button(strings::MENU_FILE, |ui| {
+                    if ui
+                        .button(strings::MENU_SETTINGS)
+                        .on_hover_text(strings::MENU_SETTINGS_TOOLTIP)
+                        .clickable()
+                        .clicked()
+                    {
                         self.settings_open = true;
                         self.settings_draft = Some(self.model.settings_form());
                     }
-                    if ui.button("Exit").clickable().clicked() {
+                    if ui.button(strings::MENU_EXIT).clickable().clicked() {
                         exit = true;
                     }
-                });
-                ui.menu_button("View", |ui| {
+                })
+                .response
+                .clickable();
+                ui.menu_button(strings::MENU_VIEW, |ui| {
                     if ui
-                        .checkbox(&mut self.log_panel_open, "Live Log")
+                        .checkbox(&mut self.log_panel_open, strings::MENU_LOG_TOGGLE)
+                        .on_hover_text(strings::MENU_LOG_TOGGLE_TOOLTIP)
                         .clickable()
                         .changed()
                     {
                         intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
                     }
-                });
+                })
+                .response
+                .clickable();
             });
             ui.separator();
 
@@ -187,60 +197,85 @@ impl EsoWeaveApp {
             ui.separator();
         }
 
-        // Status region.
-        ui.horizontal(|ui| {
-            ui.label(format!("State: {}", view.app_state.indicator));
-            if primary_button(ui, &palette, view.app_state.button).clicked() {
-                intents.push(UiIntent::ToggleSuspend);
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(format!("Fishing: {}", view.fishing.indicator));
-            if primary_button(ui, &palette, view.fishing.button).clicked() {
-                intents.push(UiIntent::SetFishing(view.fishing.button == "Go Fish"));
-            }
-        });
-        ui.horizontal(|ui| {
-            let dot = if view.beacon.green {
-                palette.ok
-            } else {
-                palette.err
-            };
-            ui.colored_label(dot, "\u{25CF}")
-                .on_hover_text(view.beacon.tooltip);
-            ui.label("PixelBeacon");
-            if primary_button(ui, &palette, "Install").clicked() {
-                intents.push(UiIntent::InstallBeacon);
-            }
-            if ui
-                .add_enabled(view.uninstall_enabled, egui::Button::new("Uninstall"))
-                .clickable()
-                .clicked()
-            {
-                self.confirm_uninstall = true;
-            }
-        });
+        // Status region: title, colorized state, and control, aligned in a grid
+        // that spans the same width as the Skills grid below.
+        egui::Grid::new("status")
+            .num_columns(3)
+            .spacing([12.0, 8.0])
+            .min_col_width(110.0)
+            .show(ui, |ui| {
+                status_cells(ui, &palette, &view.status_line);
+                let mut running = !view.suspended;
+                if widgets::toggle_switch(ui, &mut running, &palette)
+                    .on_hover_text(strings::SUSPEND_TOOLTIP)
+                    .clickable()
+                    .changed()
+                {
+                    intents.push(UiIntent::ToggleSuspend);
+                }
+                ui.end_row();
+
+                status_cells(ui, &palette, &view.fishing_line);
+                let mut fishing_on = view.fishing_active;
+                if widgets::toggle_switch(ui, &mut fishing_on, &palette)
+                    .on_hover_text(strings::FISHING_TOGGLE_TOOLTIP)
+                    .clickable()
+                    .changed()
+                {
+                    intents.push(UiIntent::SetFishing(fishing_on));
+                }
+                ui.end_row();
+
+                status_cells(ui, &palette, &view.beacon_line);
+                ui.horizontal(|ui| {
+                    if primary_button(ui, &palette, "Install")
+                        .on_hover_text(strings::BEACON_INSTALL_TOOLTIP)
+                        .clicked()
+                    {
+                        intents.push(UiIntent::InstallBeacon);
+                    }
+                    if ui
+                        .add_enabled(view.uninstall_enabled, egui::Button::new("Uninstall"))
+                        .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
+                        .clickable()
+                        .clicked()
+                    {
+                        self.confirm_uninstall = true;
+                    }
+                });
+                ui.end_row();
+            });
 
         ui.separator();
-        ui.label("Skills");
-        // A single grid so the label, active toggle, weave selector, override
-        // toggle, and value align in fixed columns across every row. The value
-        // cell is always allocated (a disabled placeholder when there is no
-        // override) so rows with and without a value are the same width.
+        widgets::heading(ui, strings::SKILLS_TITLE);
+        // A single grid so the label, enabled toggle, weave selector, override
+        // toggle, and delay align in labeled columns across every row. When a row
+        // has no override, the Delay cell shows the inherited default (muted) so a
+        // row never displays a meaningless zero.
         egui::Grid::new("skills")
             .num_columns(5)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
+                for (header, tip) in strings::SKILL_COLUMNS {
+                    ui.label(egui::RichText::new(header).strong())
+                        .on_hover_text(tip);
+                }
+                ui.end_row();
+
                 for row in &view.skills {
                     ui.label(&row.label);
 
                     let mut active = row.active;
-                    if ui.checkbox(&mut active, "active").clickable().changed() {
+                    if widgets::toggle_switch(ui, &mut active, &palette)
+                        .on_hover_text(strings::SKILL_COLUMNS[1].1)
+                        .clickable()
+                        .changed()
+                    {
                         intents.push(UiIntent::EditSkill(row.index, SkillEdit::Active(active)));
                     }
 
                     let mut weave_type = row.weave_type;
-                    let weave = egui::ComboBox::from_id_salt(("weave", row.index))
+                    egui::ComboBox::from_id_salt(("weave", row.index))
                         .selected_text(weave_type_name(weave_type))
                         .show_ui(ui, |ui| {
                             for candidate in WEAVE_TYPES {
@@ -250,8 +285,10 @@ impl EsoWeaveApp {
                                     weave_type_name(candidate),
                                 );
                             }
-                        });
-                    weave.response.clickable();
+                        })
+                        .response
+                        .on_hover_text(strings::SKILL_COLUMNS[2].1)
+                        .clickable();
                     if weave_type != row.weave_type {
                         intents.push(UiIntent::EditSkill(
                             row.index,
@@ -259,30 +296,41 @@ impl EsoWeaveApp {
                         ));
                     }
 
-                    let mut has_override = row.override_d_weave.is_some();
-                    if ui
-                        .checkbox(&mut has_override, "override")
+                    let mut has_override = row.is_override;
+                    if widgets::toggle_switch(ui, &mut has_override, &palette)
+                        .on_hover_text(strings::SKILL_COLUMNS[3].1)
                         .clickable()
                         .changed()
                     {
-                        let value = if has_override { Some(50) } else { None };
+                        let value = if has_override {
+                            Some(row.effective_delay)
+                        } else {
+                            None
+                        };
                         intents.push(UiIntent::EditSkill(
                             row.index,
-                            SkillEdit::OverrideDWeave(value),
+                            override_edit_for(row.weave_type, value),
                         ));
                     }
 
-                    if let Some(current) = row.override_d_weave {
-                        let mut value = current;
-                        if ui.add(egui::DragValue::new(&mut value)).changed() {
+                    if row.is_override {
+                        let mut value = row.effective_delay;
+                        if ui
+                            .add(egui::DragValue::new(&mut value))
+                            .on_hover_text(strings::SKILL_COLUMNS[4].1)
+                            .changed()
+                        {
                             intents.push(UiIntent::EditSkill(
                                 row.index,
-                                SkillEdit::OverrideDWeave(Some(value)),
+                                override_edit_for(row.weave_type, Some(value)),
                             ));
                         }
                     } else {
-                        let mut placeholder: u32 = 0;
-                        ui.add_enabled(false, egui::DragValue::new(&mut placeholder));
+                        ui.add(egui::Label::new(
+                            egui::RichText::new(row.effective_delay.to_string())
+                                .color(palette.muted),
+                        ))
+                        .on_hover_text(strings::SKILL_COLUMNS[4].1);
                     }
                     ui.end_row();
                 }
@@ -429,6 +477,16 @@ impl EsoWeaveApp {
             self.settings_draft = None;
         }
     }
+}
+
+/// Renders the first two cells of a status grid row: the section title, then the
+/// colorized, normalized state field. The caller adds the third (control) cell.
+fn status_cells(ui: &mut egui::Ui, palette: &crate::app::theme::Palette, line: &StatusLine) {
+    ui.label(egui::RichText::new(line.title).strong())
+        .on_hover_text(line.tooltip);
+    let color = crate::app::theme::status_color(palette, line.role);
+    ui.label(egui::RichText::new(&line.state_text).color(color))
+        .on_hover_text(line.tooltip);
 }
 
 fn timing_row(ui: &mut egui::Ui, label: &str, value: &mut u32) {

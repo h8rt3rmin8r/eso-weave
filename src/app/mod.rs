@@ -11,8 +11,10 @@ pub mod beacon_light;
 pub mod log_view;
 pub mod routing;
 pub mod settings_form;
+pub mod strings;
 pub mod theme;
 pub mod ui;
+pub mod widgets;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -77,6 +79,90 @@ pub fn fishing_label(state: FishingState) -> FishingLabel {
     }
 }
 
+/// A brand status role, mapping a state to a palette color from one place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusRole {
+    /// Running and healthy (ok color).
+    Healthy,
+    /// A warning condition (warn color).
+    Warning,
+    /// An active operation in progress (accent color).
+    Active,
+    /// Idle or absent (muted color).
+    Muted,
+    /// An error or lost signal (error color).
+    Error,
+}
+
+/// A normalized status line for the top region: a title, a colorized state
+/// field, and a tooltip. Derived each frame from the subsystem state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusLine {
+    /// The section title, shown first on the line.
+    pub title: &'static str,
+    /// The normalized state text.
+    pub state_text: String,
+    /// The palette role that colors the state field.
+    pub role: StatusRole,
+    /// The hover tooltip for the line.
+    pub tooltip: &'static str,
+}
+
+/// Derives the Status line from the suspend state.
+pub fn status_line_app(suspended: bool) -> StatusLine {
+    if suspended {
+        StatusLine {
+            title: strings::STATUS_TITLE,
+            state_text: "Suspended".to_string(),
+            role: StatusRole::Warning,
+            tooltip: strings::STATUS_TOOLTIP,
+        }
+    } else {
+        StatusLine {
+            title: strings::STATUS_TITLE,
+            state_text: "Running".to_string(),
+            role: StatusRole::Healthy,
+            tooltip: strings::STATUS_TOOLTIP,
+        }
+    }
+}
+
+/// Derives the Fishing line from the controller state.
+pub fn status_line_fishing(state: FishingState) -> StatusLine {
+    let (state_text, role) = match state {
+        FishingState::Disabled => ("Idle".to_string(), StatusRole::Muted),
+        active => (format!("{active:?}"), StatusRole::Active),
+    };
+    StatusLine {
+        title: strings::FISHING_TITLE,
+        state_text,
+        role,
+        tooltip: strings::FISHING_TOOLTIP,
+    }
+}
+
+/// Derives the Pixel Beacon line from the beacon condition.
+pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
+    let (state_text, role) = match condition {
+        BeaconCondition::InstalledCurrent => {
+            ("Installed (current)".to_string(), StatusRole::Healthy)
+        }
+        BeaconCondition::InstalledOutdated => {
+            ("Installed (outdated)".to_string(), StatusRole::Warning)
+        }
+        BeaconCondition::NotInstalled => ("Not installed".to_string(), StatusRole::Muted),
+        BeaconCondition::AddonsNotFound => {
+            ("AddOns folder not found".to_string(), StatusRole::Error)
+        }
+    };
+    StatusLine {
+        title: strings::BEACON_TITLE,
+        state_text,
+        role,
+        tooltip: strings::BEACON_TOOLTIP,
+    }
+}
+
 /// A view of one skill slot for the skills region.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillRow {
@@ -94,6 +180,38 @@ pub struct SkillRow {
     pub override_d_heavy: Option<u32>,
     /// The per-slot `d_bash` override, if any.
     pub override_d_bash: Option<u32>,
+    /// Whether the delay for this row's weave type is overridden.
+    pub is_override: bool,
+    /// The delay in effect for this row's weave type: the override when set,
+    /// otherwise the global default for that weave type.
+    pub effective_delay: u32,
+}
+
+/// The per-slot override (if any) for the delay matching a weave type.
+pub fn override_for(overrides: &crate::weave::SlotOverrides, weave_type: WeaveType) -> Option<u32> {
+    match weave_type {
+        WeaveType::HeavyAttack => overrides.d_heavy,
+        WeaveType::BashAttack => overrides.d_bash,
+        WeaveType::LightAttack | WeaveType::BlockCasting => overrides.d_weave,
+    }
+}
+
+/// The global default delay for a weave type.
+pub fn default_delay_for(timing: &crate::weave::TimingConfig, weave_type: WeaveType) -> u32 {
+    match weave_type {
+        WeaveType::HeavyAttack => timing.d_heavy,
+        WeaveType::BashAttack => timing.d_bash,
+        WeaveType::LightAttack | WeaveType::BlockCasting => timing.d_weave,
+    }
+}
+
+/// The [`SkillEdit`] that sets or clears the override matching a weave type.
+pub fn override_edit_for(weave_type: WeaveType, value: Option<u32>) -> SkillEdit {
+    match weave_type {
+        WeaveType::HeavyAttack => SkillEdit::OverrideDHeavy(value),
+        WeaveType::BashAttack => SkillEdit::OverrideDBash(value),
+        WeaveType::LightAttack | WeaveType::BlockCasting => SkillEdit::OverrideDWeave(value),
+    }
 }
 
 /// Derives the skill rows from the weave configuration.
@@ -101,14 +219,20 @@ pub fn skill_rows(config: &WeaveConfig) -> Vec<SkillRow> {
     config
         .slots
         .iter()
-        .map(|slot| SkillRow {
-            index: slot.index,
-            label: slot_label(slot.index),
-            active: slot.active,
-            weave_type: slot.weave_type,
-            override_d_weave: slot.overrides.d_weave,
-            override_d_heavy: slot.overrides.d_heavy,
-            override_d_bash: slot.overrides.d_bash,
+        .map(|slot| {
+            let over = override_for(&slot.overrides, slot.weave_type);
+            SkillRow {
+                index: slot.index,
+                label: slot_label(slot.index),
+                active: slot.active,
+                weave_type: slot.weave_type,
+                override_d_weave: slot.overrides.d_weave,
+                override_d_heavy: slot.overrides.d_heavy,
+                override_d_bash: slot.overrides.d_bash,
+                is_override: over.is_some(),
+                effective_delay: over
+                    .unwrap_or_else(|| default_delay_for(&config.timing, slot.weave_type)),
+            }
         })
         .collect()
 }
@@ -163,6 +287,16 @@ pub struct AppView {
     pub app_state: AppStateLabel,
     /// The fishing indicator and button.
     pub fishing: FishingLabel,
+    /// The normalized Status line (title, colorized state, tooltip).
+    pub status_line: StatusLine,
+    /// The normalized Fishing line.
+    pub fishing_line: StatusLine,
+    /// The normalized Pixel Beacon line.
+    pub beacon_line: StatusLine,
+    /// Whether the engine is currently suspended (for the Status toggle).
+    pub suspended: bool,
+    /// Whether fishing is currently active (for the Fishing toggle).
+    pub fishing_active: bool,
     /// The beacon status light.
     pub beacon: BeaconLight,
     /// The derived beacon condition.
@@ -242,9 +376,15 @@ impl AppModel {
         let condition = self.beacon_condition();
         let fishing_state = self.fishing.lock().unwrap().state();
         let skills = skill_rows(self.weave.lock().unwrap().config());
+        let suspended = self.input.is_suspended();
         AppView {
-            app_state: app_state_label(self.input.is_suspended()),
+            app_state: app_state_label(suspended),
             fishing: fishing_label(fishing_state),
+            status_line: status_line_app(suspended),
+            fishing_line: status_line_fishing(fishing_state),
+            beacon_line: status_line_beacon(condition),
+            suspended,
+            fishing_active: fishing_state != FishingState::Disabled,
             beacon: beacon_light(condition),
             beacon_condition: condition,
             uninstall_enabled: uninstall_enabled(condition),

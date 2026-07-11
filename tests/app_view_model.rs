@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use eso_weave::app::{
-    app_state_label, beacon_light, fishing_label, route_reader_event, skill_rows,
-    uninstall_enabled, AppModel, BeaconCondition, SkillEdit, UiIntent,
+    app_state_label, beacon_light, default_delay_for, fishing_label, override_edit_for,
+    route_reader_event, skill_rows, status_line_app, status_line_beacon, status_line_fishing,
+    uninstall_enabled, AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LoggingPrefs, Settings};
@@ -69,6 +70,97 @@ fn skill_rows_label_ultimate_and_synergy() {
     assert_eq!(rows[0].label, "Skill 1");
     assert_eq!(rows[5].label, "Ultimate (R)");
     assert_eq!(rows[6].label, "Synergy (X)");
+}
+
+// Status-line derivations (US1).
+
+#[test]
+fn status_line_app_reflects_suspend() {
+    let running = status_line_app(false);
+    assert_eq!(running.title, "Status");
+    assert_eq!(running.state_text, "Running");
+    assert_eq!(running.role, StatusRole::Healthy);
+
+    let suspended = status_line_app(true);
+    assert_eq!(suspended.state_text, "Suspended");
+    assert_eq!(suspended.role, StatusRole::Warning);
+}
+
+#[test]
+fn status_line_fishing_reflects_state() {
+    let idle = status_line_fishing(FishingState::Disabled);
+    assert_eq!(idle.title, "Fishing");
+    assert_eq!(idle.state_text, "Idle");
+    assert_eq!(idle.role, StatusRole::Muted);
+
+    let waiting = status_line_fishing(FishingState::Waiting);
+    assert_eq!(waiting.state_text, "Waiting");
+    assert_eq!(waiting.role, StatusRole::Active);
+}
+
+#[test]
+fn status_line_beacon_maps_conditions() {
+    assert_eq!(
+        status_line_beacon(BeaconCondition::InstalledCurrent).role,
+        StatusRole::Healthy
+    );
+    assert_eq!(
+        status_line_beacon(BeaconCondition::InstalledOutdated).role,
+        StatusRole::Warning
+    );
+    assert_eq!(
+        status_line_beacon(BeaconCondition::NotInstalled).role,
+        StatusRole::Muted
+    );
+    assert_eq!(
+        status_line_beacon(BeaconCondition::AddonsNotFound).role,
+        StatusRole::Error
+    );
+    assert_eq!(
+        status_line_beacon(BeaconCondition::InstalledCurrent).title,
+        "Pixel Beacon (Addon)"
+    );
+}
+
+// Skill effective-delay display (US1).
+
+#[test]
+fn skill_row_shows_inherited_default_when_no_override() {
+    let config = WeaveConfig::default();
+    let rows = skill_rows(&config);
+    // Default slots are light attacks; the effective delay is the global d_weave
+    // default, and the row is not marked as overridden (so it is shown muted,
+    // never as a literal zero).
+    assert!(!rows[0].is_override);
+    assert_eq!(rows[0].effective_delay, config.timing.d_weave);
+    assert_eq!(
+        default_delay_for(&config.timing, WeaveType::LightAttack),
+        config.timing.d_weave
+    );
+}
+
+#[test]
+fn skill_override_targets_the_rows_weave_type() {
+    // A heavy-attack override edits d_heavy, not d_weave.
+    assert_eq!(
+        override_edit_for(WeaveType::HeavyAttack, Some(640)),
+        SkillEdit::OverrideDHeavy(Some(640))
+    );
+    assert_eq!(
+        override_edit_for(WeaveType::BashAttack, Some(125)),
+        SkillEdit::OverrideDBash(Some(125))
+    );
+    assert_eq!(
+        override_edit_for(WeaveType::LightAttack, Some(50)),
+        SkillEdit::OverrideDWeave(Some(50))
+    );
+
+    let mut config = WeaveConfig::default();
+    config.slots[0].weave_type = WeaveType::HeavyAttack;
+    config.slots[0].overrides.d_heavy = Some(700);
+    let rows = skill_rows(&config);
+    assert!(rows[0].is_override);
+    assert_eq!(rows[0].effective_delay, 700);
 }
 
 // Reader-event routing.

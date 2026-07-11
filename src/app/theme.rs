@@ -7,6 +7,7 @@
 
 use eframe::egui::{self, Color32, Stroke};
 
+use crate::app::StatusRole;
 use crate::config::Theme;
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
@@ -151,11 +152,22 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
         style.spacing.item_spacing = egui::vec2(8.0, 6.0);
         style.spacing.button_padding = egui::vec2(10.0, 5.0);
         style.spacing.interact_size.y = 22.0;
+        // Section headings use the bundled SemiBold weight at a larger size, so
+        // they read as headings rather than bold body text.
+        style.text_styles.insert(
+            egui::TextStyle::Heading,
+            egui::FontId::new(17.0, egui::FontFamily::Name(HEADING_FAMILY.into())),
+        );
     });
 }
 
+/// The named font family used for section headings (Inter SemiBold).
+pub const HEADING_FAMILY: &str = "InterSemiBold";
+
 /// Installs the bundled Inter font as the proportional family, keeping the
-/// framework default fonts as glyph fallback. Call once at startup.
+/// framework default fonts as glyph fallback, and registers the Medium and
+/// SemiBold weights as named families for headings and emphasis. Call once at
+/// startup.
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
@@ -163,12 +175,45 @@ pub fn install_fonts(ctx: &egui::Context) {
         egui::FontData::from_static(include_bytes!("../../assets/brand/fonts/Inter-Regular.ttf"))
             .into(),
     );
+    fonts.font_data.insert(
+        "InterMedium".to_owned(),
+        egui::FontData::from_static(include_bytes!("../../assets/brand/fonts/Inter-Medium.ttf"))
+            .into(),
+    );
+    fonts.font_data.insert(
+        HEADING_FAMILY.to_owned(),
+        egui::FontData::from_static(include_bytes!(
+            "../../assets/brand/fonts/Inter-SemiBold.ttf"
+        ))
+        .into(),
+    );
     fonts
         .families
         .entry(egui::FontFamily::Proportional)
         .or_default()
         .insert(0, "Inter".to_owned());
+    // Named families keep the regular Inter as glyph fallback behind the weight.
+    fonts.families.insert(
+        egui::FontFamily::Name(HEADING_FAMILY.into()),
+        vec![HEADING_FAMILY.to_owned(), "Inter".to_owned()],
+    );
+    fonts.families.insert(
+        egui::FontFamily::Name("InterMedium".into()),
+        vec!["InterMedium".to_owned(), "Inter".to_owned()],
+    );
     ctx.set_fonts(fonts);
+}
+
+/// The palette color for a status role, so status fields are colorized from one
+/// place rather than at each call site.
+pub fn status_color(p: &Palette, role: StatusRole) -> Color32 {
+    match role {
+        StatusRole::Healthy => p.ok,
+        StatusRole::Warning => p.warn,
+        StatusRole::Active => p.teal,
+        StatusRole::Muted => p.muted,
+        StatusRole::Error => p.err,
+    }
 }
 
 #[cfg(test)]
