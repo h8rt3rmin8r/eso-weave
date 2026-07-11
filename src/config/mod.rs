@@ -85,6 +85,16 @@ pub struct Settings {
     /// compatible, so no schema version bump is required.
     #[serde(default)]
     pub bindings: BTreeMap<String, String>,
+    /// Weave timing configuration, as an opaque JSON section owned by the weave
+    /// module. Null or absent means the timing defaults are used. Additive and
+    /// backward compatible.
+    #[serde(default)]
+    pub timing: serde_json::Value,
+    /// Weave skill-slot configuration, as an opaque JSON section owned by the
+    /// weave module. Null or absent means the slot defaults are used. Additive
+    /// and backward compatible.
+    #[serde(default)]
+    pub skills: serde_json::Value,
 }
 
 impl Default for Settings {
@@ -93,6 +103,8 @@ impl Default for Settings {
             schema_version: CURRENT_SCHEMA_VERSION,
             logging: LoggingPrefs::default(),
             bindings: BTreeMap::new(),
+            timing: serde_json::Value::Null,
+            skills: serde_json::Value::Null,
         }
     }
 }
@@ -149,6 +161,10 @@ struct RawSettings {
     logging: RawLogging,
     #[serde(default)]
     bindings: BTreeMap<String, String>,
+    #[serde(default)]
+    timing: serde_json::Value,
+    #[serde(default)]
+    skills: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -193,7 +209,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
 
     let mut notices = Vec::new();
 
-    let known: BTreeSet<&str> = ["schema_version", "logging", "bindings"]
+    let known: BTreeSet<&str> = ["schema_version", "logging", "bindings", "timing", "skills"]
         .into_iter()
         .collect();
     let unknown: Vec<String> = object
@@ -228,6 +244,8 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
             file_enabled: raw.logging.file_enabled.unwrap_or(false),
         },
         bindings: raw.bindings,
+        timing: raw.timing,
+        skills: raw.skills,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {

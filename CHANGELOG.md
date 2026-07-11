@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keybinding model persisted as an additive settings section, behind an
   `InputBackend` seam with a mock plus Windows (low-level hook, SendInput) and
   Linux (evdev grab, uinput) backends.
+- Weave Engine (S003): seven skill slots with four weave types, a pure
+  sequence builder, global timing with per-slot overrides, monotonic-clock
+  cooldown gating, inactive-slot pass-through fed to the Input Engine, and
+  additive `skills` and `timing` settings sections, executed through a testable
+  `WeaveSink` seam. Adds mouse synthesis (primary and secondary) to the input
+  backends.
 
 ### Changed
 

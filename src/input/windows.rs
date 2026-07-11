@@ -11,7 +11,9 @@ use std::sync::{Arc, OnceLock};
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::Media::{timeBeginPeriod, timeEndPeriod};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
+    MOUSEINPUT,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW,
@@ -20,7 +22,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::input::{
-    Decision, InputBackend, InputEngine, InputError, Key, KeyEvent, Origin, Transition,
+    Decision, InputBackend, InputEngine, InputError, Key, KeyEvent, MouseButton, Origin, Transition,
 };
 
 static ENGINE: OnceLock<Arc<InputEngine>> = OnceLock::new();
@@ -72,6 +74,37 @@ impl InputBackend for WindowsBackend {
         } else {
             Err(InputError::Synth(
                 "SendInput did not dispatch the event".to_string(),
+            ))
+        }
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        let flags = match (button, transition) {
+            (MouseButton::Primary, Transition::Down) => MOUSEEVENTF_LEFTDOWN,
+            (MouseButton::Primary, Transition::Up) => MOUSEEVENTF_LEFTUP,
+            (MouseButton::Secondary, Transition::Down) => MOUSEEVENTF_RIGHTDOWN,
+            (MouseButton::Secondary, Transition::Up) => MOUSEEVENTF_RIGHTUP,
+        };
+        let mut input: INPUT = unsafe { std::mem::zeroed() };
+        input.r#type = INPUT_MOUSE;
+        input.Anonymous.mi = MOUSEINPUT {
+            dx: 0,
+            dy: 0,
+            mouseData: 0,
+            dwFlags: flags,
+            time: 0,
+            dwExtraInfo: 0,
+        };
+        let sent = unsafe { SendInput(1, &input, std::mem::size_of::<INPUT>() as i32) };
+        if sent == 1 {
+            Ok(())
+        } else {
+            Err(InputError::Synth(
+                "SendInput did not dispatch the mouse event".to_string(),
             ))
         }
     }

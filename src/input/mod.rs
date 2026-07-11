@@ -48,6 +48,15 @@ pub enum Origin {
     SelfOriginated,
 }
 
+/// A mouse button the engine can synthesize (used by weave sequences).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    /// The left mouse button (basic attack).
+    Primary,
+    /// The right mouse button (block or bash modifier).
+    Secondary,
+}
+
 /// A single key transition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyEvent {
@@ -89,6 +98,7 @@ pub struct InputEngine {
     focused: AtomicBool,
     suspended: AtomicBool,
     held: Mutex<HashSet<Key>>,
+    active: Mutex<HashSet<Action>>,
     tx: SyncSender<Action>,
 }
 
@@ -102,6 +112,7 @@ impl InputEngine {
             focused: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             held: Mutex::new(HashSet::new()),
+            active: Mutex::new(Action::ALL.into_iter().collect()),
             tx,
         };
         (engine, rx)
@@ -122,6 +133,18 @@ impl InputEngine {
         self.suspended.load(Ordering::Relaxed)
     }
 
+    /// Sets whether an action is active. An inactive action's bound key passes
+    /// through to the game instead of being intercepted (master specification
+    /// section 7.1: an inactive slot's key passes through unmodified).
+    pub fn set_action_active(&self, action: Action, active: bool) {
+        let mut set = self.active.lock().unwrap();
+        if active {
+            set.insert(action);
+        } else {
+            set.remove(&action);
+        }
+    }
+
     /// The single safety-critical decision, synchronous and non-blocking. Only
     /// reads state, looks up the binding, updates held-key state, and performs at
     /// most one non-blocking hand-off. Never sleeps or does timed work.
@@ -137,6 +160,9 @@ impl InputEngine {
         let Some((action, suspend_exempt)) = bound else {
             return Decision::Pass;
         };
+        if !self.active.lock().unwrap().contains(&action) {
+            return Decision::Pass;
+        }
         if self.suspended.load(Ordering::Relaxed) && !suspend_exempt {
             return Decision::Pass;
         }
@@ -202,6 +228,13 @@ pub trait InputBackend {
     /// Synthesizes a key transition, marked so the engine treats it as
     /// self-originated.
     fn synthesize(&self, key: Key, transition: Transition) -> Result<(), InputError>;
+
+    /// Synthesizes a mouse button transition, marked self-originated.
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError>;
 
     /// Starts interception, feeding the engine focus and classification. Blocks
     /// for the lifetime of interception. Returns an error if it cannot start.

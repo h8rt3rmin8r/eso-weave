@@ -17,13 +17,13 @@ use evdev::uinput::{VirtualDevice, VirtualDeviceBuilder};
 use evdev::{AttributeSet, Device, EventType, InputEvent, Key as EvKey};
 
 use crate::input::{
-    Decision, InputBackend, InputEngine, InputError, Key, KeyEvent, Origin, Transition,
+    Decision, InputBackend, InputEngine, InputError, Key, KeyEvent, MouseButton, Origin, Transition,
 };
 
 /// The default ESO window title fragment used for focus matching.
 pub const DEFAULT_WINDOW_TITLE: &str = "Elder Scrolls Online";
 
-const ALL_EV_KEYS: [EvKey; 11] = [
+const ALL_EV_KEYS: [EvKey; 13] = [
     EvKey::KEY_1,
     EvKey::KEY_2,
     EvKey::KEY_3,
@@ -35,6 +35,8 @@ const ALL_EV_KEYS: [EvKey; 11] = [
     EvKey::KEY_SPACE,
     EvKey::KEY_F1,
     EvKey::KEY_F2,
+    EvKey::BTN_LEFT,
+    EvKey::BTN_RIGHT,
 ];
 
 /// The Linux interception and synthesis backend.
@@ -96,6 +98,30 @@ impl InputBackend for LinuxBackend {
         device
             .emit(&[event])
             .map_err(|e| InputError::Synth(format!("emit failed: {e}")))
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.ensure_virtual_device()?;
+        let code = match button {
+            MouseButton::Primary => EvKey::BTN_LEFT,
+            MouseButton::Secondary => EvKey::BTN_RIGHT,
+        };
+        let value = match transition {
+            Transition::Down => 1,
+            Transition::Up => 0,
+        };
+        let event = InputEvent::new(EventType::KEY, code.code(), value);
+        let mut guard = self.virtual_device.lock().unwrap();
+        let device = guard
+            .as_mut()
+            .ok_or_else(|| InputError::Synth("virtual device missing".to_string()))?;
+        device
+            .emit(&[event])
+            .map_err(|e| InputError::Synth(format!("mouse emit failed: {e}")))
     }
 
     fn run(&self, engine: Arc<InputEngine>) -> Result<(), InputError> {

@@ -8,6 +8,7 @@ pub mod config;
 pub mod input;
 pub mod logging;
 pub mod platform;
+pub mod weave;
 
 /// Returns the crate version, single-sourced from `Cargo.toml`.
 pub fn version() -> &'static str {
