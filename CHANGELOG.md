@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Installer and First-Run Experience (S011): the Windows MSI now presents a guided
+  WixUI wizard (welcome, license, install location, progress, finish) with a
+  license acceptance gate, adds a desktop shortcut alongside the Start Menu entry,
+  and offers a de-elevated "Launch ESO Weave" checkbox on the finish page that
+  never launches on a silent install. The application is built for the Windows
+  subsystem on release, so it no longer flashes a console window, and a startup
+  panic hook shows a native message box and writes a log line so a first-run
+  failure is never silent. Adds `packaging/windows/License.rtf` and a bin-local
+  `startup` module behind a testable `Notifier` seam; the README documents the
+  shortcut and log locations.
+
+### Decisions
+
+- 2026-07-11: Installer and First-Run Experience (S011) changes the pinned
+  packaging artifact `wix/main.wxs` (adding the WixUI_InstallDir wizard, the
+  `WixUILicenseRtf` variable, a desktop shortcut component, and the ExitDialog
+  launch custom action) and adds `packaging/windows/License.rtf` (the repository
+  Apache-2.0 license rendered as RTF for the wizard license page). The
+  launch-on-finish uses the WixUI ExitDialog with `WixShellExec` and
+  `Impersonate="yes"`, which runs in the InstallUISequence as the invoking user for
+  a de-elevated launch; a silent install has no UI sequence and never launches.
+  cargo-wix links WixUIExtension and WixUtilExtension by default, so the pinned
+  `.github/workflows/release.yml` is unchanged. Rationale is in
+  `specs/011-installer-first-run/research.md`.
+
 ## [0.1.1] - 2026-07-11
 
 ### Added

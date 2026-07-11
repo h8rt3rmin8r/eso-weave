@@ -31,6 +31,23 @@ Prebuilt installers are published on the [Releases](https://github.com/h8rt3rmin
 page: a Windows x64 MSI, and for Linux x86_64 a `.deb` package, an AppImage, and a
 tarball.
 
+### Windows (MSI)
+
+Download the `.msi`, right click it, choose Properties, and tick Unblock if the
+file was marked as coming from the internet, then run it. The installer walks
+through a short wizard (welcome, license, install location, progress, finish). On
+the final page you can leave "Launch ESO Weave" ticked to start the app right
+away.
+
+After installing you can start ESO Weave from either shortcut:
+
+- Desktop: an "ESO Weave" shortcut on your desktop.
+- Start Menu: All apps, under the "ESO Weave" folder.
+
+The application is installed to `C:\Program Files\ESO Weave\`. Logs, when the file
+log is enabled, are written to `%APPDATA%\eso-weave\logs\YYYY-MM.log`; check there
+first if the app does not behave as expected.
+
 ### Linux input permission (evdev)
 
 Input interception on Linux reads keyboard devices and synthesizes input through

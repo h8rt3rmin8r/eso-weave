@@ -6,6 +6,11 @@
 //! worker threads share the subsystems; the input backend keeps its own thread
 //! and message pump (the S002 contract) while eframe owns the main event loop.
 
+// Release builds target the Windows subsystem so the GUI carries no console
+// window; debug builds keep the console so developers see stdout and logs during
+// the dev loop.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,10 +24,18 @@ use eso_weave::pixelbus::{self, PixelBusReader, SurfaceSampler};
 use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
 
+mod startup;
+
 /// The exact ESO window title the backends and samplers resolve.
 const WINDOW_TITLE: &str = "Elder Scrolls Online";
 
 fn main() {
+    // Install the startup panic hook first, before any fallible work, so a
+    // failure is surfaced even though the release build has no console. Panics
+    // before logging is ready still raise the dialog; the log line is best effort
+    // until logging::init runs a few lines below.
+    let gui_started = startup::install_hook(Box::new(startup::DialogNotifier));
+
     let config_dir = platform::config_dir();
     let outcome = match &config_dir {
         Some(dir) => config::load(dir),
@@ -138,6 +151,11 @@ fn main() {
         settings,
         config_dir,
     );
+
+    // The GUI is about to take over the main thread; from here on a panic is
+    // logged but no longer raises a dialog (a mid-session worker panic should not
+    // pop a message box).
+    gui_started.store(true, std::sync::atomic::Ordering::SeqCst);
 
     let native_options = eframe::NativeOptions::default();
     if let Err(err) = eframe::run_native(
