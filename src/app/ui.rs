@@ -314,6 +314,21 @@ impl EsoWeaveApp {
                 ui.end_row();
             });
 
+        // Detected weapon-bar state (from the updated Pixel Beacon addon).
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(strings::WEAPON_BAR_TITLE).strong())
+                .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
+            let wb = &view.weapon_bar;
+            let color = crate::app::theme::status_color(&palette, wb.role);
+            let text = if wb.detected {
+                format!("{} (front {}, back {})", wb.active_bar, wb.front, wb.back)
+            } else {
+                "Not detected".to_string()
+            };
+            ui.label(egui::RichText::new(text).color(color))
+                .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
+        });
+
         ui.separator();
         widgets::heading(ui, strings::SKILLS_TITLE).on_hover_text(strings::SKILLS_TOOLTIP);
         // A single grid so the label, enabled toggle, weave selector, override
@@ -534,6 +549,26 @@ fn settings_body(
         setting(ui, palette, &strings::SET_D_BASH, |ui| {
             ui.add(egui::DragValue::new(&mut draft.weave.timing.d_bash));
         });
+        setting(ui, palette, &strings::SET_AUTO_TIMING, |ui| {
+            widgets::toggle_switch(ui, &mut draft.weave.auto_timing, palette);
+        });
+        if !draft.weave.auto_timing {
+            ui.add_space(4.0);
+            widgets::muted_help(
+                ui,
+                palette,
+                "Back bar delays (used when auto timing is off)",
+            );
+            setting(ui, palette, &strings::SET_D_WEAVE, |ui| {
+                ui.add(egui::DragValue::new(&mut draft.weave.timing_back.d_weave));
+            });
+            setting(ui, palette, &strings::SET_D_HEAVY, |ui| {
+                ui.add(egui::DragValue::new(&mut draft.weave.timing_back.d_heavy));
+            });
+            setting(ui, palette, &strings::SET_D_BASH, |ui| {
+                ui.add(egui::DragValue::new(&mut draft.weave.timing_back.d_bash));
+            });
+        }
         setting(ui, palette, &strings::SET_LATENCY_ENABLED, |ui| {
             widgets::toggle_switch(ui, &mut draft.latency.enabled, palette);
         });

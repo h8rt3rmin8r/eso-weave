@@ -7,6 +7,7 @@ use crate::weave::WeaveEngine;
 /// Routes one reader event to the weave engine and the fishing controller.
 ///
 /// - `Latency(ms)` sets the weave engine's current latency (nothing to fishing).
+/// - `WeaponBar(signal)` sets the weave engine's active bar and weapon classes.
 /// - `SignalLost` clears the weave latency and disables fishing.
 /// - `FishingStarted`, `BiteDetected`, `FishingStopped` reach the controller.
 /// - `Heartbeat` is forwarded to the controller (a no-op there).
@@ -24,6 +25,10 @@ pub fn route_reader_event(
     match event {
         PixelBusEvent::Latency(ms) => {
             weave.set_latency(Some(ms));
+            return;
+        }
+        PixelBusEvent::WeaponBar(signal) => {
+            weave.set_weapon_bar(signal);
             return;
         }
         PixelBusEvent::SignalLost => {

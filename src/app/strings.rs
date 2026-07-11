@@ -29,6 +29,11 @@ pub const BEACON_INSTALL_TOOLTIP: &str =
 pub const BEACON_UNINSTALL_TOOLTIP: &str =
     "Remove the PixelBeacon addon. Only a folder marked as managed by ESO Weave is deleted.";
 
+// Weapon-bar section.
+pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
+pub const WEAPON_BAR_TOOLTIP: &str =
+    "The active weapon bar and the weapon class detected on each bar. Requires the updated Pixel Beacon addon; shows Unknown without a signal.";
+
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
 pub const SKILLS_TOOLTIP: &str =
@@ -110,6 +115,10 @@ pub const SET_D_BASH: Setting = Setting {
     label: "Bash delay (ms)",
     help: "Gap before the bash action in a bash attack.",
 };
+pub const SET_AUTO_TIMING: Setting = Setting {
+    label: "Auto timing from weapon",
+    help: "Set each bar's heavy-attack delay automatically from the weapon equipped on that bar.",
+};
 pub const SET_LATENCY_ENABLED: Setting = Setting {
     label: "Adapt to latency",
     help: "Shorten delays automatically as measured latency rises.",
@@ -160,13 +169,14 @@ pub const SET_FILE_LOGGING: Setting = Setting {
 };
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 18] = [
+pub const ALL_SETTINGS: [&Setting; 19] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
     &SET_GLOBAL_COOLDOWN,
     &SET_D_WEAVE,
     &SET_D_HEAVY,
     &SET_D_BASH,
+    &SET_AUTO_TIMING,
     &SET_LATENCY_ENABLED,
     &SET_LATENCY_K,
     &SET_ARM_TIMEOUT,
@@ -189,6 +199,7 @@ pub fn all_labels() -> Vec<&'static str> {
         BEACON_TITLE,
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
+        WEAPON_BAR_TITLE,
         SKILLS_TITLE,
         LOG_TITLE,
         MENU_FILE,
@@ -223,6 +234,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         FISHING_TOGGLE_TOOLTIP,
         BEACON_INSTALL_TOOLTIP,
         BEACON_UNINSTALL_TOOLTIP,
+        WEAPON_BAR_TOOLTIP,
         SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,

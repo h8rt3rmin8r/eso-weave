@@ -18,6 +18,7 @@ pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
         PixelBusEvent::BiteDetected => Some(DetectorEvent::BiteDetected),
         PixelBusEvent::FishingStopped => Some(DetectorEvent::FishingStopped),
         PixelBusEvent::Latency(_) => None,
+        PixelBusEvent::WeaponBar(_) => None,
     }
 }
 

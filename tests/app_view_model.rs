@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use eso_weave::app::{
     app_state_label, beacon_light, default_delay_for, fishing_label, override_edit_for,
     route_reader_event, skill_rows, status_line_app, status_line_beacon, status_line_fishing,
-    uninstall_enabled, AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
+    uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LoggingPrefs, Settings};
@@ -14,7 +14,7 @@ use eso_weave::fishing::{FishingConfig, FishingController, FishingState, MockFis
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
-use eso_weave::pixelbus::PixelBusEvent;
+use eso_weave::pixelbus::{ActiveBar, PixelBusEvent, WeaponBarSignal, WeaponClass};
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
 // Derivations.
@@ -239,6 +239,53 @@ fn routing_directs_events_to_the_right_subsystems() {
         fishing.state(),
         FishingState::Disabled,
         "heartbeat is a no-op"
+    );
+}
+
+#[test]
+fn weapon_bar_view_shows_detected_and_unknown() {
+    let detected = weapon_bar_view(
+        ActiveBar::Back,
+        WeaponClass::DualWield,
+        WeaponClass::RestorationStaff,
+    );
+    assert!(detected.detected);
+    assert_eq!(detected.active_bar, "Back");
+    assert_eq!(detected.front, "Dual Wield");
+    assert_eq!(detected.back, "Restoration Staff");
+    assert_eq!(detected.role, StatusRole::Active);
+
+    let none = weapon_bar_view(
+        ActiveBar::Unknown,
+        WeaponClass::Unknown,
+        WeaponClass::Unknown,
+    );
+    assert!(!none.detected);
+    assert_eq!(none.role, StatusRole::Muted);
+}
+
+#[test]
+fn routing_a_weapon_bar_event_updates_the_engine() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+
+    route_reader_event(
+        PixelBusEvent::WeaponBar(WeaponBarSignal {
+            bar: ActiveBar::Back,
+            front: WeaponClass::DualWield,
+            back: WeaponClass::RestorationStaff,
+        }),
+        &mut weave,
+        &mut fishing,
+        1,
+        &mut sink,
+    );
+
+    assert_eq!(weave.active_bar(), ActiveBar::Back);
+    assert_eq!(
+        weave.weapon_classes(),
+        (WeaponClass::DualWield, WeaponClass::RestorationStaff)
     );
 }
 

@@ -26,6 +26,7 @@ use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
+use crate::pixelbus::{ActiveBar, WeaponClass};
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
@@ -161,6 +162,60 @@ pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
         state_text,
         role,
         tooltip: strings::BEACON_TOOLTIP,
+    }
+}
+
+/// The display name for a weapon class.
+pub fn weapon_class_name(class: WeaponClass) -> &'static str {
+    match class {
+        WeaponClass::Unknown => "Unknown",
+        WeaponClass::DualWield => "Dual Wield",
+        WeaponClass::TwoHanded => "Two Handed",
+        WeaponClass::SwordAndShield => "Sword and Shield",
+        WeaponClass::Bow => "Bow",
+        WeaponClass::DestructionStaff => "Destruction Staff",
+        WeaponClass::RestorationStaff => "Restoration Staff",
+    }
+}
+
+/// The display name for an active bar.
+pub fn active_bar_name(bar: ActiveBar) -> &'static str {
+    match bar {
+        ActiveBar::Unknown => "Unknown",
+        ActiveBar::Front => "Front",
+        ActiveBar::Back => "Back",
+    }
+}
+
+/// A normalized view of the detected weapon-bar state for the status region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WeaponBarView {
+    /// Whether any weapon-bar signal has been detected.
+    pub detected: bool,
+    /// The active bar display name.
+    pub active_bar: &'static str,
+    /// The front bar weapon class display name.
+    pub front: &'static str,
+    /// The back bar weapon class display name.
+    pub back: &'static str,
+    /// The palette role for the state field.
+    pub role: StatusRole,
+}
+
+/// Derives the weapon-bar view from the decoded bar and classes.
+pub fn weapon_bar_view(bar: ActiveBar, front: WeaponClass, back: WeaponClass) -> WeaponBarView {
+    let detected =
+        bar != ActiveBar::Unknown || front != WeaponClass::Unknown || back != WeaponClass::Unknown;
+    WeaponBarView {
+        detected,
+        active_bar: active_bar_name(bar),
+        front: weapon_class_name(front),
+        back: weapon_class_name(back),
+        role: if detected {
+            StatusRole::Active
+        } else {
+            StatusRole::Muted
+        },
     }
 }
 
@@ -317,6 +372,8 @@ pub struct AppView {
     pub uninstall_enabled: bool,
     /// One row per skill slot.
     pub skills: Vec<SkillRow>,
+    /// The detected weapon-bar state.
+    pub weapon_bar: WeaponBarView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -449,7 +506,14 @@ impl AppModel {
     pub fn view(&self) -> AppView {
         let condition = self.beacon_condition();
         let fishing_state = self.fishing.lock().unwrap().state();
-        let skills = skill_rows(self.weave.lock().unwrap().config());
+        let (skills, active_bar, classes) = {
+            let weave = self.weave.lock().unwrap();
+            (
+                skill_rows(weave.config()),
+                weave.active_bar(),
+                weave.weapon_classes(),
+            )
+        };
         let suspended = self.input.is_suspended();
         AppView {
             app_state: app_state_label(suspended),
@@ -463,6 +527,7 @@ impl AppModel {
             beacon_condition: condition,
             uninstall_enabled: uninstall_enabled(condition),
             skills,
+            weapon_bar: weapon_bar_view(active_bar, classes.0, classes.1),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }

@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
+use crate::pixelbus::{ActiveBar, WeaponBarSignal, WeaponClass};
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
 pub use types::{
@@ -26,13 +27,17 @@ pub use types::{
 /// The maximum accepted timing value, in milliseconds (a generous upper bound).
 const MAX_TIMING_MS: u32 = 60_000;
 
-/// The seven skill slots plus the global timing.
+/// The seven skill slots plus the per-bar timing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeaveConfig {
     /// The seven skill slots (index 1 through 7).
     pub slots: [SkillSlot; 7],
-    /// The global timing configuration.
+    /// The front (primary) bar timing profile.
     pub timing: TimingConfig,
+    /// The back (backup) bar timing profile.
+    pub timing_back: TimingConfig,
+    /// When true, each bar's heavy-attack delay follows the detected weapon class.
+    pub auto_timing: bool,
 }
 
 impl Default for WeaveConfig {
@@ -55,8 +60,51 @@ impl Default for WeaveConfig {
                 slot(7, Key::X, false),
             ],
             timing: TimingConfig::default(),
+            timing_back: TimingConfig::default(),
+            auto_timing: false,
         }
     }
+}
+
+/// The default heavy-attack delay (ms) for a weapon class, or `None` to keep the
+/// profile's own value. These are community estimates (see the master
+/// specification R1 appendix) pending in-game validation; one-hand-and-shield is a
+/// flagged estimate not yet measured.
+pub fn heavy_preset(class: WeaponClass) -> Option<u32> {
+    match class {
+        WeaponClass::DualWield => Some(640),
+        WeaponClass::TwoHanded => Some(1050),
+        WeaponClass::SwordAndShield => Some(900),
+        WeaponClass::Bow => Some(1380),
+        WeaponClass::DestructionStaff => Some(1180),
+        WeaponClass::RestorationStaff => Some(1360),
+        WeaponClass::Unknown => None,
+    }
+}
+
+/// The effective timing for the active bar: the back profile when the back bar is
+/// active, otherwise the front profile (which also covers an unknown bar). When
+/// auto timing is on and the class is known, the bar's heavy-attack delay is
+/// replaced with the weapon-class preset.
+pub fn effective_timing(
+    front: &TimingConfig,
+    back: &TimingConfig,
+    auto_timing: bool,
+    active_bar: ActiveBar,
+    front_class: WeaponClass,
+    back_class: WeaponClass,
+) -> TimingConfig {
+    let (base, class) = match active_bar {
+        ActiveBar::Back => (back, back_class),
+        ActiveBar::Front | ActiveBar::Unknown => (front, front_class),
+    };
+    let mut timing = *base;
+    if auto_timing {
+        if let Some(d_heavy) = heavy_preset(class) {
+            timing.d_heavy = d_heavy;
+        }
+    }
+    timing
 }
 
 impl WeaveConfig {
@@ -164,18 +212,55 @@ pub struct WeaveEngine {
     last_weave_ms: Option<u64>,
     latency: LatencyConfig,
     current_latency: Option<u16>,
+    active_bar: ActiveBar,
+    front_class: WeaponClass,
+    back_class: WeaponClass,
 }
 
 impl WeaveEngine {
     /// Creates an engine with the given configuration. Latency adaptation is off
-    /// and no current latency is known until set.
+    /// and no current latency or weapon-bar state is known until set.
     pub fn new(config: WeaveConfig) -> Self {
         Self {
             config,
             last_weave_ms: None,
             latency: LatencyConfig::default(),
             current_latency: None,
+            active_bar: ActiveBar::Unknown,
+            front_class: WeaponClass::Unknown,
+            back_class: WeaponClass::Unknown,
         }
+    }
+
+    /// Records the decoded weapon-bar state (active bar and each bar's weapon
+    /// class), which selects the active timing profile and the auto-timing preset.
+    pub fn set_weapon_bar(&mut self, signal: WeaponBarSignal) {
+        self.active_bar = signal.bar;
+        self.front_class = signal.front;
+        self.back_class = signal.back;
+    }
+
+    /// The currently active weapon bar.
+    pub fn active_bar(&self) -> ActiveBar {
+        self.active_bar
+    }
+
+    /// The detected weapon classes on the front and back bars.
+    pub fn weapon_classes(&self) -> (WeaponClass, WeaponClass) {
+        (self.front_class, self.back_class)
+    }
+
+    /// The effective timing for the currently active bar (profile plus any
+    /// weapon-class preset when auto timing is on).
+    pub fn current_timing(&self) -> TimingConfig {
+        effective_timing(
+            &self.config.timing,
+            &self.config.timing_back,
+            self.config.auto_timing,
+            self.active_bar,
+            self.front_class,
+            self.back_class,
+        )
     }
 
     /// Sets the current server latency, or clears it (for example on signal loss)
@@ -229,19 +314,15 @@ impl WeaveEngine {
         }
 
         let now = sink.now_ms();
+        let timing = self.current_timing();
         if let Some(last) = self.last_weave_ms {
-            if now.saturating_sub(last) < u64::from(self.config.timing.global_cooldown) {
+            if now.saturating_sub(last) < u64::from(timing.global_cooldown) {
                 return;
             }
         }
         self.last_weave_ms = Some(now);
 
-        for step in sequence_for_adapted(
-            &slot,
-            &self.config.timing,
-            self.current_latency,
-            &self.latency,
-        ) {
+        for step in sequence_for_adapted(&slot, &timing, self.current_latency, &self.latency) {
             match step {
                 WeaveStep::Emit(op) => sink.emit(op),
                 WeaveStep::Wait(ms) => sink.wait(ms),
@@ -263,7 +344,10 @@ impl WeaveEngine {
     /// notices for invalid values.
     pub fn load(&mut self, settings: &Settings) -> Vec<Notice> {
         let mut notices = Vec::new();
-        self.config.timing = load_timing(&settings.timing, &mut notices);
+        let (front, back, auto) = load_timing(&settings.timing, &mut notices);
+        self.config.timing = front;
+        self.config.timing_back = back;
+        self.config.auto_timing = auto;
         load_skills(&settings.skills, &mut self.config.slots, &mut notices);
         self.latency = load_latency(&settings.latency, &mut notices);
         notices
@@ -276,6 +360,11 @@ impl WeaveEngine {
             d_weave: self.config.timing.d_weave,
             d_heavy: self.config.timing.d_heavy,
             d_bash: self.config.timing.d_bash,
+            back_global_cooldown: Some(self.config.timing_back.global_cooldown),
+            back_d_weave: Some(self.config.timing_back.d_weave),
+            back_d_heavy: Some(self.config.timing_back.d_heavy),
+            back_d_bash: Some(self.config.timing_back.d_bash),
+            auto_timing: self.config.auto_timing,
         };
         settings.timing = serde_json::to_value(timing).unwrap_or(serde_json::Value::Null);
 
@@ -338,6 +427,19 @@ struct TimingJson {
     d_weave: u32,
     d_heavy: u32,
     d_bash: u32,
+    // The back-bar profile and auto flag are optional so older configs (front
+    // only) still load; when absent the back profile mirrors the front and auto is
+    // off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    back_global_cooldown: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    back_d_weave: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    back_d_heavy: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    back_d_bash: Option<u32>,
+    #[serde(default)]
+    auto_timing: bool,
 }
 
 #[derive(Deserialize, Default)]
@@ -346,6 +448,12 @@ struct RawTiming {
     d_weave: Option<u32>,
     d_heavy: Option<u32>,
     d_bash: Option<u32>,
+    back_global_cooldown: Option<u32>,
+    back_d_weave: Option<u32>,
+    back_d_heavy: Option<u32>,
+    back_d_bash: Option<u32>,
+    #[serde(default)]
+    auto_timing: bool,
 }
 
 /// The valid inclusive maximum for the latency scale factor `k` (minimum 0.0).
@@ -401,13 +509,20 @@ struct SkillJson {
     d_bash: Option<u32>,
 }
 
-fn load_timing(value: &serde_json::Value, notices: &mut Vec<Notice>) -> TimingConfig {
+/// Loads the front and back timing profiles and the auto-timing flag. The back
+/// profile mirrors the front when its fields are absent (older configs), so the
+/// section stays back-compatible.
+fn load_timing(
+    value: &serde_json::Value,
+    notices: &mut Vec<Notice>,
+) -> (TimingConfig, TimingConfig, bool) {
     if value.is_null() {
-        return TimingConfig::default();
+        let d = TimingConfig::default();
+        return (d, d, false);
     }
     let raw: RawTiming = serde_json::from_value(value.clone()).unwrap_or_default();
     let defaults = TimingConfig::default();
-    TimingConfig {
+    let front = TimingConfig {
         global_cooldown: checked(
             raw.global_cooldown,
             defaults.global_cooldown,
@@ -417,7 +532,19 @@ fn load_timing(value: &serde_json::Value, notices: &mut Vec<Notice>) -> TimingCo
         d_weave: checked(raw.d_weave, defaults.d_weave, "d_weave", notices),
         d_heavy: checked(raw.d_heavy, defaults.d_heavy, "d_heavy", notices),
         d_bash: checked(raw.d_bash, defaults.d_bash, "d_bash", notices),
-    }
+    };
+    let back = TimingConfig {
+        global_cooldown: checked(
+            raw.back_global_cooldown,
+            front.global_cooldown,
+            "back_global_cooldown",
+            notices,
+        ),
+        d_weave: checked(raw.back_d_weave, front.d_weave, "back_d_weave", notices),
+        d_heavy: checked(raw.back_d_heavy, front.d_heavy, "back_d_heavy", notices),
+        d_bash: checked(raw.back_d_bash, front.d_bash, "back_d_bash", notices),
+    };
+    (front, back, raw.auto_timing)
 }
 
 fn checked(value: Option<u32>, default: u32, name: &str, notices: &mut Vec<Notice>) -> u32 {

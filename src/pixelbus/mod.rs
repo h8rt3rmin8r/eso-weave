@@ -50,6 +50,80 @@ pub enum FishingSignal {
     Bite,
 }
 
+/// The active weapon bar decoded from the weapon-bar block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveBar {
+    /// The bar could not be determined.
+    Unknown,
+    /// The front (primary) bar is active.
+    Front,
+    /// The back (backup) bar is active.
+    Back,
+}
+
+impl ActiveBar {
+    /// Decodes the active bar from its wire code (0 unknown, 1 front, 2 back).
+    pub fn from_code(code: u8) -> Self {
+        match code {
+            1 => ActiveBar::Front,
+            2 => ActiveBar::Back,
+            _ => ActiveBar::Unknown,
+        }
+    }
+}
+
+/// A normalized weapon class on one bar. The integer codes are a fixed contract
+/// shared byte-for-byte with the PixelBeacon addon (`PixelBeacon.lua`), which maps
+/// the game `WEAPONTYPE_*` constants to these codes, so the reader never depends on
+/// the raw game enum integers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeaponClass {
+    /// No weapon or an unrecognized class (code 0).
+    Unknown,
+    /// Dual wield (code 1).
+    DualWield,
+    /// Two handed (code 2).
+    TwoHanded,
+    /// One hand and shield (code 3).
+    SwordAndShield,
+    /// Bow (code 4).
+    Bow,
+    /// Destruction staff (code 5).
+    DestructionStaff,
+    /// Restoration staff (code 6).
+    RestorationStaff,
+}
+
+impl WeaponClass {
+    /// Decodes a weapon class from its wire code (a 0..6 nibble).
+    pub fn from_code(code: u8) -> Self {
+        match code {
+            1 => WeaponClass::DualWield,
+            2 => WeaponClass::TwoHanded,
+            3 => WeaponClass::SwordAndShield,
+            4 => WeaponClass::Bow,
+            5 => WeaponClass::DestructionStaff,
+            6 => WeaponClass::RestorationStaff,
+            _ => WeaponClass::Unknown,
+        }
+    }
+}
+
+/// The decoded weapon-bar signal: the active bar and each bar's weapon class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WeaponBarSignal {
+    /// The active weapon bar.
+    pub bar: ActiveBar,
+    /// The weapon class on the front bar.
+    pub front: WeaponClass,
+    /// The weapon class on the back bar.
+    pub back: WeaponClass,
+}
+
+/// The green marker that identifies a weapon-bar sample (distinct from the latency
+/// marker `0xA5` so tolerance can never confuse the two).
+const WEAPON_MARKER: u8 = 0x5A;
+
 /// A typed event decoded from the pixel bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelBusEvent {
@@ -65,6 +139,8 @@ pub enum PixelBusEvent {
     FishingStopped,
     /// A decoded server latency in milliseconds.
     Latency(u16),
+    /// A change in the active weapon bar or a bar's weapon class.
+    WeaponBar(WeaponBarSignal),
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -116,6 +192,8 @@ pub struct ReaderConfig {
     pub fishing_point: (u32, u32),
     /// Sample point for the latency block (B2).
     pub latency_point: (u32, u32),
+    /// Sample point for the weapon-bar block (B3).
+    pub weapon_point: (u32, u32),
     /// Sampling interval while fishing is enabled.
     pub interval_fishing_ms: u64,
     /// Sampling interval otherwise.
@@ -130,6 +208,7 @@ impl Default for ReaderConfig {
             status_point: (8, 8),
             fishing_point: (24, 8),
             latency_point: (40, 8),
+            weapon_point: (56, 8),
             interval_fishing_ms: 100,
             interval_idle_ms: 1000,
         }
@@ -248,12 +327,27 @@ pub fn decode_latency(sample: Rgb, tolerance: u8) -> Option<u16> {
     }
 }
 
+/// Decodes the weapon-bar block, or `None` when the marker fails validation. The
+/// red channel packs the front weapon class in its high nibble and the back class
+/// in its low nibble; the blue channel is the active-bar code.
+pub fn decode_weapon_bar(sample: Rgb, tolerance: u8) -> Option<WeaponBarSignal> {
+    if !within(sample.g, WEAPON_MARKER, tolerance) {
+        return None;
+    }
+    Some(WeaponBarSignal {
+        bar: ActiveBar::from_code(sample.b),
+        front: WeaponClass::from_code(sample.r >> 4),
+        back: WeaponClass::from_code(sample.r & 0x0F),
+    })
+}
+
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
     last_heartbeat_ms: Option<u64>,
     signal_lost: bool,
     fishing: FishingSignal,
+    weapon: Option<WeaponBarSignal>,
 }
 
 impl PixelBusReader {
@@ -264,6 +358,7 @@ impl PixelBusReader {
             last_heartbeat_ms: None,
             signal_lost: false,
             fishing: FishingSignal::None,
+            weapon: None,
         }
     }
 
@@ -278,6 +373,7 @@ impl PixelBusReader {
         b0: Option<Rgb>,
         b1: Option<Rgb>,
         b2: Option<Rgb>,
+        b3: Option<Rgb>,
         now_ms: u64,
     ) -> Vec<PixelBusEvent> {
         let mut events = Vec::new();
@@ -302,10 +398,21 @@ impl PixelBusReader {
             if let Some(latency) = b2.and_then(|c| decode_latency(c, tolerance)) {
                 events.push(PixelBusEvent::Latency(latency));
             }
+
+            // The weapon-bar block is optional (older addons omit it). Emit only on
+            // a change in the decoded signal, so per-attack redraws never churn.
+            let weapon = b3.and_then(|c| decode_weapon_bar(c, tolerance));
+            if let Some(signal) = weapon {
+                if self.weapon != Some(signal) {
+                    self.weapon = Some(signal);
+                    events.push(PixelBusEvent::WeaponBar(signal));
+                }
+            }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
                 self.signal_lost = true;
                 self.fishing = FishingSignal::None;
+                self.weapon = None;
                 events.push(PixelBusEvent::SignalLost);
             }
         }
@@ -313,7 +420,7 @@ impl PixelBusReader {
         events
     }
 
-    /// Samples the three configured points and observes them (the runtime path).
+    /// Samples the four configured points and observes them (the runtime path).
     pub fn sample_and_observe(
         &mut self,
         sampler: &dyn SurfaceSampler,
@@ -322,9 +429,11 @@ impl PixelBusReader {
         let (sx, sy) = self.config.status_point;
         let (fx, fy) = self.config.fishing_point;
         let (lx, ly) = self.config.latency_point;
+        let (wx, wy) = self.config.weapon_point;
         let b0 = sampler.sample(sx, sy);
         let b1 = sampler.sample(fx, fy);
         let b2 = sampler.sample(lx, ly);
-        self.observe(b0, b1, b2, now_ms)
+        let b3 = sampler.sample(wx, wy);
+        self.observe(b0, b1, b2, b3, now_ms)
     }
 }

@@ -5,8 +5,9 @@ use eso_weave::config::{self, Settings};
 use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
-use eso_weave::weave::types::WeaveType;
-use eso_weave::weave::{MockSink, WeaveConfig, WeaveEngine};
+use eso_weave::pixelbus::{ActiveBar, WeaponBarSignal, WeaponClass};
+use eso_weave::weave::types::{TimingConfig, WeaveType};
+use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
 
 fn down(key: Key) -> KeyEvent {
     KeyEvent {
@@ -162,4 +163,170 @@ fn unknown_weave_type_falls_back_with_notice() {
     assert!(!notices.is_empty());
     // Falls back to the default weave type for slot 1.
     assert_eq!(engine.config().slots[0].weave_type, WeaveType::LightAttack);
+}
+
+// Slice 014: per-bar timing selection and weapon-class presets.
+
+fn timing(global: u32, weave: u32, heavy: u32, bash: u32) -> TimingConfig {
+    TimingConfig {
+        global_cooldown: global,
+        d_weave: weave,
+        d_heavy: heavy,
+        d_bash: bash,
+    }
+}
+
+#[test]
+fn effective_timing_selects_profile_by_active_bar() {
+    let front = timing(500, 50, 640, 125);
+    let back = timing(500, 50, 1360, 125);
+
+    // Front and Unknown use the front profile; Back uses the back profile.
+    let f = effective_timing(
+        &front,
+        &back,
+        false,
+        ActiveBar::Front,
+        WeaponClass::Unknown,
+        WeaponClass::Unknown,
+    );
+    assert_eq!(f.d_heavy, 640);
+    let u = effective_timing(
+        &front,
+        &back,
+        false,
+        ActiveBar::Unknown,
+        WeaponClass::Unknown,
+        WeaponClass::Unknown,
+    );
+    assert_eq!(
+        u.d_heavy, 640,
+        "unknown bar falls back to the front profile"
+    );
+    let b = effective_timing(
+        &front,
+        &back,
+        false,
+        ActiveBar::Back,
+        WeaponClass::Unknown,
+        WeaponClass::Unknown,
+    );
+    assert_eq!(b.d_heavy, 1360);
+}
+
+#[test]
+fn heavy_preset_orders_dual_wield_fastest() {
+    let dw = heavy_preset(WeaponClass::DualWield).unwrap();
+    let th = heavy_preset(WeaponClass::TwoHanded).unwrap();
+    let staff = heavy_preset(WeaponClass::RestorationStaff).unwrap();
+    let bow = heavy_preset(WeaponClass::Bow).unwrap();
+    assert!(dw < th, "dual wield heavy is shorter than two handed");
+    assert!(
+        th < staff && th < bow,
+        "two handed is shorter than staves and bow"
+    );
+    assert_eq!(heavy_preset(WeaponClass::Unknown), None);
+}
+
+#[test]
+fn auto_timing_applies_preset_per_bar() {
+    // Base profiles both use 900; auto derives d_heavy from each bar's class.
+    let front = timing(500, 50, 900, 125);
+    let back = timing(500, 50, 900, 125);
+
+    // Front bar dual wield -> 640; back bar restoration staff -> 1360.
+    let f = effective_timing(
+        &front,
+        &back,
+        true,
+        ActiveBar::Front,
+        WeaponClass::DualWield,
+        WeaponClass::RestorationStaff,
+    );
+    assert_eq!(f.d_heavy, 640);
+    let b = effective_timing(
+        &front,
+        &back,
+        true,
+        ActiveBar::Back,
+        WeaponClass::DualWield,
+        WeaponClass::RestorationStaff,
+    );
+    assert_eq!(b.d_heavy, 1360);
+    assert!(
+        f.d_heavy < b.d_heavy,
+        "the faster-heavy bar has the shorter delay"
+    );
+
+    // Auto off uses the manual profile unchanged.
+    let manual = effective_timing(
+        &front,
+        &back,
+        false,
+        ActiveBar::Front,
+        WeaponClass::DualWield,
+        WeaponClass::RestorationStaff,
+    );
+    assert_eq!(manual.d_heavy, 900);
+}
+
+#[test]
+fn set_weapon_bar_drives_current_timing() {
+    let config = WeaveConfig {
+        timing: timing(500, 50, 640, 125),
+        timing_back: timing(500, 50, 1360, 125),
+        ..Default::default()
+    };
+    let mut engine = WeaveEngine::new(config);
+
+    // Default (unknown) bar uses the front profile.
+    assert_eq!(engine.current_timing().d_heavy, 640);
+
+    engine.set_weapon_bar(WeaponBarSignal {
+        bar: ActiveBar::Back,
+        front: WeaponClass::DualWield,
+        back: WeaponClass::RestorationStaff,
+    });
+    assert_eq!(engine.active_bar(), ActiveBar::Back);
+    assert_eq!(engine.current_timing().d_heavy, 1360);
+}
+
+#[test]
+fn back_profile_and_auto_flag_round_trip() {
+    let config = WeaveConfig {
+        timing: timing(500, 50, 640, 100),
+        timing_back: timing(600, 40, 1360, 150),
+        auto_timing: true,
+        ..Default::default()
+    };
+    let engine = WeaveEngine::new(config);
+
+    let mut settings = Settings::default();
+    engine.store(&mut settings);
+
+    let mut loaded = WeaveEngine::new(WeaveConfig::default());
+    let notices = loaded.load(&settings);
+    assert!(notices.is_empty());
+    assert_eq!(loaded.config().timing_back.d_heavy, 1360);
+    assert_eq!(loaded.config().timing_back.global_cooldown, 600);
+    assert!(loaded.config().auto_timing);
+}
+
+#[test]
+fn old_config_without_back_defaults_to_front() {
+    // A timing section from before slice 014 has only the front fields.
+    let settings = Settings {
+        timing: serde_json::json!({
+            "global_cooldown": 500, "d_weave": 50, "d_heavy": 700, "d_bash": 125
+        }),
+        ..Default::default()
+    };
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.load(&settings);
+    assert_eq!(
+        engine.config().timing_back.d_heavy,
+        700,
+        "back mirrors front when absent"
+    );
+    assert!(!engine.config().auto_timing);
 }
