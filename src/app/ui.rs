@@ -4,9 +4,9 @@
 //! correctness-bearing logic, so it is excluded from the unit-tested surface and
 //! validated with the manual checklist in the feature quickstart.
 //!
-//! Rendering uses a single central panel with inline sections (menu row, main
-//! content, an optional log section, and an inline settings view), keeping to a
-//! small, stable set of egui widgets.
+//! Rendering uses a central panel (menu bar, status region, and skills), an
+//! optional resizable bottom panel for the live log, and a settings modal, keeping
+//! to a small, stable set of egui widgets plus a few brand presentation helpers.
 
 use std::time::{Duration, Instant};
 

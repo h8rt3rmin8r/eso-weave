@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- GUI Ergonomics, Information Design, and Auto-Save (S013): a substantial rework
+  of the main window. Two-state controls (suspend and resume, fishing, per-skill
+  enabled and override, and every boolean setting) are now colorized toggle
+  switches; sections use real headings from the bundled Inter SemiBold weight; the
+  status region is renamed (Status, Fishing, Pixel Beacon (Addon)), spread across a
+  full-width grid, and shows a normalized, color-coded state field; the Skills grid
+  has labeled columns (Skill, Enabled, Weave, Override, Delay) and shows the
+  inherited default (muted) instead of a literal zero when no override is set, with
+  the override targeting the delay for the row's weave type. The Settings screen is
+  now a full-frame modal over a dimmed backdrop that closes on an outside click,
+  Escape, or the close control, reorganized into labeled clusters (Appearance,
+  Combat timing, Fishing, Pixel Beacon and bus, Logging, Keybindings) with no
+  underscores in any label and a short inline help line under every option; the
+  previously hidden beacon AddOns-folder override and game environment are now
+  surfaced. The live log moved into a resizable bottom panel with a darker
+  terminal-like fill and a monospace font. All persistence is now automatic and
+  coalesced (no Apply or Save control anywhere): main-window skill edits, the live
+  suspend and fishing intents, and the log-panel height are all persisted and
+  restored across restarts, with a gentle bottom-right save confirmation. Hover
+  tooltips and inline help cover the controls, section titles, and Skills columns.
+
+### Decisions
+
+- 2026-07-11: GUI Ergonomics and Auto-Save (S013) persists live session state
+  (the suspend and fishing on/off intents) so the app restores the state it was
+  closed in. Because the constitution requires the configuration file to hold user
+  settings only, with no session, runtime, or derived state, this session state is
+  written to a separate `state.json` in the config directory, never to
+  `config.json`. Folding it into `config.json` was rejected as a constitution
+  violation; not persisting it was rejected because the operator requested the
+  restore. Restoring under the focus-scoped input invariant is safe: a restored
+  running or fishing-on state performs no input until the game window is focused,
+  and the fishing intent restores as a clean re-arm rather than a transient
+  sub-state. The log-panel height is a user layout preference and is kept in the
+  config UI section. No pinned artifact is changed by this slice.
+
 ## [0.3.0] - 2026-07-11
 
 ### Added
