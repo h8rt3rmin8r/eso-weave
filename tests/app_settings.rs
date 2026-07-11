@@ -49,6 +49,7 @@ fn ui_section_round_trips_and_defaults() {
     let custom = UiPrefs {
         theme: Theme::Light,
         always_on_top: true,
+        log_panel_height: 240,
     };
     let (loaded, notices) = ui_from_value(&ui_to_value(&custom));
     assert_eq!(loaded, custom);

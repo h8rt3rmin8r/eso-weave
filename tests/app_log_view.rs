@@ -3,9 +3,23 @@
 use time::OffsetDateTime;
 use tracing::Level;
 
+use eso_weave::app::clamp_log_height;
 use eso_weave::app::log_view::{autoscroll, build_log_view, level_color, LogColor};
 use eso_weave::config::LevelName;
 use eso_weave::logging::LogEvent;
+
+#[test]
+fn log_height_clamps_to_window() {
+    let window = 800.0;
+    // Grows are capped so the interactive area stays visible.
+    assert!(clamp_log_height(10_000.0, window) <= window * 0.75 + 0.01);
+    // Shrinks are floored so the panel never disappears.
+    assert!(clamp_log_height(0.0, window) >= (window * 0.1).min(48.0));
+    // A reasonable height passes through unchanged.
+    assert_eq!(clamp_log_height(200.0, window), 200.0);
+    // A tiny window still yields a usable minimum.
+    assert!(clamp_log_height(10.0, 100.0) >= 48.0);
+}
 
 fn event(level: Level, message: &str) -> LogEvent {
     LogEvent {

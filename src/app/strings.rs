@@ -31,6 +31,8 @@ pub const BEACON_UNINSTALL_TOOLTIP: &str =
 
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
+pub const SKILLS_TOOLTIP: &str =
+    "Per-slot weave configuration: which slots are active, their weave type, and any delay override.";
 
 /// The Skills grid columns as (header label, tooltip), left to right.
 pub const SKILL_COLUMNS: [(&str, &str); 5] = [
@@ -221,6 +223,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         FISHING_TOGGLE_TOOLTIP,
         BEACON_INSTALL_TOOLTIP,
         BEACON_UNINSTALL_TOOLTIP,
+        SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,
         MENU_SETTINGS_TOOLTIP,

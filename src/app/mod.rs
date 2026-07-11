@@ -279,6 +279,17 @@ pub enum UiIntent {
     ToggleLogPanel(bool),
     /// Set the panel-local minimum log level.
     SetLogFilter(LevelName),
+    /// Persist the live-log panel height (a user layout preference), in points.
+    SetLogHeight(u32),
+}
+
+/// Clamps a live-log panel height (points) to a sensible range for the given
+/// window height: at least about a tenth of the window, at most enough to leave
+/// the interactive area visible.
+pub fn clamp_log_height(height: f32, window_height: f32) -> f32 {
+    let min = (window_height * 0.1).max(48.0);
+    let max = (window_height * 0.75).max(min);
+    height.clamp(min, max)
 }
 
 /// The derived display state for one frame.
@@ -503,6 +514,13 @@ impl AppModel {
             }
             UiIntent::SetLogFilter(level) => {
                 self.log_filter = level;
+                Vec::new()
+            }
+            UiIntent::SetLogHeight(height) => {
+                let mut prefs = settings_form::ui_from_value(&self.settings.ui).0;
+                prefs.log_panel_height = height;
+                self.settings.ui = settings_form::ui_to_value(&prefs);
+                self.scheduler.mark_config(Instant::now());
                 Vec::new()
             }
         }

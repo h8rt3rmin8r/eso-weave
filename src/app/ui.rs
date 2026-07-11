@@ -77,7 +77,8 @@ const LEVELS: [LevelName; 6] = [
 pub struct EsoWeaveApp {
     model: AppModel,
     ui_prefs: UiPrefs,
-    applied_prefs: Option<UiPrefs>,
+    applied_prefs: Option<(Theme, bool)>,
+    log_height: f32,
     log_panel_open: bool,
     settings_open: bool,
     settings_draft: Option<SettingsForm>,
@@ -90,10 +91,12 @@ impl EsoWeaveApp {
     /// Creates the app over the view-model.
     pub fn new(model: AppModel) -> Self {
         let ui_prefs = model.ui_prefs();
+        let log_height = ui_prefs.log_panel_height as f32;
         Self {
             model,
             ui_prefs,
             applied_prefs: None,
+            log_height,
             log_panel_open: false,
             settings_open: false,
             settings_draft: None,
@@ -104,7 +107,10 @@ impl EsoWeaveApp {
     }
 
     fn apply_prefs(&mut self, ctx: &egui::Context) {
-        if self.applied_prefs == Some(self.ui_prefs) {
+        // Only the theme and always-on-top drive a re-apply; the log height is a
+        // layout preference that must not churn the theme while the user drags.
+        let key = (self.ui_prefs.theme, self.ui_prefs.always_on_top);
+        if self.applied_prefs == Some(key) {
             return;
         }
         crate::app::theme::apply(ctx, self.ui_prefs.theme);
@@ -114,7 +120,7 @@ impl EsoWeaveApp {
             egui::WindowLevel::Normal
         };
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
-        self.applied_prefs = Some(self.ui_prefs);
+        self.applied_prefs = Some(key);
     }
 }
 
@@ -122,9 +128,39 @@ impl eframe::App for EsoWeaveApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_prefs(&ctx);
+        let extreme_bg = ui.visuals().extreme_bg_color;
 
         let mut intents: Vec<UiIntent> = Vec::new();
         let mut exit = false;
+
+        // The live log lives in a resizable bottom panel (drag handle and resize
+        // cursor come for free), added before the central panel. It is clamped so
+        // it never overlaps the interactive area or shrinks away, and its height is
+        // persisted as a layout preference.
+        if self.log_panel_open {
+            let window_h = ctx.content_rect().height();
+            let min_h = (window_h * 0.1).max(48.0);
+            let max_h = (window_h * 0.75).max(min_h);
+            let start = crate::app::clamp_log_height(self.log_height, window_h);
+            let resp = egui::Panel::bottom("log_panel")
+                .resizable(true)
+                .min_size(min_h)
+                .max_size(max_h)
+                .default_size(start)
+                .frame(
+                    egui::Frame::new()
+                        .fill(extreme_bg)
+                        .inner_margin(egui::Margin::same(6)),
+                )
+                .show(ui, |ui| {
+                    self.log_view(ui, &mut intents);
+                });
+            let new_h = resp.response.rect.height();
+            if (new_h - self.log_height).abs() > 0.5 {
+                self.log_height = new_h;
+                intents.push(UiIntent::SetLogHeight(new_h.round() as u32));
+            }
+        }
 
         egui::CentralPanel::default().show(ui, |ui| {
             // Menu bar.
@@ -163,10 +199,6 @@ impl eframe::App for EsoWeaveApp {
             ui.separator();
 
             self.main_view(ui, &mut intents);
-            if self.log_panel_open {
-                ui.separator();
-                self.log_view(ui, &mut intents);
-            }
         });
 
         if self.settings_open {
@@ -212,11 +244,21 @@ impl EsoWeaveApp {
         if self.confirm_uninstall {
             ui.horizontal(|ui| {
                 ui.label("Remove the PixelBeacon addon?");
-                if ui.button("Uninstall").clickable().clicked() {
+                if ui
+                    .button("Uninstall")
+                    .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
+                    .clickable()
+                    .clicked()
+                {
                     intents.push(UiIntent::UninstallBeacon);
                     self.confirm_uninstall = false;
                 }
-                if ui.button("Cancel").clickable().clicked() {
+                if ui
+                    .button("Cancel")
+                    .on_hover_text("Keep the addon installed.")
+                    .clickable()
+                    .clicked()
+                {
                     self.confirm_uninstall = false;
                 }
             });
@@ -273,7 +315,7 @@ impl EsoWeaveApp {
             });
 
         ui.separator();
-        widgets::heading(ui, strings::SKILLS_TITLE);
+        widgets::heading(ui, strings::SKILLS_TITLE).on_hover_text(strings::SKILLS_TOOLTIP);
         // A single grid so the label, enabled toggle, weave selector, override
         // toggle, and delay align in labeled columns across every row. When a row
         // has no override, the Delay cell shows the inherited default (muted) so a
@@ -366,7 +408,8 @@ impl EsoWeaveApp {
     fn log_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
         let filter = self.model.view().log_filter;
         ui.horizontal(|ui| {
-            ui.label("Live Log");
+            ui.label(egui::RichText::new(strings::LOG_TITLE).strong())
+                .on_hover_text(strings::LOG_TOOLTIP);
             let mut selected = filter;
             egui::ComboBox::from_id_salt("log_filter")
                 .selected_text(level_name(selected))
@@ -376,6 +419,7 @@ impl EsoWeaveApp {
                     }
                 })
                 .response
+                .on_hover_text(strings::LOG_FILTER_TOOLTIP)
                 .clickable();
             if selected != filter {
                 intents.push(UiIntent::SetLogFilter(selected));
@@ -383,13 +427,15 @@ impl EsoWeaveApp {
         });
         let events = self.model.log_handle().recent(1000);
         let rows = build_log_view(&events, filter);
+        // A terminal-like panel: monospace rows over the darker panel fill set by
+        // the enclosing bottom panel, keeping the per-level colors.
         egui::ScrollArea::vertical()
             .stick_to_bottom(true)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 for row in rows {
                     let color = egui::Color32::from_rgb(row.color.r, row.color.g, row.color.b);
-                    ui.colored_label(color, row.text);
+                    ui.label(egui::RichText::new(row.text).monospace().color(color));
                 }
             });
     }

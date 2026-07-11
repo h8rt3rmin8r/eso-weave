@@ -8,13 +8,28 @@ use crate::input::bindings::BindingTable;
 use crate::pixelbus::{self, ReaderConfig};
 use crate::weave::{LatencyConfig, WeaveConfig, WeaveEngine};
 
+/// The default live-log panel height in points.
+pub const DEFAULT_LOG_HEIGHT: u32 = 160;
+
 /// GUI preferences (the `ui` settings section).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UiPrefs {
     /// The active theme.
     pub theme: Theme,
     /// Whether the window stays on top.
     pub always_on_top: bool,
+    /// The persisted live-log panel height in points (a user layout preference).
+    pub log_panel_height: u32,
+}
+
+impl Default for UiPrefs {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            always_on_top: false,
+            log_panel_height: DEFAULT_LOG_HEIGHT,
+        }
+    }
 }
 
 /// Reads the `ui` section into [`UiPrefs`], falling back with a notice on an
@@ -41,10 +56,16 @@ pub fn ui_from_value(value: &serde_json::Value) -> (UiPrefs, Vec<Notice>) {
         .get("always_on_top")
         .and_then(|v| v.as_bool())
         .unwrap_or(defaults.always_on_top);
+    let log_panel_height = value
+        .get("log_panel_height")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(defaults.log_panel_height);
     (
         UiPrefs {
             theme,
             always_on_top,
+            log_panel_height,
         },
         notices,
     )
@@ -56,7 +77,11 @@ pub fn ui_to_value(prefs: &UiPrefs) -> serde_json::Value {
         Theme::Dark => "dark",
         Theme::Light => "light",
     };
-    serde_json::json!({ "theme": theme, "always_on_top": prefs.always_on_top })
+    serde_json::json!({
+        "theme": theme,
+        "always_on_top": prefs.always_on_top,
+        "log_panel_height": prefs.log_panel_height,
+    })
 }
 
 /// An editable in-memory copy of every section-10.3 setting.
