@@ -2,8 +2,11 @@
 //!
 //! This crate carries the project foundations: the Config Store
 //! ([`config`]) and the Logging subsystem ([`logging`]), plus a per-platform
-//! path seam ([`platform`]) that later input and sampling backends extend.
+//! path seam ([`platform`]) that later input and sampling backends extend. The
+//! [`beacon`] module manages the on-disk lifecycle of the embedded PixelBeacon
+//! addon.
 
+pub mod beacon;
 pub mod config;
 pub mod input;
 pub mod logging;

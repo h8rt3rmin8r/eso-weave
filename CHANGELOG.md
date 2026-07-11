@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   state machine that emits typed events and raises SignalLost on heartbeat
   timeout against an injected clock, behind a `SurfaceSampler` seam with a mock
   plus thin GDI (Windows) and X11 (Linux) samplers.
+- Beacon Manager (S006): on-disk lifecycle of the embedded PixelBeacon addon
+  (embedded manifest and Lua, single-sourced embedded version), pure four-state
+  classification, install confined to the `PixelBeacon` subtree of an injected
+  AddOns root, and a marker-gated uninstall that deletes only when the managed
+  marker line is verified present in the on-disk manifest. AddOns discovery sits
+  behind thin backends (Windows Documents known folder; Linux Steam
+  `libraryfolders.vdf` plus Proton app id 306130 compatdata), with a manual path
+  override and a selectable `live`/`pts` environment persisted as an additive
+  `beacon` settings section, plus a best-effort running-game probe feeding the
+  `/reloadui` reminder. No new crates.
 
 ### Changed
 
@@ -53,3 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   synthesis, and X11 focus. The Linux backend is type-checked and clippy-clean on
   the linux target; its runtime is validated on a Linux host. Rationale is in
   `specs/002-input-engine/research.md`.
+- 2026-07-11: Beacon Manager (S006) single-sources the embedded addon version by
+  parsing the embedded `PixelBeacon.txt` manifest at runtime rather than
+  declaring a separate version constant, so the file written on install and the
+  version verify compares can never drift. Beacon settings (AddOns path override
+  and `live`/`pts` environment) reuse the additive opaque config-section pattern
+  (like `timing` and `skills`), requiring no config `schema_version` bump. Enable
+  the `windows-sys` `Win32_System_Diagnostics_ToolHelp` feature for the
+  best-effort running-game process probe; no new crates. Rationale is in
+  `specs/006-beacon-manager/research.md`.

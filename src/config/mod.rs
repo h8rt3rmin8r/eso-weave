@@ -95,6 +95,12 @@ pub struct Settings {
     /// and backward compatible.
     #[serde(default)]
     pub skills: serde_json::Value,
+    /// Beacon Manager configuration (AddOns path override and game
+    /// environment), as an opaque JSON section owned by the beacon module. Null
+    /// or absent means the beacon defaults are used. Additive and backward
+    /// compatible.
+    #[serde(default)]
+    pub beacon: serde_json::Value,
 }
 
 impl Default for Settings {
@@ -105,6 +111,7 @@ impl Default for Settings {
             bindings: BTreeMap::new(),
             timing: serde_json::Value::Null,
             skills: serde_json::Value::Null,
+            beacon: serde_json::Value::Null,
         }
     }
 }
@@ -165,6 +172,8 @@ struct RawSettings {
     timing: serde_json::Value,
     #[serde(default)]
     skills: serde_json::Value,
+    #[serde(default)]
+    beacon: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -209,9 +218,16 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
 
     let mut notices = Vec::new();
 
-    let known: BTreeSet<&str> = ["schema_version", "logging", "bindings", "timing", "skills"]
-        .into_iter()
-        .collect();
+    let known: BTreeSet<&str> = [
+        "schema_version",
+        "logging",
+        "bindings",
+        "timing",
+        "skills",
+        "beacon",
+    ]
+    .into_iter()
+    .collect();
     let unknown: Vec<String> = object
         .keys()
         .filter(|key| !known.contains(key.as_str()))
@@ -246,6 +262,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         bindings: raw.bindings,
         timing: raw.timing,
         skills: raw.skills,
+        beacon: raw.beacon,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {
