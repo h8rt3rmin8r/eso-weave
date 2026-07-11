@@ -588,8 +588,49 @@ accordance with the Apache License, Version 2.0 under which it is distributed.
 
 | ID | Item | Notes |
 | --- | --- | --- |
-| R1 | Weave delay defaults research | Derive evidence-based defaults for `d_weave`, `d_heavy` per weapon class, and the latency coefficient `k`, informed by community combat data and Combat Metrics' weave-window methodology. Deliverable: an appendix revision to this specification. |
+| R1 | Weave delay defaults research | CLOSED 2026-07-11 (slice 014). Evidence-based defaults for `d_weave` and per-weapon-class `d_heavy` recorded in Appendix A below; the latency coefficient `k` default remains 0.25 from slice 008. |
 | R2 | Audio-cue bite detector | Prototype a loopback-capture detector as a second `BiteDetector` implementation, removing the addon dependency for fishing. Post-v1. |
 | R3 | Pure-Wayland sampling path | Evaluate xdg-desktop-portal screen capture for sessions without an XWayland ESO surface. Post-v1 unless field reports demand it. |
 | R4 | PixelBeacon APIVersion upkeep | Define the patch-release checklist for bumping the addon manifest after ESO major updates. |
 | R5 | Interact key discovery | The interact key is configurable (default `E`); evaluate whether it should be read from the game's keybind exports rather than configured manually. Low priority. |
+
+## Appendix A. Weave Delay Defaults (R1)
+
+Added 2026-07-11 (slice 014), closing open item R1. These are evidence-based
+defaults drawn from community combat data (Combat Metrics measurements and
+animation-canceling references). The exact millisecond values are estimates
+pending in-game re-validation; they ship as adjustable configuration defaults, not
+fixed constants.
+
+### A.1 Global cooldown and weave window
+
+ESO's global cooldown is 1000 ms: at most one ability activates per second. Light
+and heavy attacks run on a parallel track (effectively off-GCD), and "weaving"
+fires one light attack plus one skill within the same window. The practical target
+is about 965 ms per light-attack-plus-skill cycle (roughly 62 BPM); exceeding
+1000 ms drops (misses) light attacks. The true lower bound on `d_weave` is
+therefore dominated by server latency rather than local timing, so `d_weave`
+defaults small (50 ms) and the latency-adaptive path (slice 008) shortens it; the
+weapon-specific knob is `d_heavy`.
+
+### A.2 Per-weapon-class heavy-attack defaults
+
+Approximate fully-charged heavy-attack channel durations by weapon class, used as
+the per-bar `d_heavy` presets when auto timing is enabled:
+
+| Weapon class | `d_heavy` default (ms) | Source note |
+| --- | --- | --- |
+| Dual wield | 640 | Fastest heavy attack (Combat Metrics community measurements). |
+| Two handed | 1050 | Next-fastest melee. |
+| Destruction staff | 1180 | Fire/frost; lightning staff channels longer but is folded into this class for now. |
+| Restoration staff | 1360 | |
+| Bow | 1380 | |
+| Sword and shield | 900 | Estimate not found in sources; flagged for in-game measurement. |
+| None or unknown | keep profile value | No preset applied. |
+
+### A.3 Owed in-game validation
+
+- Re-validate each preset against live timing per current patch.
+- Measure the sword-and-shield heavy-attack duration (currently an estimate).
+- Confirm the B3 pixel signal decodes correctly across bar swaps, loading screens,
+  and death, per the slice 014 quickstart.

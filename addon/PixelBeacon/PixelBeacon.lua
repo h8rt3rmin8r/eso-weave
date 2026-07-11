@@ -1,16 +1,33 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders up to three 16 by 16 physical-pixel blocks anchored to the top-left
--- of the client area, encoding load status (B0), fishing state (B1), and server
--- latency (B2). It has no settings, no user interface beyond the blocks, no
--- external libraries, and no saved variables. Values follow the ESO Weave master
--- specification section 9.3.
+-- It renders up to four 16 by 16 physical-pixel blocks anchored to the top-left
+-- of the client area, encoding load status (B0), fishing state (B1), server
+-- latency (B2), and the active weapon bar with each bar's weapon class (B3). It
+-- has no settings, no user interface beyond the blocks, no external libraries,
+-- and no saved variables. Values follow the ESO Weave master specification
+-- section 9.3 and the slice 014 weapon-bar block.
 
 local ADDON_NAME = "PixelBeacon"
-local ADDON_VERSION = 1
+local ADDON_VERSION = 2
 local BLOCK_PX = 16
 local LATENCY_UPDATE_MS = 1000
 local BITE_SAFETY_TIMEOUT_MS = 5000
+
+-- Weapon-class codes, shared byte-for-byte with the ESO Weave pixel-bus reader.
+local CLASS_NONE = 0
+local CLASS_DUAL_WIELD = 1
+local CLASS_TWO_HANDED = 2
+local CLASS_SWORD_AND_SHIELD = 3
+local CLASS_BOW = 4
+local CLASS_DESTRUCTION_STAFF = 5
+local CLASS_RESTORATION_STAFF = 6
+
+-- The weapon-bar block marker (green channel), distinct from the latency marker.
+local WEAPON_MARKER = 0x5A
+
+-- The decoded weapon-bar state: active bar code (0 unknown, 1 front, 2 back) and
+-- each bar's class code. Held across indeterminate reads (locked or none pair).
+local weaponBar = { bar = 0, front = CLASS_NONE, back = CLASS_NONE }
 
 local wm = WINDOW_MANAGER
 local em = EVENT_MANAGER
@@ -90,6 +107,87 @@ local function renderLatency()
     blocks.latency:SetHidden(false)
 end
 
+-- B3 Weapon bar ------------------------------------------------------------
+
+-- Maps a weapon pair (main-hand and off-hand weapon types) to a normalized class
+-- code from the named WEAPONTYPE_* constants, so the reader never needs the raw
+-- game enum integers.
+local function classifyWeaponPair(mainType, offType)
+    if mainType == WEAPONTYPE_NONE then
+        return CLASS_NONE
+    elseif mainType == WEAPONTYPE_TWO_HANDED_SWORD
+        or mainType == WEAPONTYPE_TWO_HANDED_AXE
+        or mainType == WEAPONTYPE_TWO_HANDED_HAMMER then
+        return CLASS_TWO_HANDED
+    elseif mainType == WEAPONTYPE_BOW then
+        return CLASS_BOW
+    elseif mainType == WEAPONTYPE_FIRE_STAFF
+        or mainType == WEAPONTYPE_FROST_STAFF
+        or mainType == WEAPONTYPE_LIGHTNING_STAFF then
+        return CLASS_DESTRUCTION_STAFF
+    elseif mainType == WEAPONTYPE_HEALING_STAFF then
+        return CLASS_RESTORATION_STAFF
+    elseif offType == WEAPONTYPE_SHIELD then
+        return CLASS_SWORD_AND_SHIELD
+    else
+        -- A one-handed melee weapon with another weapon (or nothing) in the off
+        -- hand is treated as dual wield for timing purposes.
+        return CLASS_DUAL_WIELD
+    end
+end
+
+-- Recomputes the weapon-bar state from the game, holding the last good bar when
+-- the pair is locked or none. Returns true when the stored state changed.
+local function computeWeaponBar()
+    local pair, locked = GetActiveWeaponPairInfo()
+    local bar = weaponBar.bar
+    if not locked then
+        if pair == ACTIVE_WEAPON_PAIR_MAIN then
+            bar = 1
+        elseif pair == ACTIVE_WEAPON_PAIR_BACKUP then
+            bar = 2
+        end
+        -- ACTIVE_WEAPON_PAIR_NONE leaves the last good bar unchanged.
+    end
+
+    local front = classifyWeaponPair(
+        GetItemWeaponType(BAG_WORN, EQUIP_SLOT_MAIN_HAND),
+        GetItemWeaponType(BAG_WORN, EQUIP_SLOT_OFF_HAND)
+    )
+    local back = classifyWeaponPair(
+        GetItemWeaponType(BAG_WORN, EQUIP_SLOT_BACKUP_MAIN),
+        GetItemWeaponType(BAG_WORN, EQUIP_SLOT_BACKUP_OFF)
+    )
+
+    if bar == weaponBar.bar and front == weaponBar.front and back == weaponBar.back then
+        return false
+    end
+    weaponBar.bar = bar
+    weaponBar.front = front
+    weaponBar.back = back
+    return true
+end
+
+-- Renders B3: green marker, red packs the front and back class nibbles, blue is
+-- the active-bar code. Rendered only while the status block renders.
+local function renderWeapon()
+    if blocks.status:IsHidden() then
+        blocks.weapon:SetHidden(true)
+        return
+    end
+    local red = weaponBar.front * 16 + weaponBar.back
+    blocks.weapon:SetCenterColor(channel(red), channel(WEAPON_MARKER), channel(weaponBar.bar), 1)
+    blocks.weapon:SetHidden(false)
+end
+
+-- Reacts to a weapon-pair-changed event, which fires on nearly every attack:
+-- re-render only when the decoded state actually changes.
+local function onWeaponPairChanged()
+    if computeWeaponBar() then
+        renderWeapon()
+    end
+end
+
 local function setFishingState(state)
     fishingState = state
     renderFishing()
@@ -157,25 +255,33 @@ end
 local function buildBlocks()
     root = wm:CreateTopLevelWindow(ADDON_NAME .. "Root")
     root:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, 0, 0)
-    root:SetDimensions(physicalToUi(BLOCK_PX * 3), physicalToUi(BLOCK_PX))
+    root:SetDimensions(physicalToUi(BLOCK_PX * 4), physicalToUi(BLOCK_PX))
     root:SetDrawLayer(DL_OVERLAY)
 
     blocks.status = createBlock("Status")
     blocks.fishing = createBlock("Fishing")
     blocks.latency = createBlock("Latency")
+    blocks.weapon = createBlock("Weapon")
 
     positionBlock(blocks.status, 0)
     positionBlock(blocks.fishing, BLOCK_PX)
     positionBlock(blocks.latency, BLOCK_PX * 2)
+    positionBlock(blocks.weapon, BLOCK_PX * 3)
 
     renderStatus()
     renderFishing()
     renderLatency()
+    computeWeaponBar()
+    renderWeapon()
 end
 
 local function onLatencyTick()
     renderStatus()
     renderLatency()
+    -- A 1 Hz recompute picks up equipment changes; renders idempotently, so the
+    -- read-back signal only changes on a real weapon or bar change.
+    computeWeaponBar()
+    renderWeapon()
 end
 
 local function onAddOnLoaded(_, name)
@@ -190,6 +296,15 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "Inv", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, onInventorySlotUpdate)
     em:RegisterForEvent(ADDON_NAME .. "Interact", EVENT_CLIENT_INTERACT_RESULT, onInteractResult)
     em:RegisterForEvent(ADDON_NAME .. "Chatter", EVENT_CHATTER_END, onChatterEnd)
+
+    -- Weapon-bar tracking: react immediately to a real bar swap, and re-baseline
+    -- after each loading screen (the pair-changed event may not fire for the
+    -- initial state).
+    em:RegisterForEvent(ADDON_NAME .. "Bar", EVENT_ACTIVE_WEAPON_PAIR_CHANGED, onWeaponPairChanged)
+    em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
+        computeWeaponBar()
+        renderWeapon()
+    end)
 end
 
 em:RegisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED, onAddOnLoaded)

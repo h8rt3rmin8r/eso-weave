@@ -1,9 +1,9 @@
 ## Title: PixelBeacon
 ## Author: ESO Weave
-## Version: 1
-## AddOnVersion: 1
+## Version: 2
+## AddOnVersion: 2
 ## APIVersion: 101044
 ## X-ESO-Weave-Managed: true
-## Description: Minimal screen-signal beacon managed by ESO Weave. It renders small color blocks that encode load status, fishing state, and server latency. It has no settings, no user interface, and no saved variables. Do not edit or publish; it is installed and removed by the ESO Weave application.
+## Description: Minimal screen-signal beacon managed by ESO Weave. It renders small color blocks that encode load status, fishing state, server latency, and the active weapon bar with each bar's weapon class. It has no settings, no user interface, and no saved variables. Do not edit or publish; it is installed and removed by the ESO Weave application.
 
 PixelBeacon.lua

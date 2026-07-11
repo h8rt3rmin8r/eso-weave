@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Weapon-Bar-Aware Adaptive Timing (S014): the app now detects which weapon bar is
+  active and each bar's weapon class and applies per-bar skill-delay timing. The
+  PixelBeacon addon gains a fourth pixel block (B3) that encodes the active bar and
+  a normalized weapon-class code computed in Lua from the game weapon-type
+  constants (so the reader never needs the raw enum integers), edge-detected so
+  per-attack redraws do not churn and re-baselined after loading screens. The
+  pixel-bus reader decodes it, the weave engine keeps a front and back timing
+  profile selected by the active bar, and an "auto timing from weapon" preference
+  fills each bar's heavy-attack delay from weapon-class presets (dual wield fastest
+  through staves and bow slowest). The main window shows the detected bar and
+  weapon classes, and the settings expose the auto-timing toggle and a back-bar
+  timing group. Closes research item R1 with a new timing appendix
+  (`docs/ESO-Weave-Specification-v0.1.0.md` Appendix A). The exact preset values
+  and the pixel signal require in-game validation (an explicit follow-up).
 - GUI Ergonomics, Information Design, and Auto-Save (S013): a substantial rework
   of the main window. Two-state controls (suspend and resume, fishing, per-skill
   enabled and override, and every boolean setting) are now colorized toggle
@@ -32,6 +46,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-07-11: Weapon-Bar-Aware Adaptive Timing (S014) changes pinned contract
+  surfaces. The pixel-bus contract (`specs/004-pixelbeacon-addon/contracts/pixel-bus.md`)
+  gains the B3 weapon-bar block at x=48 (sample (56,8)): green `0x5A` marker
+  (distinct from the latency marker `0xA5`), red packing the front and back
+  weapon-class nibbles, blue the active-bar code; the marker is matched within
+  tolerance while the data channels are read exactly. The reader contract
+  (`specs/005-pixel-bus-reader/contracts/reader.md`) gains `decode_weapon_bar`, the
+  `ActiveBar`/`WeaponClass`/`WeaponBarSignal` types, the `WeaponBar` event (emitted
+  only on change and only with a heartbeat), and the fourth sample point, and
+  `observe` takes a `b3` argument. The PixelBeacon manifest
+  (`addon/PixelBeacon/PixelBeacon.txt`) bumps `## Version` and `## AddOnVersion` to
+  2 (single-sourced into the app's embedded-version check); the managed-marker line
+  is unchanged so safe uninstall still verifies it, and `## APIVersion` is left at
+  101044 because the weapon-bar API predates it and the live value cannot be
+  confirmed offline (tracked under R4). The weapon-class codes are shared
+  byte-for-byte between the addon Lua and the reader. The R1 appendix in the master
+  specification records the evidence-based defaults and marks R1 closed. Session
+  state is unaffected. In-game validation of the pixel signal and the exact preset
+  timings (including one-hand-and-shield) is owed.
 - 2026-07-11: GUI Ergonomics and Auto-Save (S013) persists live session state
   (the suspend and fishing on/off intents) so the app restores the state it was
   closed in. Because the constitution requires the configuration file to hold user
