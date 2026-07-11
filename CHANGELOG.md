@@ -53,6 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PixelBusDetector` adapt the Pixel Bus Reader events (dropping Latency), and the
   interact key is synthesized through a `FishingSink` seam over the input backend
   (mock plus real), with `Key::E` added as the default interact key. No new crates.
+- Latency-Adaptive Delays (S008): an opt-in weave enhancement that scales the
+  `d_weave` and `d_bash` delays by server latency using
+  `effective_delay = base + clamp(round(k * latency), 0, 300)` (k default 0.25),
+  leaving `d_heavy` and `global_cooldown` untouched. The computation lives in the
+  pure weave sequence builder; `sequence_for` delegates to the adapted builder with
+  the feature disabled, so existing weave timing is byte-for-byte unchanged unless
+  the feature is enabled with live latency. The engine takes latency in via
+  `set_latency(Option<u16>)` (clearing on signal loss reverts to base delays), and
+  the enabled flag and `k` persist as an additive `latency` settings section. Off by
+  default. No new crates.
 
 ### Changed
 
@@ -90,3 +100,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   added to the input engine as the default interact key (its Windows and Linux
   scan-code mappings included). Rationale is in
   `specs/007-fishing-controller/research.md`.
+- 2026-07-11: Latency-Adaptive Delays (S008) computes the effective delay in the
+  pure weave sequence builder, exactly where the per-slot-resolved delays are
+  consumed, so the scaling respects per-slot overrides and stays unit-testable.
+  `sequence_for` delegates to `sequence_for_adapted` with the feature disabled,
+  structurally guaranteeing no regression to existing weave timing. The adaptation
+  config (enabled flag and `k`, valid finite in `[0.0, 4.0]`) persists as a new
+  additive `latency` settings section (no `schema_version` bump); the transient
+  current latency is runtime state fed via `set_latency` and never written to the
+  config file. Rationale is in
+  `specs/008-latency-adaptive-delays/research.md`.

@@ -106,6 +106,11 @@ pub struct Settings {
     /// the fishing defaults are used. Additive and backward compatible.
     #[serde(default)]
     pub fishing: serde_json::Value,
+    /// Latency-adaptive weave delay configuration (enabled flag and scale factor
+    /// k), as an opaque JSON section owned by the weave module. Null or absent
+    /// means the defaults are used. Additive and backward compatible.
+    #[serde(default)]
+    pub latency: serde_json::Value,
 }
 
 impl Default for Settings {
@@ -118,6 +123,7 @@ impl Default for Settings {
             skills: serde_json::Value::Null,
             beacon: serde_json::Value::Null,
             fishing: serde_json::Value::Null,
+            latency: serde_json::Value::Null,
         }
     }
 }
@@ -182,6 +188,8 @@ struct RawSettings {
     beacon: serde_json::Value,
     #[serde(default)]
     fishing: serde_json::Value,
+    #[serde(default)]
+    latency: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -234,6 +242,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         "skills",
         "beacon",
         "fishing",
+        "latency",
     ]
     .into_iter()
     .collect();
@@ -273,6 +282,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         skills: raw.skills,
         beacon: raw.beacon,
         fishing: raw.fishing,
+        latency: raw.latency,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {

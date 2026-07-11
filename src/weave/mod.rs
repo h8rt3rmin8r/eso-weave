@@ -17,8 +17,11 @@ use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
 
-pub use sequence::sequence_for;
-pub use types::{InputOp, SkillSlot, SlotOverrides, TimingConfig, WeaveStep, WeaveType};
+pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
+pub use types::{
+    InputOp, LatencyConfig, SkillSlot, SlotOverrides, TimingConfig, WeaveStep, WeaveType,
+    MAX_LATENCY_BONUS_MS,
+};
 
 /// The maximum accepted timing value, in milliseconds (a generous upper bound).
 const MAX_TIMING_MS: u32 = 60_000;
@@ -159,15 +162,37 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
 pub struct WeaveEngine {
     config: WeaveConfig,
     last_weave_ms: Option<u64>,
+    latency: LatencyConfig,
+    current_latency: Option<u16>,
 }
 
 impl WeaveEngine {
-    /// Creates an engine with the given configuration.
+    /// Creates an engine with the given configuration. Latency adaptation is off
+    /// and no current latency is known until set.
     pub fn new(config: WeaveConfig) -> Self {
         Self {
             config,
             last_weave_ms: None,
+            latency: LatencyConfig::default(),
+            current_latency: None,
         }
+    }
+
+    /// Sets the current server latency, or clears it (for example on signal loss)
+    /// when `None`. While the latency is cleared, the base delays are used
+    /// unchanged.
+    pub fn set_latency(&mut self, latency: Option<u16>) {
+        self.current_latency = latency;
+    }
+
+    /// The current latency-adaptation configuration.
+    pub fn latency_config(&self) -> &LatencyConfig {
+        &self.latency
+    }
+
+    /// Replaces the latency-adaptation configuration.
+    pub fn set_latency_config(&mut self, latency: LatencyConfig) {
+        self.latency = latency;
     }
 
     /// The current configuration.
@@ -200,7 +225,12 @@ impl WeaveEngine {
         }
         self.last_weave_ms = Some(now);
 
-        for step in sequence_for(&slot, &self.config.timing) {
+        for step in sequence_for_adapted(
+            &slot,
+            &self.config.timing,
+            self.current_latency,
+            &self.latency,
+        ) {
             match step {
                 WeaveStep::Emit(op) => sink.emit(op),
                 WeaveStep::Wait(ms) => sink.wait(ms),
@@ -224,6 +254,7 @@ impl WeaveEngine {
         let mut notices = Vec::new();
         self.config.timing = load_timing(&settings.timing, &mut notices);
         load_skills(&settings.skills, &mut self.config.slots, &mut notices);
+        self.latency = load_latency(&settings.latency, &mut notices);
         notices
     }
 
@@ -255,6 +286,12 @@ impl WeaveEngine {
             })
             .collect();
         settings.skills = serde_json::to_value(skills).unwrap_or(serde_json::Value::Null);
+
+        let latency = LatencyJson {
+            enabled: self.latency.enabled,
+            k: self.latency.k,
+        };
+        settings.latency = serde_json::to_value(latency).unwrap_or(serde_json::Value::Null);
     }
 }
 
@@ -298,6 +335,47 @@ struct RawTiming {
     d_weave: Option<u32>,
     d_heavy: Option<u32>,
     d_bash: Option<u32>,
+}
+
+/// The valid inclusive maximum for the latency scale factor `k` (minimum 0.0).
+const K_MAX: f64 = 4.0;
+
+fn load_latency(value: &serde_json::Value, notices: &mut Vec<Notice>) -> LatencyConfig {
+    if value.is_null() {
+        return LatencyConfig::default();
+    }
+    let raw: RawLatency = serde_json::from_value(value.clone()).unwrap_or_default();
+    let defaults = LatencyConfig::default();
+    let k = match raw.k {
+        None => defaults.k,
+        Some(k) if k.is_finite() && (0.0..=K_MAX).contains(&k) => k,
+        Some(_) => {
+            notices.push(Notice {
+                kind: NoticeKind::InvalidValue,
+                message: format!(
+                    "latency k is not finite or out of range; using default {}",
+                    defaults.k
+                ),
+            });
+            defaults.k
+        }
+    };
+    LatencyConfig {
+        enabled: raw.enabled.unwrap_or(defaults.enabled),
+        k,
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct RawLatency {
+    enabled: Option<bool>,
+    k: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct LatencyJson {
+    enabled: bool,
+    k: f64,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -81,6 +81,33 @@ impl Default for TimingConfig {
     }
 }
 
+/// The inclusive cap, in milliseconds, on the latency bonus added to a scaled
+/// delay, so an effective delay never exceeds `base + MAX_LATENCY_BONUS_MS`.
+pub const MAX_LATENCY_BONUS_MS: u32 = 300;
+
+/// Latency-adaptation configuration for the weave delays.
+///
+/// When [`enabled`](LatencyConfig::enabled) and a current latency is known, the
+/// `d_weave` and `d_bash` delays are scaled; see
+/// [`effective_delay`](crate::weave::sequence::effective_delay).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LatencyConfig {
+    /// Whether latency scaling is applied. Off by default.
+    pub enabled: bool,
+    /// The scale factor on latency. Defaults to 0.25; a valid value is finite and
+    /// in `[0.0, 4.0]`.
+    pub k: f64,
+}
+
+impl Default for LatencyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            k: 0.25,
+        }
+    }
+}
+
 /// Per-slot delay overrides. A `None` means use the global default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SlotOverrides {
