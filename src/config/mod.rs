@@ -101,6 +101,11 @@ pub struct Settings {
     /// compatible.
     #[serde(default)]
     pub beacon: serde_json::Value,
+    /// Fishing controller configuration (timing parameters and interact key), as
+    /// an opaque JSON section owned by the fishing module. Null or absent means
+    /// the fishing defaults are used. Additive and backward compatible.
+    #[serde(default)]
+    pub fishing: serde_json::Value,
 }
 
 impl Default for Settings {
@@ -112,6 +117,7 @@ impl Default for Settings {
             timing: serde_json::Value::Null,
             skills: serde_json::Value::Null,
             beacon: serde_json::Value::Null,
+            fishing: serde_json::Value::Null,
         }
     }
 }
@@ -174,6 +180,8 @@ struct RawSettings {
     skills: serde_json::Value,
     #[serde(default)]
     beacon: serde_json::Value,
+    #[serde(default)]
+    fishing: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -225,6 +233,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         "timing",
         "skills",
         "beacon",
+        "fishing",
     ]
     .into_iter()
     .collect();
@@ -263,6 +272,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         timing: raw.timing,
         skills: raw.skills,
         beacon: raw.beacon,
+        fishing: raw.fishing,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {

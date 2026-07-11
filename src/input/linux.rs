@@ -194,6 +194,7 @@ fn to_ev_key(key: Key) -> EvKey {
         Key::Digit3 => EvKey::KEY_3,
         Key::Digit4 => EvKey::KEY_4,
         Key::Digit5 => EvKey::KEY_5,
+        Key::E => EvKey::KEY_E,
         Key::R => EvKey::KEY_R,
         Key::X => EvKey::KEY_X,
         Key::Q => EvKey::KEY_Q,

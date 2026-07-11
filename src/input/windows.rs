@@ -214,6 +214,7 @@ fn key_to_vk(key: Key) -> u16 {
         Key::Digit3 => 0x33,
         Key::Digit4 => 0x34,
         Key::Digit5 => 0x35,
+        Key::E => 0x45,
         Key::R => 0x52,
         Key::X => 0x58,
         Key::Q => 0x51,

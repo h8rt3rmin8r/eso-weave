@@ -8,6 +8,7 @@
 
 pub mod beacon;
 pub mod config;
+pub mod fishing;
 pub mod input;
 pub mod logging;
 pub mod pixelbus;

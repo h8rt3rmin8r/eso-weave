@@ -45,6 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   override and a selectable `live`/`pts` environment persisted as an additive
   `beacon` settings section, plus a best-effort running-game probe feeding the
   `/reloadui` reminder. No new crates.
+- Fishing Controller (S007): a pure, non-blocking fishing state machine (Disabled,
+  Armed, Waiting, Reeling, Recast) driven by detector events and an injected clock,
+  with configurable arm/reel/recast timing persisted as an additive `fishing`
+  settings section. On SignalLost it disables fishing and cancels any pending
+  interact rather than blind-firing. A `BiteDetector` trait (with a stub) and a v1
+  `PixelBusDetector` adapt the Pixel Bus Reader events (dropping Latency), and the
+  interact key is synthesized through a `FishingSink` seam over the input backend
+  (mock plus real), with `Key::E` added as the default interact key. No new crates.
 
 ### Changed
 
@@ -72,3 +80,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `windows-sys` `Win32_System_Diagnostics_ToolHelp` feature for the
   best-effort running-game process probe; no new crates. Rationale is in
   `specs/006-beacon-manager/research.md`.
+- 2026-07-11: Fishing Controller (S007) is a non-blocking, event-and-tick-driven
+  state machine with all delays and timeouts modeled as deadlines against an
+  injected clock, so it is pure and fully unit-tested. Its interact sink is a
+  dedicated key-only `FishingSink` over the input engine's `InputBackend` (not the
+  weave engine's `WeaveSink`), keeping the fishing module dependent only on the
+  input engine and the reader. Fishing settings reuse the additive opaque
+  config-section pattern (no `schema_version` bump), and a `Key::E` variant was
+  added to the input engine as the default interact key (its Windows and Linux
+  scan-code mappings included). Rationale is in
+  `specs/007-fishing-controller/research.md`.

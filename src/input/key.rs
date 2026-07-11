@@ -21,6 +21,8 @@ pub enum Key {
     Digit4,
     /// The `5` key.
     Digit5,
+    /// The `E` key.
+    E,
     /// The `R` key.
     R,
     /// The `X` key.
@@ -44,6 +46,7 @@ impl Key {
             Key::Digit3 => "digit3",
             Key::Digit4 => "digit4",
             Key::Digit5 => "digit5",
+            Key::E => "e",
             Key::R => "r",
             Key::X => "x",
             Key::Q => "q",
@@ -61,6 +64,7 @@ impl Key {
             "digit3" => Some(Key::Digit3),
             "digit4" => Some(Key::Digit4),
             "digit5" => Some(Key::Digit5),
+            "e" => Some(Key::E),
             "r" => Some(Key::R),
             "x" => Some(Key::X),
             "q" => Some(Key::Q),
