@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fishing state, latency with marker and checksum) at constant physical-pixel
   geometry and detecting a bite from bait consumption, with the managed marker
   line in its manifest. No Rust changes.
+- Pixel Bus Reader (S005): pure decoders (status heartbeat, fishing signal,
+  checksum-validated latency) with per-channel tolerance and a `PixelBusReader`
+  state machine that emits typed events and raises SignalLost on heartbeat
+  timeout against an injected clock, behind a `SurfaceSampler` seam with a mock
+  plus thin GDI (Windows) and X11 (Linux) samplers.
 
 ### Changed
 

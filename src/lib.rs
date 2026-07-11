@@ -7,6 +7,7 @@
 pub mod config;
 pub mod input;
 pub mod logging;
+pub mod pixelbus;
 pub mod platform;
 pub mod weave;
 
