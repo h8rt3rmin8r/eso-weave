@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ESO Weave
+Comment=Desktop companion for The Elder Scrolls Online
+Exec=eso-weave
+Icon=eso-weave
+Terminal=false
+Categories=Utility;Game;

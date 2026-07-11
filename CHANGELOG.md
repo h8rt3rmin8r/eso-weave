@@ -76,6 +76,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fishing, fishing events to the controller) without blocking the UI thread. Adds the
   `eframe`/`egui` dependency (glow backend) and additive `pixelbus` and `ui` settings
   sections.
+- Packaging and Distribution (S010): the artifacts that complete the pinned release
+  pipeline, a WiX MSI source (`wix/main.wxs`) and `assets/icon.ico`, cargo-deb
+  metadata in `Cargo.toml` with a desktop entry, icon, and a packaged `/dev/uinput`
+  udev rule, an AppImage `AppDir`, the `scripts/changelog-section.sh` and
+  `scripts/linux-build-deps.sh` scripts, `release.toml` for cargo-release, and a
+  Linux evdev-permission section in the README. The MSI installs only the
+  application and never writes to game or Documents directories; the version stays
+  single-sourced from `Cargo.toml`.
 
 ### Changed
 
@@ -123,6 +131,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   current latency is runtime state fed via `set_latency` and never written to the
   config file. Rationale is in
   `specs/008-latency-adaptive-delays/research.md`.
+- 2026-07-11: Packaging (S010) creates the pinned artifacts the release pipeline
+  references for the first time: `scripts/changelog-section.sh` and
+  `scripts/linux-build-deps.sh` (the shared changelog extractor and Linux build
+  dependency source), `release.toml` (cargo-release: version bump, CHANGELOG roll,
+  `release: vX.Y.Z` commit, tag, push), the WiX MSI source `wix/main.wxs`, the
+  AppImage `AppDir` under `packaging/appimage/`, and the udev rule and desktop entry
+  under `packaging/linux/`. It also adds `[package.metadata.deb]` to `Cargo.toml`
+  and generates `assets/icon.ico` from the logo art with ImageMagick. The pinned
+  `.github/workflows/release.yml`, `docs/releasing.md`, and `rust-toolchain.toml`
+  are not modified, and no release tag is cut. The MSI never writes to game or
+  Documents directories. Rationale is in `specs/010-packaging-and-ci/research.md`.
 - 2026-07-11: The GUI (S009) adds the `eframe`/`egui` 0.35 dependency with the glow
   backend (`default-features = false`, features `glow`, `default_fonts`, `x11`,
   `wayland`), the spec-named GUI framework; the glow backend is lighter than wgpu and

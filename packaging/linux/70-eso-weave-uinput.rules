@@ -1,0 +1,10 @@
+# Grant the "input" group read/write access to /dev/uinput so ESO Weave can
+# synthesize keyboard and mouse input on Linux. Add your user to the "input"
+# group (then log in again) for this to take effect. Reading /dev/input/event*
+# devices for key interception also relies on "input" group membership.
+#
+# Installed by the .deb under /usr/lib/udev/rules.d/. For the AppImage, copy this
+# file there yourself (see the README Linux notes).
+#
+# Pinned artifact. Do not modify without a dated decision recorded in CHANGELOG.md.
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

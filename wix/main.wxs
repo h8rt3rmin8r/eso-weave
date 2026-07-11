@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX MSI source for ESO Weave, built by the pinned release pipeline with the
+  cargo-wix no-build step (which resolves this file at the default wix/main.wxs
+  location). It installs the single application binary under Program Files with a
+  Start Menu shortcut and the application icon, supports add and remove and
+  upgrade in place, and never writes to game or Documents directories.
+
+  cargo-wix supplies the $(var.Version) and $(var.CargoTargetBinDir) definitions.
+
+  Pinned artifact. Change it only with a dated decision recorded in CHANGELOG.md.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="ESO Weave"
+    UpgradeCode="B7A5F0E2-1C3D-4E6A-9B2F-8D4C5A6E7F10"
+    Manufacturer="ESO Weave"
+    Language="1033"
+    Codepage="1252"
+    Version="$(var.Version)">
+
+    <Package
+      Id="*"
+      Keywords="Installer"
+      Description="ESO Weave desktop companion for The Elder Scrolls Online"
+      Manufacturer="ESO Weave"
+      InstallerVersion="450"
+      Languages="1033"
+      Compressed="yes"
+      InstallScope="perMachine"
+      SummaryCodepage="1252" />
+
+    <MajorUpgrade
+      Schedule="afterInstallInitialize"
+      DowngradeErrorMessage="A newer version of ESO Weave is already installed. Setup will now exit." />
+
+    <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" DiskPrompt="CD-ROM #1" />
+    <Property Id="DiskPrompt" Value="ESO Weave Installation" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder" Name="PFiles">
+        <Directory Id="APPLICATIONFOLDER" Name="ESO Weave">
+          <Component Id="ApplicationBinary" Guid="*" Win64="yes">
+            <File
+              Id="EsoWeaveExe"
+              Name="eso-weave.exe"
+              DiskId="1"
+              Source="$(var.CargoTargetBinDir)\eso-weave.exe"
+              KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="ESO Weave" />
+      </Directory>
+    </Directory>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="*" Win64="yes">
+        <Shortcut
+          Id="ApplicationStartMenuShortcut"
+          Name="ESO Weave"
+          Description="Desktop companion for The Elder Scrolls Online"
+          Target="[#EsoWeaveExe]"
+          WorkingDirectory="APPLICATIONFOLDER"
+          Icon="ProductIcon" />
+        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\ESO Weave\ESO Weave"
+          Name="installed"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Icon Id="ProductIcon" SourceFile="assets\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+
+    <Feature Id="Application" Title="ESO Weave" Level="1">
+      <ComponentRef Id="ApplicationBinary" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+  </Product>
+</Wix>

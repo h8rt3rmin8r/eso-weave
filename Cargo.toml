@@ -38,3 +38,28 @@ x11rb = "0.13"
 
 [dev-dependencies]
 tempfile = "3"
+
+# Debian package metadata for cargo-deb (built by the pinned release pipeline with
+# `cargo deb --no-build`). Pinned packaging config: changes are recorded as dated
+# decisions in CHANGELOG.md.
+[package.metadata.deb]
+section = "utils"
+priority = "optional"
+depends = "$auto"
+extended-description = """
+ESO Weave is a desktop companion for The Elder Scrolls Online. It runs entirely
+outside the game: an input engine intercepts and synthesizes keys while the game
+window is focused, a weave engine executes combat action sequences, and an optional
+fishing module reads a pixel-bus signal from the embedded PixelBeacon addon.
+
+Linux input interception needs access to input devices. Add your user to the
+"input" group, or rely on the packaged udev rule for /dev/uinput. See the README
+under /usr/share/doc/eso-weave/ for details.
+"""
+assets = [
+    ["target/release/eso-weave", "usr/bin/", "755"],
+    ["packaging/linux/eso-weave.desktop", "usr/share/applications/", "644"],
+    ["packaging/linux/eso-weave.png", "usr/share/icons/hicolor/256x256/apps/eso-weave.png", "644"],
+    ["packaging/linux/70-eso-weave-uinput.rules", "usr/lib/udev/rules.d/70-eso-weave-uinput.rules", "644"],
+    ["README.md", "usr/share/doc/eso-weave/README.md", "644"],
+]

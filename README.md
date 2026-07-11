@@ -25,6 +25,27 @@ damages arising from the use or misuse of this software. This software is
 provided "AS IS", without warranty of any kind, express or implied, in
 accordance with the Apache License, Version 2.0 under which it is distributed.
 
+## Installation
+
+Prebuilt installers are published on the [Releases](https://github.com/h8rt3rmin8r/eso-weave/releases)
+page: a Windows x64 MSI, and for Linux x86_64 a `.deb` package, an AppImage, and a
+tarball.
+
+### Linux input permission (evdev)
+
+Input interception on Linux reads keyboard devices and synthesizes input through
+`/dev/uinput`, which requires device access. Satisfy this in one of two ways:
+
+- Add your user to the `input` group and log in again:
+  `sudo usermod -aG input "$USER"`.
+- Or install the provided udev rule that grants the `input` group access to
+  `/dev/uinput`. The `.deb` installs it to
+  `/usr/lib/udev/rules.d/70-eso-weave-uinput.rules` automatically; for the AppImage
+  or tarball, copy `packaging/linux/70-eso-weave-uinput.rules` there yourself and
+  reload with `sudo udevadm control --reload && sudo udevadm trigger`.
+
+Without this permission, key interception silently does nothing.
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
