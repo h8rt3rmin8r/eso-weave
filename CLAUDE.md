@@ -6,7 +6,11 @@ engine intercepts and synthesizes keys while the game window is focused, a weave
 engine executes combat action sequences, and an optional fishing module reads a
 pixel-bus signal rendered by the embedded PixelBeacon companion addon. The master
 specification is `docs/ESO-Weave-Specification-v0.1.0.md`; it is the architecture
-of record, and every feature traces to it.
+of record, and every feature traces to it. Build plans under `docs/plans/`
+(index `docs/plans/README.md`) decompose the specification into the ordered work
+slices that become spec-kit features and define what to build next; they are
+distinct from the per-feature `specs/NNN-name/plan.md` files that `/speckit.plan`
+generates.
 
 ## Build-phase autopilot
 
@@ -57,5 +61,4 @@ normal interactive mode.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/.
 <!-- SPECKIT END -->

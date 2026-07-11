@@ -15,8 +15,11 @@ conflict, the constitution wins.
 
 Every feature derived from the master specification
 (`docs/ESO-Weave-Specification-v0.1.0.md`) runs the same spec-kit sequence. The
-default agent behavior pauses for authorization between each step and raises
-routine decisions to the user that, in practice, are approved as recommended.
+sequence and slice boundaries of those features come from the current build plan
+under `docs/plans/` (index `docs/plans/README.md`); the master specification
+supplies each slice's technical scope. The default agent behavior pauses for
+authorization between each step and raises routine decisions to the user that,
+in practice, are approved as recommended.
 Autopilot removes that friction: one verbal kickoff runs a full feature end to
 end, the agent makes the routine decisions itself and records them, and the agent
 halts once, right before the push to `main`, with a breakdown for review.

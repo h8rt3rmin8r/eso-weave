@@ -518,7 +518,9 @@ follows the GitHub spec-kit workflow for agentic development: this document is
 the master specification, and individual features are derived from it into
 numbered `specs/NNN-name/` directories (each holding its `spec.md`, `plan.md`,
 and `tasks.md`) via the spec-kit commands, governed by
-`.specify/memory/constitution.md`.
+`.specify/memory/constitution.md`. Build plans under `docs/plans/` sequence that
+derivation, decomposing this specification into the ordered slices that become
+those `specs/NNN-name/` features.
 
 ```text
 eso-weave/
@@ -526,7 +528,10 @@ eso-weave/
 ├── .specify/           # constitution, scripts, templates (spec-kit scaffolding)
 ├── specs/              # generated per-feature spec-kit directories
 ├── docs/
-│   └── ESO-Weave-Specification-v0.1.0.md
+│   ├── ESO-Weave-Specification-v0.1.0.md
+│   ├── build-autopilot.md
+│   ├── releasing.md
+│   └── plans/          # build plans decomposing this spec into features
 ├── addon/
 │   └── PixelBeacon/    # companion addon source, embedded at build time
 ├── src/                # Rust application (single crate; platform backends as modules)
