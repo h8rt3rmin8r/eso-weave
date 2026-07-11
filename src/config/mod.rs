@@ -5,7 +5,7 @@
 //! [`Notice`] describing what happened. [`save`] writes UTF-8 without a byte
 //! order mark, with LF endings and a trailing newline.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -78,8 +78,13 @@ impl Default for LoggingPrefs {
 pub struct Settings {
     /// The settings schema version.
     pub schema_version: u32,
-    /// Logging preferences (the only settings category in this slice).
+    /// Logging preferences.
     pub logging: LoggingPrefs,
+    /// Input bindings as an action-name to key-name map. Absent or empty means
+    /// the default bindings are used. This section is additive and backward
+    /// compatible, so no schema version bump is required.
+    #[serde(default)]
+    pub bindings: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -87,6 +92,7 @@ impl Default for Settings {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
             logging: LoggingPrefs::default(),
+            bindings: BTreeMap::new(),
         }
     }
 }
@@ -141,6 +147,8 @@ struct RawSettings {
     schema_version: u32,
     #[serde(default)]
     logging: RawLogging,
+    #[serde(default)]
+    bindings: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -185,7 +193,9 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
 
     let mut notices = Vec::new();
 
-    let known: BTreeSet<&str> = ["schema_version", "logging"].into_iter().collect();
+    let known: BTreeSet<&str> = ["schema_version", "logging", "bindings"]
+        .into_iter()
+        .collect();
     let unknown: Vec<String> = object
         .keys()
         .filter(|key| !known.contains(key.as_str()))
@@ -217,6 +227,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
             level,
             file_enabled: raw.logging.file_enabled.unwrap_or(false),
         },
+        bindings: raw.bindings,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {

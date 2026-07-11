@@ -17,6 +17,7 @@ fn round_trip_preserves_settings() {
             level: LevelName::Debug,
             file_enabled: true,
         },
+        ..Settings::default()
     };
     config::save(dir.path(), &settings).unwrap();
 

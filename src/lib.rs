@@ -5,6 +5,7 @@
 //! path seam ([`platform`]) that later input and sampling backends extend.
 
 pub mod config;
+pub mod input;
 pub mod logging;
 pub mod platform;
 

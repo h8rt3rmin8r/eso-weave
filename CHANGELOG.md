@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON, corruption fallback with `.invalid` preservation, forward migration) and
   the Logging subsystem (runtime-selectable level, always-on ring buffer,
   optional monthly file sink, input-privacy guarantee).
+- Input Engine (S002): a platform-agnostic engine core with focused-window-only
+  interception, injected-input recursion breaking, a non-blocking bounded
+  hand-off, suspend with suspend-exempt toggles, and a conflict-rejecting
+  keybinding model persisted as an additive settings section, behind an
+  `InputBackend` seam with a mock plus Windows (low-level hook, SendInput) and
+  Linux (evdev grab, uinput) backends.
 
 ### Changed
 
@@ -25,3 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   serde_json, tracing, tracing-subscriber, dirs, time, and thiserror for the
   foundations slice. Rationale is recorded in
   `specs/001-foundations/research.md`.
+- 2026-07-11: Adopt target-specific dependencies for the Input Engine backends:
+  `windows-sys` (Windows) for the low-level hook, SendInput, and timer
+  resolution, and `evdev` plus `x11rb` (Linux) for the keyboard grab, uinput
+  synthesis, and X11 focus. The Linux backend is type-checked and clippy-clean on
+  the linux target; its runtime is validated on a Linux host. Rationale is in
+  `specs/002-input-engine/research.md`.
