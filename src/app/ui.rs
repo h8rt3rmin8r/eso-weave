@@ -31,6 +31,18 @@ impl Clickable for egui::Response {
     }
 }
 
+/// A gold-filled primary action button (dark text on the brand accent), for the
+/// main affirmative controls. Secondary and destructive actions stay neutral.
+fn primary_button(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    text: &str,
+) -> egui::Response {
+    let button =
+        egui::Button::new(egui::RichText::new(text).color(palette.gold_text)).fill(palette.gold);
+    ui.add(button).clickable()
+}
+
 const WEAVE_TYPES: [WeaveType; 4] = [
     WeaveType::LightAttack,
     WeaveType::HeavyAttack,
@@ -178,13 +190,13 @@ impl EsoWeaveApp {
         // Status region.
         ui.horizontal(|ui| {
             ui.label(format!("State: {}", view.app_state.indicator));
-            if ui.button(view.app_state.button).clickable().clicked() {
+            if primary_button(ui, &palette, view.app_state.button).clicked() {
                 intents.push(UiIntent::ToggleSuspend);
             }
         });
         ui.horizontal(|ui| {
             ui.label(format!("Fishing: {}", view.fishing.indicator));
-            if ui.button(view.fishing.button).clickable().clicked() {
+            if primary_button(ui, &palette, view.fishing.button).clicked() {
                 intents.push(UiIntent::SetFishing(view.fishing.button == "Go Fish"));
             }
         });
@@ -197,7 +209,7 @@ impl EsoWeaveApp {
             ui.colored_label(dot, "\u{25CF}")
                 .on_hover_text(view.beacon.tooltip);
             ui.label("PixelBeacon");
-            if ui.button("Install").clickable().clicked() {
+            if primary_button(ui, &palette, "Install").clicked() {
                 intents.push(UiIntent::InstallBeacon);
             }
             if ui

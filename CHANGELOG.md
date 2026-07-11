@@ -27,10 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-07-11: Brand and UX Polish (S012) changes the pinned packaging artifacts.
   `wix/main.wxs` switches the wizard from `WixUI_InstallDir` to `WixUI_FeatureTree`,
   adds the `WixUIBannerBmp` and `WixUIDialogBmp` branded-artwork variables, and
-  moves the desktop shortcut into its own `Level="2"` (off-by-default) `Feature` so
-  it is opt-in via the Custom Setup step, while the application feature is
-  `Absent="disallow"` and configurable for the install location. A single checkbox
-  on the install page was rejected because it requires replacing the entire
+  moves the desktop shortcut into its own `Level="2"` (off-by-default) `Feature`,
+  nested under the application feature, so it is opt-in via the Custom Setup step,
+  while the application feature is `Absent="disallow"` and configurable for the
+  install location. The shortcut `Target` values use the resolved path
+  `[APPLICATIONFOLDER]eso-weave.exe` instead of the `[#EsoWeaveExe]` file key so
+  the opt-in shortcut in a child feature does not trip ICE69 (a cross-feature file
+  reference); this was confirmed by building the MSI locally with WiX 3.11. A single
+  checkbox on the install page was rejected because it requires replacing the entire
   built-in WixUI dialog set, which cannot be validated without a local WiX build.
   `packaging/windows/License.rtf` is regenerated from `LICENSE` as proportional
   (Segoe UI) RTF with headings and spacing, text preserved verbatim. New pinned

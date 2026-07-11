@@ -68,7 +68,7 @@
           Id="ApplicationStartMenuShortcut"
           Name="ESO Weave"
           Description="Desktop companion for The Elder Scrolls Online"
-          Target="[#EsoWeaveExe]"
+          Target="[APPLICATIONFOLDER]eso-weave.exe"
           WorkingDirectory="APPLICATIONFOLDER"
           Icon="ProductIcon" />
         <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
@@ -88,7 +88,7 @@
           Id="ApplicationDesktopShortcutLink"
           Name="ESO Weave"
           Description="Desktop companion for The Elder Scrolls Online"
-          Target="[#EsoWeaveExe]"
+          Target="[APPLICATIONFOLDER]eso-weave.exe"
           WorkingDirectory="APPLICATIONFOLDER"
           Icon="ProductIcon" />
         <RegistryValue
@@ -151,18 +151,20 @@
       Description="The ESO Weave application and its Start Menu shortcut.">
       <ComponentRef Id="ApplicationBinary" />
       <ComponentRef Id="ApplicationShortcut" />
-    </Feature>
-    <!--
-      The desktop shortcut is opt-in: Level 2 means it is not installed unless the
-      user selects it in the Custom Setup step. This is why the Component carries
-      its own HKCU key path rather than living in the always-installed feature.
-    -->
-    <Feature
-      Id="DesktopShortcut"
-      Title="Desktop shortcut"
-      Level="2"
-      Description="Create a shortcut to ESO Weave on the desktop.">
-      <ComponentRef Id="ApplicationDesktopShortcut" />
+      <!--
+        The desktop shortcut is opt-in: a child feature at Level 2 is not installed
+        unless the user selects it in the Custom Setup step. It nests under the
+        application feature so the shortcut's target file (EsoWeaveExe) lives in an
+        ancestor feature, which ICE69 requires; that is also why the component
+        carries its own HKCU key path rather than living in the parent component.
+      -->
+      <Feature
+        Id="DesktopShortcut"
+        Title="Desktop shortcut"
+        Level="2"
+        Description="Create a shortcut to ESO Weave on the desktop.">
+        <ComponentRef Id="ApplicationDesktopShortcut" />
+      </Feature>
     </Feature>
   </Product>
 </Wix>
