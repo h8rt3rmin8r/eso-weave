@@ -1,50 +1,156 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+- Version change: unversioned template -> 1.0.0
+- Ratification: initial adoption (first authored constitution)
+- Modified principles: none (initial authoring; all placeholder tokens replaced)
+- Added principles:
+  I. Spec-Driven Development (NON-NEGOTIABLE)
+  II. Safety-Critical Surfaces Are Sacrosanct (NON-NEGOTIABLE)
+  III. Test-First With Explicit Seams
+  IV. CI Parity Before Every Commit (NON-NEGOTIABLE)
+  V. Bounded Scope: Outside The Game
+- Added sections:
+  Platform, Configuration, and Text Hygiene Constraints
+  Development Workflow and Quality Gates
+  Governance
+- Removed sections: none
+- Templates:
+  .specify/templates/plan-template.md ......... aligned (generic Constitution
+    Check gate references this file; no edit needed)
+  .specify/templates/spec-template.md ......... aligned (no constitution
+    references; no edit needed)
+  .specify/templates/tasks-template.md ........ aligned (no constitution
+    references; no edit needed)
+  CLAUDE.md, docs/build-autopilot.md .......... consistent with these
+    principles (runtime guidance; no edit needed)
+- Follow-up TODOs: none
+-->
+
+# ESO Weave Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Spec-Driven Development (NON-NEGOTIABLE)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+Every feature traces to the master specification
+(`docs/ESO-Weave-Specification-v0.1.0.md`) and is built through the full
+spec-kit sequence before any implementation code: specify, clarify, checklist,
+plan, tasks, analyze, then implement. Work lands as a numbered
+`specs/NNN-name/` slice holding its `spec.md`, `plan.md`, and `tasks.md`. Build
+plans under `docs/plans/` set slice order and boundaries; the master
+specification supplies technical scope. The `/speckit.analyze` gate MUST pass
+and MUST NOT be weakened or skipped.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+Rationale: the specification is the architecture of record. Deriving code any
+other way lets scope drift away from it and defeats the workflow the project is
+built on.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Safety-Critical Surfaces Are Sacrosanct (NON-NEGOTIABLE)
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+These behaviors MUST always be covered by tests that are never weakened,
+skipped, or made conditional:
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+- Injected-input recursion breaking: synthesized input is flagged so the engine
+  never intercepts its own output.
+- Input suppression scoped to the focused game window only; the app never hooks
+  input globally.
+- No blocking work on the input hook thread; interception callbacks classify
+  and hand off, and all timed sequences run on a dedicated worker thread.
+- PixelBeacon uninstall deletes a folder only after verifying the managed-marker
+  line in its manifest; an unmanaged folder is never deleted.
+- AddOns discovery never writes outside the resolved AddOns directory.
+- Fishing degrades to disabled on SignalLost rather than firing inputs blind.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+Rationale: each surface, if wrong, silently breaks input handling or destroys
+data outside the app. These are the exact failure modes the design exists to
+prevent.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### III. Test-First With Explicit Seams
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+Implementation follows test-first discipline: a failing test is written before
+the code that satisfies it, and the red-green-refactor cycle is honored.
+Platform and hardware dependencies are crossed through trait seams (the `Input`
+trait, the `BiteDetector` trait) so the weave engine, fishing controller, and
+decoders are unit-testable with mock backends, without the game or physical
+devices.
+
+Rationale: the engine cannot be verified by hand against a live game. The seams
+are what make it verifiable at all.
+
+### IV. CI Parity Before Every Commit (NON-NEGOTIABLE)
+
+Any commit that adds or changes buildable Rust sources MUST first pass the full
+merge gate: `cargo fmt --all -- --check`,
+`cargo clippy --all-targets --all-features -- -D warnings`, and
+`cargo test --all --locked`. These run in the foreground and are watched to
+completion; they are never backgrounded, because cargo buffers test output
+until the run ends and a backgrounded run cannot be told apart from a hung one.
+A red result that cannot be fixed within the current work halts progress.
+Documentation-only or configuration-only commits that touch no Rust source have
+no cargo gate to run, but still obey the text hygiene rules below.
+
+Rationale: local parity with CI keeps `main` continuously releasable and
+prevents the misdiagnosed hangs that backgrounded test runs have caused.
+
+### V. Bounded Scope: Outside The Game
+
+ESO Weave runs entirely outside the game and its addon ecosystem. It MUST NOT
+read or write game process memory, intercept network or packet traffic, provide
+in-game functionality beyond the PixelBeacon screen-signal contract, or
+orchestrate multiple accounts. The weave engine has no in-game dependency of any
+kind; only the fishing module depends on PixelBeacon.
+
+Rationale: the scope boundary is the project's technical and ethical contract.
+Crossing it changes what the software is.
+
+## Platform, Configuration, and Text Hygiene Constraints
+
+- Targets are Windows 10 and 11 x64 and Linux x64; macOS is out of scope.
+  Cross-platform behavior is achieved with one trait and per-OS backend modules
+  in a single Rust crate; promotion to a Cargo workspace requires a documented
+  justification.
+- Configuration stores user settings only. No session, runtime, or derived
+  state is ever written to the config file. Config is JSON, UTF-8 without BOM,
+  LF, pretty-printed, carries a top-level `schema_version`, migrates older
+  schemas forward on load, and on corruption falls back to defaults while
+  preserving the bad file with a `.invalid` suffix and surfacing a notice.
+- Logging is structured with a runtime-selectable level and an always-available
+  in-memory ring buffer. Input contents are never logged above DEBUG and never
+  while suspended.
+- All text files are UTF-8 without BOM with LF line endings. Em-dashes and
+  en-dashes MUST NOT appear anywhere, including code comments; use commas,
+  parentheses, or standard hyphens.
+
+## Development Workflow and Quality Gates
+
+- Features run under the Build-Phase Autopilot Protocol
+  (`docs/build-autopilot.md`): one kickoff runs the spec-kit sequence end to
+  end, the agent decides routine questions itself and records the rationale, and
+  halts once before pushing.
+- Integration is direct to `main` on `origin`; the project uses no pull requests
+  or long-lived feature branches. The authorization halt is the review gate.
+- Pinned artifacts (`.github/workflows/**`, `rust-toolchain.toml`,
+  `release.toml`, `scripts/**`, `packaging/**`, `docs/releasing.md`, plus
+  `.gitattributes`, `.gitignore`, `LICENSE`) change only with a dated decision
+  recorded in `CHANGELOG.md`.
+- Releases follow `docs/releasing.md` exactly. Cutting a `vX.Y.Z` tag and
+  running `cargo release` always require explicit human authorization, as does
+  every push to `main`.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes other process conventions where they conflict.
+`CLAUDE.md` and `docs/build-autopilot.md` provide runtime development guidance
+and MUST remain consistent with these principles; where they appear to conflict,
+the constitution wins.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Amendments are made by editing this file, recording the change in the Sync
+Impact Report at its top, and bumping the version by semantic versioning: MAJOR
+for backward-incompatible governance or principle removals or redefinitions,
+MINOR for a new principle or materially expanded guidance, PATCH for
+clarifications and wording. Every feature's `plan.md` includes a Constitution
+Check that MUST pass before implementation, and the `/speckit.analyze` gate
+verifies ongoing compliance. Complexity that violates a principle MUST be
+justified in writing against the principle it strains, or be removed.
+
+**Version**: 1.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-07-11
