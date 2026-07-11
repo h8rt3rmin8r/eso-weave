@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Main-window emphasis labels (the Status, Fishing, Pixel Beacon (Addon), and
+  Weapon Bar titles, and the Skills column headers Skill, Enabled, Weave,
+  Override, Delay) were nearly unreadable on the dark base: they rendered in the
+  dark ink used for text on a gold button. egui derives bold (`.strong()`) text
+  color from the active-widget text color, which the brand theme sets to
+  `gold_text`, so every strong label inherited it. Emphasis labels now go through
+  a new `widgets::label_strong` helper that draws them in the primary text color
+  (Inter SemiBold at body size), which the palette legibility test already
+  guarantees is readable in both themes. Presentation layer only; no
+  safety-critical surface changed.
+
 ## [0.4.0] - 2026-07-11
 
 ### Added

@@ -316,7 +316,7 @@ impl EsoWeaveApp {
 
         // Detected weapon-bar state (from the updated Pixel Beacon addon).
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(strings::WEAPON_BAR_TITLE).strong())
+            widgets::label_strong(ui, &palette, strings::WEAPON_BAR_TITLE)
                 .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
             let wb = &view.weapon_bar;
             let color = crate::app::theme::status_color(&palette, wb.role);
@@ -340,8 +340,7 @@ impl EsoWeaveApp {
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
                 for (header, tip) in strings::SKILL_COLUMNS {
-                    ui.label(egui::RichText::new(header).strong())
-                        .on_hover_text(tip);
+                    widgets::label_strong(ui, &palette, header).on_hover_text(tip);
                 }
                 ui.end_row();
 
@@ -422,8 +421,9 @@ impl EsoWeaveApp {
 
     fn log_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
         let filter = self.model.view().log_filter;
+        let palette = crate::app::theme::palette(self.ui_prefs.theme);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(strings::LOG_TITLE).strong())
+            widgets::label_strong(ui, &palette, strings::LOG_TITLE)
                 .on_hover_text(strings::LOG_TOOLTIP);
             let mut selected = filter;
             egui::ComboBox::from_id_salt("log_filter")
@@ -724,8 +724,7 @@ fn env_name(env: crate::beacon::Environment) -> &'static str {
 /// Renders the first two cells of a status grid row: the section title, then the
 /// colorized, normalized state field. The caller adds the third (control) cell.
 fn status_cells(ui: &mut egui::Ui, palette: &crate::app::theme::Palette, line: &StatusLine) {
-    ui.label(egui::RichText::new(line.title).strong())
-        .on_hover_text(line.tooltip);
+    widgets::label_strong(ui, palette, line.title).on_hover_text(line.tooltip);
     let color = crate::app::theme::status_color(palette, line.role);
     ui.label(egui::RichText::new(&line.state_text).color(color))
         .on_hover_text(line.tooltip);

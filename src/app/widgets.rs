@@ -48,6 +48,25 @@ pub fn heading(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add(egui::Label::new(egui::RichText::new(text).heading()))
 }
 
+/// Renders an emphasized label (SemiBold at body size, primary text color) for
+/// section titles and column headers.
+///
+/// This intentionally avoids egui's `RichText::strong()`: its color comes from
+/// `strong_text_color()`, which is `widgets.active.text_color()`, and the brand
+/// theme sets that to `gold_text` (the dark ink used for text on a gold button).
+/// On the dark base that reads as an almost invisible brown, so emphasis labels
+/// are colored from the palette here instead.
+pub fn label_strong(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
+    let size = ui.style().text_styles[&egui::TextStyle::Body].size;
+    let font = egui::FontId::new(
+        size,
+        egui::FontFamily::Name(super::theme::HEADING_FAMILY.into()),
+    );
+    ui.add(egui::Label::new(
+        egui::RichText::new(text).font(font).color(palette.text),
+    ))
+}
+
 /// Renders a small muted inline help line beneath a control.
 pub fn muted_help(ui: &mut egui::Ui, palette: &Palette, text: &str) {
     ui.label(egui::RichText::new(text).small().color(palette.muted));
