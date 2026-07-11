@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   additive `skills` and `timing` settings sections, executed through a testable
   `WeaveSink` seam. Adds mouse synthesis (primary and secondary) to the input
   backends.
+- PixelBeacon addon (S004): the embedded in-game Lua companion under
+  `addon/PixelBeacon/`, rendering the three pixel-bus blocks (status heartbeat,
+  fishing state, latency with marker and checksum) at constant physical-pixel
+  geometry and detecting a bite from bait consumption, with the managed marker
+  line in its manifest. No Rust changes.
 
 ### Changed
 
