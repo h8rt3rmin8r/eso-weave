@@ -39,6 +39,15 @@ traceable to the master specification and to any feature or task the operator
 explicitly places under autopilot; unrelated requests with no such kickoff use
 normal interactive mode.
 
+## Integration workflow
+
+Work integrates directly to `main`. Once a push is authorized, changes are
+committed and pushed straight to the `main` branch on `origin`; this project
+does not use pull requests or long-lived feature branches. The review gate is
+the authorization halt itself (the once-per-feature pre-push halt for autopilot
+work, or an explicit go-ahead for other work), not a post-push review. The
+authorization requirement is unchanged: never push to `main` without it.
+
 ## Non-negotiables
 
 - Safety-critical test surfaces are never weakened or skipped: injected-input
