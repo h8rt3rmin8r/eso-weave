@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Brand and UX Polish (S012): a documented "Arcane gold on ink" brand standard
+  (`docs/brand/ESO-Weave-Brand-v1.md`) applied across the app and installers. A new
+  woven-caret brand mark (gold and teal on an ink badge) replaces the antique
+  two-fish gold mark and is regenerated at every size from SVG masters under
+  `assets/brand/` by `assets/brand/generate.sh`. The application window and the
+  Windows executable now carry the mark (a `build.rs` embeds the exe icon on
+  Windows), and the app is themed for both dark (default) and light modes with the
+  bundled Inter typeface, aligned skill columns, and a pointer cursor on every
+  clickable control. The installer license page is rendered as clean proportional
+  text, the wizard uses branded artwork, and the desktop shortcut is now an opt-in
+  Custom Setup feature that is off by default. Adds a GitHub social-share image
+  (`assets/eso-weave-social.png`).
+
+### Decisions
+
+- 2026-07-11: Brand and UX Polish (S012) changes the pinned packaging artifacts.
+  `wix/main.wxs` switches the wizard from `WixUI_InstallDir` to `WixUI_FeatureTree`,
+  adds the `WixUIBannerBmp` and `WixUIDialogBmp` branded-artwork variables, and
+  moves the desktop shortcut into its own `Level="2"` (off-by-default) `Feature` so
+  it is opt-in via the Custom Setup step, while the application feature is
+  `Absent="disallow"` and configurable for the install location. A single checkbox
+  on the install page was rejected because it requires replacing the entire
+  built-in WixUI dialog set, which cannot be validated without a local WiX build.
+  `packaging/windows/License.rtf` is regenerated from `LICENSE` as proportional
+  (Segoe UI) RTF with headings and spacing, text preserved verbatim. New pinned
+  wizard bitmaps `packaging/windows/banner.bmp` (493x58) and
+  `packaging/windows/dialog.bmp` (493x312) are added, and the pinned Linux and
+  AppImage icons (`packaging/linux/eso-weave.png`,
+  `packaging/appimage/AppDir/eso-weave.png`) are regenerated from the new mark. The
+  pinned `.gitattributes` adds `*.bmp binary` so the wizard bitmaps are never line
+  normalized. All packaging rasters are reproduced by `assets/brand/generate.sh`
+  (ImageMagick 7). Rationale is in `specs/012-brand-ux-polish/`.
+
 ## [0.2.0] - 2026-07-11
 
 ### Added

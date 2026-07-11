@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256" role="img" aria-label="ESO Weave glyph">
+  <title>ESO Weave glyph</title>
+  <!--
+    Badge-less glyph: the two woven carets on a transparent ground, for lockups
+    on ink backgrounds (wordmark, banner, social image). The weave is baked with
+    an overlaid segment (no clipPath) for renderer-independent output.
+  -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="11">
+    <path d="M24 74 L50 42 L76 74" stroke="#2DD4BF"/>
+    <path d="M24 30 L50 62 L76 30" stroke="#F2B03C"/>
+    <path d="M53.1 45.8 L63.6 58.7" stroke="#2DD4BF"/>
+  </g>
+</svg>

@@ -157,13 +157,45 @@ fn main() {
     // pop a message box).
     gui_started.store(true, std::sync::atomic::Ordering::SeqCst);
 
-    let native_options = eframe::NativeOptions::default();
+    let mut viewport = eframe::egui::ViewportBuilder::default();
+    if let Some(icon) = window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+    let native_options = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    };
     if let Err(err) = eframe::run_native(
         "ESO Weave",
         native_options,
-        Box::new(|_cc| Ok(Box::new(EsoWeaveApp::new(model)))),
+        Box::new(|cc| {
+            eso_weave::app::theme::install_fonts(&cc.egui_ctx);
+            Ok(Box::new(EsoWeaveApp::new(model)))
+        }),
     ) {
         tracing::error!(target: "eso_weave", "GUI exited with error: {err}");
+    }
+}
+
+/// Decodes the bundled window icon into an egui icon for the title bar and
+/// taskbar. Returns `None` if it cannot be decoded, in which case the window
+/// simply carries no custom icon.
+fn window_icon() -> Option<eframe::egui::IconData> {
+    let bytes = include_bytes!("../assets/brand/window-icon-256.png");
+    match image::load_from_memory(bytes) {
+        Ok(img) => {
+            let img = img.to_rgba8();
+            let (width, height) = img.dimensions();
+            Some(eframe::egui::IconData {
+                rgba: img.into_raw(),
+                width,
+                height,
+            })
+        }
+        Err(err) => {
+            tracing::warn!(target: "eso_weave", "window icon decode failed: {err}");
+            None
+        }
     }
 }
 

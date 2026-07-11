@@ -31,15 +31,16 @@ pub struct LogRow {
     pub color: LogColor,
 }
 
-/// The color for a level: ERROR red, WARN amber, INFO neutral, DEBUG dim, TRACE
-/// dimmer.
+/// The color for a level, drawn from the brand palette and chosen to stay legible
+/// on both the dark and light themes: ERROR red, WARN amber, INFO teal, DEBUG
+/// muted, TRACE dimmer.
 pub fn level_color(level: Level) -> LogColor {
     match level {
-        Level::ERROR => LogColor::new(0xE0, 0x30, 0x30),
-        Level::WARN => LogColor::new(0xE0, 0xA0, 0x30),
-        Level::INFO => LogColor::new(0xC8, 0xC8, 0xC8),
-        Level::DEBUG => LogColor::new(0x90, 0x90, 0x90),
-        Level::TRACE => LogColor::new(0x60, 0x60, 0x60),
+        Level::ERROR => LogColor::new(0xF8, 0x71, 0x71),
+        Level::WARN => LogColor::new(0xE0, 0x8C, 0x2E),
+        Level::INFO => LogColor::new(0x2D, 0xB0, 0xA0),
+        Level::DEBUG => LogColor::new(0x8B, 0x97, 0xA7),
+        Level::TRACE => LogColor::new(0x6B, 0x72, 0x80),
     }
 }
 

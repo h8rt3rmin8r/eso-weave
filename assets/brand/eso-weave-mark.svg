@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256" role="img" aria-label="ESO Weave">
+  <title>ESO Weave</title>
+  <!--
+    ESO Weave brand mark: two interlocking carets woven over and under, a gold
+    strand and a teal strand, on a self-contained ink badge. The weave is baked
+    with an overlaid segment (no clipPath) so any rasterizer renders it correctly.
+  -->
+  <defs>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B222C"/>
+      <stop offset="1" stop-color="#0D1015"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#badge)"
+        stroke="#F2B03C" stroke-opacity="0.22" stroke-width="1.2"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="10">
+    <path d="M26 72 L50 44 L74 72" stroke="#2DD4BF"/>
+    <path d="M26 34 L50 62 L74 34" stroke="#F2B03C"/>
+    <path d="M52.9 47.4 L62.5 58.6" stroke="#2DD4BF"/>
+  </g>
+</svg>

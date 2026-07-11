@@ -19,6 +19,18 @@ use crate::config::{LevelName, Theme};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
 
+/// Adds the pointer (hand) cursor to an interactive widget's hover state, so
+/// every clickable control signals that it is clickable.
+trait Clickable {
+    fn clickable(self) -> Self;
+}
+
+impl Clickable for egui::Response {
+    fn clickable(self) -> Self {
+        self.on_hover_cursor(egui::CursorIcon::PointingHand)
+    }
+}
+
 const WEAVE_TYPES: [WeaveType; 4] = [
     WeaveType::LightAttack,
     WeaveType::HeavyAttack,
@@ -79,11 +91,7 @@ impl EsoWeaveApp {
         if self.applied_prefs == Some(self.ui_prefs) {
             return;
         }
-        let visuals = match self.ui_prefs.theme {
-            Theme::Dark => egui::Visuals::dark(),
-            Theme::Light => egui::Visuals::light(),
-        };
-        ctx.set_visuals(visuals);
+        crate::app::theme::apply(ctx, self.ui_prefs.theme);
         let level = if self.ui_prefs.always_on_top {
             egui::WindowLevel::AlwaysOnTop
         } else {
@@ -106,16 +114,20 @@ impl eframe::App for EsoWeaveApp {
             // Menu row.
             ui.horizontal(|ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("Settings").clicked() {
+                    if ui.button("Settings").clickable().clicked() {
                         self.settings_open = true;
                         self.settings_draft = Some(self.model.settings_form());
                     }
-                    if ui.button("Exit").clicked() {
+                    if ui.button("Exit").clickable().clicked() {
                         exit = true;
                     }
                 });
                 ui.menu_button("View", |ui| {
-                    if ui.checkbox(&mut self.log_panel_open, "Live Log").changed() {
+                    if ui
+                        .checkbox(&mut self.log_panel_open, "Live Log")
+                        .clickable()
+                        .changed()
+                    {
                         intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
                     }
                 });
@@ -147,14 +159,16 @@ impl EsoWeaveApp {
     fn main_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
         let view = self.model.view();
 
+        let palette = crate::app::theme::palette(self.ui_prefs.theme);
+
         if self.confirm_uninstall {
             ui.horizontal(|ui| {
                 ui.label("Remove the PixelBeacon addon?");
-                if ui.button("Uninstall").clicked() {
+                if ui.button("Uninstall").clickable().clicked() {
                     intents.push(UiIntent::UninstallBeacon);
                     self.confirm_uninstall = false;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button("Cancel").clickable().clicked() {
                     self.confirm_uninstall = false;
                 }
             });
@@ -164,30 +178,31 @@ impl EsoWeaveApp {
         // Status region.
         ui.horizontal(|ui| {
             ui.label(format!("State: {}", view.app_state.indicator));
-            if ui.button(view.app_state.button).clicked() {
+            if ui.button(view.app_state.button).clickable().clicked() {
                 intents.push(UiIntent::ToggleSuspend);
             }
         });
         ui.horizontal(|ui| {
             ui.label(format!("Fishing: {}", view.fishing.indicator));
-            if ui.button(view.fishing.button).clicked() {
+            if ui.button(view.fishing.button).clickable().clicked() {
                 intents.push(UiIntent::SetFishing(view.fishing.button == "Go Fish"));
             }
         });
         ui.horizontal(|ui| {
             let dot = if view.beacon.green {
-                egui::Color32::from_rgb(0x40, 0xC0, 0x40)
+                palette.ok
             } else {
-                egui::Color32::from_rgb(0xC0, 0x40, 0x40)
+                palette.err
             };
             ui.colored_label(dot, "\u{25CF}")
                 .on_hover_text(view.beacon.tooltip);
             ui.label("PixelBeacon");
-            if ui.button("Install").clicked() {
+            if ui.button("Install").clickable().clicked() {
                 intents.push(UiIntent::InstallBeacon);
             }
             if ui
                 .add_enabled(view.uninstall_enabled, egui::Button::new("Uninstall"))
+                .clickable()
                 .clicked()
             {
                 self.confirm_uninstall = true;
@@ -196,53 +211,70 @@ impl EsoWeaveApp {
 
         ui.separator();
         ui.label("Skills");
-        for row in &view.skills {
-            ui.horizontal(|ui| {
-                ui.label(&row.label);
+        // A single grid so the label, active toggle, weave selector, override
+        // toggle, and value align in fixed columns across every row. The value
+        // cell is always allocated (a disabled placeholder when there is no
+        // override) so rows with and without a value are the same width.
+        egui::Grid::new("skills")
+            .num_columns(5)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                for row in &view.skills {
+                    ui.label(&row.label);
 
-                let mut active = row.active;
-                if ui.checkbox(&mut active, "active").changed() {
-                    intents.push(UiIntent::EditSkill(row.index, SkillEdit::Active(active)));
-                }
+                    let mut active = row.active;
+                    if ui.checkbox(&mut active, "active").clickable().changed() {
+                        intents.push(UiIntent::EditSkill(row.index, SkillEdit::Active(active)));
+                    }
 
-                let mut weave_type = row.weave_type;
-                egui::ComboBox::from_id_salt(("weave", row.index))
-                    .selected_text(weave_type_name(weave_type))
-                    .show_ui(ui, |ui| {
-                        for candidate in WEAVE_TYPES {
-                            ui.selectable_value(
-                                &mut weave_type,
-                                candidate,
-                                weave_type_name(candidate),
-                            );
-                        }
-                    });
-                if weave_type != row.weave_type {
-                    intents.push(UiIntent::EditSkill(
-                        row.index,
-                        SkillEdit::WeaveType(weave_type),
-                    ));
-                }
-
-                let mut has_override = row.override_d_weave.is_some();
-                if ui.checkbox(&mut has_override, "override").changed() {
-                    let value = if has_override { Some(50) } else { None };
-                    intents.push(UiIntent::EditSkill(
-                        row.index,
-                        SkillEdit::OverrideDWeave(value),
-                    ));
-                }
-                if let Some(current) = row.override_d_weave {
-                    let mut value = current;
-                    if ui.add(egui::DragValue::new(&mut value)).changed() {
+                    let mut weave_type = row.weave_type;
+                    let weave = egui::ComboBox::from_id_salt(("weave", row.index))
+                        .selected_text(weave_type_name(weave_type))
+                        .show_ui(ui, |ui| {
+                            for candidate in WEAVE_TYPES {
+                                ui.selectable_value(
+                                    &mut weave_type,
+                                    candidate,
+                                    weave_type_name(candidate),
+                                );
+                            }
+                        });
+                    weave.response.clickable();
+                    if weave_type != row.weave_type {
                         intents.push(UiIntent::EditSkill(
                             row.index,
-                            SkillEdit::OverrideDWeave(Some(value)),
+                            SkillEdit::WeaveType(weave_type),
                         ));
                     }
+
+                    let mut has_override = row.override_d_weave.is_some();
+                    if ui
+                        .checkbox(&mut has_override, "override")
+                        .clickable()
+                        .changed()
+                    {
+                        let value = if has_override { Some(50) } else { None };
+                        intents.push(UiIntent::EditSkill(
+                            row.index,
+                            SkillEdit::OverrideDWeave(value),
+                        ));
+                    }
+
+                    if let Some(current) = row.override_d_weave {
+                        let mut value = current;
+                        if ui.add(egui::DragValue::new(&mut value)).changed() {
+                            intents.push(UiIntent::EditSkill(
+                                row.index,
+                                SkillEdit::OverrideDWeave(Some(value)),
+                            ));
+                        }
+                    } else {
+                        let mut placeholder: u32 = 0;
+                        ui.add_enabled(false, egui::DragValue::new(&mut placeholder));
+                    }
+                    ui.end_row();
                 }
             });
-        }
     }
 
     fn log_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
@@ -256,7 +288,9 @@ impl EsoWeaveApp {
                     for level in LEVELS {
                         ui.selectable_value(&mut selected, level, level_name(level));
                     }
-                });
+                })
+                .response
+                .clickable();
             if selected != filter {
                 intents.push(UiIntent::SetLogFilter(selected));
             }
@@ -283,10 +317,10 @@ impl EsoWeaveApp {
         let mut close = false;
         ui.horizontal(|ui| {
             ui.heading("Settings");
-            if ui.button("Apply").clicked() {
+            if ui.button("Apply").clickable().clicked() {
                 apply = true;
             }
-            if ui.button("Close").clicked() {
+            if ui.button("Close").clickable().clicked() {
                 close = true;
             }
         });
@@ -297,8 +331,11 @@ impl EsoWeaveApp {
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut draft.ui.theme, Theme::Dark, "Dark");
                     ui.selectable_value(&mut draft.ui.theme, Theme::Light, "Light");
-                });
-            ui.checkbox(&mut draft.ui.always_on_top, "Always on top");
+                })
+                .response
+                .clickable();
+            ui.checkbox(&mut draft.ui.always_on_top, "Always on top")
+                .clickable();
 
             ui.separator();
             ui.heading("Global timing (ms)");
@@ -313,7 +350,8 @@ impl EsoWeaveApp {
 
             ui.separator();
             ui.heading("Latency adaptation");
-            ui.checkbox(&mut draft.latency.enabled, "Enabled");
+            ui.checkbox(&mut draft.latency.enabled, "Enabled")
+                .clickable();
             ui.horizontal(|ui| {
                 ui.label("k");
                 ui.add(egui::DragValue::new(&mut draft.latency.k).speed(0.05));
@@ -343,8 +381,11 @@ impl EsoWeaveApp {
                     for level in LEVELS {
                         ui.selectable_value(&mut draft.logging.level, level, level_name(level));
                     }
-                });
-            ui.checkbox(&mut draft.logging.file_enabled, "File logging");
+                })
+                .response
+                .clickable();
+            ui.checkbox(&mut draft.logging.file_enabled, "File logging")
+                .clickable();
 
             ui.separator();
             ui.heading("Keybindings");
@@ -357,7 +398,9 @@ impl EsoWeaveApp {
                         for key in KEYS {
                             ui.selectable_value(&mut selected, key, key.as_str());
                         }
-                    });
+                    })
+                    .response
+                    .clickable();
                 if selected != current {
                     let _ = draft.bindings.rebind(action, selected);
                 }

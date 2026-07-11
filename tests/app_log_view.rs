@@ -18,13 +18,15 @@ fn event(level: Level, message: &str) -> LogEvent {
 
 #[test]
 fn level_colors_are_distinct_per_level() {
+    // ERROR is the brand palette red (retuned in S012 to be legible on both
+    // themes). The distinctness checks below are what the view relies on.
     let error = level_color(Level::ERROR);
     assert_eq!(
         error,
         LogColor {
-            r: 0xE0,
-            g: 0x30,
-            b: 0x30
+            r: 0xF8,
+            g: 0x71,
+            b: 0x71
         }
     );
     assert_ne!(level_color(Level::WARN), error);

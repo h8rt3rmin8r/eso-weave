@@ -3,8 +3,9 @@
   WiX MSI source for ESO Weave, built by the pinned release pipeline with the
   cargo-wix no-build step (which resolves this file at the default wix/main.wxs
   location). It installs the single application binary under Program Files with a
-  guided wizard (welcome, license, install location, progress, exit), a license
-  acceptance gate, Start Menu and desktop shortcuts, the application icon, and an
+  guided wizard (welcome, license, custom setup, progress, exit), a license
+  acceptance gate, an always-installed Start Menu shortcut, an opt-in desktop
+  shortcut (off by default), branded wizard artwork, the application icon, and an
   optional de-elevated launch on finish. It supports add and remove and upgrade in
   place, and never writes to game or Documents directories.
 
@@ -104,13 +105,19 @@
     <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
 
     <!--
-      Installer UI: a full WixUI_InstallDir wizard with a license acceptance gate
-      and the standard install-location page. The license text is the repository
-      Apache-2.0 license rendered as RTF.
+      Installer UI: a WixUI_FeatureTree wizard with a license acceptance gate and
+      a Custom Setup step. The desktop shortcut is its own feature, off by default
+      (Level 2), so the user opts in rather than being given one unasked; the
+      application (with its Start Menu shortcut) cannot be deselected. The install
+      location is set through the Custom Setup Browse button. The license text is
+      the repository Apache-2.0 license rendered as clean proportional RTF, and the
+      wizard uses branded banner and dialog artwork.
     -->
     <WixVariable Id="WixUILicenseRtf" Value="packaging\windows\License.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="packaging\windows\banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="packaging\windows\dialog.bmp" />
     <Property Id="WIXUI_INSTALLDIR" Value="APPLICATIONFOLDER" />
-    <UIRef Id="WixUI_InstallDir" />
+    <UIRef Id="WixUI_FeatureTree" />
 
     <!--
       Optional "Launch ESO Weave" checkbox on the exit dialog, checked by default.
@@ -135,9 +142,26 @@
         Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
     </UI>
 
-    <Feature Id="Application" Title="ESO Weave" Level="1">
+    <Feature
+      Id="Application"
+      Title="ESO Weave"
+      Level="1"
+      Absent="disallow"
+      ConfigurableDirectory="APPLICATIONFOLDER"
+      Description="The ESO Weave application and its Start Menu shortcut.">
       <ComponentRef Id="ApplicationBinary" />
       <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+    <!--
+      The desktop shortcut is opt-in: Level 2 means it is not installed unless the
+      user selects it in the Custom Setup step. This is why the Component carries
+      its own HKCU key path rather than living in the always-installed feature.
+    -->
+    <Feature
+      Id="DesktopShortcut"
+      Title="Desktop shortcut"
+      Level="2"
+      Description="Create a shortcut to ESO Weave on the desktop.">
       <ComponentRef Id="ApplicationDesktopShortcut" />
     </Feature>
   </Product>

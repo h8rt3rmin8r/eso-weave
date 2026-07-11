@@ -21,6 +21,7 @@ eframe = { version = "0.35", default-features = false, features = [
     "x11",
     "wayland",
 ] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -35,6 +36,11 @@ windows-sys = { version = "0.59", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.12"
 x11rb = "0.13"
+
+# Embeds the application icon into the Windows executable at build time. Only a
+# build dependency on Windows hosts; the Linux build never pulls or runs it.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

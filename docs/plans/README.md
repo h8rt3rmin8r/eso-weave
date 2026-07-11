@@ -21,3 +21,4 @@ add one row to the table below. No other files need to change.
 | Plan | Status | Scope |
 | --- | --- | --- |
 | [plan-001.md](plan-001.md) | Active | Initial decomposition of the master specification into ten build slices, from foundations through packaging, preceded by the constitution prerequisite. |
+| [plan-002.md](plan-002.md) | Active | Brand and UX polish (slice 012): a documented brand standard applied across the app UI, the runtime and executable icon, and the Windows and Linux installers. |

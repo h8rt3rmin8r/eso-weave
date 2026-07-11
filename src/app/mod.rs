@@ -11,6 +11,7 @@ pub mod beacon_light;
 pub mod log_view;
 pub mod routing;
 pub mod settings_form;
+pub mod theme;
 pub mod ui;
 
 use std::path::PathBuf;

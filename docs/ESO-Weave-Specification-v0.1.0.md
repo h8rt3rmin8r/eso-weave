@@ -174,7 +174,9 @@ Component responsibilities:
 - **Logging Subsystem:** Structured logging with runtime-adjustable level, an
   optional file sink, and an always-available in-memory ring buffer feeding the
   live log viewer.
-- **GUI Layer:** Cross-platform immediate-mode UI (egui/eframe or equivalent).
+- **GUI Layer:** Cross-platform immediate-mode UI (egui/eframe or equivalent). Its
+  visual identity (palette, typography, iconography) is governed by the brand
+  standard `docs/brand/ESO-Weave-Brand-v1.md`.
 
 ## 6. Input Engine
 
