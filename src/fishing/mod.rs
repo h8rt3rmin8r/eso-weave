@@ -257,7 +257,7 @@ impl FishingController {
     /// enabling when already active, or disabling when already Disabled, is a
     /// no-op. Disabling from any active state returns to Disabled and cancels any
     /// pending interact, emitting nothing.
-    pub fn set_enabled(&mut self, enabled: bool, now_ms: u64, sink: &mut impl FishingSink) {
+    pub fn set_enabled(&mut self, enabled: bool, now_ms: u64, sink: &mut dyn FishingSink) {
         if enabled {
             if self.state == FishingState::Disabled {
                 self.cast(now_ms, sink);
@@ -268,7 +268,7 @@ impl FishingController {
     }
 
     /// Handles a detector event.
-    pub fn on_event(&mut self, event: DetectorEvent, now_ms: u64, sink: &mut impl FishingSink) {
+    pub fn on_event(&mut self, event: DetectorEvent, now_ms: u64, sink: &mut dyn FishingSink) {
         match event {
             DetectorEvent::SignalLost => {
                 if self.state != FishingState::Disabled {
@@ -304,7 +304,7 @@ impl FishingController {
     }
 
     /// Fires the pending deadline if it is due at `now_ms`.
-    pub fn tick(&mut self, now_ms: u64, sink: &mut impl FishingSink) {
+    pub fn tick(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
         let Some((at_ms, kind)) = self.deadline else {
             return;
         };
@@ -333,7 +333,7 @@ impl FishingController {
     }
 
     /// Enters Armed, emits one interact (the cast), and arms the arm timeout.
-    fn cast(&mut self, now_ms: u64, sink: &mut impl FishingSink) {
+    fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
         self.send_interact(sink);
         self.state = FishingState::Armed;
         self.deadline = Some((
@@ -349,7 +349,7 @@ impl FishingController {
     }
 
     /// Emits one interact: a key press followed by a key release.
-    fn send_interact(&self, sink: &mut impl FishingSink) {
+    fn send_interact(&self, sink: &mut dyn FishingSink) {
         sink.key(self.config.interact_key, Transition::Down);
         sink.key(self.config.interact_key, Transition::Up);
     }

@@ -190,6 +190,11 @@ impl WeaveEngine {
         &self.latency
     }
 
+    /// The current known latency, or `None` when unknown.
+    pub fn current_latency(&self) -> Option<u16> {
+        self.current_latency
+    }
+
     /// Replaces the latency-adaptation configuration.
     pub fn set_latency_config(&mut self, latency: LatencyConfig) {
         self.latency = latency;
@@ -198,6 +203,12 @@ impl WeaveEngine {
     /// The current configuration.
     pub fn config(&self) -> &WeaveConfig {
         &self.config
+    }
+
+    /// Mutable access to the configuration, for editing skill slots and timing
+    /// from the GUI.
+    pub fn config_mut(&mut self) -> &mut WeaveConfig {
+        &mut self.config
     }
 
     /// The slot bound to an action, if the action is a weave action.

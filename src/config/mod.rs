@@ -55,6 +55,17 @@ impl LevelName {
     }
 }
 
+/// The GUI theme.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    /// The dark theme (the default).
+    #[default]
+    Dark,
+    /// The light theme.
+    Light,
+}
+
 /// Operator-chosen logging preferences that belong to user settings.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct LoggingPrefs {
@@ -111,6 +122,16 @@ pub struct Settings {
     /// means the defaults are used. Additive and backward compatible.
     #[serde(default)]
     pub latency: serde_json::Value,
+    /// Pixel bus reader configuration (sampling tolerance and intervals), as an
+    /// opaque JSON section owned by the pixelbus module. Null or absent means the
+    /// defaults are used. Additive and backward compatible.
+    #[serde(default)]
+    pub pixelbus: serde_json::Value,
+    /// GUI preferences (theme and always-on-top), as an opaque JSON section owned
+    /// by the app module. Null or absent means the defaults are used. Additive and
+    /// backward compatible.
+    #[serde(default)]
+    pub ui: serde_json::Value,
 }
 
 impl Default for Settings {
@@ -124,6 +145,8 @@ impl Default for Settings {
             beacon: serde_json::Value::Null,
             fishing: serde_json::Value::Null,
             latency: serde_json::Value::Null,
+            pixelbus: serde_json::Value::Null,
+            ui: serde_json::Value::Null,
         }
     }
 }
@@ -190,6 +213,10 @@ struct RawSettings {
     fishing: serde_json::Value,
     #[serde(default)]
     latency: serde_json::Value,
+    #[serde(default)]
+    pixelbus: serde_json::Value,
+    #[serde(default)]
+    ui: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -243,6 +270,8 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         "beacon",
         "fishing",
         "latency",
+        "pixelbus",
+        "ui",
     ]
     .into_iter()
     .collect();
@@ -283,6 +312,8 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         beacon: raw.beacon,
         fishing: raw.fishing,
         latency: raw.latency,
+        pixelbus: raw.pixelbus,
+        ui: raw.ui,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {

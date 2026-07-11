@@ -1,29 +1,196 @@
 //! ESO Weave binary entry point.
 //!
-//! For the foundations slice this wires the Config Store and Logging together:
-//! resolve platform directories, load settings, initialize logging from the
-//! loaded preferences, emit any load notices, log a startup line, and exit.
+//! Resolves platform directories, loads settings, initializes logging, builds
+//! the shared subsystems, spawns the interception, weave-worker, and pixel-bus
+//! worker threads, and runs the eframe GUI on the main thread. The GUI and the
+//! worker threads share the subsystems; the input backend keeps its own thread
+//! and message pump (the S002 contract) while eframe owns the main event loop.
 
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use eso_weave::app::{route_reader_event, ui::EsoWeaveApp, AppModel};
 use eso_weave::config::{self, LoadOutcome};
+use eso_weave::fishing::{FishingConfig, FishingController, RealFishingSink};
+use eso_weave::input::bindings::BindingTable;
+use eso_weave::input::{InputBackend, InputEngine, InputError, Key, MouseButton, Transition};
+use eso_weave::pixelbus::{self, PixelBusReader, SurfaceSampler};
+use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
 
+/// The exact ESO window title the backends and samplers resolve.
+const WINDOW_TITLE: &str = "Elder Scrolls Online";
+
 fn main() {
-    let outcome = match platform::config_dir() {
-        Some(dir) => config::load(&dir),
+    let config_dir = platform::config_dir();
+    let outcome = match &config_dir {
+        Some(dir) => config::load(dir),
         None => LoadOutcome::default(),
     };
+    let settings = outcome.settings;
 
-    let log_dir = platform::log_dir().unwrap_or_default();
-    let _handle = logging::init(&outcome.settings.logging, log_dir);
-
+    let log = logging::init(&settings.logging, platform::log_dir().unwrap_or_default());
     for notice in &outcome.notices {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
-
     tracing::info!(
         target: "eso_weave",
         "eso-weave {} started (schema_version={})",
         version(),
-        outcome.settings.schema_version
+        settings.schema_version
     );
+
+    // Input engine and its shared backend.
+    let (bindings, binding_notices) = BindingTable::from_settings_map(&settings.bindings);
+    for notice in &binding_notices {
+        tracing::warn!(target: "eso_weave::config", "{}", notice.message);
+    }
+    let (engine, actions) = InputEngine::new(bindings, 64);
+    let input = Arc::new(engine);
+    let backend = Arc::new(make_backend());
+
+    // Weave engine, loaded from settings and synced to the bindings.
+    let mut weave_engine = WeaveEngine::new(WeaveConfig::default());
+    for notice in weave_engine.load(&settings) {
+        tracing::warn!(target: "eso_weave::config", "{}", notice.message);
+    }
+    weave_engine.config_mut().sync_keys(&input.bindings());
+    weave_engine.apply_activity(&input);
+    let weave = Arc::new(Mutex::new(weave_engine));
+
+    // Fishing controller.
+    let mut fishing_notices = Vec::new();
+    let fishing_config = FishingConfig::load(&settings.fishing, &mut fishing_notices);
+    for notice in &fishing_notices {
+        tracing::warn!(target: "eso_weave::config", "{}", notice.message);
+    }
+    let fishing = Arc::new(Mutex::new(FishingController::new(fishing_config)));
+
+    // Pixel bus reader configuration.
+    let mut reader_notices = Vec::new();
+    let reader_config = pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices);
+    for notice in &reader_notices {
+        tracing::warn!(target: "eso_weave::config", "{}", notice.message);
+    }
+
+    // Interception thread: the backend runs its own event loop (S002 contract).
+    {
+        let backend = backend.clone();
+        let engine = input.clone();
+        thread::spawn(move || {
+            if let Err(err) = backend.run(engine) {
+                tracing::warn!(target: "eso_weave::input", "interception ended: {err}");
+            }
+        });
+    }
+
+    // Weave worker: drains handed-off actions and runs sequences through the backend.
+    {
+        let backend = backend.clone();
+        let weave = weave.clone();
+        thread::spawn(move || {
+            let mut sink = RealSink::new(SharedBackend(backend));
+            while let Ok(action) = actions.recv() {
+                weave.lock().unwrap().handle(action, &mut sink);
+            }
+        });
+    }
+
+    // Pixel bus worker: samples the reader and routes events to the subsystems.
+    {
+        let backend = backend.clone();
+        let weave = weave.clone();
+        let fishing = fishing.clone();
+        thread::spawn(move || {
+            let mut reader = PixelBusReader::new(reader_config);
+            let mut sink = RealFishingSink::new(SharedBackend(backend));
+            let mut sampler = resolve_sampler();
+            let origin = Instant::now();
+            loop {
+                thread::sleep(Duration::from_millis(reader_config.interval_idle_ms));
+                if sampler.is_none() {
+                    sampler = resolve_sampler();
+                }
+                let Some(active) = sampler.as_ref() else {
+                    continue;
+                };
+                let now = origin.elapsed().as_millis() as u64;
+                let events = reader.sample_and_observe(active.as_ref(), now);
+                let mut weave = weave.lock().unwrap();
+                let mut fishing = fishing.lock().unwrap();
+                for event in events {
+                    route_reader_event(event, &mut weave, &mut fishing, now, &mut sink);
+                }
+                fishing.tick(now, &mut sink);
+            }
+        });
+    }
+
+    // GUI on the main thread.
+    let gui_sink = Box::new(RealFishingSink::new(SharedBackend(backend.clone())));
+    let model = AppModel::new(
+        input.clone(),
+        weave.clone(),
+        fishing.clone(),
+        gui_sink,
+        log.clone(),
+        settings,
+        config_dir,
+    );
+
+    let native_options = eframe::NativeOptions::default();
+    if let Err(err) = eframe::run_native(
+        "ESO Weave",
+        native_options,
+        Box::new(|_cc| Ok(Box::new(EsoWeaveApp::new(model)))),
+    ) {
+        tracing::error!(target: "eso_weave", "GUI exited with error: {err}");
+    }
+}
+
+/// A shareable adapter over the input backend, so the interception thread, the
+/// weave worker, the pixel bus worker, and the GUI all synthesize through the
+/// same backend (self-originated marking stays consistent).
+struct SharedBackend<B>(Arc<B>);
+
+impl<B: InputBackend> InputBackend for SharedBackend<B> {
+    fn synthesize(&self, key: Key, transition: Transition) -> Result<(), InputError> {
+        self.0.synthesize(key, transition)
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.0.synthesize_mouse(button, transition)
+    }
+
+    fn run(&self, engine: Arc<InputEngine>) -> Result<(), InputError> {
+        self.0.run(engine)
+    }
+}
+
+#[cfg(windows)]
+fn make_backend() -> eso_weave::input::WindowsBackend {
+    eso_weave::input::WindowsBackend::new(WINDOW_TITLE)
+}
+
+#[cfg(target_os = "linux")]
+fn make_backend() -> eso_weave::input::LinuxBackend {
+    eso_weave::input::LinuxBackend::new(WINDOW_TITLE)
+}
+
+#[cfg(windows)]
+fn resolve_sampler() -> Option<Box<dyn SurfaceSampler>> {
+    eso_weave::pixelbus::GdiSampler::for_window(WINDOW_TITLE)
+        .map(|sampler| Box::new(sampler) as Box<dyn SurfaceSampler>)
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_sampler() -> Option<Box<dyn SurfaceSampler>> {
+    Some(Box::new(eso_weave::pixelbus::X11Sampler::for_window(
+        WINDOW_TITLE,
+    )))
 }

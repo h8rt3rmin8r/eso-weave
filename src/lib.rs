@@ -6,6 +6,7 @@
 //! [`beacon`] module manages the on-disk lifecycle of the embedded PixelBeacon
 //! addon.
 
+pub mod app;
 pub mod beacon;
 pub mod config;
 pub mod fishing;

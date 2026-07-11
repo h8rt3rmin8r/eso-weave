@@ -17,6 +17,10 @@ pub use windows::GdiSampler;
 
 use std::collections::HashMap;
 
+use serde::Deserialize;
+
+use crate::config::{Notice, NoticeKind};
+
 /// A red-green-blue color triple sampled from a beacon point.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rgb {
@@ -100,7 +104,7 @@ impl SurfaceSampler for MockSampler {
 }
 
 /// Reader configuration.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReaderConfig {
     /// Per-channel color match tolerance.
     pub tolerance: u8,
@@ -128,6 +132,79 @@ impl Default for ReaderConfig {
             latency_point: (40, 8),
             interval_fishing_ms: 100,
             interval_idle_ms: 1000,
+        }
+    }
+}
+
+/// The minimum accepted sampling interval, in milliseconds.
+const MIN_INTERVAL_MS: u64 = 1;
+/// The maximum accepted sampling interval, in milliseconds.
+const MAX_INTERVAL_MS: u64 = 60_000;
+
+#[derive(Deserialize, Default)]
+struct RawPixelBus {
+    #[serde(default)]
+    tolerance: Option<u8>,
+    #[serde(default)]
+    interval_fishing_ms: Option<u64>,
+    #[serde(default)]
+    interval_idle_ms: Option<u64>,
+}
+
+/// Loads the user-editable reader configuration (tolerance and sampling
+/// intervals) from the opaque `pixelbus` settings value onto a default
+/// [`ReaderConfig`]. The fixed beacon geometry and heartbeat timeout are not
+/// user settings and keep their defaults. Null or absent yields defaults; an
+/// out-of-range interval falls back with a notice.
+pub fn load_reader_config(value: &serde_json::Value, notices: &mut Vec<Notice>) -> ReaderConfig {
+    let defaults = ReaderConfig::default();
+    if value.is_null() {
+        return defaults;
+    }
+    let raw: RawPixelBus = serde_json::from_value(value.clone()).unwrap_or_default();
+    ReaderConfig {
+        tolerance: raw.tolerance.unwrap_or(defaults.tolerance),
+        interval_fishing_ms: checked_interval(
+            raw.interval_fishing_ms,
+            defaults.interval_fishing_ms,
+            "interval_fishing_ms",
+            notices,
+        ),
+        interval_idle_ms: checked_interval(
+            raw.interval_idle_ms,
+            defaults.interval_idle_ms,
+            "interval_idle_ms",
+            notices,
+        ),
+        ..defaults
+    }
+}
+
+/// Serializes the user-editable reader configuration to the opaque `pixelbus`
+/// settings value.
+pub fn store_reader_config(config: &ReaderConfig) -> serde_json::Value {
+    serde_json::json!({
+        "tolerance": config.tolerance,
+        "interval_fishing_ms": config.interval_fishing_ms,
+        "interval_idle_ms": config.interval_idle_ms,
+    })
+}
+
+fn checked_interval(
+    value: Option<u64>,
+    default: u64,
+    name: &str,
+    notices: &mut Vec<Notice>,
+) -> u64 {
+    match value {
+        None => default,
+        Some(ms) if (MIN_INTERVAL_MS..=MAX_INTERVAL_MS).contains(&ms) => ms,
+        Some(_) => {
+            notices.push(Notice {
+                kind: NoticeKind::InvalidValue,
+                message: format!("pixelbus {name} is out of range; using default {default}"),
+            });
+            default
         }
     }
 }

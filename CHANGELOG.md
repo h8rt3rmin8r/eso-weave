@@ -63,6 +63,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `set_latency(Option<u16>)` (clearing on signal loss reverts to base delays), and
   the enabled flag and `k` persist as an additive `latency` settings section. Off by
   default. No new crates.
+- Graphical User Interface (S009): an eframe/egui main window that integrates and
+  controls every subsystem, built around a testable application view-model (status
+  and beacon-light derivation, UI-intent handling, the settings-to-config mapping
+  for all of section 10.3, and the reader-event routing) separated from the egui
+  rendering. Status region (Suspend/Resume, Go Fish/Stop, a PixelBeacon status light
+  with exact-condition tooltip, Install, confirm-gated Uninstall), skills region
+  (per-slot active, weave type, and delay override), a colorized live log panel over
+  the ring buffer with pause-scroll and a level filter, and an in-app settings
+  surface for every section-10.3 category. A worker loop pumps the pixel bus reader
+  and routes its events (latency to the weave engine, signal loss to weave and
+  fishing, fishing events to the controller) without blocking the UI thread. Adds the
+  `eframe`/`egui` dependency (glow backend) and additive `pixelbus` and `ui` settings
+  sections.
 
 ### Changed
 
@@ -110,3 +123,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   current latency is runtime state fed via `set_latency` and never written to the
   config file. Rationale is in
   `specs/008-latency-adaptive-delays/research.md`.
+- 2026-07-11: The GUI (S009) adds the `eframe`/`egui` 0.35 dependency with the glow
+  backend (`default-features = false`, features `glow`, `default_fonts`, `x11`,
+  `wayland`), the spec-named GUI framework; the glow backend is lighter than wgpu and
+  builds on both targets. The correctness-bearing logic lives in a testable
+  `app` view-model separated from the egui rendering, which is validated with a
+  manual checklist because a native window cannot be exercised in the automated
+  environment. The input hook thread keeps its own message pump (the S002 contract)
+  while eframe owns the main thread; the subsystems are shared across the
+  interception, weave-worker, and pixel-bus worker threads via a `SharedBackend`
+  adapter so synthesis stays self-originated. Theme and always-on-top, and pixel bus
+  sampling tolerance and intervals, persist as additive `ui` and `pixelbus` settings
+  sections (no `schema_version` bump). Rationale is in `specs/009-gui/research.md`.
