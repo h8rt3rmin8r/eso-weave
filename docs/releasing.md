@@ -26,9 +26,10 @@ That command (configured in `release.toml`):
 
 Pushing the tag triggers `.github/workflows/release.yml`.
 
-Note: the repository is public, so the README release badge reads the latest GitHub Release
-directly from shields.io. No badge value is pinned in the file and no badge step exists in the
-rollover (an adaptation from the procedure this document derives from, where the repo was private).
+Note: the README version badge is a static shields.io badge (`version-X.Y.Z-2ea44f`). The
+`cargo release` rollover bumps it in lockstep with the version via a `[[pre-release-replacements]]`
+entry in `release.toml`, so it never drifts from the released version. Do not hand-edit the badge
+version; let the release command set it.
 
 ## What the pipeline guarantees
 

@@ -126,8 +126,7 @@
       Id="LaunchApplication"
       BinaryKey="WixCA"
       DllEntry="WixShellExec"
-      Impersonate="yes"
-      Return="asyncNoWait" />
+      Impersonate="yes" />
     <UI>
       <Publish
         Dialog="ExitDialog"

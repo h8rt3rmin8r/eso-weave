@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failure is never silent. Adds `packaging/windows/License.rtf` and a bin-local
   `startup` module behind a testable `Notifier` seam; the README documents the
   shortcut and log locations.
+- README: the `assets/eso-weave-banner.png` banner now heads the README, and the
+  static version badge is bumped automatically by the release rollover so it no
+  longer drifts from the released version.
 
 ### Decisions
 
@@ -32,9 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   launch-on-finish uses the WixUI ExitDialog with `WixShellExec` and
   `Impersonate="yes"`, which runs in the InstallUISequence as the invoking user for
   a de-elevated launch; a silent install has no UI sequence and never launches.
-  cargo-wix links WixUIExtension and WixUtilExtension by default, so the pinned
-  `.github/workflows/release.yml` is unchanged. Rationale is in
+  cargo-wix links WixUIExtension and WixUtilExtension by default (verified in the
+  cargo-wix linker source), so the pinned `.github/workflows/release.yml` is
+  unchanged. The WixShellExec custom action takes no `Return` attribute (WiX
+  CNDL0038 forbids `Return` without `ExeCommand`). Rationale is in
   `specs/011-installer-first-run/research.md`.
+- 2026-07-11: Automate the README version badge in the pinned `release.toml` with a
+  `[[pre-release-replacements]]` entry that rewrites the static shields.io badge
+  version on every `cargo release`, and correct `docs/releasing.md` (both pinned
+  artifacts) which had described the badge as dynamically read from the latest
+  GitHub Release. The badge is static, so it needs the rollover to stay in sync.
 
 ## [0.1.1] - 2026-07-11
 
