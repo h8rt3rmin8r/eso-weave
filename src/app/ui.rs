@@ -81,6 +81,7 @@ pub struct EsoWeaveApp {
     log_panel_open: bool,
     settings_open: bool,
     settings_draft: Option<SettingsForm>,
+    settings_applied: Option<SettingsForm>,
     confirm_uninstall: bool,
     toast: Option<widgets::Toast>,
 }
@@ -96,6 +97,7 @@ impl EsoWeaveApp {
             log_panel_open: false,
             settings_open: false,
             settings_draft: None,
+            settings_applied: None,
             confirm_uninstall: false,
             toast: None,
         }
@@ -134,8 +136,10 @@ impl eframe::App for EsoWeaveApp {
                         .clickable()
                         .clicked()
                     {
+                        let form = self.model.settings_form();
+                        self.settings_applied = Some(form.clone());
+                        self.settings_draft = Some(form);
                         self.settings_open = true;
-                        self.settings_draft = Some(self.model.settings_form());
                     }
                     if ui.button(strings::MENU_EXIT).clickable().clicked() {
                         exit = true;
@@ -158,16 +162,16 @@ impl eframe::App for EsoWeaveApp {
             });
             ui.separator();
 
-            if self.settings_open {
-                self.settings_view(ui, &mut intents);
-            } else {
-                self.main_view(ui, &mut intents);
-                if self.log_panel_open {
-                    ui.separator();
-                    self.log_view(ui, &mut intents);
-                }
+            self.main_view(ui, &mut intents);
+            if self.log_panel_open {
+                ui.separator();
+                self.log_view(ui, &mut intents);
             }
         });
+
+        if self.settings_open {
+            self.settings_modal(&ctx, &mut intents);
+        }
 
         for intent in intents {
             self.model.apply_intent(intent);
@@ -390,25 +394,70 @@ impl EsoWeaveApp {
             });
     }
 
-    fn settings_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
-        let Some(draft) = self.settings_draft.as_mut() else {
-            self.settings_open = false;
-            return;
+    /// Renders settings as a full-frame modal over a dimmed backdrop. Changes are
+    /// applied and persisted automatically (coalesced), with no explicit save.
+    /// The modal closes on an outside click, on Escape, or on the close control.
+    fn settings_modal(&mut self, ctx: &egui::Context, intents: &mut Vec<UiIntent>) {
+        let palette = crate::app::theme::palette(self.ui_prefs.theme);
+        let mut draft = match self.settings_draft.take() {
+            Some(draft) => draft,
+            None => {
+                self.settings_open = false;
+                return;
+            }
         };
-        let mut apply = false;
+        let screen = ctx.content_rect();
         let mut close = false;
-        ui.horizontal(|ui| {
-            ui.heading("Settings");
-            if ui.button("Apply").clickable().clicked() {
-                apply = true;
-            }
-            if ui.button("Close").clickable().clicked() {
-                close = true;
-            }
+
+        let modal = egui::Modal::new(egui::Id::new("eso_weave_settings")).show(ctx, |ui| {
+            ui.set_width((screen.width() * 0.9).min(720.0));
+            ui.horizontal(|ui| {
+                widgets::heading(ui, strings::MENU_SETTINGS);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Close").clickable().clicked() {
+                        close = true;
+                    }
+                });
+            });
+            ui.separator();
+            egui::ScrollArea::vertical()
+                .max_height(screen.height() * 0.78)
+                .show(ui, |ui| {
+                    settings_body(ui, &palette, &mut draft);
+                });
         });
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.heading("Theme and window");
-            egui::ComboBox::from_label("Theme")
+        if modal.should_close() {
+            close = true;
+        }
+
+        // Auto-apply: any change to the draft is applied live and persisted
+        // (coalesced through the save scheduler), with no explicit save action.
+        if self.settings_applied.as_ref() != Some(&draft) {
+            intents.push(UiIntent::ApplySettings(Box::new(draft.clone())));
+            self.ui_prefs = draft.ui;
+            self.settings_applied = Some(draft.clone());
+        }
+
+        if close {
+            self.settings_open = false;
+            self.settings_applied = None;
+        } else {
+            self.settings_draft = Some(draft);
+        }
+    }
+}
+
+/// Renders the clustered settings body into the modal. Each option carries a
+/// human-readable label (no underscore) and a short inline help line.
+fn settings_body(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    draft: &mut SettingsForm,
+) {
+    widgets::heading(ui, strings::CLUSTER_APPEARANCE);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        setting(ui, palette, &strings::SET_THEME, |ui| {
+            egui::ComboBox::from_id_salt("set_theme")
                 .selected_text(theme_name(draft.ui.theme))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut draft.ui.theme, Theme::Dark, "Dark");
@@ -416,48 +465,104 @@ impl EsoWeaveApp {
                 })
                 .response
                 .clickable();
-            ui.checkbox(&mut draft.ui.always_on_top, "Always on top")
-                .clickable();
+        });
+        setting(ui, palette, &strings::SET_ALWAYS_ON_TOP, |ui| {
+            widgets::toggle_switch(ui, &mut draft.ui.always_on_top, palette);
+        });
+    });
+    ui.add_space(6.0);
 
-            ui.separator();
-            ui.heading("Global timing (ms)");
-            timing_row(
-                ui,
-                "global_cooldown",
+    widgets::heading(ui, strings::CLUSTER_COMBAT_TIMING);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        setting(ui, palette, &strings::SET_GLOBAL_COOLDOWN, |ui| {
+            ui.add(egui::DragValue::new(
                 &mut draft.weave.timing.global_cooldown,
-            );
-            timing_row(ui, "d_weave", &mut draft.weave.timing.d_weave);
-            timing_row(ui, "d_heavy", &mut draft.weave.timing.d_heavy);
-            timing_row(ui, "d_bash", &mut draft.weave.timing.d_bash);
+            ));
+        });
+        setting(ui, palette, &strings::SET_D_WEAVE, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.weave.timing.d_weave));
+        });
+        setting(ui, palette, &strings::SET_D_HEAVY, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.weave.timing.d_heavy));
+        });
+        setting(ui, palette, &strings::SET_D_BASH, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.weave.timing.d_bash));
+        });
+        setting(ui, palette, &strings::SET_LATENCY_ENABLED, |ui| {
+            widgets::toggle_switch(ui, &mut draft.latency.enabled, palette);
+        });
+        setting(ui, palette, &strings::SET_LATENCY_K, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.latency.k).speed(0.05));
+        });
+    });
+    ui.add_space(6.0);
 
-            ui.separator();
-            ui.heading("Latency adaptation");
-            ui.checkbox(&mut draft.latency.enabled, "Enabled")
+    widgets::heading(ui, strings::CLUSTER_FISHING);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        setting(ui, palette, &strings::SET_ARM_TIMEOUT, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.fishing.arm_timeout_ms));
+        });
+        setting(ui, palette, &strings::SET_REEL_DELAY, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.fishing.reel_delay_ms));
+        });
+        setting(ui, palette, &strings::SET_RECAST_DELAY, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.fishing.recast_delay_ms));
+        });
+    });
+    ui.add_space(6.0);
+
+    widgets::heading(ui, strings::CLUSTER_BEACON);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        setting(ui, palette, &strings::SET_BEACON_PATH, |ui| {
+            let mut text = draft
+                .beacon
+                .path_override
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            if ui.text_edit_singleline(&mut text).changed() {
+                let trimmed = text.trim();
+                draft.beacon.path_override = if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(std::path::PathBuf::from(trimmed))
+                };
+            }
+        });
+        setting(ui, palette, &strings::SET_BEACON_ENV, |ui| {
+            egui::ComboBox::from_id_salt("set_env")
+                .selected_text(env_name(draft.beacon.environment))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut draft.beacon.environment,
+                        crate::beacon::Environment::Live,
+                        "Live",
+                    );
+                    ui.selectable_value(
+                        &mut draft.beacon.environment,
+                        crate::beacon::Environment::Pts,
+                        "PTS",
+                    );
+                })
+                .response
                 .clickable();
-            ui.horizontal(|ui| {
-                ui.label("k");
-                ui.add(egui::DragValue::new(&mut draft.latency.k).speed(0.05));
-            });
+        });
+        setting(ui, palette, &strings::SET_TOLERANCE, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.reader.tolerance));
+        });
+        setting(ui, palette, &strings::SET_INTERVAL_FISHING, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.reader.interval_fishing_ms));
+        });
+        setting(ui, palette, &strings::SET_INTERVAL_IDLE, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.reader.interval_idle_ms));
+        });
+    });
+    ui.add_space(6.0);
 
-            ui.separator();
-            ui.heading("Fishing (ms)");
-            timing_row(ui, "arm_timeout_ms", &mut draft.fishing.arm_timeout_ms);
-            timing_row(ui, "reel_delay_ms", &mut draft.fishing.reel_delay_ms);
-            timing_row(ui, "recast_delay_ms", &mut draft.fishing.recast_delay_ms);
-
-            ui.separator();
-            ui.heading("Pixel bus");
-            u8_row(ui, "tolerance", &mut draft.reader.tolerance);
-            u64_row(
-                ui,
-                "interval_fishing_ms",
-                &mut draft.reader.interval_fishing_ms,
-            );
-            u64_row(ui, "interval_idle_ms", &mut draft.reader.interval_idle_ms);
-
-            ui.separator();
-            ui.heading("Logging");
-            egui::ComboBox::from_label("Log level")
+    widgets::heading(ui, strings::CLUSTER_LOGGING);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        setting(ui, palette, &strings::SET_LOG_LEVEL, |ui| {
+            egui::ComboBox::from_id_salt("set_log_level")
                 .selected_text(level_name(draft.logging.level))
                 .show_ui(ui, |ui| {
                     for level in LEVELS {
@@ -466,15 +571,21 @@ impl EsoWeaveApp {
                 })
                 .response
                 .clickable();
-            ui.checkbox(&mut draft.logging.file_enabled, "File logging")
-                .clickable();
+        });
+        setting(ui, palette, &strings::SET_FILE_LOGGING, |ui| {
+            widgets::toggle_switch(ui, &mut draft.logging.file_enabled, palette);
+        });
+    });
+    ui.add_space(6.0);
 
-            ui.separator();
-            ui.heading("Keybindings");
-            for action in Action::ALL {
-                let current = draft.bindings.key_for(action);
-                let mut selected = current;
-                egui::ComboBox::from_label(action.as_str())
+    widgets::heading(ui, strings::CLUSTER_KEYBINDINGS);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        for action in Action::ALL {
+            let current = draft.bindings.key_for(action);
+            let mut selected = current;
+            ui.horizontal(|ui| {
+                ui.label(action_label(action));
+                egui::ComboBox::from_id_salt(("bind", action.as_str()))
                     .selected_text(selected.as_str())
                     .show_ui(ui, |ui| {
                         for key in KEYS {
@@ -483,21 +594,49 @@ impl EsoWeaveApp {
                     })
                     .response
                     .clickable();
-                if selected != current {
-                    let _ = draft.bindings.rebind(action, selected);
-                }
+            });
+            if selected != current {
+                let _ = draft.bindings.rebind(action, selected);
             }
-        });
+        }
+    });
+}
 
-        if apply {
-            intents.push(UiIntent::ApplySettings(Box::new(draft.clone())));
-            self.ui_prefs = draft.ui;
-            close = true;
-        }
-        if close {
-            self.settings_open = false;
-            self.settings_draft = None;
-        }
+/// Renders one settings option: a label with a tooltip, the control, and a small
+/// muted inline help line beneath it.
+fn setting(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    s: &strings::Setting,
+    add: impl FnOnce(&mut egui::Ui),
+) {
+    ui.horizontal(|ui| {
+        ui.label(s.label).on_hover_text(s.help);
+        add(ui);
+    });
+    widgets::muted_help(ui, palette, s.help);
+}
+
+/// A human-readable, underscore-free label for a bindable action.
+fn action_label(action: Action) -> &'static str {
+    match action {
+        Action::Skill1 => "Skill 1",
+        Action::Skill2 => "Skill 2",
+        Action::Skill3 => "Skill 3",
+        Action::Skill4 => "Skill 4",
+        Action::Skill5 => "Skill 5",
+        Action::Ultimate => "Ultimate",
+        Action::Synergy => "Synergy",
+        Action::ToggleSuspend => "Toggle suspend",
+        Action::ToggleFishing => "Toggle fishing",
+    }
+}
+
+/// The display name for a game environment.
+fn env_name(env: crate::beacon::Environment) -> &'static str {
+    match env {
+        crate::beacon::Environment::Live => "Live",
+        crate::beacon::Environment::Pts => "PTS",
     }
 }
 
@@ -509,27 +648,6 @@ fn status_cells(ui: &mut egui::Ui, palette: &crate::app::theme::Palette, line: &
     let color = crate::app::theme::status_color(palette, line.role);
     ui.label(egui::RichText::new(&line.state_text).color(color))
         .on_hover_text(line.tooltip);
-}
-
-fn timing_row(ui: &mut egui::Ui, label: &str, value: &mut u32) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(value));
-    });
-}
-
-fn u8_row(ui: &mut egui::Ui, label: &str, value: &mut u8) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(value));
-    });
-}
-
-fn u64_row(ui: &mut egui::Ui, label: &str, value: &mut u64) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(value));
-    });
 }
 
 fn weave_type_name(weave_type: WeaveType) -> &'static str {

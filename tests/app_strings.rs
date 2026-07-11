@@ -37,3 +37,27 @@ fn skill_columns_have_headers_and_tooltips() {
         assert!(!tip.trim().is_empty());
     }
 }
+
+#[test]
+fn settings_cluster_titles_are_clean() {
+    for title in [
+        strings::CLUSTER_APPEARANCE,
+        strings::CLUSTER_COMBAT_TIMING,
+        strings::CLUSTER_FISHING,
+        strings::CLUSTER_BEACON,
+        strings::CLUSTER_LOGGING,
+        strings::CLUSTER_KEYBINDINGS,
+    ] {
+        assert!(!title.trim().is_empty());
+        assert!(!title.contains('_'));
+    }
+}
+
+#[test]
+fn beacon_settings_are_surfaced() {
+    // The beacon location override and environment options must be present in the
+    // settings surface (they were previously persisted but not shown).
+    let labels: Vec<&str> = strings::ALL_SETTINGS.iter().map(|s| s.label).collect();
+    assert!(labels.contains(&strings::SET_BEACON_PATH.label));
+    assert!(labels.contains(&strings::SET_BEACON_ENV.label));
+}
