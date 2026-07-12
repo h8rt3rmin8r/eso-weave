@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use eso_weave::app::{AppModel, SaveScheduler, SkillEdit, UiIntent};
+use eso_weave::app::{app_toggle_intent, AppModel, SaveScheduler, SkillEdit, UiIntent};
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::state::{self, SessionState};
 use eso_weave::config::{LoggingPrefs, Settings};
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
+use eso_weave::input::Action;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::weave::{WeaveConfig, WeaveEngine};
@@ -142,6 +143,53 @@ fn restore_fishing_marks_active_and_round_trips() {
     let state = model.current_session_state();
     assert!(state.fishing);
     assert!(!state.suspended);
+}
+
+// Hotkey-driven toggles reach the same state as the GUI buttons (feature 015).
+
+/// Applies a hotkey action exactly as the GUI drain loop does: map it to an
+/// intent against the live fishing state, then apply it through the model.
+fn press(model: &mut AppModel, action: Action) {
+    if let Some(intent) = app_toggle_intent(action, model.fishing_on()) {
+        model.apply_intent(intent);
+    }
+}
+
+#[test]
+fn hotkey_suspend_toggles_like_the_button() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+    assert!(!model.view().suspended);
+
+    press(&mut model, Action::ToggleSuspend);
+    assert!(model.view().suspended, "first press suspends");
+    assert_eq!(model.view().app_state.indicator, "Suspended");
+
+    press(&mut model, Action::ToggleSuspend);
+    assert!(!model.view().suspended, "second press resumes");
+
+    // The suspend flip marks the session dirty and persists on settle, exactly
+    // like the button path.
+    press(&mut model, Action::ToggleSuspend);
+    assert!(model.maybe_flush(Instant::now() + Duration::from_millis(500)));
+    let (loaded, _) = state::load(dir.path());
+    assert!(loaded.suspended, "hotkey suspend persists to session state");
+}
+
+#[test]
+fn hotkey_fishing_toggles_like_the_button() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+    assert!(!model.view().fishing_active);
+
+    press(&mut model, Action::ToggleFishing);
+    assert!(model.view().fishing_active, "first press enables fishing");
+
+    press(&mut model, Action::ToggleFishing);
+    assert!(
+        !model.view().fishing_active,
+        "second press disables fishing"
+    );
 }
 
 #[test]

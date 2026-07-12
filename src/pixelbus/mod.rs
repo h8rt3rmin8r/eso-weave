@@ -380,6 +380,21 @@ impl PixelBusReader {
         let tolerance = self.config.tolerance;
         let heartbeat = b0.is_some_and(|c| status_present(c, tolerance));
 
+        // Raw per-sample diagnostic (TRACE only, never at the default level). This
+        // is the in-game signature the operator reads to tell a present heartbeat
+        // with a non-decoding B3 (a stale or misrendered addon) apart from no
+        // heartbeat at all (the strip is not being read).
+        tracing::trace!(
+            target: "eso_weave::pixelbus",
+            heartbeat,
+            ?b0,
+            ?b1,
+            ?b2,
+            ?b3,
+            now_ms,
+            "pixel bus sample"
+        );
+
         if heartbeat {
             self.last_heartbeat_ms = Some(now_ms);
             self.signal_lost = false;
@@ -405,6 +420,11 @@ impl PixelBusReader {
             if let Some(signal) = weapon {
                 if self.weapon != Some(signal) {
                     self.weapon = Some(signal);
+                    tracing::debug!(
+                        target: "eso_weave::pixelbus",
+                        ?signal,
+                        "weapon bar detected"
+                    );
                     events.push(PixelBusEvent::WeaponBar(signal));
                 }
             }
@@ -412,6 +432,12 @@ impl PixelBusReader {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
                 self.signal_lost = true;
                 self.fishing = FishingSignal::None;
+                if self.weapon.is_some() {
+                    tracing::debug!(
+                        target: "eso_weave::pixelbus",
+                        "weapon bar cleared (signal lost)"
+                    );
+                }
                 self.weapon = None;
                 events.push(PixelBusEvent::SignalLost);
             }

@@ -8,13 +8,17 @@
 //! optional resizable bottom panel for the live log, and a settings modal, keeping
 //! to a small, stable set of egui widgets plus a few brand presentation helpers.
 
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
 
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
-use crate::app::{override_edit_for, strings, widgets, AppModel, SkillEdit, StatusLine, UiIntent};
+use crate::app::{
+    app_toggle_intent, override_edit_for, strings, widgets, AppModel, SkillEdit, StatusLine,
+    UiIntent,
+};
 use crate::config::{LevelName, Theme};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
@@ -76,6 +80,9 @@ const LEVELS: [LevelName; 6] = [
 /// The eframe application: renders the main window from the [`AppModel`].
 pub struct EsoWeaveApp {
     model: AppModel,
+    /// Hotkey toggles (suspend, fishing) forwarded from the weave worker, drained
+    /// each frame and applied through the same intent path as the GUI buttons.
+    toggle_rx: Receiver<Action>,
     ui_prefs: UiPrefs,
     applied_prefs: Option<(Theme, bool)>,
     log_height: f32,
@@ -88,12 +95,13 @@ pub struct EsoWeaveApp {
 }
 
 impl EsoWeaveApp {
-    /// Creates the app over the view-model.
-    pub fn new(model: AppModel) -> Self {
+    /// Creates the app over the view-model and the hotkey-toggle receiver.
+    pub fn new(model: AppModel, toggle_rx: Receiver<Action>) -> Self {
         let ui_prefs = model.ui_prefs();
         let log_height = ui_prefs.log_panel_height as f32;
         Self {
             model,
+            toggle_rx,
             ui_prefs,
             applied_prefs: None,
             log_height,
@@ -103,6 +111,19 @@ impl EsoWeaveApp {
             settings_applied: None,
             confirm_uninstall: false,
             toast: None,
+        }
+    }
+
+    /// Drains any hotkey toggles received since the last frame and applies each
+    /// through the model's intent path, so a hotkey and its button share one
+    /// state, one persistence mark, and one display update. Each toggle is mapped
+    /// against the live fishing state and applied immediately, so two presses in a
+    /// single frame compose correctly.
+    fn drain_hotkey_toggles(&mut self) {
+        while let Ok(action) = self.toggle_rx.try_recv() {
+            if let Some(intent) = app_toggle_intent(action, self.model.fishing_on()) {
+                self.model.apply_intent(intent);
+            }
         }
     }
 
@@ -128,6 +149,9 @@ impl eframe::App for EsoWeaveApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_prefs(&ctx);
+        // Apply any hotkey toggles before deriving the view, so a press taken this
+        // frame is reflected immediately.
+        self.drain_hotkey_toggles();
         let extreme_bg = ui.visuals().extreme_bg_color;
 
         let mut intents: Vec<UiIntent> = Vec::new();

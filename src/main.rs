@@ -19,7 +19,9 @@ use eso_weave::app::{route_reader_event, ui::EsoWeaveApp, AppModel};
 use eso_weave::config::{self, LoadOutcome};
 use eso_weave::fishing::{FishingConfig, FishingController, RealFishingSink};
 use eso_weave::input::bindings::BindingTable;
-use eso_weave::input::{InputBackend, InputEngine, InputError, Key, MouseButton, Transition};
+use eso_weave::input::{
+    Action, InputBackend, InputEngine, InputError, Key, MouseButton, Transition,
+};
 use eso_weave::pixelbus::{self, PixelBusReader, SurfaceSampler};
 use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
@@ -98,14 +100,27 @@ fn main() {
         });
     }
 
-    // Weave worker: drains handed-off actions and runs sequences through the backend.
+    // App-toggle channel: the two hotkey toggles (suspend, fishing) are carried
+    // from the weave worker to the GUI so a hotkey and its button reach one shared
+    // state through the same intent path (feature 015).
+    let (toggle_tx, toggle_rx) = std::sync::mpsc::channel::<Action>();
+
+    // Weave worker: drains handed-off actions and runs sequences through the
+    // backend. Application-level toggles are not weave actions, so they are
+    // forwarded to the GUI intent path instead of the weave engine.
     {
         let backend = backend.clone();
         let weave = weave.clone();
         thread::spawn(move || {
             let mut sink = RealSink::new(SharedBackend(backend));
             while let Ok(action) = actions.recv() {
-                weave.lock().unwrap().handle(action, &mut sink);
+                if action.is_app_toggle() {
+                    // A send error means the GUI receiver is gone (the app is
+                    // exiting); dropping the toggle is the correct response.
+                    let _ = toggle_tx.send(action);
+                } else {
+                    weave.lock().unwrap().handle(action, &mut sink);
+                }
             }
         });
     }
@@ -183,7 +198,7 @@ fn main() {
         native_options,
         Box::new(|cc| {
             eso_weave::app::theme::install_fonts(&cc.egui_ctx);
-            Ok(Box::new(EsoWeaveApp::new(model)))
+            Ok(Box::new(EsoWeaveApp::new(model, toggle_rx)))
         }),
     ) {
         tracing::error!(target: "eso_weave", "GUI exited with error: {err}");

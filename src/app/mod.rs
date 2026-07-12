@@ -31,7 +31,7 @@ use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
 pub use log_view::{build_log_view, level_color, LogColor, LogRow};
-pub use routing::route_reader_event;
+pub use routing::{app_toggle_intent, route_reader_event};
 pub use settings_form::{SettingsForm, UiPrefs};
 
 /// The application-state indicator and its toggle button label.
@@ -686,6 +686,13 @@ impl AppModel {
                 .unwrap()
                 .set_enabled(true, now, self.fishing_sink.as_mut());
         }
+    }
+
+    /// Whether fishing is currently on (enabled), the live on/off intent used to
+    /// negate a hotkey fishing toggle so a hotkey and the Fishing button share one
+    /// state. Mirrors the check in [`current_session_state`](Self::current_session_state).
+    pub fn fishing_on(&self) -> bool {
+        self.fishing.lock().unwrap().state() != FishingState::Disabled
     }
 
     /// The current session state to persist (suspend flag and fishing on/off

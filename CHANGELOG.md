@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The default F1 (suspend) and F2 (fishing) hotkeys had no effect in-game. The
+  input engine hands their actions off on the action channel, which is drained
+  only by the weave worker, and the weave engine maps both toggle actions to no
+  operation; the real suspend and fishing state is owned by the GUI intent path
+  (`AppModel::apply_intent`), so the hotkeys never reached it. The weave worker
+  now forwards the two application-level toggle actions to the GUI over a
+  dedicated channel, and the GUI drains them each frame and applies them through
+  the same intent path as the Status and Fishing buttons. A hotkey and its button
+  now share one state, one persistence mark, and one display update. The
+  safety-critical `InputEngine::classify` path (recursion breaking, focus-scoped
+  suppression, non-blocking hand-off) is unchanged, and toggles still only take
+  effect while the game window is focused.
+
+### Added
+
+- Pixel-bus reader diagnostics for weapon-bar detection. The reader now logs a
+  DEBUG line when a weapon bar is first detected (with the decoded bar and
+  classes) and when it is cleared on signal loss, and a TRACE line with the raw
+  sampled block bytes on every observation. This lets the operator confirm
+  in-game whether the weapon-bar signal is present and decoding, and tell a
+  present heartbeat with a non-decoding B3 (a stale or misrendered addon) apart
+  from no heartbeat at all, without a debugger. Nothing weapon-related logs at the
+  default level on an idle sample. The decode path and the B3 encoding are
+  unchanged; this slice wires up detection visibility only, with no effect on
+  weave timing or skill weaving. The live pixel signal is validated in-game (an
+  explicit operator follow-up).
+
+### Decisions
+
+- 2026-07-11: Hotkey suspend and fishing toggles are routed from the weave worker
+  to the GUI intent path over a dedicated `std::sync::mpsc` channel, rather than
+  mutating the shared state from the worker or splitting the action channel inside
+  the safety-critical `InputEngine`. Reusing `AppModel::apply_intent` makes a
+  hotkey and its button provably identical in state, persistence, and display, and
+  leaves the most-tested core untouched. Worst-case reflection latency is the
+  existing 250 ms idle repaint cadence.
+- 2026-07-11: Weapon-bar reader diagnostics are layered by log level (DEBUG for
+  detected and cleared transitions, TRACE for raw per-sample bytes) so detection
+  is diagnosable in-game without emitting per-sample log lines at the default
+  level, and without changing decode behavior.
+
 ## [0.4.1] - 2026-07-11
 
 ### Fixed

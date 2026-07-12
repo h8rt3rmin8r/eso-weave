@@ -65,6 +65,14 @@ impl Action {
         matches!(self, Action::ToggleSuspend | Action::ToggleFishing)
     }
 
+    /// Whether this action is an application-level toggle (suspend or fishing)
+    /// rather than a weave action. Toggle actions are routed to the GUI intent
+    /// path instead of the weave worker, so a hotkey and its button reach one
+    /// shared state.
+    pub fn is_app_toggle(self) -> bool {
+        matches!(self, Action::ToggleSuspend | Action::ToggleFishing)
+    }
+
     /// The default physical key for this action (master specification section 6.4).
     pub fn default_key(self) -> Key {
         match self {
@@ -77,6 +85,38 @@ impl Action {
             Action::Synergy => Key::X,
             Action::ToggleSuspend => Key::F1,
             Action::ToggleFishing => Key::F2,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Action;
+
+    #[test]
+    fn is_app_toggle_is_true_only_for_the_two_toggles() {
+        for action in Action::ALL {
+            let expected = matches!(action, Action::ToggleSuspend | Action::ToggleFishing);
+            assert_eq!(
+                action.is_app_toggle(),
+                expected,
+                "{action:?} toggle classification"
+            );
+        }
+    }
+
+    #[test]
+    fn skill_actions_are_not_app_toggles() {
+        for action in [
+            Action::Skill1,
+            Action::Skill2,
+            Action::Skill3,
+            Action::Skill4,
+            Action::Skill5,
+            Action::Ultimate,
+            Action::Synergy,
+        ] {
+            assert!(!action.is_app_toggle(), "{action:?} must be a weave action");
         }
     }
 }
