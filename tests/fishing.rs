@@ -8,7 +8,7 @@
 use eso_weave::config::NoticeKind;
 use eso_weave::fishing::{
     map_event, BiteDetector, DetectorEvent, FishingConfig, FishingController, FishingState,
-    MockFishingSink, RealFishingSink, StubDetector,
+    MockFishingSink, RealFishingSink, StopReason, StubDetector,
 };
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{Key, Transition};
@@ -234,7 +234,47 @@ fn toggles_are_idempotent() {
     assert!(sink2.ops.is_empty());
 }
 
-// US4: configuration.
+// US4: configuration and stop reasons.
+
+#[test]
+fn default_timeouts_are_tuned() {
+    let cfg = FishingConfig::default();
+    assert_eq!(cfg.arm_timeout_ms, 8000);
+    assert_eq!(cfg.reel_delay_ms, 100);
+    assert_eq!(cfg.recast_delay_ms, 3000);
+}
+
+#[test]
+fn stop_reason_records_why_fishing_ended() {
+    let cfg = FishingConfig::default();
+    let mut sink = MockFishingSink::new();
+
+    // A fresh controller has no stop reason.
+    let mut c = controller();
+    assert_eq!(c.stop_reason(), None);
+
+    // A user stop is recorded, and a fresh cast clears the reason.
+    c.set_enabled(true, 0, &mut sink);
+    assert_eq!(c.stop_reason(), None, "a cast clears any prior reason");
+    c.set_enabled(false, 1, &mut sink);
+    assert_eq!(c.stop_reason(), Some(StopReason::UserStop));
+
+    // An arm timeout with no cast confirmation records NoCastDetected.
+    let mut c = controller();
+    c.set_enabled(true, 0, &mut sink);
+    c.tick(u64::from(cfg.arm_timeout_ms), &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::NoCastDetected));
+    // Starting again clears the prior reason.
+    c.set_enabled(true, 10_000, &mut sink);
+    assert_eq!(c.stop_reason(), None);
+
+    // Signal loss records SignalLost.
+    let mut c = controller();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::SignalLost, 1, &mut sink);
+    assert_eq!(c.stop_reason(), Some(StopReason::SignalLost));
+}
 
 #[test]
 fn config_round_trips_and_defaults() {

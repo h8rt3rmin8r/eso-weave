@@ -215,6 +215,20 @@ impl Default for ReaderConfig {
     }
 }
 
+/// Selects the worker poll interval from whether a fishing session is active.
+///
+/// While fishing is active the reader must sample, and the fishing state machine
+/// must tick, at the fast fishing cadence so transient cast and bite signals are
+/// observed in time and the reel is not delayed; while idle the slower interval
+/// avoids needless screen sampling.
+pub fn poll_interval(fishing_active: bool, cfg: &ReaderConfig) -> u64 {
+    if fishing_active {
+        cfg.interval_fishing_ms
+    } else {
+        cfg.interval_idle_ms
+    }
+}
+
 /// The minimum accepted sampling interval, in milliseconds.
 const MIN_INTERVAL_MS: u64 = 1;
 /// The maximum accepted sampling interval, in milliseconds.

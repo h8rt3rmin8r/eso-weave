@@ -17,12 +17,12 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{route_reader_event, ui::EsoWeaveApp, AppModel};
 use eso_weave::config::{self, LoadOutcome};
-use eso_weave::fishing::{FishingConfig, FishingController, RealFishingSink};
+use eso_weave::fishing::{FishingConfig, FishingController, FishingState, RealFishingSink};
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::{
     Action, InputBackend, InputEngine, InputError, Key, MouseButton, Transition,
 };
-use eso_weave::pixelbus::{self, PixelBusReader, SurfaceSampler};
+use eso_weave::pixelbus::{self, poll_interval, PixelBusReader, SurfaceSampler};
 use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
 
@@ -125,6 +125,11 @@ fn main() {
         });
     }
 
+    // Shared monotonic clock: the GUI intent path stamps fishing deadlines and
+    // the pixel-bus worker evaluates them, so both must read the same origin or a
+    // deadline could be judged against a different timeline than it was set on.
+    let clock_origin = Instant::now();
+
     // Pixel bus worker: samples the reader and routes events to the subsystems.
     {
         let backend = backend.clone();
@@ -134,9 +139,16 @@ fn main() {
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink = RealFishingSink::new(SharedBackend(backend));
             let mut sampler = resolve_sampler();
-            let origin = Instant::now();
+            let origin = clock_origin;
             loop {
-                thread::sleep(Duration::from_millis(reader_config.interval_idle_ms));
+                // Poll fast while a fishing session is active so transient cast
+                // and bite signals are sampled and the state machine ticks in
+                // time; poll slowly otherwise.
+                let fishing_active = fishing.lock().unwrap().state() != FishingState::Disabled;
+                thread::sleep(Duration::from_millis(poll_interval(
+                    fishing_active,
+                    &reader_config,
+                )));
                 if sampler.is_none() {
                     sampler = resolve_sampler();
                 }
@@ -170,6 +182,7 @@ fn main() {
         log.clone(),
         settings,
         config_dir,
+        clock_origin,
     );
     if let Some((state, notices)) = session {
         for notice in &notices {

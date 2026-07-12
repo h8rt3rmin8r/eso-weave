@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fishing would start (status "active") and then revert to Idle within a few
+  seconds, and a caught fish was never reeled in. Three causes are addressed.
+  First, the embedded PixelBeacon manifest declared a stale API version
+  (`101044`), so the game flagged the addon out of date and, unless the player had
+  enabled out-of-date addons, did not load it at all; with no beacon rendered the
+  app never saw the cast or bite signal. The manifest now declares
+  `## APIVersion: 101050 101054` (the current live value plus a future value, the
+  game's supported two-value form) and bumps `## Version`/`## AddOnVersion` to 3 so
+  an existing on-disk install is classified as outdated and refreshed. Second, the
+  pixel-bus worker loop always slept at the idle interval (1000 ms) and never used
+  the fishing interval (100 ms), so it sampled the beacon and ticked the fishing
+  state machine only once per second and missed the transient cast and bite pulses
+  and the reel window; the loop now polls at the fishing cadence while a session is
+  active. Third, fishing deadlines were stamped on the GUI clock but evaluated on a
+  separate worker clock; both now share one monotonic origin. The default arm
+  timeout is raised from 5000 ms to 8000 ms for margin. The safety behaviors (no
+  blocking on the hook thread, focus-scoped suppression, SignalLost cancels any
+  pending interact, and managed-marker-gated uninstall) are unchanged and stay
+  tested.
+
+### Added
+
+- The Fishing status now reads in plain language (Casting, Fishing (waiting for a
+  bite), Reeling in, Recasting) instead of internal state names, and when the
+  routine returns to idle it explains why: Idle (no cast detected) after an arm
+  timeout, Idle (signal lost) on signal loss, or a plain Idle when the player
+  stopped it. The reason persists until fishing is next started and colors a
+  fault-stop as a warning, so an early stop is diagnosable at a glance.
+
+### Decisions
+
+- 2026-07-12: The PixelBeacon manifest `## APIVersion` is set to `101050 101054`,
+  closing open item R4 (the live API version could not be confirmed offline when
+  the value was last left at 101044). The current live value (game Update 50) is
+  declared so the game loads the addon, and a future value is declared using the
+  supported two-value form to keep the addon current across several future updates.
+  `## Version`/`## AddOnVersion` are bumped to 3 so existing installs refresh; the
+  managed-marker line is unchanged so marker-gated safe uninstall is unaffected.
+- 2026-07-12: The pixel-bus worker selects its poll interval from the live fishing
+  state (fishing interval while active, idle interval otherwise) through a pure,
+  unit-tested helper, rather than always polling fast (wasteful) or redesigning the
+  loop to be event-driven (out of scope). The GUI and worker share one monotonic
+  clock origin so fishing deadlines are stamped and evaluated on one timeline. The
+  arm-timeout default rises to 8000 ms as a provisional value pending in-game
+  validation.
+
 ## [0.4.2] - 2026-07-12
 
 ### Fixed

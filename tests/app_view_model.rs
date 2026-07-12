@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use eso_weave::app::{
     app_state_label, beacon_light, default_delay_for, fishing_label, override_edit_for,
@@ -10,7 +11,9 @@ use eso_weave::app::{
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LoggingPrefs, Settings};
-use eso_weave::fishing::{FishingConfig, FishingController, FishingState, MockFishingSink};
+use eso_weave::fishing::{
+    FishingConfig, FishingController, FishingState, MockFishingSink, StopReason,
+};
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
@@ -28,12 +31,59 @@ fn app_state_label_reflects_suspend() {
 }
 
 #[test]
-fn fishing_label_reflects_state() {
-    assert_eq!(fishing_label(FishingState::Disabled).indicator, "Idle");
-    assert_eq!(fishing_label(FishingState::Disabled).button, "Go Fish");
-    let armed = fishing_label(FishingState::Armed);
-    assert_eq!(armed.indicator, "Armed");
-    assert_eq!(armed.button, "Stop Fishing");
+fn fishing_label_uses_plain_language_and_stop_reason() {
+    // Idle with no reason.
+    let idle = fishing_label(FishingState::Disabled, None);
+    assert_eq!(idle.indicator, "Idle");
+    assert_eq!(idle.button, "Go Fish");
+
+    // Working states read as plain language, never an internal state name.
+    assert_eq!(
+        fishing_label(FishingState::Armed, None).indicator,
+        "Casting"
+    );
+    assert_eq!(
+        fishing_label(FishingState::Waiting, None).indicator,
+        "Fishing (waiting for a bite)"
+    );
+    assert_eq!(
+        fishing_label(FishingState::Reeling, None).indicator,
+        "Reeling in"
+    );
+    assert_eq!(
+        fishing_label(FishingState::Recast, None).indicator,
+        "Recasting"
+    );
+    assert_eq!(
+        fishing_label(FishingState::Armed, None).button,
+        "Stop Fishing"
+    );
+
+    // Idle explains why it stopped.
+    assert_eq!(
+        fishing_label(FishingState::Disabled, Some(StopReason::UserStop)).indicator,
+        "Idle"
+    );
+    assert_eq!(
+        fishing_label(FishingState::Disabled, Some(StopReason::NoCastDetected)).indicator,
+        "Idle (no cast detected)"
+    );
+    assert_eq!(
+        fishing_label(FishingState::Disabled, Some(StopReason::SignalLost)).indicator,
+        "Idle (signal lost)"
+    );
+
+    // No indicator is ever a raw debug state name.
+    for (state, reason) in [
+        (FishingState::Armed, None),
+        (FishingState::Waiting, None),
+        (FishingState::Reeling, None),
+        (FishingState::Recast, None),
+        (FishingState::Disabled, Some(StopReason::SignalLost)),
+    ] {
+        let indicator = fishing_label(state, reason).indicator;
+        assert_ne!(indicator, format!("{state:?}"));
+    }
 }
 
 #[test]
@@ -87,15 +137,27 @@ fn status_line_app_reflects_suspend() {
 }
 
 #[test]
-fn status_line_fishing_reflects_state() {
-    let idle = status_line_fishing(FishingState::Disabled);
+fn status_line_fishing_reflects_state_and_reason() {
+    let idle = status_line_fishing(FishingState::Disabled, None);
     assert_eq!(idle.title, "Fishing");
     assert_eq!(idle.state_text, "Idle");
     assert_eq!(idle.role, StatusRole::Muted);
 
-    let waiting = status_line_fishing(FishingState::Waiting);
-    assert_eq!(waiting.state_text, "Waiting");
+    let waiting = status_line_fishing(FishingState::Waiting, None);
+    assert_eq!(waiting.state_text, "Fishing (waiting for a bite)");
     assert_eq!(waiting.role, StatusRole::Active);
+
+    // A clean user stop stays muted; a fault-stop is warned.
+    assert_eq!(
+        status_line_fishing(FishingState::Disabled, Some(StopReason::UserStop)).role,
+        StatusRole::Muted
+    );
+    let no_cast = status_line_fishing(FishingState::Disabled, Some(StopReason::NoCastDetected));
+    assert_eq!(no_cast.state_text, "Idle (no cast detected)");
+    assert_eq!(no_cast.role, StatusRole::Warning);
+    let lost = status_line_fishing(FishingState::Disabled, Some(StopReason::SignalLost));
+    assert_eq!(lost.state_text, "Idle (signal lost)");
+    assert_eq!(lost.role, StatusRole::Warning);
 }
 
 #[test]
@@ -292,6 +354,10 @@ fn routing_a_weapon_bar_event_updates_the_engine() {
 // AppModel intents.
 
 fn model_with_beacon_root(root: &std::path::Path) -> AppModel {
+    model_with_clock(root, Instant::now())
+}
+
+fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
     let fishing = Arc::new(Mutex::new(FishingController::new(FishingConfig::default())));
@@ -314,7 +380,24 @@ fn model_with_beacon_root(root: &std::path::Path) -> AppModel {
         log,
         settings,
         None,
+        clock,
     )
+}
+
+#[test]
+fn model_uses_the_injected_clock_not_its_own() {
+    // The model must stamp fishing time on the shared clock it is given (the same
+    // origin the pixel-bus worker evaluates against), not on a clock it creates
+    // itself. A model built with an origin 500 ms in the past reports at least
+    // 500 ms elapsed immediately.
+    let dir = tempfile::tempdir().unwrap();
+    let past = Instant::now() - Duration::from_millis(500);
+    let model = model_with_clock(dir.path(), past);
+    assert!(
+        model.now_ms() >= 500,
+        "now_ms {} should reflect the injected origin",
+        model.now_ms()
+    );
 }
 
 #[test]

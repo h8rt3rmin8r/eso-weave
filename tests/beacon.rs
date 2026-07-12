@@ -59,6 +59,40 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
+fn embedded_manifest_version_is_three() {
+    // Bumped so the app classifies an existing on-disk version-2 install as
+    // outdated and refreshes it, delivering the new APIVersion.
+    assert_eq!(embedded_version(), 3);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(3));
+}
+
+#[test]
+fn embedded_manifest_declares_current_api_version() {
+    // The addon must not be flagged out of date by the live client. The manifest
+    // uses the supported multi-value form; confirm it declares a value at least
+    // the current live game API version, and keeps the managed marker so safe
+    // uninstall still verifies it.
+    const LIVE_API_VERSION: u32 = 101050;
+    let line = MANIFEST
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("## APIVersion:"))
+        .expect("manifest declares an APIVersion line");
+    let versions: Vec<u32> = line
+        .split_whitespace()
+        .filter_map(|token| token.parse().ok())
+        .collect();
+    assert!(
+        !versions.is_empty(),
+        "APIVersion declares at least one value"
+    );
+    assert!(
+        versions.iter().any(|&v| v >= LIVE_API_VERSION),
+        "APIVersion {versions:?} declares at least the live value {LIVE_API_VERSION}"
+    );
+    assert!(has_managed_marker(MANIFEST));
+}
+
+#[test]
 fn reload_reminder_rule() {
     assert!(reload_reminder(RunningState::Running));
     assert!(reload_reminder(RunningState::Unknown));

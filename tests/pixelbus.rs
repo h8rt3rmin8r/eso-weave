@@ -1,9 +1,25 @@
 //! Decoder and state-machine tests for the Pixel Bus Reader.
 
 use eso_weave::pixelbus::{
-    decode_latency, decode_weapon_bar, fishing_signal, status_present, ActiveBar, FishingSignal,
-    PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal, WeaponClass,
+    decode_latency, decode_weapon_bar, fishing_signal, poll_interval, status_present, ActiveBar,
+    FishingSignal, PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal, WeaponClass,
 };
+
+#[test]
+fn poll_interval_tracks_fishing_state() {
+    let cfg = ReaderConfig::default();
+    assert_eq!(poll_interval(true, &cfg), cfg.interval_fishing_ms);
+    assert_eq!(poll_interval(false, &cfg), cfg.interval_idle_ms);
+
+    // A custom config is honored, not the defaults.
+    let cfg = ReaderConfig {
+        interval_fishing_ms: 75,
+        interval_idle_ms: 1500,
+        ..ReaderConfig::default()
+    };
+    assert_eq!(poll_interval(true, &cfg), 75);
+    assert_eq!(poll_interval(false, &cfg), 1500);
+}
 
 fn reader() -> PixelBusReader {
     PixelBusReader::new(ReaderConfig::default())

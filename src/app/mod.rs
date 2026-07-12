@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
 use crate::config::state::{SessionState, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
-use crate::fishing::{FishingController, FishingSink, FishingState};
+use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{ActiveBar, WeaponClass};
@@ -67,16 +67,30 @@ pub struct FishingLabel {
     pub button: &'static str,
 }
 
-/// Derives the fishing label from the controller state.
-pub fn fishing_label(state: FishingState) -> FishingLabel {
+/// The plain-language fishing indicator for a state and, when idle, the reason it
+/// last stopped. An internal state name is never shown.
+pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'static str {
     match state {
-        FishingState::Disabled => FishingLabel {
-            indicator: "Idle".to_string(),
-            button: "Go Fish",
+        FishingState::Armed => strings::FISHING_CASTING,
+        FishingState::Waiting => strings::FISHING_WAITING,
+        FishingState::Reeling => strings::FISHING_REELING,
+        FishingState::Recast => strings::FISHING_RECASTING,
+        FishingState::Disabled => match reason {
+            Some(StopReason::NoCastDetected) => strings::FISHING_IDLE_NO_CAST,
+            Some(StopReason::SignalLost) => strings::FISHING_IDLE_SIGNAL_LOST,
+            None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
-        active => FishingLabel {
-            indicator: format!("{active:?}"),
-            button: "Stop Fishing",
+    }
+}
+
+/// Derives the fishing label from the controller state and stop reason.
+pub fn fishing_label(state: FishingState, reason: Option<StopReason>) -> FishingLabel {
+    FishingLabel {
+        indicator: fishing_indicator(state, reason).to_string(),
+        button: if state == FishingState::Disabled {
+            "Go Fish"
+        } else {
+            "Stop Fishing"
         },
     }
 }
@@ -129,15 +143,20 @@ pub fn status_line_app(suspended: bool) -> StatusLine {
     }
 }
 
-/// Derives the Fishing line from the controller state.
-pub fn status_line_fishing(state: FishingState) -> StatusLine {
-    let (state_text, role) = match state {
-        FishingState::Disabled => ("Idle".to_string(), StatusRole::Muted),
-        active => (format!("{active:?}"), StatusRole::Active),
+/// Derives the Fishing line from the controller state and stop reason. An idle
+/// state that stopped on a fault (no cast detected or signal lost) is colored as
+/// a warning so it draws the eye; a clean idle stays muted.
+pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> StatusLine {
+    let role = match state {
+        FishingState::Disabled => match reason {
+            Some(StopReason::NoCastDetected) | Some(StopReason::SignalLost) => StatusRole::Warning,
+            None | Some(StopReason::UserStop) => StatusRole::Muted,
+        },
+        _ => StatusRole::Active,
     };
     StatusLine {
         title: strings::FISHING_TITLE,
-        state_text,
+        state_text: fishing_indicator(state, reason).to_string(),
         role,
         tooltip: strings::FISHING_TOOLTIP,
     }
@@ -468,6 +487,7 @@ impl AppModel {
         log: LogHandle,
         settings: Settings,
         config_dir: Option<PathBuf>,
+        clock: Instant,
     ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
         let log_filter = settings.logging.level;
@@ -476,7 +496,7 @@ impl AppModel {
             weave,
             fishing,
             fishing_sink,
-            clock: Instant::now(),
+            clock,
             log,
             settings,
             config_dir,
@@ -505,7 +525,10 @@ impl AppModel {
     /// The current derived display state.
     pub fn view(&self) -> AppView {
         let condition = self.beacon_condition();
-        let fishing_state = self.fishing.lock().unwrap().state();
+        let (fishing_state, fishing_reason) = {
+            let fishing = self.fishing.lock().unwrap();
+            (fishing.state(), fishing.stop_reason())
+        };
         let (skills, active_bar, classes) = {
             let weave = self.weave.lock().unwrap();
             (
@@ -517,9 +540,9 @@ impl AppModel {
         let suspended = self.input.is_suspended();
         AppView {
             app_state: app_state_label(suspended),
-            fishing: fishing_label(fishing_state),
+            fishing: fishing_label(fishing_state, fishing_reason),
             status_line: status_line_app(suspended),
-            fishing_line: status_line_fishing(fishing_state),
+            fishing_line: status_line_fishing(fishing_state, fishing_reason),
             beacon_line: status_line_beacon(condition),
             suspended,
             fishing_active: fishing_state != FishingState::Disabled,
@@ -591,7 +614,10 @@ impl AppModel {
         }
     }
 
-    fn now_ms(&self) -> u64 {
+    /// The current time in milliseconds on the shared monotonic clock the model
+    /// was constructed with. Fishing deadlines are stamped against this clock, and
+    /// the pixel-bus worker evaluates them against the same origin.
+    pub fn now_ms(&self) -> u64 {
         self.clock.elapsed().as_millis() as u64
     }
 

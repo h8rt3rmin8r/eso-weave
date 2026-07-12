@@ -19,6 +19,16 @@ pub const FISHING_TOOLTIP: &str =
 pub const BEACON_TOOLTIP: &str =
     "Install state of the bundled PixelBeacon companion addon that renders the pixel signal.";
 
+// Fishing status indicators: plain language for each fishing routine phase, and
+// for an idle state the reason the routine last stopped.
+pub const FISHING_CASTING: &str = "Casting";
+pub const FISHING_WAITING: &str = "Fishing (waiting for a bite)";
+pub const FISHING_REELING: &str = "Reeling in";
+pub const FISHING_RECASTING: &str = "Recasting";
+pub const FISHING_IDLE: &str = "Idle";
+pub const FISHING_IDLE_NO_CAST: &str = "Idle (no cast detected)";
+pub const FISHING_IDLE_SIGNAL_LOST: &str = "Idle (signal lost)";
+
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";
 pub const SUSPEND_TOOLTIP: &str = "Suspend or resume the weave engine.";
@@ -197,6 +207,13 @@ pub fn all_labels() -> Vec<&'static str> {
         STATUS_TITLE,
         FISHING_TITLE,
         BEACON_TITLE,
+        FISHING_CASTING,
+        FISHING_WAITING,
+        FISHING_REELING,
+        FISHING_RECASTING,
+        FISHING_IDLE,
+        FISHING_IDLE_NO_CAST,
+        FISHING_IDLE_SIGNAL_LOST,
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,

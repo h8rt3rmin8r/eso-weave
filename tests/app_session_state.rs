@@ -108,6 +108,7 @@ fn model_with_dir(dir: Option<PathBuf>, root: &Path) -> AppModel {
         log,
         settings,
         dir,
+        std::time::Instant::now(),
     )
 }
 

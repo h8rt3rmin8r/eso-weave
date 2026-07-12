@@ -52,6 +52,19 @@ pub enum FishingState {
     Recast,
 }
 
+/// Why the controller last returned to Disabled. Recorded when it disables and
+/// cleared when a new cast starts, so the UI can explain an idle state instead of
+/// reverting silently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopReason {
+    /// The player turned fishing off.
+    UserStop,
+    /// The arm timeout fired without a cast confirmation.
+    NoCastDetected,
+    /// The beacon signal was lost while a session was active.
+    SignalLost,
+}
+
 /// The kind of the controller's single pending deadline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TimerKind {
@@ -81,7 +94,10 @@ pub struct FishingConfig {
 impl Default for FishingConfig {
     fn default() -> Self {
         Self {
-            arm_timeout_ms: 5000,
+            // 8000 ms gives the cast confirmation adequate margin over addon
+            // render and interact-registration latency now that the worker polls
+            // at the fishing cadence; provisional pending in-game validation.
+            arm_timeout_ms: 8000,
             reel_delay_ms: 100,
             recast_delay_ms: 3000,
             interact_key: Key::E,
@@ -231,6 +247,7 @@ pub struct FishingController {
     config: FishingConfig,
     state: FishingState,
     deadline: Option<(u64, TimerKind)>,
+    stop_reason: Option<StopReason>,
 }
 
 impl FishingController {
@@ -240,12 +257,20 @@ impl FishingController {
             config,
             state: FishingState::Disabled,
             deadline: None,
+            stop_reason: None,
         }
     }
 
     /// The current observable state.
     pub fn state(&self) -> FishingState {
         self.state
+    }
+
+    /// Why fishing last returned to Disabled, if it has since startup and a new
+    /// cast has not since cleared it. Only meaningful while [`state`](Self::state)
+    /// is Disabled.
+    pub fn stop_reason(&self) -> Option<StopReason> {
+        self.stop_reason
     }
 
     /// The controller's configuration.
@@ -263,7 +288,7 @@ impl FishingController {
                 self.cast(now_ms, sink);
             }
         } else if self.state != FishingState::Disabled {
-            self.disable();
+            self.disable(StopReason::UserStop);
         }
     }
 
@@ -272,7 +297,7 @@ impl FishingController {
         match event {
             DetectorEvent::SignalLost => {
                 if self.state != FishingState::Disabled {
-                    self.disable();
+                    self.disable(StopReason::SignalLost);
                 }
             }
             DetectorEvent::Heartbeat => {}
@@ -312,7 +337,7 @@ impl FishingController {
             return;
         }
         match kind {
-            TimerKind::ArmTimeout => self.disable(),
+            TimerKind::ArmTimeout => self.disable(StopReason::NoCastDetected),
             TimerKind::ReelDue => {
                 self.send_interact(sink);
                 self.state = FishingState::Recast;
@@ -332,8 +357,10 @@ impl FishingController {
         }
     }
 
-    /// Enters Armed, emits one interact (the cast), and arms the arm timeout.
+    /// Enters Armed, emits one interact (the cast), arms the arm timeout, and
+    /// clears any prior stop reason now that a fresh session is starting.
     fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
+        self.stop_reason = None;
         self.send_interact(sink);
         self.state = FishingState::Armed;
         self.deadline = Some((
@@ -342,10 +369,12 @@ impl FishingController {
         ));
     }
 
-    /// Returns to Disabled and clears any pending deadline; emits nothing.
-    fn disable(&mut self) {
+    /// Returns to Disabled, clears any pending deadline, and records why; emits
+    /// nothing.
+    fn disable(&mut self, reason: StopReason) {
         self.state = FishingState::Disabled;
         self.deadline = None;
+        self.stop_reason = Some(reason);
     }
 
     /// Emits one interact: a key press followed by a key release.
