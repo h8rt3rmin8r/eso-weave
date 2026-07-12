@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- The README now has dedicated Fishing and Weaving usage sections. Fishing
+  documents the interaction model (the F2 hotkey casts for you; do not cast
+  first), the PixelBeacon prerequisites (installed, enabled, not out of date,
+  beacon visible, window focused), the status progression, the interact key and
+  timings, and troubleshooting for the early-stop symptom. Weaving documents the
+  single-bar overview, the skill slots and defaults, the weave types, and the
+  default timings (global cooldown 500 ms, light 50 ms, heavy 1000 ms, bash
+  125 ms); multi-bar weaving is noted as out of scope. The Disclaimer is moved to
+  be the next-to-last section, immediately before the License.
+
 ### Fixed
 
 - Fishing would start (status "active") and then revert to Idle within a few
