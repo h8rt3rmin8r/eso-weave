@@ -2,7 +2,7 @@
   <img alt="ESO Weave" src="assets/eso-weave-banner.png" width="720">
 </p>
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.4.1-2ea44f">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.4.2-2ea44f">
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue">
 </p>
 <p align="center">Cross-platform desktop companion for The Elder Scrolls Online.</p>
