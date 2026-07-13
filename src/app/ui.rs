@@ -79,6 +79,27 @@ const LEVELS: [LevelName; 6] = [
     LevelName::Trace,
 ];
 
+/// Fixed width (points) for the app's dropdowns, sized to the longest option in
+/// use (the weave types) with breathing room, so the resting field never changes
+/// width with the selection and the rows below never shift. Shared by the main
+/// window and the settings modal.
+const COMBO_WIDTH: f32 = 150.0;
+
+/// Fixed width (points) for a skill delay field: enough to show four digits
+/// comfortably, right-aligned, in both the editable and greyed read-only states.
+const DELAY_FIELD_WIDTH: f32 = 56.0;
+
+/// A dropdown preset to a fixed width, so its resting field does not track the
+/// selected option (which would reflow the rows below on selection or hover).
+fn combo(
+    id_salt: impl std::hash::Hash + std::fmt::Debug,
+    selected_text: impl Into<egui::WidgetText>,
+) -> egui::ComboBox {
+    egui::ComboBox::from_id_salt(id_salt)
+        .width(COMBO_WIDTH)
+        .selected_text(selected_text)
+}
+
 /// The eframe application: renders the main window from the [`AppModel`].
 pub struct EsoWeaveApp {
     model: AppModel,
@@ -101,6 +122,9 @@ pub struct EsoWeaveApp {
     /// change and to keep the normal geometry while maximized. Seeded from the
     /// restored session so an unchanged restored window is not re-saved.
     last_geometry: Option<WindowGeometry>,
+    /// The skill slot currently being edited in the Delay column and the digits
+    /// typed so far, so the model value does not clobber in-progress input.
+    delay_edit: Option<(u8, String)>,
 }
 
 impl EsoWeaveApp {
@@ -128,6 +152,7 @@ impl EsoWeaveApp {
             confirm_uninstall: false,
             toast: None,
             last_geometry: restored_geometry,
+            delay_edit: None,
         }
     }
 
@@ -402,6 +427,14 @@ impl EsoWeaveApp {
                         intents.push(UiIntent::InstallBeacon);
                     }
                     if ui
+                        .add_enabled(view.uninstall_enabled, egui::Button::new("Update"))
+                        .on_hover_text(strings::BEACON_UPDATE_TOOLTIP)
+                        .clickable()
+                        .clicked()
+                    {
+                        intents.push(UiIntent::UpdateBeacon);
+                    }
+                    if ui
                         .add_enabled(view.uninstall_enabled, egui::Button::new("Uninstall"))
                         .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
                         .clickable()
@@ -411,22 +444,22 @@ impl EsoWeaveApp {
                     }
                 });
                 ui.end_row();
-            });
 
-        // Detected weapon-bar state (from the updated Pixel Beacon addon).
-        ui.horizontal(|ui| {
-            widgets::label_strong(ui, &palette, strings::WEAPON_BAR_TITLE)
-                .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
-            let wb = &view.weapon_bar;
-            let color = crate::app::theme::status_color(&palette, wb.role);
-            let text = if wb.detected {
-                format!("{} (front {}, back {})", wb.active_bar, wb.front, wb.back)
-            } else {
-                "Not detected".to_string()
-            };
-            ui.label(egui::RichText::new(text).color(color))
-                .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
-        });
+                // Weapon bar (from the updated Pixel Beacon addon), rendered as a
+                // grid row so its title and state align with the rows above.
+                widgets::label_strong(ui, &palette, strings::WEAPON_BAR_TITLE)
+                    .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
+                let wb = &view.weapon_bar;
+                let color = crate::app::theme::status_color(&palette, wb.role);
+                let text = if wb.detected {
+                    format!("{} (front {}, back {})", wb.active_bar, wb.front, wb.back)
+                } else {
+                    "Not detected".to_string()
+                };
+                ui.label(egui::RichText::new(text).color(color))
+                    .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
+                ui.end_row();
+            });
 
         ui.separator();
         widgets::heading(ui, strings::SKILLS_TITLE).on_hover_text(strings::SKILLS_TOOLTIP);
@@ -456,8 +489,7 @@ impl EsoWeaveApp {
                     }
 
                     let mut weave_type = row.weave_type;
-                    egui::ComboBox::from_id_salt(("weave", row.index))
-                        .selected_text(weave_type_name(weave_type))
+                    combo(("weave", row.index), weave_type_name(weave_type))
                         .show_ui(ui, |ui| {
                             for candidate in WEAVE_TYPES {
                                 ui.selectable_value(
@@ -494,24 +526,45 @@ impl EsoWeaveApp {
                         ));
                     }
 
+                    // Delay (ms): a right-aligned, four-digit field in both states so
+                    // the column keeps one width when Override is toggled. Editable
+                    // when overriding (buffered so typing is not clobbered by the
+                    // model value), greyed and read-only otherwise.
+                    let tip = strings::SKILL_COLUMNS[4].1;
                     if row.is_override {
-                        let mut value = row.effective_delay;
-                        if ui
-                            .add(egui::DragValue::new(&mut value))
-                            .on_hover_text(strings::SKILL_COLUMNS[4].1)
-                            .changed()
-                        {
+                        let mut buf = match &self.delay_edit {
+                            Some((idx, s)) if *idx == row.index => s.clone(),
+                            _ => row.effective_delay.to_string(),
+                        };
+                        let resp = ui
+                            .add(
+                                egui::TextEdit::singleline(&mut buf)
+                                    .desired_width(DELAY_FIELD_WIDTH)
+                                    .horizontal_align(egui::Align::RIGHT),
+                            )
+                            .on_hover_text(tip);
+                        if resp.changed() {
+                            let filtered: String =
+                                buf.chars().filter(|c| c.is_ascii_digit()).take(4).collect();
+                            let value: u32 = filtered.parse().unwrap_or(0);
+                            self.delay_edit = Some((row.index, filtered));
                             intents.push(UiIntent::EditSkill(
                                 row.index,
                                 override_edit_for(row.weave_type, Some(value)),
                             ));
                         }
+                        if resp.lost_focus() {
+                            self.delay_edit = None;
+                        }
                     } else {
-                        ui.add(egui::Label::new(
-                            egui::RichText::new(row.effective_delay.to_string())
-                                .color(palette.muted),
-                        ))
-                        .on_hover_text(strings::SKILL_COLUMNS[4].1);
+                        let mut buf = row.effective_delay.to_string();
+                        ui.add_enabled(
+                            false,
+                            egui::TextEdit::singleline(&mut buf)
+                                .desired_width(DELAY_FIELD_WIDTH)
+                                .horizontal_align(egui::Align::RIGHT),
+                        )
+                        .on_hover_text(tip);
                     }
                     ui.end_row();
                 }
@@ -525,8 +578,7 @@ impl EsoWeaveApp {
             widgets::label_strong(ui, &palette, strings::LOG_TITLE)
                 .on_hover_text(strings::LOG_TOOLTIP);
             let mut selected = filter;
-            egui::ComboBox::from_id_salt("log_filter")
-                .selected_text(level_name(selected))
+            combo("log_filter", level_name(selected))
                 .show_ui(ui, |ui| {
                     for level in LEVELS {
                         ui.selectable_value(&mut selected, level, level_name(level));

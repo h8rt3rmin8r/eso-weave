@@ -346,6 +346,9 @@ pub enum UiIntent {
     InstallBeacon,
     /// Uninstall the beacon addon (the UI has already confirmed).
     UninstallBeacon,
+    /// Update the beacon addon: uninstall the managed copy then install the
+    /// current one.
+    UpdateBeacon,
     /// Edit a skill slot.
     EditSkill(u8, SkillEdit),
     /// Apply and persist the settings form.
@@ -604,6 +607,13 @@ impl AppModel {
             }
             UiIntent::UninstallBeacon => {
                 self.uninstall_beacon();
+                Vec::new()
+            }
+            UiIntent::UpdateBeacon => {
+                // A clean reinstall: remove the managed copy (marker-gated, so an
+                // unmanaged folder is never deleted) then install the current one.
+                self.uninstall_beacon();
+                self.install_beacon();
                 Vec::new()
             }
             UiIntent::EditSkill(index, edit) => {

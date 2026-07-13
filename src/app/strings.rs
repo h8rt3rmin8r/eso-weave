@@ -36,6 +36,8 @@ pub const FISHING_TOGGLE_LABEL: &str = "Fishing";
 pub const FISHING_TOGGLE_TOOLTIP: &str = "Start or stop the fishing routine.";
 pub const BEACON_INSTALL_TOOLTIP: &str =
     "Install or update the PixelBeacon addon in your AddOns folder.";
+pub const BEACON_UPDATE_TOOLTIP: &str =
+    "Reinstall the PixelBeacon addon: remove the managed copy and install the current one. Enabled only when the addon is installed.";
 pub const BEACON_UNINSTALL_TOOLTIP: &str =
     "Remove the PixelBeacon addon. Only a folder marked as managed by ESO Weave is deleted.";
 
@@ -62,7 +64,7 @@ pub const SKILL_COLUMNS: [(&str, &str); 5] = [
         "Use a custom delay for this slot instead of the global default for its weave type.",
     ),
     (
-        "Delay",
+        "Delay (ms)",
         "The delay in milliseconds in effect for this slot: the override when set, otherwise the global default.",
     ),
 ];
@@ -250,6 +252,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         SUSPEND_TOOLTIP,
         FISHING_TOGGLE_TOOLTIP,
         BEACON_INSTALL_TOOLTIP,
+        BEACON_UPDATE_TOOLTIP,
         BEACON_UNINSTALL_TOOLTIP,
         WEAPON_BAR_TOOLTIP,
         SKILLS_TOOLTIP,

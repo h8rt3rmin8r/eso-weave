@@ -441,6 +441,27 @@ fn install_and_uninstall_beacon_intents() {
 }
 
 #[test]
+fn update_beacon_intent_reinstalls() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+
+    model.apply_intent(UiIntent::InstallBeacon);
+    assert_eq!(
+        model.view().beacon_condition,
+        BeaconCondition::InstalledCurrent
+    );
+
+    // Update removes and reinstalls in one step, leaving the addon installed and
+    // current (the managed-marker uninstall gate is reused unchanged).
+    model.apply_intent(UiIntent::UpdateBeacon);
+    assert_eq!(
+        model.view().beacon_condition,
+        BeaconCondition::InstalledCurrent
+    );
+    assert!(model.view().uninstall_enabled);
+}
+
+#[test]
 fn edit_skill_intent_updates_weave_config() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());

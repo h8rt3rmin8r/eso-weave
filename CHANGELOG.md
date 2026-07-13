@@ -17,6 +17,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than opening off-screen, and a degenerate size is clamped to the usable
   range. Geometry is written to `state.json` and a change made immediately before
   closing is flushed on exit.
+- An Update control for the PixelBeacon addon, beside Install and Uninstall. It is
+  greyed while the addon is not installed and enabled whenever it is installed
+  (even when current); pressing it reinstalls the addon (uninstall then install)
+  for a clean managed copy. The managed-marker uninstall safety rule is unchanged,
+  so an unmanaged folder is never deleted.
+
+### Fixed
+
+- The Weapon Bar line is now drawn in the same grid as the Status, Fishing, and
+  Pixel Beacon rows, so its title and state align with them instead of hanging out
+  of alignment.
+- Dropdowns on the main window (the skill Weave selector and the live-log level
+  filter) now keep a constant width regardless of the option selected, so
+  selecting an option no longer shifts the rows below.
+- The Skills delay column now reads `Delay (ms)` and renders each delay in a
+  right-aligned field wide enough for four digits, in both states: an editable
+  field when the override is on, and a matching greyed read-only field showing the
+  inherited value when it is off, so toggling the override no longer changes the
+  cell width or appearance.
 
 ### Decisions
 
