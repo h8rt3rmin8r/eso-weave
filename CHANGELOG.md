@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   manifest with no network and no stored value; the last known API version and
   last seen game version persist in `state.json`.
 
+### Fixed
+
+- Buttons grew slightly on hover and shifted the whole window up and down. The
+  egui theme set a wider border stroke on the hovered state, which fed the widget
+  inner margin and reflowed the layout. All widget states now use the same
+  size-affecting inputs (zero interaction expansion and a 1.0 border stroke width),
+  so hovering a control changes only its color, never its size.
+- The settings modal filled only part of its width and its scrollbar floated in
+  the middle instead of at the right edge. The modal scroll area now disables
+  horizontal auto-shrink, so the body fills the modal width and the scrollbar sits
+  at the far right edge.
+
 ### Documentation
 
 - The master specification is rewritten as `docs/ESO-Weave-Specification-v0.2.0.md`,
