@@ -372,6 +372,19 @@ pub fn clamp_log_height(height: f32, window_height: f32) -> f32 {
     height.clamp(min, max)
 }
 
+/// Computes a settings-modal dimension (points) for a window dimension. The modal
+/// grows sub-linearly with the window, so it takes a progressively smaller fraction
+/// of a larger window while its absolute size keeps increasing, is clamped to
+/// `[min_px, max_px]`, and never exceeds `max_frac` of the window (so it always
+/// fits, even a very small window). Pure and deterministic.
+pub fn modal_extent(window: f32, min_px: f32, max_px: f32, max_frac: f32) -> f32 {
+    // Grow at a fraction of the window's growth past the minimum, so the occupied
+    // fraction decreases as the window enlarges.
+    const GROWTH: f32 = 0.55;
+    let grown = min_px + (window - min_px).max(0.0) * GROWTH;
+    grown.clamp(min_px, max_px).min(window * max_frac)
+}
+
 /// The derived display state for one frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppView {
@@ -627,7 +640,13 @@ impl AppModel {
                 Vec::new()
             }
             UiIntent::SetLogFilter(level) => {
+                // The live-log level and the settings Log level are one setting:
+                // changing the panel dropdown also changes what is captured and
+                // persists it, so the two controls stay in sync.
                 self.log_filter = level;
+                self.settings.logging.level = level;
+                self.log.set_level(level);
+                self.scheduler.mark_config(Instant::now());
                 Vec::new()
             }
             UiIntent::SetLogHeight(height) => {
@@ -867,6 +886,9 @@ impl AppModel {
         self.log.set_level(self.settings.logging.level);
         self.log
             .set_file_enabled(self.settings.logging.file_enabled);
+        // Keep the live-log panel dropdown in sync with the settings Log level, so
+        // applying a settings change updates the panel too.
+        self.log_filter = self.settings.logging.level;
         notices
     }
 

@@ -16,8 +16,8 @@ use eframe::egui;
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
 use crate::app::{
-    app_toggle_intent, override_edit_for, strings, widgets, AppModel, SkillEdit, StatusLine,
-    UiIntent,
+    app_toggle_intent, modal_extent, override_edit_for, strings, widgets, AppModel, SkillEdit,
+    StatusLine, UiIntent,
 };
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::config::state::WindowGeometry;
@@ -56,7 +56,7 @@ const WEAVE_TYPES: [WeaveType; 4] = [
     WeaveType::BlockCasting,
 ];
 
-const KEYS: [Key; 11] = [
+const KEYS: [Key; 12] = [
     Key::Digit1,
     Key::Digit2,
     Key::Digit3,
@@ -68,6 +68,7 @@ const KEYS: [Key; 11] = [
     Key::Q,
     Key::Space,
     Key::F1,
+    Key::F2,
 ];
 
 const LEVELS: [LevelName; 6] = [
@@ -621,8 +622,17 @@ impl EsoWeaveApp {
         let screen = ctx.content_rect();
         let mut close = false;
 
+        // Size the modal from the current window each frame: both axes grow with
+        // the window but occupy a progressively smaller fraction, bounded to a
+        // maximum (so it looks right from the minimum window up to a QHD ultrawide
+        // display) and never exceeding the window.
+        let modal_w = modal_extent(screen.width(), 460.0, 1040.0, 0.92);
+        let modal_h = modal_extent(screen.height(), 400.0, 880.0, 0.92);
+        // Reserve room for the heading, separator, and close row above the body.
+        let body_max_h = (modal_h - 52.0).max(120.0);
+
         let modal = egui::Modal::new(egui::Id::new("eso_weave_settings")).show(ctx, |ui| {
-            ui.set_width((screen.width() * 0.9).min(720.0));
+            ui.set_width(modal_w);
             ui.horizontal(|ui| {
                 widgets::heading(ui, strings::MENU_SETTINGS);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -636,7 +646,7 @@ impl EsoWeaveApp {
             // body spans the modal and the vertical scrollbar sits at the far right
             // edge (matching the log-panel scroll area).
             egui::ScrollArea::vertical()
-                .max_height(screen.height() * 0.78)
+                .max_height(body_max_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     settings_body(ui, &palette, &mut draft);
@@ -673,8 +683,7 @@ fn settings_body(
     widgets::heading(ui, strings::CLUSTER_APPEARANCE);
     egui::Frame::group(ui.style()).show(ui, |ui| {
         setting(ui, palette, &strings::SET_THEME, |ui| {
-            egui::ComboBox::from_id_salt("set_theme")
-                .selected_text(theme_name(draft.ui.theme))
+            combo("set_theme", theme_name(draft.ui.theme))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut draft.ui.theme, Theme::Dark, "Dark");
                     ui.selectable_value(&mut draft.ui.theme, Theme::Light, "Light");
@@ -766,8 +775,7 @@ fn settings_body(
             }
         });
         setting(ui, palette, &strings::SET_BEACON_ENV, |ui| {
-            egui::ComboBox::from_id_salt("set_env")
-                .selected_text(env_name(draft.beacon.environment))
+            combo("set_env", env_name(draft.beacon.environment))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut draft.beacon.environment,
@@ -798,8 +806,7 @@ fn settings_body(
     widgets::heading(ui, strings::CLUSTER_LOGGING);
     egui::Frame::group(ui.style()).show(ui, |ui| {
         setting(ui, palette, &strings::SET_LOG_LEVEL, |ui| {
-            egui::ComboBox::from_id_salt("set_log_level")
-                .selected_text(level_name(draft.logging.level))
+            combo("set_log_level", level_name(draft.logging.level))
                 .show_ui(ui, |ui| {
                     for level in LEVELS {
                         ui.selectable_value(&mut draft.logging.level, level, level_name(level));
@@ -821,11 +828,10 @@ fn settings_body(
             let mut selected = current;
             ui.horizontal(|ui| {
                 ui.label(action_label(action));
-                egui::ComboBox::from_id_salt(("bind", action.as_str()))
-                    .selected_text(selected.as_str())
+                combo(("bind", action.as_str()), selected.display_name())
                     .show_ui(ui, |ui| {
                         for key in KEYS {
-                            ui.selectable_value(&mut selected, key, key.as_str());
+                            ui.selectable_value(&mut selected, key, key.display_name());
                         }
                     })
                     .response

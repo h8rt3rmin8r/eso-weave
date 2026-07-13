@@ -5,12 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{
-    app_state_label, beacon_light, default_delay_for, fishing_label, override_edit_for,
-    route_reader_event, skill_rows, status_line_app, status_line_beacon, status_line_fishing,
-    uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
+    app_state_label, beacon_light, default_delay_for, fishing_label, modal_extent,
+    override_edit_for, route_reader_event, skill_rows, status_line_app, status_line_beacon,
+    status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition, SkillEdit,
+    StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
-use eso_weave::config::{LoggingPrefs, Settings};
+use eso_weave::config::{LevelName, LoggingPrefs, Settings};
 use eso_weave::fishing::{
     FishingConfig, FishingController, FishingState, MockFishingSink, StopReason,
 };
@@ -459,6 +460,52 @@ fn update_beacon_intent_reinstalls() {
         BeaconCondition::InstalledCurrent
     );
     assert!(model.view().uninstall_enabled);
+}
+
+#[test]
+fn log_filter_and_settings_level_stay_linked() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+
+    // Changing the live-log dropdown also changes the settings Log level.
+    model.apply_intent(UiIntent::SetLogFilter(LevelName::Debug));
+    assert_eq!(model.view().log_filter, LevelName::Debug);
+    assert_eq!(model.settings_form().logging.level, LevelName::Debug);
+
+    // Applying a settings Log level updates the live-log dropdown.
+    let mut form = model.settings_form();
+    form.logging.level = LevelName::Warn;
+    model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+    assert_eq!(model.view().log_filter, LevelName::Warn);
+
+    // Hiding or showing the live-log panel does not change the verbosity.
+    model.apply_intent(UiIntent::ToggleLogPanel(true));
+    model.apply_intent(UiIntent::ToggleLogPanel(false));
+    assert_eq!(model.settings_form().logging.level, LevelName::Warn);
+}
+
+#[test]
+fn modal_extent_fits_small_grows_and_caps() {
+    // A small window: the modal fits inside it (about max_frac of the window).
+    let small = modal_extent(480.0, 440.0, 1000.0, 0.92);
+    assert!(
+        small <= 480.0 * 0.92 + 0.5,
+        "small modal must fit the window"
+    );
+
+    // A mid window (below the pixel cap): more pixels than the small window, but a
+    // smaller fraction of the window.
+    let mid = modal_extent(1200.0, 440.0, 1000.0, 0.92);
+    assert!(mid > small, "modal grows in pixels with the window");
+    assert!(mid < 1000.0, "mid window is below the pixel cap");
+    assert!(
+        mid / 1200.0 < small / 480.0,
+        "modal occupies a smaller fraction as the window grows"
+    );
+
+    // A very large window: capped at max_px.
+    let large = modal_extent(6000.0, 440.0, 1000.0, 0.92);
+    assert_eq!(large, 1000.0, "modal is capped at max_px");
 }
 
 #[test]

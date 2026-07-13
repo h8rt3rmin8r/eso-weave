@@ -94,7 +94,10 @@ impl Toast {
         now.duration_since(self.shown_at) >= self.ttl
     }
 
-    /// Paints the toast anchored to the bottom-right, fading out near the end.
+    /// Paints the toast anchored to the bottom-right, fading out near the end. It
+    /// is a success confirmation, so it fills with the brand success (green) color
+    /// and draws its text in the contrasting base color at a heavier weight, which
+    /// stays legible in both light and dark themes.
     pub fn show(&self, ctx: &egui::Context, palette: &Palette, now: Instant) {
         let elapsed = now.duration_since(self.shown_at).as_secs_f32();
         let total = self.ttl.as_secs_f32();
@@ -110,10 +113,19 @@ impl Toast {
             .interactable(false)
             .show(ctx, |ui| {
                 ui.set_opacity(alpha);
+                let font = egui::FontId::new(
+                    ui.style().text_styles[&egui::TextStyle::Body].size,
+                    egui::FontFamily::Name(super::theme::HEADING_FAMILY.into()),
+                );
                 egui::Frame::popup(ui.style())
-                    .fill(palette.elevated)
+                    .fill(palette.ok)
+                    .stroke(egui::Stroke::new(1.0, palette.ok))
                     .show(ui, |ui| {
-                        ui.label(egui::RichText::new(&self.message).color(palette.text));
+                        ui.label(
+                            egui::RichText::new(&self.message)
+                                .font(font)
+                                .color(palette.base),
+                        );
                     });
             });
     }

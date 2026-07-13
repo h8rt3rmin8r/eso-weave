@@ -36,6 +36,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field when the override is on, and a matching greyed read-only field showing the
   inherited value when it is off, so toggling the override no longer changes the
   cell width or appearance.
+- The F2 key is now selectable in the keybindings. It was missing from the key
+  list even though it is the default Toggle Fishing binding, so that binding could
+  not be seen or changed; F2 now appears and the binding shows it.
+- Keybindings now display friendly key names (Number 1 through Number 5, E, R, X,
+  Q, Space, F1, F2) instead of raw internal strings; the stored key values are
+  unchanged.
+- The live-log verbosity dropdown and the settings Log level are now one setting:
+  changing either updates the other and the captured verbosity. Hiding the live
+  log panel no longer has any effect on the logging level.
+- The settings modal now sizes both its width and height to the current window
+  each time it opens and as the window resizes, growing in pixels but taking a
+  progressively smaller fraction up to a maximum, so it looks right from a small
+  window up to a QHD ultrawide display and no longer conforms to a stale size.
+- The Settings saved confirmation now uses a green success color so it is easy to
+  notice, kept legible in both light and dark themes.
 
 ### Decisions
 
