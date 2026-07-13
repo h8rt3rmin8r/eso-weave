@@ -145,9 +145,33 @@ pub enum PixelBusEvent {
 
 /// The surface sampling seam: reads one client-area pixel.
 pub trait SurfaceSampler {
+    /// Captures a fresh frame if the backend needs to. The reader calls this once
+    /// before sampling the block points, so a backend that captures a whole strip
+    /// (the Windows screen-composited capture) does so once per batch rather than
+    /// per point. The default is a no-op (the mock and the X11 backend read points
+    /// directly).
+    fn prepare(&self) {}
+
     /// The color at a client-area point, or `None` when the surface cannot be
     /// sampled.
     fn sample(&self, x: u32, y: u32) -> Option<Rgb>;
+}
+
+/// Extracts one pixel from a captured 32-bit BGRA strip (the byte layout
+/// `GetDIBits` fills for a top-down `BI_RGB` bitmap): at offset
+/// `(y * width + x) * 4` the bytes are blue, green, red, alpha. Returns `None`
+/// when the point is out of range or the buffer is too short. Pure and tested, so
+/// the only decodable part of the screen-capture path is covered while the OS
+/// calls stay in the thin backend.
+pub fn strip_pixel(buffer: &[u8], width: u32, height: u32, x: u32, y: u32) -> Option<Rgb> {
+    if x >= width || y >= height {
+        return None;
+    }
+    let offset = ((y as usize) * (width as usize) + (x as usize)) * 4;
+    let b = *buffer.get(offset)?;
+    let g = *buffer.get(offset + 1)?;
+    let r = *buffer.get(offset + 2)?;
+    Some(Rgb::new(r, g, b))
 }
 
 /// A test sampler that returns crafted colors for specific points.
@@ -362,6 +386,7 @@ pub struct PixelBusReader {
     signal_lost: bool,
     fishing: FishingSignal,
     weapon: Option<WeaponBarSignal>,
+    had_heartbeat: bool,
 }
 
 impl PixelBusReader {
@@ -373,6 +398,7 @@ impl PixelBusReader {
             signal_lost: false,
             fishing: FishingSignal::None,
             weapon: None,
+            had_heartbeat: false,
         }
     }
 
@@ -396,11 +422,17 @@ impl PixelBusReader {
 
         // Raw per-sample diagnostic (TRACE only, never at the default level). This
         // is the in-game signature the operator reads to tell a present heartbeat
-        // with a non-decoding B3 (a stale or misrendered addon) apart from no
-        // heartbeat at all (the strip is not being read).
+        // apart from no heartbeat at all (the strip is not being read), and, once a
+        // heartbeat is present, whether the fishing block ever decodes to Waiting.
+        let fishing_decoded = b1.map_or(FishingSignal::None, |c| fishing_signal(c, tolerance));
+        let heartbeat_age_ms = self
+            .last_heartbeat_ms
+            .map(|last| now_ms.saturating_sub(last));
         tracing::trace!(
             target: "eso_weave::pixelbus",
             heartbeat,
+            ?fishing_decoded,
+            ?heartbeat_age_ms,
             ?b0,
             ?b1,
             ?b2,
@@ -408,6 +440,24 @@ impl PixelBusReader {
             now_ms,
             "pixel bus sample"
         );
+
+        // A clear DEBUG signature on the heartbeat acquire and lose transitions, so
+        // the operator can tell at a glance whether B0 (the addon signal) is being
+        // read at all, without reading every TRACE sample. This changes no emitted
+        // event.
+        if heartbeat && !self.had_heartbeat {
+            tracing::debug!(
+                target: "eso_weave::pixelbus",
+                ?b0,
+                "pixel bus heartbeat acquired"
+            );
+        } else if !heartbeat && self.had_heartbeat {
+            tracing::debug!(
+                target: "eso_weave::pixelbus",
+                "pixel bus heartbeat lost"
+            );
+        }
+        self.had_heartbeat = heartbeat;
 
         if heartbeat {
             self.last_heartbeat_ms = Some(now_ms);
@@ -466,6 +516,8 @@ impl PixelBusReader {
         sampler: &dyn SurfaceSampler,
         now_ms: u64,
     ) -> Vec<PixelBusEvent> {
+        // Let the backend capture a fresh frame once, before the four point reads.
+        sampler.prepare();
         let (sx, sy) = self.config.status_point;
         let (fx, fy) = self.config.fishing_point;
         let (lx, ly) = self.config.latency_point;

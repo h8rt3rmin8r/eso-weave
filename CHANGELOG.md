@@ -51,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   window up to a QHD ultrawide display and no longer conforms to a stale size.
 - The Settings saved confirmation now uses a green success color so it is easy to
   notice, kept legible in both light and dark themes.
+- Fishing could report Casting and then revert to Idle (no cast detected) because
+  the Windows sampler read the game window device context with GetPixel, which on a
+  hardware-accelerated (DirectX) surface returns the GDI front buffer (black or
+  stale pixels), so the PixelBeacon signal was never read. The Windows sampler now
+  captures a small strip of the composited desktop at the window's top-left and
+  reads the beacon blocks from it, so accelerated content is read as displayed. The
+  live log also gains clearer diagnostics: a message when the beacon heartbeat is
+  acquired or lost, and the decoded fishing signal and heartbeat age on the verbose
+  per-sample trace, so a single session shows whether the signal is being read.
 
 ### Decisions
 
@@ -63,6 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-07-13: Added the `Win32_UI_HiDpi` feature to the windows-sys dependency for
   `GetDpiForSystem`, used to convert the physical virtual-screen bounds to egui
   points for the off-screen recovery check. windows-sys is not a pinned artifact.
+- 2026-07-13: The Windows pixel-bus capture changed from a window device-context
+  `GetPixel` to a screen-composited `BitBlt` of the beacon strip, so DirectX-
+  rendered content is read from the desktop framebuffer rather than the GDI front
+  buffer. The master specification section 10.3 is updated to match. The addon
+  interaction-detection contract and the keypress synthesis are deliberately left
+  unchanged so the capture fix stays isolable; the end-to-end result requires an
+  in-game validation run (see `specs/024-fishing-capture-hardening/quickstart.md`).
 
 ## [0.5.0] - 2026-07-13
 

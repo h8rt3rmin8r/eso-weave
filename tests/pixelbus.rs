@@ -1,9 +1,55 @@
 //! Decoder and state-machine tests for the Pixel Bus Reader.
 
 use eso_weave::pixelbus::{
-    decode_latency, decode_weapon_bar, fishing_signal, poll_interval, status_present, ActiveBar,
-    FishingSignal, PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal, WeaponClass,
+    decode_latency, decode_weapon_bar, fishing_signal, poll_interval, status_present, strip_pixel,
+    ActiveBar, FishingSignal, PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal,
+    WeaponClass,
 };
+
+// Pixel extraction from a captured BGRA strip (the Windows screen-composited
+// capture path). The bytes are blue, green, red, alpha per pixel.
+
+#[test]
+fn strip_pixel_decodes_bgra_channel_order() {
+    // A 2x2 strip: (0,0) magenta FF00FF, (1,0) green 00FF00, (0,1) blue 0000FF,
+    // (1,1) white FFFFFF. Stored BGRA.
+    let buf: [u8; 16] = [
+        0xFF, 0x00, 0xFF, 0x00, // (0,0) B=FF G=00 R=FF -> magenta
+        0x00, 0xFF, 0x00, 0x00, // (1,0) B=00 G=FF R=00 -> green
+        0xFF, 0x00, 0x00, 0x00, // (0,1) B=FF G=00 R=00 -> blue
+        0xFF, 0xFF, 0xFF, 0x00, // (1,1) B=FF G=FF R=FF -> white
+    ];
+    assert_eq!(
+        strip_pixel(&buf, 2, 2, 0, 0),
+        Some(Rgb::new(0xFF, 0x00, 0xFF))
+    );
+    assert_eq!(
+        strip_pixel(&buf, 2, 2, 1, 0),
+        Some(Rgb::new(0x00, 0xFF, 0x00))
+    );
+    assert_eq!(
+        strip_pixel(&buf, 2, 2, 0, 1),
+        Some(Rgb::new(0x00, 0x00, 0xFF))
+    );
+    assert_eq!(
+        strip_pixel(&buf, 2, 2, 1, 1),
+        Some(Rgb::new(0xFF, 0xFF, 0xFF))
+    );
+}
+
+#[test]
+fn strip_pixel_rejects_out_of_range() {
+    let buf = [0u8; 16];
+    assert_eq!(strip_pixel(&buf, 2, 2, 2, 0), None);
+    assert_eq!(strip_pixel(&buf, 2, 2, 0, 2), None);
+}
+
+#[test]
+fn strip_pixel_rejects_truncated_buffer() {
+    // A buffer shorter than the addressed pixel returns None rather than panicking.
+    let buf = [0u8; 3];
+    assert_eq!(strip_pixel(&buf, 2, 2, 1, 1), None);
+}
 
 #[test]
 fn poll_interval_tracks_fishing_state() {

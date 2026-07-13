@@ -511,8 +511,12 @@ ms) while a fishing session is active, slow (default 1000 ms) otherwise. Sample
 matching allows a small per-channel tolerance (default plus or minus 2) to absorb
 compositor rounding, and the marker and checksum channels guard against misreads.
 Loss of B0 for more than `heartbeat_timeout_ms` (default 2000) raises `SignalLost`.
-Sampling backends are GDI window-surface capture on Windows and X11 or XWayland
-capture on Linux.
+On Windows the sampler captures a small strip of the composited desktop at the game
+window's top-left client area (a GDI `BitBlt` from the screen device context) and
+reads the block points from it, so pixels rendered through a hardware-accelerated
+(DirectX) surface are read as displayed; a read of the window device context alone
+returns the GDI front buffer, which does not contain the accelerated content. On
+Linux the sampler uses X11 or XWayland capture.
 
 ### 10.4 AddOns directory discovery
 
