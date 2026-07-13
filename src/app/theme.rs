@@ -111,12 +111,18 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
 
     let radius = egui::CornerRadius::same(6);
 
+    // Every state keeps the same size-affecting inputs (zero interaction
+    // expansion and a 1.0 border stroke width, which feeds the widget inner
+    // margin), so hovering a control changes only its color, never its size, and
+    // the layout never reflows on hover. Only appearance (fill and stroke color)
+    // differs between states.
     let n = &mut v.widgets.noninteractive;
     n.bg_fill = p.panel;
     n.weak_bg_fill = p.panel;
     n.bg_stroke = Stroke::new(1.0, p.stroke);
     n.fg_stroke = Stroke::new(1.0, p.text);
     n.corner_radius = radius;
+    n.expansion = 0.0;
 
     let i = &mut v.widgets.inactive;
     i.bg_fill = p.elevated;
@@ -124,13 +130,15 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     i.bg_stroke = Stroke::new(1.0, p.stroke);
     i.fg_stroke = Stroke::new(1.0, p.text);
     i.corner_radius = radius;
+    i.expansion = 0.0;
 
     let h = &mut v.widgets.hovered;
     h.bg_fill = p.elevated;
     h.weak_bg_fill = p.elevated;
-    h.bg_stroke = Stroke::new(1.2, p.gold);
+    h.bg_stroke = Stroke::new(1.0, p.gold);
     h.fg_stroke = Stroke::new(1.0, p.text);
     h.corner_radius = radius;
+    h.expansion = 0.0;
 
     let a = &mut v.widgets.active;
     a.bg_fill = p.gold;
@@ -138,6 +146,7 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     a.bg_stroke = Stroke::new(1.0, p.gold_hover);
     a.fg_stroke = Stroke::new(1.0, p.gold_text);
     a.corner_radius = radius;
+    a.expansion = 0.0;
 
     let o = &mut v.widgets.open;
     o.bg_fill = p.elevated;
@@ -145,6 +154,7 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     o.bg_stroke = Stroke::new(1.0, p.gold);
     o.fg_stroke = Stroke::new(1.0, p.text);
     o.corner_radius = radius;
+    o.expansion = 0.0;
 
     ctx.set_visuals(v);
 

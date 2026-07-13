@@ -525,8 +525,12 @@ impl EsoWeaveApp {
                 });
             });
             ui.separator();
+            // Do not shrink to content width: fill the modal's inner width so the
+            // body spans the modal and the vertical scrollbar sits at the far right
+            // edge (matching the log-panel scroll area).
             egui::ScrollArea::vertical()
                 .max_height(screen.height() * 0.78)
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
                     settings_body(ui, &palette, &mut draft);
                 });
