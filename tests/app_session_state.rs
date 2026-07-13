@@ -24,6 +24,7 @@ fn session_state_round_trips() {
         schema_version: 1,
         suspended: true,
         fishing: true,
+        api_version: Default::default(),
     };
     state::save(dir.path(), &state).unwrap();
     let (loaded, notices) = state::load(dir.path());
@@ -122,6 +123,7 @@ fn restore_suspended_keeps_engine_suspended() {
         schema_version: 1,
         suspended: true,
         fishing: false,
+        api_version: Default::default(),
     });
     // The engine is suspended, so the weave worker produces no input regardless
     // of focus; combined with the backend's focus-scoped synthesis this upholds
@@ -138,6 +140,7 @@ fn restore_fishing_marks_active_and_round_trips() {
         schema_version: 1,
         suspended: false,
         fishing: true,
+        api_version: Default::default(),
     });
     assert!(model.view().fishing_active);
     // The persisted intent is a single on/off flag.

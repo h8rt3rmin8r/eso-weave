@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ESO API version check automation. On startup, off the GUI thread, the app
+  fetches the live ESO game client version from the official esoui/esoui GitHub
+  live branch as a bump-detection signal, keeps the on-disk PixelBeacon manifest
+  `## APIVersion:` current (marker-gated, never downgrading, preserving all other
+  lines), and warns in the live log when the client has moved ahead of this build
+  so the player knows to update. A compiled default API version guarantees a valid
+  manifest with no network and no stored value; the last known API version and
+  last seen game version persist in `state.json`.
+
+### Decisions
+
+- 2026-07-12: Added a networked dependency, `ureq` (blocking, rustls TLS), to
+  support the startup ESO API version check. No async runtime is introduced; the
+  check runs on a `std::thread`. `Cargo.toml` is not a pinned artifact; this entry
+  records the added networked dependency per the constitution. The chosen version
+  source is the esoui/esoui GitHub `live` branch head commit, because the exact
+  numeric API version is only published behind bot challenges a plain client
+  cannot pass, whereas GitHub reliably reports the live game version string as the
+  bump-detection signal. The numeric value written to the manifest resolves as the
+  maximum of the stored last known value and the compiled default.
+
 ## [0.4.3] - 2026-07-13
 
 ### Documentation

@@ -12,10 +12,26 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::beacon::api_check::GameVersion;
 use crate::config::{ConfigError, Notice, NoticeKind};
 
 /// Current session-state schema version.
-pub const CURRENT_STATE_VERSION: u32 = 1;
+pub const CURRENT_STATE_VERSION: u32 = 2;
+
+/// The derived API-version cache: the last known numeric API version and the last
+/// seen game version, both remembered between runs. Runtime derived state, so it
+/// lives here in `state.json`, never in the settings file. Additive and
+/// backward compatible: an old `state.json` without this section loads as default.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ApiVersionCache {
+    /// The highest numeric API version resolved so far; `None` before first run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_known_api_version: Option<u32>,
+    /// The newest game version observed from the network signal; `None` before
+    /// the first successful fetch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_game_version: Option<GameVersion>,
+}
 
 /// Session state file name within the config directory.
 pub const STATE_FILE_NAME: &str = "state.json";
@@ -32,6 +48,9 @@ pub struct SessionState {
     /// The fishing on/off intent (never a transient sub-state).
     #[serde(default)]
     pub fishing: bool,
+    /// The derived API-version cache maintained by the startup version check.
+    #[serde(default)]
+    pub api_version: ApiVersionCache,
 }
 
 fn default_version() -> u32 {
@@ -44,6 +63,7 @@ impl Default for SessionState {
             schema_version: CURRENT_STATE_VERSION,
             suspended: false,
             fishing: false,
+            api_version: ApiVersionCache::default(),
         }
     }
 }
@@ -88,4 +108,28 @@ pub fn save(config_dir: &Path, state: &SessionState) -> Result<(), ConfigError> 
     json.push('\n');
     std::fs::write(config_dir.join(STATE_FILE_NAME), json.as_bytes())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v1_state_without_api_version_loads_as_default() {
+        let v1 = r#"{"schema_version":1,"suspended":true,"fishing":false}"#;
+        let state: SessionState = serde_json::from_str(v1).unwrap();
+        assert!(state.suspended);
+        assert_eq!(state.api_version, ApiVersionCache::default());
+        assert_eq!(state.api_version.last_known_api_version, None);
+    }
+
+    #[test]
+    fn api_version_round_trips() {
+        let mut state = SessionState::default();
+        state.api_version.last_known_api_version = Some(101050);
+        state.api_version.last_seen_game_version = Some(GameVersion::new([12, 0, 6, 0]));
+        let json = serde_json::to_string(&state).unwrap();
+        let back: SessionState = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, state);
+    }
 }

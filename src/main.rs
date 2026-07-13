@@ -174,6 +174,21 @@ fn main() {
     let session = config_dir
         .as_ref()
         .map(|dir| eso_weave::config::state::load(dir));
+
+    // Capture what the startup API version check needs before `settings` and
+    // `session` are moved into the model: the AddOns preferences and the stored
+    // last known API version and last seen game version.
+    let api_beacon_prefs = eso_weave::beacon::prefs_from_value(&settings.beacon);
+    let (stored_api_version, stored_game_version) = session
+        .as_ref()
+        .map(|(state, _)| {
+            (
+                state.api_version.last_known_api_version,
+                state.api_version.last_seen_game_version,
+            )
+        })
+        .unwrap_or((None, None));
+    let (api_tx, api_rx) = std::sync::mpsc::channel();
     let mut model = AppModel::new(
         input.clone(),
         weave.clone(),
@@ -190,6 +205,23 @@ fn main() {
         }
         model.restore_session(state);
     }
+
+    // Startup ESO API version check: runs off the GUI thread, keeps the on-disk
+    // manifest current (marker-gated, never downgrading), detects a client bump,
+    // and hands the values to persist back to the GUI. Never blocks the window.
+    thread::spawn(move || {
+        let addons = eso_weave::beacon::resolve_addons_dir(&api_beacon_prefs).ok();
+        let source = eso_weave::beacon::api_check::GithubLiveSource::default();
+        let outcome = eso_weave::beacon::api_check::run_check(
+            &source,
+            addons.as_deref(),
+            stored_api_version,
+            stored_game_version,
+        );
+        // A send error means the GUI receiver is gone (the app is exiting); the
+        // outcome is simply dropped.
+        let _ = api_tx.send(outcome);
+    });
 
     // The GUI is about to take over the main thread; from here on a panic is
     // logged but no longer raises a dialog (a mid-session worker panic should not
@@ -211,7 +243,7 @@ fn main() {
         native_options,
         Box::new(|cc| {
             eso_weave::app::theme::install_fonts(&cc.egui_ctx);
-            Ok(Box::new(EsoWeaveApp::new(model, toggle_rx)))
+            Ok(Box::new(EsoWeaveApp::new(model, toggle_rx, api_rx)))
         }),
     ) {
         tracing::error!(target: "eso_weave", "GUI exited with error: {err}");

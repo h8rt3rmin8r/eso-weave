@@ -19,6 +19,7 @@ use crate::app::{
     app_toggle_intent, override_edit_for, strings, widgets, AppModel, SkillEdit, StatusLine,
     UiIntent,
 };
+use crate::beacon::api_check::ApiCheckOutcome;
 use crate::config::{LevelName, Theme};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
@@ -83,6 +84,9 @@ pub struct EsoWeaveApp {
     /// Hotkey toggles (suspend, fishing) forwarded from the weave worker, drained
     /// each frame and applied through the same intent path as the GUI buttons.
     toggle_rx: Receiver<Action>,
+    /// Startup API-version-check outcomes forwarded from the check thread, drained
+    /// each frame and persisted through the model's session save path.
+    api_rx: Receiver<ApiCheckOutcome>,
     ui_prefs: UiPrefs,
     applied_prefs: Option<(Theme, bool)>,
     log_height: f32,
@@ -95,13 +99,19 @@ pub struct EsoWeaveApp {
 }
 
 impl EsoWeaveApp {
-    /// Creates the app over the view-model and the hotkey-toggle receiver.
-    pub fn new(model: AppModel, toggle_rx: Receiver<Action>) -> Self {
+    /// Creates the app over the view-model, the hotkey-toggle receiver, and the
+    /// API-version-check outcome receiver.
+    pub fn new(
+        model: AppModel,
+        toggle_rx: Receiver<Action>,
+        api_rx: Receiver<ApiCheckOutcome>,
+    ) -> Self {
         let ui_prefs = model.ui_prefs();
         let log_height = ui_prefs.log_panel_height as f32;
         Self {
             model,
             toggle_rx,
+            api_rx,
             ui_prefs,
             applied_prefs: None,
             log_height,
@@ -124,6 +134,15 @@ impl EsoWeaveApp {
             if let Some(intent) = app_toggle_intent(action, self.model.fishing_on()) {
                 self.model.apply_intent(intent);
             }
+        }
+    }
+
+    /// Drains any API-version-check outcomes received since the last frame and
+    /// applies each to the model, which persists the updated cache through the
+    /// coalesced session save path.
+    fn drain_api_checks(&mut self) {
+        while let Ok(outcome) = self.api_rx.try_recv() {
+            self.model.apply_api_check(outcome);
         }
     }
 
@@ -152,6 +171,7 @@ impl eframe::App for EsoWeaveApp {
         // Apply any hotkey toggles before deriving the view, so a press taken this
         // frame is reflected immediately.
         self.drain_hotkey_toggles();
+        self.drain_api_checks();
         let extreme_bg = ui.visuals().extreme_bg_color;
 
         let mut intents: Vec<UiIntent> = Vec::new();

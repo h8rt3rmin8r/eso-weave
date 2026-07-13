@@ -7,6 +7,7 @@
 //! tested against an injected AddOns root. Discovery of that root and the
 //! running-game probe sit behind thin per-platform backends.
 
+pub mod api_check;
 #[cfg(target_os = "linux")]
 mod linux;
 pub mod steam;
@@ -28,10 +29,18 @@ pub const MANAGED_MARKER: &str = "## X-ESO-Weave-Managed: true";
 /// The Steam app id for The Elder Scrolls Online.
 pub const ESO_APP_ID: &str = "306130";
 
-/// The canonical embedded addon manifest, shipped verbatim by install.
+/// The canonical embedded addon manifest, the render template for install.
 pub const MANIFEST: &str = include_str!("../../addon/PixelBeacon/PixelBeacon.txt");
 /// The canonical embedded addon Lua, shipped verbatim by install.
 pub const LUA: &str = include_str!("../../addon/PixelBeacon/PixelBeacon.lua");
+
+/// The compiled default numeric ESO API version, the current live value. It is
+/// the always-available fallback so a manifest can always be rendered with no
+/// network access and no stored value, and it is refreshed as release upkeep.
+pub const DEFAULT_API_VERSION: u32 = 101050;
+/// The live ESO game client version that [`DEFAULT_API_VERSION`] corresponds to,
+/// the baseline the network bump-detection signal is compared against.
+pub const DEFAULT_GAME_VERSION: api_check::GameVersion = api_check::GameVersion::new([12, 0, 6, 0]);
 
 /// The ESO game environment selecting the AddOns subdirectory.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -162,6 +171,57 @@ pub fn embedded_version() -> u32 {
     parse_manifest_version(MANIFEST).expect("embedded manifest carries a parseable ## Version:")
 }
 
+/// Parses the first (primary) numeric token of the first `## APIVersion:` line,
+/// or `None` when the line is absent or the primary token is not a `u32`.
+pub fn parse_api_version_primary(manifest: &str) -> Option<u32> {
+    for line in manifest.lines() {
+        if let Some(rest) = line.trim().strip_prefix("## APIVersion:") {
+            return rest
+                .split_whitespace()
+                .next()
+                .and_then(|t| t.parse::<u32>().ok());
+        }
+    }
+    None
+}
+
+/// Rewrites only the `## APIVersion:` line of `existing`, setting `effective` as
+/// the primary token, preserving any existing tokens greater than `effective`
+/// (ordered descending after the primary), and dropping any tokens less than
+/// `effective`. Every other line, including the managed marker, and the trailing
+/// newline structure are preserved.
+pub fn rewrite_api_version(existing: &str, effective: u32) -> String {
+    let mut replaced = false;
+    let out: Vec<String> = existing
+        .split('\n')
+        .map(|line| {
+            if !replaced {
+                if let Some(rest) = line.trim_start().strip_prefix("## APIVersion:") {
+                    replaced = true;
+                    let mut greater: Vec<u32> = rest
+                        .split_whitespace()
+                        .filter_map(|t| t.parse::<u32>().ok())
+                        .filter(|&v| v > effective)
+                        .collect();
+                    greater.sort_unstable_by(|a, b| b.cmp(a));
+                    greater.dedup();
+                    let mut tokens = vec![effective.to_string()];
+                    tokens.extend(greater.iter().map(|v| v.to_string()));
+                    return format!("## APIVersion: {}", tokens.join(" "));
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+    out.join("\n")
+}
+
+/// Renders the full addon manifest for install with the given numeric API version
+/// as its primary `## APIVersion:` token.
+pub fn render_manifest(effective: u32) -> String {
+    rewrite_api_version(MANIFEST, effective)
+}
+
 /// The reload reminder rule: true when the game is running or the state is
 /// unknown (fail safe toward reminding), false when it is not running.
 pub fn reload_reminder(state: RunningState) -> bool {
@@ -197,13 +257,15 @@ pub fn status(addons_root: &Path) -> BeaconStatus {
     }
 }
 
-/// Installs (or safely updates) the embedded addon into `addons_root`.
+/// Installs (or safely updates) the embedded addon into `addons_root`, rendering
+/// the manifest with `api_version` as its primary `## APIVersion:` token.
 ///
 /// The AddOns root must already exist; only the `PixelBeacon` subfolder is
 /// created and populated. Every write is confined to that subfolder.
 pub fn install(
     addons_root: &Path,
     running: RunningState,
+    api_version: u32,
 ) -> Result<LifecycleOutcome, LifecycleError> {
     if !addons_root.is_dir() {
         tracing::warn!(
@@ -215,7 +277,7 @@ pub fn install(
     }
     let dir = addons_root.join(SUBFOLDER);
     std::fs::create_dir_all(&dir)?;
-    std::fs::write(dir.join(MANIFEST_FILE), MANIFEST)?;
+    std::fs::write(dir.join(MANIFEST_FILE), render_manifest(api_version))?;
     std::fs::write(dir.join(LUA_FILE), LUA)?;
     tracing::info!(target: "beacon", path = %dir.display(), "installed PixelBeacon");
     Ok(LifecycleOutcome {

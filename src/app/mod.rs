@@ -20,8 +20,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::beacon::api_check::ApiCheckOutcome;
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
-use crate::config::state::{SessionState, CURRENT_STATE_VERSION};
+use crate::config::state::{ApiVersionCache, SessionState, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
@@ -474,6 +475,7 @@ pub struct AppModel {
     log_panel_open: bool,
     log_filter: LevelName,
     scheduler: SaveScheduler,
+    api_version: ApiVersionCache,
 }
 
 impl AppModel {
@@ -504,6 +506,7 @@ impl AppModel {
             log_panel_open: false,
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
+            api_version: ApiVersionCache::default(),
         }
     }
 
@@ -643,8 +646,9 @@ impl AppModel {
     }
 
     fn install_beacon(&mut self) {
+        let api_version = self.effective_api_version();
         match beacon::resolve_addons_dir(&self.beacon_prefs) {
-            Ok(root) => match beacon::install(&root, beacon::probe_game_running()) {
+            Ok(root) => match beacon::install(&root, beacon::probe_game_running(), api_version) {
                 Ok(outcome) => {
                     if outcome.reload_required {
                         tracing::info!(
@@ -702,6 +706,7 @@ impl AppModel {
     /// the game window is unfocused, because synthesis and suppression are scoped
     /// to the focused game window by the input backend.
     pub fn restore_session(&mut self, state: SessionState) {
+        self.api_version = state.api_version;
         if state.suspended != self.input.is_suspended() {
             self.input.set_suspended(state.suspended);
         }
@@ -711,6 +716,32 @@ impl AppModel {
                 .lock()
                 .unwrap()
                 .set_enabled(true, now, self.fishing_sink.as_mut());
+        }
+    }
+
+    /// The effective numeric API version for rendering a manifest: the higher of
+    /// the last known value and the compiled default. Never below the default.
+    pub fn effective_api_version(&self) -> u32 {
+        self.api_version
+            .last_known_api_version
+            .unwrap_or(0)
+            .max(beacon::DEFAULT_API_VERSION)
+    }
+
+    /// Applies a startup version-check outcome: updates the cache and, when it
+    /// changed, marks the session store dirty so the value is persisted through the
+    /// existing coalesced save path. The bump notice is emitted by the check thread
+    /// via tracing and shown in the live log; nothing is surfaced here.
+    pub fn apply_api_check(&mut self, outcome: ApiCheckOutcome) {
+        let updated = ApiVersionCache {
+            last_known_api_version: Some(outcome.last_known_api_version),
+            last_seen_game_version: outcome
+                .last_seen_game_version
+                .or(self.api_version.last_seen_game_version),
+        };
+        if updated != self.api_version {
+            self.api_version = updated;
+            self.scheduler.mark_session(Instant::now());
         }
     }
 
@@ -729,6 +760,7 @@ impl AppModel {
             schema_version: CURRENT_STATE_VERSION,
             suspended: self.input.is_suspended(),
             fishing: fishing_on,
+            api_version: self.api_version,
         }
     }
 

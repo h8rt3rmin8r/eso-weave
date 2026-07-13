@@ -9,8 +9,9 @@ use std::path::Path;
 
 use eso_weave::beacon::{
     self, addons_dir_under_documents, embedded_version, eso_addons_subpath, has_managed_marker,
-    parse_manifest_version, prefs_from_value, prefs_to_value, reload_reminder, steam, BeaconPrefs,
-    BeaconStatus, DiscoveryError, Environment, LifecycleError, RunningState, LUA_FILE,
+    parse_api_version_primary, parse_manifest_version, prefs_from_value, prefs_to_value,
+    reload_reminder, render_manifest, rewrite_api_version, steam, BeaconPrefs, BeaconStatus,
+    DiscoveryError, Environment, LifecycleError, RunningState, DEFAULT_API_VERSION, LUA_FILE,
     MANAGED_MARKER, MANIFEST, MANIFEST_FILE, SUBFOLDER,
 };
 
@@ -149,7 +150,8 @@ fn status_unmanaged_when_marker_absent() {
 #[test]
 fn install_writes_embedded_files_and_reports_up_to_date() {
     let root = tmp();
-    let outcome = beacon::install(root.path(), RunningState::NotRunning).unwrap();
+    let outcome =
+        beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap();
     assert_eq!(outcome.status, BeaconStatus::ManagedUpToDate);
     assert!(!outcome.reload_required);
 
@@ -171,7 +173,7 @@ fn install_over_older_version_updates_in_place() {
         BeaconStatus::ManagedVersionMismatch
     );
 
-    beacon::install(root.path(), RunningState::NotRunning).unwrap();
+    beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap();
     assert_eq!(beacon::status(root.path()), BeaconStatus::ManagedUpToDate);
     assert_eq!(
         fs::read_to_string(beacon_dir(root.path()).join(MANIFEST_FILE)).unwrap(),
@@ -183,7 +185,7 @@ fn install_over_older_version_updates_in_place() {
 fn install_fails_when_addons_dir_missing() {
     let root = tmp();
     let missing = root.path().join("does-not-exist");
-    let err = beacon::install(&missing, RunningState::NotRunning).unwrap_err();
+    let err = beacon::install(&missing, RunningState::NotRunning, DEFAULT_API_VERSION).unwrap_err();
     assert!(matches!(err, LifecycleError::AddonsDirMissing));
     assert!(!missing.exists());
 }
@@ -196,7 +198,7 @@ fn install_writes_only_under_pixelbeacon() {
     fs::create_dir_all(&sentinel).unwrap();
     fs::write(sentinel.join("keep.txt"), "keep me").unwrap();
 
-    beacon::install(root.path(), RunningState::NotRunning).unwrap();
+    beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap();
 
     assert_eq!(
         fs::read_to_string(sentinel.join("keep.txt")).unwrap(),
@@ -216,7 +218,7 @@ fn install_writes_only_under_pixelbeacon() {
 #[test]
 fn uninstall_removes_managed_folder() {
     let root = tmp();
-    beacon::install(root.path(), RunningState::NotRunning).unwrap();
+    beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap();
     assert_eq!(beacon::status(root.path()), BeaconStatus::ManagedUpToDate);
 
     let outcome = beacon::uninstall(root.path(), RunningState::NotRunning).unwrap();
@@ -255,7 +257,7 @@ fn uninstall_never_touches_siblings() {
     let sentinel = root.path().join("OtherAddon");
     fs::create_dir_all(&sentinel).unwrap();
     fs::write(sentinel.join("keep.txt"), "keep me").unwrap();
-    beacon::install(root.path(), RunningState::NotRunning).unwrap();
+    beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap();
 
     beacon::uninstall(root.path(), RunningState::NotRunning).unwrap();
 
@@ -276,11 +278,66 @@ fn lifecycle_reload_required_tracks_running_state() {
         (RunningState::NotRunning, false),
     ] {
         let root = tmp();
-        let installed = beacon::install(root.path(), state).unwrap();
+        let installed = beacon::install(root.path(), state, DEFAULT_API_VERSION).unwrap();
         assert_eq!(installed.reload_required, expected, "install {state:?}");
         let removed = beacon::uninstall(root.path(), state).unwrap();
         assert_eq!(removed.reload_required, expected, "uninstall {state:?}");
     }
+}
+
+// T005/T006: APIVersion parsing, the multi-value token rewrite rule, and render.
+
+#[test]
+fn parses_primary_api_version_token() {
+    assert_eq!(
+        parse_api_version_primary("## APIVersion: 101050 101054\n"),
+        Some(101050)
+    );
+    assert_eq!(parse_api_version_primary(MANIFEST), Some(101050));
+    assert_eq!(parse_api_version_primary("## Title: X\n"), None);
+    assert_eq!(parse_api_version_primary("## APIVersion: nope\n"), None);
+}
+
+#[test]
+fn rewrite_sets_primary_keeps_greater_drops_lesser() {
+    // Greater token 101054 is kept, lesser token 101040 is dropped, primary set.
+    let src = "## APIVersion: 101040 101054\n";
+    assert_eq!(
+        rewrite_api_version(src, 101050),
+        "## APIVersion: 101050 101054\n"
+    );
+    // Advancing past every token collapses to the single primary.
+    assert_eq!(rewrite_api_version(src, 101060), "## APIVersion: 101060\n");
+}
+
+#[test]
+fn rewrite_preserves_every_other_line_and_marker() {
+    let updated = rewrite_api_version(MANIFEST, 101070);
+    assert!(has_managed_marker(&updated));
+    assert_eq!(parse_api_version_primary(&updated), Some(101070));
+    // Only the APIVersion line changed; all other lines are byte for byte equal.
+    for (before, after) in MANIFEST.lines().zip(updated.lines()) {
+        if before.trim_start().starts_with("## APIVersion:") {
+            continue;
+        }
+        assert_eq!(before, after);
+    }
+    assert_eq!(parse_manifest_version(&updated), Some(embedded_version()));
+}
+
+#[test]
+fn render_manifest_with_default_matches_embedded() {
+    assert_eq!(render_manifest(DEFAULT_API_VERSION), MANIFEST);
+}
+
+#[test]
+fn install_writes_resolved_api_version() {
+    let root = tmp();
+    beacon::install(root.path(), RunningState::NotRunning, 101070).unwrap();
+    let manifest = fs::read_to_string(beacon_dir(root.path()).join(MANIFEST_FILE)).unwrap();
+    assert_eq!(parse_api_version_primary(&manifest), Some(101070));
+    assert!(has_managed_marker(&manifest));
+    assert_eq!(beacon::status(root.path()), BeaconStatus::ManagedUpToDate);
 }
 
 // T012: Steam VDF library extraction.
