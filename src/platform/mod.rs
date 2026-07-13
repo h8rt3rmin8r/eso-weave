@@ -32,3 +32,12 @@ pub fn config_dir() -> Option<PathBuf> {
 pub fn log_dir() -> Option<PathBuf> {
     backend::log_dir()
 }
+
+/// The desktop virtual-screen rectangle `(x, y, w, h)` in egui points, used to
+/// decide whether a restored window position is still on-screen. Returns `None`
+/// when the bounds are not available (the window manager is then trusted to place
+/// the window). This is the platform seam; the point-space value it returns is
+/// fed into the pure `sanitize_geometry` helper.
+pub fn virtual_screen_bounds_points() -> Option<(i32, i32, i32, i32)> {
+    backend::virtual_screen_bounds_points()
+}

@@ -20,6 +20,7 @@ use crate::app::{
     UiIntent,
 };
 use crate::beacon::api_check::ApiCheckOutcome;
+use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
@@ -96,6 +97,10 @@ pub struct EsoWeaveApp {
     settings_applied: Option<SettingsForm>,
     confirm_uninstall: bool,
     toast: Option<widgets::Toast>,
+    /// The last window geometry captured from the viewport, used to detect a
+    /// change and to keep the normal geometry while maximized. Seeded from the
+    /// restored session so an unchanged restored window is not re-saved.
+    last_geometry: Option<WindowGeometry>,
 }
 
 impl EsoWeaveApp {
@@ -105,6 +110,7 @@ impl EsoWeaveApp {
         model: AppModel,
         toggle_rx: Receiver<Action>,
         api_rx: Receiver<ApiCheckOutcome>,
+        restored_geometry: Option<WindowGeometry>,
     ) -> Self {
         let ui_prefs = model.ui_prefs();
         let log_height = ui_prefs.log_panel_height as f32;
@@ -121,6 +127,44 @@ impl EsoWeaveApp {
             settings_applied: None,
             confirm_uninstall: false,
             toast: None,
+            last_geometry: restored_geometry,
+        }
+    }
+
+    /// Captures the current window geometry from the egui viewport and raises an
+    /// intent when it changes. While maximized, the last normal position and size
+    /// are kept and only the maximized flag is set, so unmaximizing returns to the
+    /// prior geometry. Windows snap (half-screen) is a normal move/resize and is
+    /// captured as normal geometry.
+    fn capture_geometry(&mut self, ctx: &egui::Context, intents: &mut Vec<UiIntent>) {
+        let (outer, inner, maximized) = ctx.input(|i| {
+            let vp = i.viewport();
+            (vp.outer_rect, vp.inner_rect, vp.maximized.unwrap_or(false))
+        });
+        let candidate = if maximized {
+            match self.last_geometry {
+                Some(prev) => WindowGeometry {
+                    maximized: true,
+                    ..prev
+                },
+                // No normal geometry known yet; nothing meaningful to record.
+                None => return,
+            }
+        } else {
+            let (Some(outer), Some(inner)) = (outer, inner) else {
+                return;
+            };
+            WindowGeometry {
+                x: outer.min.x.round() as i32,
+                y: outer.min.y.round() as i32,
+                width: inner.width().round() as u32,
+                height: inner.height().round() as u32,
+                maximized: false,
+            }
+        };
+        if self.last_geometry != Some(candidate) {
+            self.last_geometry = Some(candidate);
+            intents.push(UiIntent::SetWindowGeometry(candidate));
         }
     }
 
@@ -176,6 +220,10 @@ impl eframe::App for EsoWeaveApp {
 
         let mut intents: Vec<UiIntent> = Vec::new();
         let mut exit = false;
+
+        // Record the window geometry each frame; the intent is raised only on a
+        // change and coalesced into a single settle-write by the model.
+        self.capture_geometry(&ctx, &mut intents);
 
         // The live log lives in a resizable bottom panel (drag handle and resize
         // cursor come for free), added before the central panel. It is clamped so
@@ -272,6 +320,13 @@ impl eframe::App for EsoWeaveApp {
             self.toast = None;
         }
 
+        // On the Exit menu item or a window-manager close request, force the
+        // final geometry to disk before the window goes away, so a resize made in
+        // the last moments is not lost to the settle-delayed scheduler.
+        let close_requested = ctx.input(|i| i.viewport().close_requested());
+        if exit || close_requested {
+            self.model.flush_session_now();
+        }
         if exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }

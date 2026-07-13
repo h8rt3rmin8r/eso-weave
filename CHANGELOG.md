@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Window geometry persistence. The application window now records its position,
+  size, and maximized state as they change and restores them on the next launch,
+  reopening where and how it was last left, including on the same monitor of a
+  multi-monitor desktop. A recorded position that is no longer on any connected
+  monitor (a disconnected or reconfigured display) falls back to a visible default
+  rather than opening off-screen, and a degenerate size is clamped to the usable
+  range. Geometry is written to `state.json` and a change made immediately before
+  closing is flushed on exit.
+
+### Decisions
+
+- 2026-07-13: Window geometry is stored as session state in `state.json` (session
+  schema 2 to 3, additive forward migration), not in the settings file, because it
+  is automatically captured runtime state; this honors the constitution's
+  configuration-holds-user-settings-only constraint. eframe's built-in window
+  persistence was rejected to avoid a second persistence store and to keep the
+  project's JSON-with-schema-version convention.
+- 2026-07-13: Added the `Win32_UI_HiDpi` feature to the windows-sys dependency for
+  `GetDpiForSystem`, used to convert the physical virtual-screen bounds to egui
+  points for the off-screen recovery check. windows-sys is not a pinned artifact.
+
 ## [0.5.0] - 2026-07-13
 
 ### Added

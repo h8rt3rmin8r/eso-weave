@@ -25,6 +25,7 @@ fn session_state_round_trips() {
         suspended: true,
         fishing: true,
         api_version: Default::default(),
+        window: None,
     };
     state::save(dir.path(), &state).unwrap();
     let (loaded, notices) = state::load(dir.path());
@@ -124,6 +125,7 @@ fn restore_suspended_keeps_engine_suspended() {
         suspended: true,
         fishing: false,
         api_version: Default::default(),
+        window: None,
     });
     // The engine is suspended, so the weave worker produces no input regardless
     // of focus; combined with the backend's focus-scoped synthesis this upholds
@@ -141,12 +143,62 @@ fn restore_fishing_marks_active_and_round_trips() {
         suspended: false,
         fishing: true,
         api_version: Default::default(),
+        window: None,
     });
     assert!(model.view().fishing_active);
     // The persisted intent is a single on/off flag.
     let state = model.current_session_state();
     assert!(state.fishing);
     assert!(!state.suspended);
+}
+
+#[test]
+fn window_geometry_persists_and_restores_through_the_model() {
+    use eso_weave::config::state::WindowGeometry;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+
+    let geo = WindowGeometry {
+        x: 120,
+        y: 64,
+        width: 820,
+        height: 900,
+        maximized: false,
+    };
+    model.apply_intent(UiIntent::SetWindowGeometry(geo));
+    // The geometry change marks the session dirty and persists on settle.
+    assert!(model.maybe_flush(Instant::now() + Duration::from_millis(500)));
+
+    let (loaded, _) = state::load(dir.path());
+    assert_eq!(loaded.window, Some(geo));
+
+    // A fresh model restores the geometry and round-trips it back out.
+    let mut restored = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+    restored.restore_session(loaded);
+    assert_eq!(restored.current_session_state().window, Some(geo));
+}
+
+#[test]
+fn flush_session_now_writes_immediately_without_settle() {
+    use eso_weave::config::state::WindowGeometry;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+
+    let geo = WindowGeometry {
+        x: 5,
+        y: 5,
+        width: 640,
+        height: 480,
+        maximized: true,
+    };
+    model.apply_intent(UiIntent::SetWindowGeometry(geo));
+    // Nothing has settled, but a forced flush (used on window close) writes now.
+    assert!(!model.maybe_flush(Instant::now()));
+    assert!(model.flush_session_now());
+    let (loaded, _) = state::load(dir.path());
+    assert_eq!(loaded.window, Some(geo));
 }
 
 // Hotkey-driven toggles reach the same state as the GUI buttons (feature 015).

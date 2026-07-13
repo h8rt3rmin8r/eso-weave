@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
-use crate::config::state::{ApiVersionCache, SessionState, CURRENT_STATE_VERSION};
+use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
@@ -356,6 +356,8 @@ pub enum UiIntent {
     SetLogFilter(LevelName),
     /// Persist the live-log panel height (a user layout preference), in points.
     SetLogHeight(u32),
+    /// Record the latest window geometry (session state), restored on next launch.
+    SetWindowGeometry(WindowGeometry),
 }
 
 /// Clamps a live-log panel height (points) to a sensible range for the given
@@ -458,6 +460,15 @@ impl SaveScheduler {
         self.last_change = None;
         flags
     }
+
+    /// Clears only the session dirty flag, after a forced session write. A pending
+    /// config write is left intact.
+    pub fn clear_session(&mut self) {
+        self.dirty_session = false;
+        if !self.dirty_config {
+            self.last_change = None;
+        }
+    }
 }
 
 /// The application model: holds the shared subsystem handles, derives the view,
@@ -476,6 +487,7 @@ pub struct AppModel {
     log_filter: LevelName,
     scheduler: SaveScheduler,
     api_version: ApiVersionCache,
+    window: Option<WindowGeometry>,
 }
 
 impl AppModel {
@@ -507,6 +519,7 @@ impl AppModel {
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
             api_version: ApiVersionCache::default(),
+            window: None,
         }
     }
 
@@ -614,6 +627,13 @@ impl AppModel {
                 self.scheduler.mark_config(Instant::now());
                 Vec::new()
             }
+            UiIntent::SetWindowGeometry(geometry) => {
+                if self.window != Some(geometry) {
+                    self.window = Some(geometry);
+                    self.scheduler.mark_session(Instant::now());
+                }
+                Vec::new()
+            }
         }
     }
 
@@ -707,6 +727,7 @@ impl AppModel {
     /// to the focused game window by the input backend.
     pub fn restore_session(&mut self, state: SessionState) {
         self.api_version = state.api_version;
+        self.window = state.window;
         if state.suspended != self.input.is_suspended() {
             self.input.set_suspended(state.suspended);
         }
@@ -761,6 +782,7 @@ impl AppModel {
             suspended: self.input.is_suspended(),
             fishing: fishing_on,
             api_version: self.api_version,
+            window: self.window,
         }
     }
 
@@ -794,6 +816,27 @@ impl AppModel {
             }
         }
         saved
+    }
+
+    /// Forces an immediate write of the current session state, used on window
+    /// close so a change made in the final moments before exit (for example a
+    /// resize) is not lost to the settle-delayed scheduler. Returns whether a
+    /// write occurred.
+    pub fn flush_session_now(&mut self) -> bool {
+        let Some(dir) = self.config_dir.clone() else {
+            return false;
+        };
+        let state = self.current_session_state();
+        match config::state::save(&dir, &state) {
+            Ok(()) => {
+                self.scheduler.clear_session();
+                true
+            }
+            Err(err) => {
+                tracing::warn!(target: "eso_weave::config", "could not save session state on close: {err}");
+                false
+            }
+        }
     }
 
     /// Syncs the live weave engine configuration back into the settings so

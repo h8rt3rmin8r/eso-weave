@@ -8,3 +8,10 @@ pub fn log_dir() -> Option<PathBuf> {
         .or_else(dirs::config_dir)
         .map(|d| d.join(super::APP_DIR).join("logs"))
 }
+
+/// Position placement is left to the window manager on Linux (Wayland cannot
+/// report or set absolute window position), so no virtual-screen bounds are
+/// supplied and the restored position is trusted.
+pub fn virtual_screen_bounds_points() -> Option<(i32, i32, i32, i32)> {
+    None
+}

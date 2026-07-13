@@ -16,6 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{route_reader_event, ui::EsoWeaveApp, AppModel};
+use eso_weave::config::state::{sanitize_geometry, RestoreBounds};
 use eso_weave::config::{self, LoadOutcome};
 use eso_weave::fishing::{FishingConfig, FishingController, FishingState, RealFishingSink};
 use eso_weave::input::bindings::BindingTable;
@@ -188,6 +189,11 @@ fn main() {
             )
         })
         .unwrap_or((None, None));
+
+    // The restored window geometry (if any), captured before `session` is moved
+    // into the model, used both to build the viewport and to seed the GUI's
+    // change detection so an unchanged restored window is not re-saved.
+    let restored_geometry = session.as_ref().and_then(|(state, _)| state.window);
     let (api_tx, api_rx) = std::sync::mpsc::channel();
     let mut model = AppModel::new(
         input.clone(),
@@ -228,9 +234,38 @@ fn main() {
     // pop a message box).
     gui_started.store(true, std::sync::atomic::Ordering::SeqCst);
 
-    let mut viewport = eframe::egui::ViewportBuilder::default()
-        .with_inner_size([600.0, 720.0])
-        .with_min_inner_size([480.0, 420.0]);
+    // Default size and minimum size the window falls back to when no geometry is
+    // restored or a recorded value is rejected.
+    const DEFAULT_SIZE: [f32; 2] = [600.0, 720.0];
+    const MIN_SIZE: [f32; 2] = [480.0, 420.0];
+    let mut viewport = eframe::egui::ViewportBuilder::default().with_min_inner_size(MIN_SIZE);
+    if let Some(geo) = restored_geometry {
+        let virtual_screen = platform::virtual_screen_bounds_points();
+        // Cap the restored size at the desktop extent when known, else a generous
+        // fallback; the pure helper clamps and validates the recorded values.
+        let (max_w, max_h) = virtual_screen
+            .map(|(_, _, w, h)| (w as u32, h as u32))
+            .unwrap_or((8000, 8000));
+        let restore = sanitize_geometry(
+            geo,
+            RestoreBounds {
+                min_w: MIN_SIZE[0] as u32,
+                min_h: MIN_SIZE[1] as u32,
+                max_w,
+                max_h,
+                virtual_screen,
+            },
+        );
+        viewport = viewport.with_inner_size([restore.width as f32, restore.height as f32]);
+        if let Some((x, y)) = restore.position {
+            viewport = viewport.with_position([x as f32, y as f32]);
+        }
+        if restore.maximized {
+            viewport = viewport.with_maximized(true);
+        }
+    } else {
+        viewport = viewport.with_inner_size(DEFAULT_SIZE);
+    }
     if let Some(icon) = window_icon() {
         viewport = viewport.with_icon(icon);
     }
@@ -243,7 +278,12 @@ fn main() {
         native_options,
         Box::new(|cc| {
             eso_weave::app::theme::install_fonts(&cc.egui_ctx);
-            Ok(Box::new(EsoWeaveApp::new(model, toggle_rx, api_rx)))
+            Ok(Box::new(EsoWeaveApp::new(
+                model,
+                toggle_rx,
+                api_rx,
+                restored_geometry,
+            )))
         }),
     ) {
         tracing::error!(target: "eso_weave", "GUI exited with error: {err}");
