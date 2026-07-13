@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Fishing engine transition logging. The fishing controller now narrates every
+  state transition at debug level under `eso_weave::fishing`: the cast interact
+  and its confirmation window, cast detected, bite detected, reel and recast
+  interacts, and every disable with its stop reason. A failed fishing session is
+  now diagnosable from the log alone.
+
+### Fixed
+
+- Fishing casts are now detected. PixelBeacon's fishing detection previously
+  hinged on `EVENT_CLIENT_INTERACT_RESULT`, which the game's interface registers
+  as an error-alert channel that never fires on a clean successful cast, so the
+  waiting signal was never rendered and every session timed out to Idle with no
+  cast detected. The addon (version 4) now polls the game's interaction state on
+  a 100 ms tick, mirroring the game's own reticle: `GetInteractionType() ==
+  INTERACTION_FISH` drives the waiting signal, the reticle action matching the
+  localized reel-in string is the primary bite signal, and bait consumption
+  (now scoped to `ITEM_SOUND_CATEGORY_LURE`, fixing a false-bite defect where
+  any single-stack decrease counted) remains the secondary bite signal.
+
+### Decisions
+
+- 2026-07-13: Retired `EVENT_CLIENT_INTERACT_RESULT` from the PixelBeacon
+  fishing-detection contract and replaced it with poll-authoritative detection
+  (specification section 10.2 updated). Verified against the official interface
+  source (github.com/esoui/esoui, branch live, pushed 2026-06-29, APIVersion
+  101050): the event's sole official consumer is the alert-text error handler
+  (alerthandlers.lua:1387), while the game's reticle polls `GetInteractionType()`
+  every frame (reticle.lua:310) and the string table defines the reel-in action
+  (en_client.lua:3258). Citations recorded in
+  `specs/025-fishing-interaction-detection/research.md`.
+
 ## [0.6.0] - 2026-07-13
 
 ### Added

@@ -70,5 +70,5 @@ authorization requirement is unchanged: never push to `main` without it.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/020-spec-rewrite-and-fishing-docs/plan.md
+at specs/025-fishing-interaction-detection/plan.md
 <!-- SPECKIT END -->

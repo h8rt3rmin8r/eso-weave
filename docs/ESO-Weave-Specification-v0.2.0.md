@@ -458,20 +458,32 @@ beyond the blocks, no libraries, and no saved variables, and it is never publish
 to addon indexes. It ships embedded in the application binary and is managed
 exclusively by the Beacon Manager.
 
-### 10.2 Bite detection contract
+### 10.2 Fishing detection contract
 
-PixelBeacon detects a bite via the bait-consumption mechanism established by prior
-art in the ESO addon community:
+PixelBeacon detects the cast and the bite by polling the game's authoritative
+interaction state, mirroring the game's own reticle (which samples the same
+state every frame):
 
-- Register `EVENT_INVENTORY_SINGLE_SLOT_UPDATE` and treat a stack-count change of
-  -1 on the equipped bait, while a fishing interaction is active and no menu is
-  open, as a bite.
-- Gate "fishing interaction active" on the client interaction result
-  (`EVENT_CLIENT_INTERACT_RESULT` with interaction type `INTERACTION_FISH` while
-  the game camera is interacting).
-- Clear the bite state when a new item is gained (catch resolved), on
-  `EVENT_CHATTER_END`, or after a safety timeout.
-- Suppress detection while menus are open to avoid consumable-use false positives.
+- A periodic update tick (100 ms) samples `GetInteractionType()`. While it
+  returns `INTERACTION_FISH` a cast is active: the tick drives idle to waiting
+  and, when the interaction ends, waiting or bite back to idle within one tick.
+- Primary bite signal: while waiting, the tick compares the reticle action from
+  `GetGameCameraInteractableActionInfo()` against the game's localized reel-in
+  string (`GetString(SI_GAMECAMERAACTIONTYPE17)`); a match drives waiting to
+  bite. Both comparands come from the game's string table, so the comparison is
+  language independent.
+- Secondary bite signal: `EVENT_INVENTORY_SINGLE_SLOT_UPDATE` with a stack-count
+  change of -1 carrying `ITEM_SOUND_CATEGORY_LURE` (the equipped bait), while a
+  cast is active and no menu is open, also drives a bite.
+- The tick never demotes a rendered bite to waiting. The bite clears when a new
+  item is gained (catch resolved), after a safety timeout, or when the
+  interaction ends; `EVENT_CHATTER_END` remains as redundant cleanup.
+- Suppress the inventory signal while menus are open to avoid consumable-use
+  false positives.
+- `EVENT_CLIENT_INTERACT_RESULT` is not consulted: the game's interface registers
+  it as an error-alert channel carrying interaction failure codes, so it never
+  fires on a clean successful cast (root cause of the pre-025 failures, retired
+  by a dated decision).
 
 ### 10.3 Pixel bus protocol
 

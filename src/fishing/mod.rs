@@ -285,6 +285,7 @@ impl FishingController {
     pub fn set_enabled(&mut self, enabled: bool, now_ms: u64, sink: &mut dyn FishingSink) {
         if enabled {
             if self.state == FishingState::Disabled {
+                tracing::debug!(target: "eso_weave::fishing", "fishing enabled");
                 self.cast(now_ms, sink);
             }
         } else if self.state != FishingState::Disabled {
@@ -303,12 +304,21 @@ impl FishingController {
             DetectorEvent::Heartbeat => {}
             DetectorEvent::FishingStarted => {
                 if matches!(self.state, FishingState::Armed | FishingState::Recast) {
+                    tracing::debug!(
+                        target: "eso_weave::fishing",
+                        "cast detected; waiting for bite"
+                    );
                     self.state = FishingState::Waiting;
                     self.deadline = None;
                 }
             }
             DetectorEvent::BiteDetected => {
                 if matches!(self.state, FishingState::Waiting | FishingState::Armed) {
+                    tracing::debug!(
+                        target: "eso_weave::fishing",
+                        "bite detected; reeling in {} ms",
+                        self.config.reel_delay_ms
+                    );
                     self.state = FishingState::Reeling;
                     self.deadline = Some((
                         now_ms + u64::from(self.config.reel_delay_ms),
@@ -322,6 +332,10 @@ impl FishingController {
                     FishingState::Waiting | FishingState::Reeling | FishingState::Recast
                 ) {
                     // Cancel any pending interact and re-cast (heartbeat is live).
+                    tracing::debug!(
+                        target: "eso_weave::fishing",
+                        "cast ended without a resolved bite; recasting"
+                    );
                     self.cast(now_ms, sink);
                 }
             }
@@ -339,6 +353,11 @@ impl FishingController {
         match kind {
             TimerKind::ArmTimeout => self.disable(StopReason::NoCastDetected),
             TimerKind::ReelDue => {
+                tracing::debug!(
+                    target: "eso_weave::fishing",
+                    "reel interact sent; recast in {} ms",
+                    self.config.recast_delay_ms
+                );
                 self.send_interact(sink);
                 self.state = FishingState::Recast;
                 self.deadline = Some((
@@ -347,19 +366,35 @@ impl FishingController {
                 ));
             }
             TimerKind::RecastDue => {
+                tracing::debug!(
+                    target: "eso_weave::fishing",
+                    "recast interact sent; awaiting cast confirmation for {} ms",
+                    self.config.arm_timeout_ms
+                );
                 self.send_interact(sink);
                 self.deadline = Some((
                     now_ms + u64::from(self.config.arm_timeout_ms),
                     TimerKind::RecastArmTimeout,
                 ));
             }
-            TimerKind::RecastArmTimeout => self.cast(now_ms, sink),
+            TimerKind::RecastArmTimeout => {
+                tracing::debug!(
+                    target: "eso_weave::fishing",
+                    "recast unconfirmed; casting again"
+                );
+                self.cast(now_ms, sink);
+            }
         }
     }
 
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and
     /// clears any prior stop reason now that a fresh session is starting.
     fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
+        tracing::debug!(
+            target: "eso_weave::fishing",
+            "cast interact sent; armed with a {} ms cast-confirmation window",
+            self.config.arm_timeout_ms
+        );
         self.stop_reason = None;
         self.send_interact(sink);
         self.state = FishingState::Armed;
@@ -372,6 +407,7 @@ impl FishingController {
     /// Returns to Disabled, clears any pending deadline, and records why; emits
     /// nothing.
     fn disable(&mut self, reason: StopReason) {
+        tracing::debug!(target: "eso_weave::fishing", "fishing disabled: {reason:?}");
         self.state = FishingState::Disabled;
         self.deadline = None;
         self.stop_reason = Some(reason);

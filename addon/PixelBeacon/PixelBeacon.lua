@@ -6,11 +6,16 @@
 -- has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
 -- section 9.3 and the slice 014 weapon-bar block.
+--
+-- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
+-- periodic tick samples the interaction type for the waiting state and the
+-- reticle action for the primary bite signal; bait consumption is the scoped
+-- secondary bite signal.
 
 local ADDON_NAME = "PixelBeacon"
-local ADDON_VERSION = 2
 local BLOCK_PX = 16
 local LATENCY_UPDATE_MS = 1000
+local FISHING_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
 
 -- Weapon-class codes, shared byte-for-byte with the ESO Weave pixel-bus reader.
@@ -34,7 +39,6 @@ local em = EVENT_MANAGER
 
 -- Fishing state: "idle", "waiting" (cast active), or "bite".
 local fishingState = "idle"
-local fishingInteractionActive = false
 
 local root
 local blocks = {}
@@ -193,61 +197,82 @@ local function setFishingState(state)
     renderFishing()
 end
 
--- Bite detection ------------------------------------------------------------
+-- Fishing detection ----------------------------------------------------------
 
 local function isMenuOpen()
     -- A menu is open when neither the gameplay HUD nor the HUD UI scene is shown.
     return not (SCENE_MANAGER:IsShowing("hud") or SCENE_MANAGER:IsShowing("hudui"))
 end
 
-local function clearBite()
-    if fishingState == "bite" then
-        setFishingState("waiting")
-    end
+local function clearBiteTimer()
     em:UnregisterForUpdate(ADDON_NAME .. "BiteTimeout")
 end
 
 local function onBiteSafetyTimeout()
-    em:UnregisterForUpdate(ADDON_NAME .. "BiteTimeout")
-    clearBite()
-end
-
-local function onBite()
-    setFishingState("bite")
-    em:UnregisterForUpdate(ADDON_NAME .. "BiteTimeout")
-    em:RegisterForUpdate(ADDON_NAME .. "BiteTimeout", BITE_SAFETY_TIMEOUT_MS, onBiteSafetyTimeout)
-end
-
--- A stack-count decrease of one on the equipped bait while a fishing interaction
--- is active, and no menu is open, is a bite.
-local function onInventorySlotUpdate(_, bagId, slotId, isNewItem, _, _, stackCountChange)
-    if isNewItem then
-        -- A new item is gained (catch resolved): clear any bite.
-        clearBite()
-        return
-    end
-    if not fishingInteractionActive or isMenuOpen() then
-        return
-    end
-    if stackCountChange == -1 then
-        onBite()
-    end
-end
-
-local function onInteractResult()
-    -- A fishing interaction is active while the game camera is interacting with a
-    -- fishing node.
-    fishingInteractionActive = IsGameCameraActive()
-        and GetInteractionType() == INTERACTION_FISH
-    if fishingInteractionActive then
+    -- Safety net unchanged: an unreeled bite reverts to waiting.
+    clearBiteTimer()
+    if fishingState == "bite" then
         setFishingState("waiting")
     end
 end
 
+local function onBite()
+    setFishingState("bite")
+    clearBiteTimer()
+    em:RegisterForUpdate(ADDON_NAME .. "BiteTimeout", BITE_SAFETY_TIMEOUT_MS, onBiteSafetyTimeout)
+end
+
+-- The authoritative fishing poll. The game's own reticle samples the interaction
+-- type every frame; an active cast holds INTERACTION_FISH for the whole
+-- cast-wait-bite window, and the reticle action flips to the localized "Reel In"
+-- string while a fish is hooked. The poll never demotes a rendered bite; a bite
+-- ends on catch resolution, the safety timeout, or the interaction ending.
+local function onFishingTick()
+    if GetInteractionType() ~= INTERACTION_FISH then
+        if fishingState ~= "idle" then
+            clearBiteTimer()
+            setFishingState("idle")
+        end
+        return
+    end
+    if fishingState == "idle" then
+        setFishingState("waiting")
+    end
+    if fishingState == "waiting" then
+        -- Primary bite signal: the interact prompt is the reel-in action. Both
+        -- comparands come from the game's string table, so this holds in every
+        -- game language.
+        local action = GetGameCameraInteractableActionInfo()
+        if action == GetString(SI_GAMECAMERAACTIONTYPE17) then
+            onBite()
+        end
+    end
+end
+
+-- Secondary bite signal: the equipped bait's stack decreases by one while a cast
+-- is active and no menu is open. The lure sound category scopes the decrease to
+-- bait, so unrelated consumables are never reported as bites.
+local function onInventorySlotUpdate(_, _, _, isNewItem, itemSoundCategory, _, stackCountChange)
+    if isNewItem then
+        -- A new item is gained (catch resolved): the bite is over.
+        if fishingState == "bite" then
+            clearBiteTimer()
+            setFishingState("waiting")
+        end
+        return
+    end
+    if fishingState == "idle" or isMenuOpen() then
+        return
+    end
+    if stackCountChange == -1 and itemSoundCategory == ITEM_SOUND_CATEGORY_LURE then
+        onBite()
+    end
+end
+
 local function onChatterEnd()
-    fishingInteractionActive = false
+    -- Cleanup only; the fishing tick is authoritative and would converge anyway.
+    clearBiteTimer()
     setFishingState("idle")
-    clearBite()
 end
 
 -- Initialization ------------------------------------------------------------
@@ -293,8 +318,8 @@ local function onAddOnLoaded(_, name)
     buildBlocks()
 
     em:RegisterForUpdate(ADDON_NAME .. "Latency", LATENCY_UPDATE_MS, onLatencyTick)
+    em:RegisterForUpdate(ADDON_NAME .. "Fishing", FISHING_UPDATE_MS, onFishingTick)
     em:RegisterForEvent(ADDON_NAME .. "Inv", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, onInventorySlotUpdate)
-    em:RegisterForEvent(ADDON_NAME .. "Interact", EVENT_CLIENT_INTERACT_RESULT, onInteractResult)
     em:RegisterForEvent(ADDON_NAME .. "Chatter", EVENT_CHATTER_END, onChatterEnd)
 
     -- Weapon-bar tracking: react immediately to a real bar swap, and re-baseline
