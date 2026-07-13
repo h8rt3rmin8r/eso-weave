@@ -60,11 +60,11 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_four() {
-    // Bumped so the app classifies an existing on-disk version-3 install as
-    // outdated and refreshes it, delivering the rewritten fishing detection.
-    assert_eq!(embedded_version(), 4);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(4));
+fn embedded_manifest_version_is_five() {
+    // Bumped so the app classifies an existing on-disk version-4 install as
+    // outdated and refreshes it, delivering the corrected bite signal.
+    assert_eq!(embedded_version(), 5);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(5));
 }
 
 #[test]

@@ -8,9 +8,9 @@
 -- section 9.3 and the slice 014 weapon-bar block.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
--- periodic tick samples the interaction type for the waiting state and the
--- reticle action for the primary bite signal; bait consumption is the scoped
--- secondary bite signal.
+-- periodic tick samples the interaction type for the waiting state, and the
+-- lure-scoped bait-consumption inventory event is the sole bite signal (the
+-- reel-in interact prompt is the standing cast prompt, not a bite indicator).
 
 local ADDON_NAME = "PixelBeacon"
 local BLOCK_PX = 16
@@ -224,9 +224,11 @@ end
 
 -- The authoritative fishing poll. The game's own reticle samples the interaction
 -- type every frame; an active cast holds INTERACTION_FISH for the whole
--- cast-wait-bite window, and the reticle action flips to the localized "Reel In"
--- string while a fish is hooked. The poll never demotes a rendered bite; a bite
--- ends on catch resolution, the safety timeout, or the interaction ending.
+-- cast-wait-bite window. The tick tracks only the cast: the reel-in interact
+-- prompt is the standing prompt for the entire cast (it is how a player reels
+-- in early manually) and is never consulted, and the poll never demotes a
+-- rendered bite; a bite ends on catch resolution, the safety timeout, or the
+-- interaction ending.
 local function onFishingTick()
     if GetInteractionType() ~= INTERACTION_FISH then
         if fishingState ~= "idle" then
@@ -238,20 +240,12 @@ local function onFishingTick()
     if fishingState == "idle" then
         setFishingState("waiting")
     end
-    if fishingState == "waiting" then
-        -- Primary bite signal: the interact prompt is the reel-in action. Both
-        -- comparands come from the game's string table, so this holds in every
-        -- game language.
-        local action = GetGameCameraInteractableActionInfo()
-        if action == GetString(SI_GAMECAMERAACTIONTYPE17) then
-            onBite()
-        end
-    end
 end
 
--- Secondary bite signal: the equipped bait's stack decreases by one while a cast
--- is active and no menu is open. The lure sound category scopes the decrease to
--- bait, so unrelated consumables are never reported as bites.
+-- The sole bite signal: the equipped bait's stack decreases by one while a cast
+-- is active and no menu is open (the game consumes the bait when the fish takes
+-- it). The lure sound category scopes the decrease to bait, so unrelated
+-- consumables are never reported as bites.
 local function onInventorySlotUpdate(_, _, _, isNewItem, itemSoundCategory, _, stackCountChange)
     if isNewItem then
         -- A new item is gained (catch resolved): the bite is over.

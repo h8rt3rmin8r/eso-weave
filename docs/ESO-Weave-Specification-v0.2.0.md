@@ -467,14 +467,17 @@ state every frame):
 - A periodic update tick (100 ms) samples `GetInteractionType()`. While it
   returns `INTERACTION_FISH` a cast is active: the tick drives idle to waiting
   and, when the interaction ends, waiting or bite back to idle within one tick.
-- Primary bite signal: while waiting, the tick compares the reticle action from
-  `GetGameCameraInteractableActionInfo()` against the game's localized reel-in
-  string (`GetString(SI_GAMECAMERAACTIONTYPE17)`); a match drives waiting to
-  bite. Both comparands come from the game's string table, so the comparison is
-  language independent.
-- Secondary bite signal: `EVENT_INVENTORY_SINGLE_SLOT_UPDATE` with a stack-count
+- The sole bite signal: `EVENT_INVENTORY_SINGLE_SLOT_UPDATE` with a stack-count
   change of -1 carrying `ITEM_SOUND_CATEGORY_LURE` (the equipped bait), while a
-  cast is active and no menu is open, also drives a bite.
+  cast is active and no menu is open. The game consumes the bait when the fish
+  takes it, making this the one reliable hooked-fish observable available to
+  addons.
+- The reel-in interact prompt (`SI_GAMECAMERAACTIONTYPE17`) is the standing
+  prompt for the entire time the line is in the water (it is how a player reels
+  in early manually); it is never consulted as a bite indicator (a dated
+  decision corrected the brief pre-026 contract that treated it as one).
+- Waiting persists indefinitely until a bite, the interaction ending, or the
+  player stopping; the addon never synthesizes a bite from a timer or prompt.
 - The tick never demotes a rendered bite to waiting. The bite clears when a new
   item is gained (catch resolved), after a safety timeout, or when the
   interaction ends; `EVENT_CHATTER_END` remains as redundant cleanup.

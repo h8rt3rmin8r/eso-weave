@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The app no longer reels in immediately after casting. Version 5 of the
+  addon (v0.6.1's version 4) misread the reel-in interact prompt as a bite:
+  that prompt is shown for the entire time the line is in the water (it is
+  how a player reels in early manually), so every cast registered a bite on
+  the first poll tick, reeled 100 ms later, recast, and looped at roughly
+  two casts per second, consuming bait each cycle. The prompt is no longer
+  consulted at all; the sole bite signal is the equipped bait's stack
+  decreasing (the game consumes the bait when the fish takes it), the same
+  trigger both proven reference implementations use. A cast now waits as
+  long as the fish takes.
+
+### Decisions
+
+- 2026-07-13: Corrected the 2026-07-13 slice 025 decision. The reticle
+  action matching `SI_GAMECAMERAACTIONTYPE17` ("Reel In") is the standing
+  cast prompt, not a bite indicator, proven by the v0.6.1 field log (bite
+  fired 200 to 800 ms after every cast, on the first poll tick). The
+  fishing-detection contract (specification section 10.2) now names the
+  lure-scoped bait-consumption inventory event as the sole bite signal,
+  matching InfoPanel 1.63 and fishyboteso's FishingStateMachine (which
+  never compares the action string). Evidence and citations in
+  `specs/026-fishing-bite-signal/research.md`.
+
 ## [0.6.1] - 2026-07-13
 
 ### Added
