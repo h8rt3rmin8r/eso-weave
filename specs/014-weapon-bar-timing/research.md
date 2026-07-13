@@ -32,7 +32,7 @@ are firm.
 - **Sources**: Combat Metrics community measurements (dpencil1 thread), UESP Heavy
   Attack page. One-hand-and-shield is unquantified in sources: flagged as a TODO to
   measure in-game.
-- **Deliverable**: an appendix to `docs/ESO-Weave-Specification-v0.1.0.md` recording
+- **Deliverable**: an appendix to `docs/ESO-Weave-Specification-v0.2.0.md` recording
   these defaults and their sources, and section 16 updated to mark R1 closed.
 
 ## Detection API (add-on side)

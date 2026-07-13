@@ -33,7 +33,7 @@ Sync Impact Report
 ### I. Spec-Driven Development (NON-NEGOTIABLE)
 
 Every feature traces to the master specification
-(`docs/ESO-Weave-Specification-v0.1.0.md`) and is built through the full
+(`docs/ESO-Weave-Specification-v0.2.0.md`) and is built through the full
 spec-kit sequence before any implementation code: specify, clarify, checklist,
 plan, tasks, analyze, then implement. Work lands as a numbered
 `specs/NNN-name/` slice holding its `spec.md`, `plan.md`, and `tasks.md`. Build

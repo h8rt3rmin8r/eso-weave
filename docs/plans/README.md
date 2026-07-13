@@ -1,7 +1,7 @@
 # Build Plans
 
 This directory holds ESO Weave build plans. A build plan decomposes the master
-specification (`docs/ESO-Weave-Specification-v0.1.0.md`) into an ordered set of
+specification (`docs/ESO-Weave-Specification-v0.2.0.md`) into an ordered set of
 work slices, each scoped to become one spec-kit feature under `specs/NNN-name/`.
 
 Two documents share the word "plan"; they are distinct:

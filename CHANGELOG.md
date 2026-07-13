@@ -18,8 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   manifest with no network and no stored value; the last known API version and
   last seen game version persist in `state.json`.
 
+### Documentation
+
+- The master specification is rewritten as `docs/ESO-Weave-Specification-v0.2.0.md`,
+  documenting the system as built in a declarative voice with expanded mermaid
+  diagrams (system architecture, concurrency and ownership, input interception,
+  weave sequence, fishing state machine, pixel-bus pipeline, beacon lifecycle, API
+  version check, GUI layout, and config and state persistence). Every repository
+  reference is repointed to v0.2.0 and the superseded v0.1.0 file is removed.
+- The README fishing usage now includes bait selection: without bait selected in
+  game the F2 cast fails and fishing never starts. Bait is added as a
+  prerequisite, as an explicit step in "Using it", and as a troubleshooting check.
+
 ### Decisions
 
+- 2026-07-12: The master specification is superseded by
+  `docs/ESO-Weave-Specification-v0.2.0.md`. Per the constitution, a new master-spec
+  version lapses the standing Build-Phase Autopilot authorization; this rewrite was
+  produced under an explicit operator kickoff, and the standing autopilot
+  authorization is re-affirmed against v0.2.0. The version is bumped (not a v0.1.0
+  in-place edit) so the document maturity matches its filename, at the cost of
+  repointing the path references, which are updated in the same change.
 - 2026-07-12: Added a networked dependency, `ureq` (blocking, rustls TLS), to
   support the startup ESO API version check. No async runtime is introduced; the
   check runs on a `std::thread`. `Cargo.toml` is not a pinned artifact; this entry
@@ -168,7 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through staves and bow slowest). The main window shows the detected bar and
   weapon classes, and the settings expose the auto-timing toggle and a back-bar
   timing group. Closes research item R1 with a new timing appendix
-  (`docs/ESO-Weave-Specification-v0.1.0.md` Appendix A). The exact preset values
+  (`docs/ESO-Weave-Specification-v0.2.0.md` Appendix A). The exact preset values
   and the pixel signal require in-game validation (an explicit follow-up).
 - GUI Ergonomics, Information Design, and Auto-Save (S013): a substantial rework
   of the main window. Two-state controls (suspend and resume, fishing, per-skill

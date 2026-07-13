@@ -2,7 +2,7 @@
 
 Plan: 001
 Status: active
-Master specification: `docs/ESO-Weave-Specification-v0.1.0.md`
+Master specification: `docs/ESO-Weave-Specification-v0.2.0.md`
 Constitution: `.specify/memory/constitution.md`
 
 ## Purpose

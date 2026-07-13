@@ -107,7 +107,7 @@ than a slower-heavy class bar; auto off uses manual values that were preserved.
 
 ## Phase 6: User Story 4 - Documented evidence-based defaults (Priority: P3)
 
-- [ ] T018 [US4] Add the R1 timing appendix to `docs/ESO-Weave-Specification-v0.1.0.md` (global-cooldown context, per-weapon-class heavy-attack defaults with sources, and the in-game validation owed) and update section 16 to mark R1 closed
+- [ ] T018 [US4] Add the R1 timing appendix to `docs/ESO-Weave-Specification-v0.2.0.md` (global-cooldown context, per-weapon-class heavy-attack defaults with sources, and the in-game validation owed) and update section 16 to mark R1 closed
 
 ---
 

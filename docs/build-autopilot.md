@@ -14,7 +14,7 @@ conflict, the constitution wins.
 ## Purpose
 
 Every feature derived from the master specification
-(`docs/ESO-Weave-Specification-v0.1.0.md`) runs the same spec-kit sequence. The
+(`docs/ESO-Weave-Specification-v0.2.0.md`) runs the same spec-kit sequence. The
 sequence and slice boundaries of those features come from the current build plan
 under `docs/plans/` (index `docs/plans/README.md`); the master specification
 supplies each slice's technical scope. The default agent behavior pauses for
@@ -133,7 +133,7 @@ explicit authorization.
 ## Scope and expiry
 
 Autopilot is valid for features derived from
-`docs/ESO-Weave-Specification-v0.1.0.md`. It also applies to any other feature or
+`docs/ESO-Weave-Specification-v0.2.0.md`. It also applies to any other feature or
 task when the operator explicitly requests an autopilot run (for example "run the
 MSI packaging under autopilot" or "autopilot this"). Such an explicit request
 authorizes autopilot for the named work and is itself the renewal.

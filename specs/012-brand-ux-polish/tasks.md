@@ -116,7 +116,7 @@ default-off shortcut checkbox honored on install, and branded wizard art.
 index and master spec reference the brand standard.
 
 - [ ] T029 [US4] Add a `plan-002.md` row to [docs/plans/README.md](docs/plans/README.md) and create [docs/plans/plan-002.md](docs/plans/plan-002.md) registering the brand-and-UX-polish slice.
-- [ ] T030 [P] [US4] Add a light note to the GUI section of [docs/ESO-Weave-Specification-v0.1.0.md](docs/ESO-Weave-Specification-v0.1.0.md) that a brand standard (`docs/brand/ESO-Weave-Brand-v1.md`) now governs visual identity.
+- [ ] T030 [P] [US4] Add a light note to the GUI section of [docs/ESO-Weave-Specification-v0.2.0.md](docs/ESO-Weave-Specification-v0.2.0.md) that a brand standard (`docs/brand/ESO-Weave-Brand-v1.md`) now governs visual identity.
 
 ---
 

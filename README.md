@@ -65,6 +65,9 @@ again to stop.
 
 For fishing to work, all of the following must be true:
 
+- You have fishing bait selected in game. ESO will not cast the line without
+  bait, so if no bait is selected the F2 automation cannot start a cast and
+  fishing will not run. Select a bait before you begin.
 - The PixelBeacon addon is installed. Use the app's Pixel Beacon (Addon) control
   to install it, and confirm the app shows it as installed and current.
 - The addon is enabled in the in-game AddOns menu and is not flagged "Out of
@@ -79,11 +82,13 @@ For fishing to work, all of the following must be true:
 ### Using it
 
 1. Confirm the Pixel Beacon (Addon) status in the app looks healthy.
-2. In game, walk up to a fishing hole and face the water so the interact prompt
+2. Select fishing bait in game. Without bait selected the cast fails and fishing
+   will not start.
+3. In game, walk up to a fishing hole and face the water so the interact prompt
    appears.
-3. Press F2 (or use the Fishing toggle in the app). Do not cast the line
+4. Press F2 (or use the Fishing toggle in the app). Do not cast the line
    yourself first.
-4. Watch the Fishing status in the app move through the routine and leave it
+5. Watch the Fishing status in the app move through the routine and leave it
    running. Press F2 again to stop.
 
 ### What the status means
@@ -114,8 +119,10 @@ lost) if the beacon signal went away.
 ### Troubleshooting
 
 If the Fishing status turns to Idle within a few seconds of starting, the app is
-not seeing the beacon signal. In order, check that:
+not seeing the beacon signal, or the cast never started. In order, check that:
 
+- You have fishing bait selected. With no bait the cast fails, so the app never
+  sees a cast start and stops with Idle (no cast detected).
 - The PixelBeacon addon is enabled and not flagged "Out of Date" in the in-game
   AddOns menu. A stale addon that ESO refuses to load produces exactly this
   symptom. If the app just refreshed the addon, remember to `/reloadui` or relog.

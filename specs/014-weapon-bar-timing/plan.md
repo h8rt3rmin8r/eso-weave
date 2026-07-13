@@ -109,7 +109,7 @@ src/weave/
 src/app/routing.rs    # route WeaponBar event to weave.set_weapon_bar
 src/app/mod.rs, ui.rs, strings.rs  # active-bar/weapon status line, per-bar timing view,
                       #   auto-timing toggle (thin, reuses slice 013 helpers)
-docs/ESO-Weave-Specification-v0.1.0.md  # R1 appendix; section 16 marks R1 closed
+docs/ESO-Weave-Specification-v0.2.0.md  # R1 appendix; section 16 marks R1 closed
 ```
 
 ### The B3 encoding (design)
