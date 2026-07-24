@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Tracked two Claude skills in the repository under `.claude/skills/`:
+  `shruggie-speckit` (runs a spec-kit feature slice under autopilot, driving
+  the installed `/speckit-*` commands end to end and halting once before push)
+  and `gh-fix-ci` (inspects failing GitHub Actions PR checks with `gh`,
+  summarizes the failure, and drafts a fix plan before implementing).
+
 ## [0.6.2] - 2026-07-13
 
 ### Fixed
