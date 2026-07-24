@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest a new capability or improvement for ESO Weave.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please describe the problem you are
+        trying to solve, not just the solution you have in mind. Search the
+        existing issues first to avoid duplicates.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What problem does this solve, or what is currently missing or frustrating?
+      placeholder: I am always frustrated when '...'
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions or workarounds you have thought about.
+    validations:
+      required: false
+  - type: dropdown
+    id: module
+    attributes:
+      label: Affected area
+      description: Which part of ESO Weave would this touch?
+      options:
+        - Input engine
+        - Weave engine
+        - Fishing module
+        - PixelBeacon addon
+        - User interface
+        - Packaging or installation
+        - Other or not sure
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, references, related add-ons, or anything else that helps explain the request.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched the existing issues and this is not a duplicate.
+          required: true

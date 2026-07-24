@@ -1,0 +1,104 @@
+name: Bug report
+description: Report a problem with ESO Weave so it can be fixed.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the
+        sections below so the issue can be reproduced and diagnosed quickly.
+        Search the existing issues first to avoid duplicates.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear and concise description of what the bug is.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps needed to trigger the behavior.
+      placeholder: |
+        1. Launch ESO Weave and focus the game window
+        2. Start a weave sequence with '...'
+        3. Observe '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened, including any error messages.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ESO Weave version
+      description: The application version (see the title bar or About screen), for example v0.6.2.
+      placeholder: v0.6.2
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11 x64
+        - Windows 10 x64
+        - Linux x64
+        - Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: Affected area
+      description: Which part of ESO Weave is involved?
+      options:
+        - Input engine
+        - Weave engine
+        - Fishing module
+        - PixelBeacon addon
+        - User interface
+        - Packaging or installation
+        - Other or not sure
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant log output, if any. This will be automatically formatted, so no
+        code fences are needed.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, in-game conditions, or anything else that might help.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I am running the latest available release.
+          required: false
