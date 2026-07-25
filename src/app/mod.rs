@@ -795,10 +795,24 @@ impl AppModel {
         }
     }
 
+    /// The effective, sanitized block size from the current settings (defaulting
+    /// to the standard size when unset). Notices from sanitization are surfaced on
+    /// the settings load path, so they are discarded here.
+    fn configured_block_px(&self) -> u32 {
+        let mut discard = Vec::new();
+        crate::pixelbus::load_reader_config(&self.settings.pixelbus, &mut discard).block_px
+    }
+
     fn install_beacon(&mut self) {
         let api_version = self.effective_api_version();
+        let block_px = self.configured_block_px();
         match beacon::resolve_addons_dir(&self.beacon_prefs) {
-            Ok(root) => match beacon::install(&root, beacon::probe_game_running(), api_version) {
+            Ok(root) => match beacon::install_sized(
+                &root,
+                beacon::probe_game_running(),
+                api_version,
+                block_px,
+            ) {
                 Ok(outcome) => {
                     if outcome.reload_required {
                         tracing::info!(
@@ -843,12 +857,69 @@ impl AppModel {
     }
 
     fn apply_settings(&mut self, form: SettingsForm) -> Vec<Notice> {
+        let previous_block_px = self.configured_block_px();
         form.apply(&mut self.settings);
         let notices = self.reload_from_settings();
+        // A block-size change re-derives the reader geometry (adopted on the next
+        // start) and re-deploys the addon so the drawn squares match. The
+        // comparison runs both values through the same sanitize path.
+        let current_block_px = self.configured_block_px();
+        if current_block_px != previous_block_px {
+            self.redeploy_for_block_size(previous_block_px, current_block_px);
+        }
         // Persistence is coalesced: mark the config store dirty and let the
         // scheduler flush a single settle-write. There is no explicit save.
         self.scheduler.mark_config(Instant::now());
         notices
+    }
+
+    /// Drives a managed-only re-deploy after the block size changed. An unmanaged
+    /// or absent install is never written; the outcome is surfaced in the live log
+    /// (the addon and reader adopt the new size after a `/reloadui` and an app
+    /// restart respectively).
+    fn redeploy_for_block_size(&self, previous: u32, current: u32) {
+        let api_version = self.effective_api_version();
+        let root = match beacon::resolve_addons_dir(&self.beacon_prefs) {
+            Ok(root) => root,
+            Err(_) => {
+                tracing::warn!(
+                    target: "eso_weave::app",
+                    "block size changed but the AddOns directory was not found; PixelBeacon not re-deployed"
+                );
+                return;
+            }
+        };
+        match beacon::redeploy_for_block_size(
+            &root,
+            beacon::probe_game_running(),
+            api_version,
+            current,
+        ) {
+            Ok(beacon::RedeployOutcome::Redeployed(_)) => {
+                tracing::info!(
+                    target: "eso_weave::app",
+                    previous,
+                    current,
+                    "PixelBeacon re-deployed at the new block size; run /reloadui and restart ESO Weave for it to take effect"
+                );
+            }
+            Ok(beacon::RedeployOutcome::SkippedUnmanaged) => {
+                tracing::warn!(
+                    target: "eso_weave::app",
+                    "block size changed but PixelBeacon is unmanaged; the folder was not modified. Reinstall to apply the new size"
+                );
+            }
+            Ok(beacon::RedeployOutcome::SkippedNotInstalled) => {
+                tracing::info!(
+                    target: "eso_weave::app",
+                    current,
+                    "block size changed; PixelBeacon is not installed. The new size applies on the next install and app restart"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(target: "eso_weave::app", "block-size re-deploy failed: {err}");
+            }
+        }
     }
 
     /// Restores the persisted session state (suspend and fishing intents) on

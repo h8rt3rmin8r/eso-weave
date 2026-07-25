@@ -203,25 +203,86 @@ impl SurfaceSampler for MockSampler {
     }
 }
 
-/// Reader configuration.
+/// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
+/// B3 weapon. Fixed for now; adding blocks is a separate feature.
+pub const NUM_BLOCKS: u32 = 4;
+/// The default block edge length in physical pixels (the historical value; a
+/// fresh or unchanged install behaves exactly as before).
+pub const DEFAULT_BLOCK_PX: u32 = 16;
+/// The smallest supported block edge length in physical pixels.
+pub const MIN_BLOCK_PX: u32 = 2;
+/// The largest supported block edge length in physical pixels.
+pub const MAX_BLOCK_PX: u32 = 32;
+
+/// The sampled center of block `index`, derived solely from `block_px`. This is
+/// the single geometry contract shared byte for byte with the PixelBeacon addon,
+/// which draws block `index` spanning `[block_px * index, block_px * index +
+/// block_px]` and fills it with its center color. `block_px` is even, so the
+/// center is always a whole pixel.
+pub fn block_center(block_px: u32, index: u32) -> (u32, u32) {
+    (block_px * index + block_px / 2, block_px / 2)
+}
+
+/// The screen-capture region for the whole strip, derived from `block_px`: wide
+/// enough for all `NUM_BLOCKS` blocks and one block tall.
+pub fn capture_dims(block_px: u32) -> (u32, u32) {
+    (block_px * NUM_BLOCKS, block_px)
+}
+
+/// Corrects a block size to the supported set (even, `MIN_BLOCK_PX..=MAX_BLOCK_PX`),
+/// recording a non-fatal notice when the value is changed. An odd value rounds
+/// down to the next even, a below-range value clamps to the minimum, an
+/// above-range value clamps to the maximum. Never panics.
+pub fn sanitize_block_px(value: u32, notices: &mut Vec<Notice>) -> u32 {
+    // Round an odd value down to the next even so the sampled center stays a
+    // whole pixel, then clamp into the supported range.
+    let corrected = (value & !1).clamp(MIN_BLOCK_PX, MAX_BLOCK_PX);
+    if corrected != value {
+        notices.push(Notice {
+            kind: NoticeKind::InvalidValue,
+            message: format!(
+                "pixelbus block_px {value} is not a supported size; using {corrected}"
+            ),
+        });
+    }
+    corrected
+}
+
+/// Reader configuration. Beacon geometry derives entirely from `block_px`: the
+/// four block-center read points and the screen-capture region are computed, not
+/// stored, so the reader and the addon can never disagree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReaderConfig {
     /// Per-channel color match tolerance.
     pub tolerance: u8,
     /// Absence past this after the last heartbeat raises signal loss.
     pub heartbeat_timeout_ms: u64,
-    /// Sample point for the status block (B0).
-    pub status_point: (u32, u32),
-    /// Sample point for the fishing block (B1).
-    pub fishing_point: (u32, u32),
-    /// Sample point for the latency block (B2).
-    pub latency_point: (u32, u32),
-    /// Sample point for the weapon-bar block (B3).
-    pub weapon_point: (u32, u32),
+    /// The single source of truth for block geometry: the physical-pixel edge
+    /// length of each square block. Even, `MIN_BLOCK_PX..=MAX_BLOCK_PX`.
+    pub block_px: u32,
     /// Sampling interval while fishing is enabled.
     pub interval_fishing_ms: u64,
     /// Sampling interval otherwise.
     pub interval_idle_ms: u64,
+}
+
+impl ReaderConfig {
+    /// The status block (B0) sample point, derived from `block_px`.
+    pub fn status_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 0)
+    }
+    /// The fishing block (B1) sample point, derived from `block_px`.
+    pub fn fishing_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 1)
+    }
+    /// The latency block (B2) sample point, derived from `block_px`.
+    pub fn latency_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 2)
+    }
+    /// The weapon-bar block (B3) sample point, derived from `block_px`.
+    pub fn weapon_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 3)
+    }
 }
 
 impl Default for ReaderConfig {
@@ -229,10 +290,7 @@ impl Default for ReaderConfig {
         Self {
             tolerance: 2,
             heartbeat_timeout_ms: 2000,
-            status_point: (8, 8),
-            fishing_point: (24, 8),
-            latency_point: (40, 8),
-            weapon_point: (56, 8),
+            block_px: DEFAULT_BLOCK_PX,
             interval_fishing_ms: 100,
             interval_idle_ms: 1000,
         }
@@ -263,16 +321,20 @@ struct RawPixelBus {
     #[serde(default)]
     tolerance: Option<u8>,
     #[serde(default)]
+    block_px: Option<u32>,
+    #[serde(default)]
     interval_fishing_ms: Option<u64>,
     #[serde(default)]
     interval_idle_ms: Option<u64>,
 }
 
-/// Loads the user-editable reader configuration (tolerance and sampling
-/// intervals) from the opaque `pixelbus` settings value onto a default
-/// [`ReaderConfig`]. The fixed beacon geometry and heartbeat timeout are not
-/// user settings and keep their defaults. Null or absent yields defaults; an
-/// out-of-range interval falls back with a notice.
+/// Loads the user-editable reader configuration (tolerance, block size, and
+/// sampling intervals) from the opaque `pixelbus` settings value onto a default
+/// [`ReaderConfig`]. The heartbeat timeout is not a user setting and keeps its
+/// default. Null or absent yields defaults; an out-of-range interval or an
+/// unsupported block size falls back with a notice. An absent `block_px` (an
+/// older config) defaults to [`DEFAULT_BLOCK_PX`], so existing installs are
+/// unchanged.
 pub fn load_reader_config(value: &serde_json::Value, notices: &mut Vec<Notice>) -> ReaderConfig {
     let defaults = ReaderConfig::default();
     if value.is_null() {
@@ -281,6 +343,10 @@ pub fn load_reader_config(value: &serde_json::Value, notices: &mut Vec<Notice>) 
     let raw: RawPixelBus = serde_json::from_value(value.clone()).unwrap_or_default();
     ReaderConfig {
         tolerance: raw.tolerance.unwrap_or(defaults.tolerance),
+        block_px: raw
+            .block_px
+            .map(|v| sanitize_block_px(v, notices))
+            .unwrap_or(defaults.block_px),
         interval_fishing_ms: checked_interval(
             raw.interval_fishing_ms,
             defaults.interval_fishing_ms,
@@ -302,6 +368,7 @@ pub fn load_reader_config(value: &serde_json::Value, notices: &mut Vec<Notice>) 
 pub fn store_reader_config(config: &ReaderConfig) -> serde_json::Value {
     serde_json::json!({
         "tolerance": config.tolerance,
+        "block_px": config.block_px,
         "interval_fishing_ms": config.interval_fishing_ms,
         "interval_idle_ms": config.interval_idle_ms,
     })
@@ -518,10 +585,10 @@ impl PixelBusReader {
     ) -> Vec<PixelBusEvent> {
         // Let the backend capture a fresh frame once, before the four point reads.
         sampler.prepare();
-        let (sx, sy) = self.config.status_point;
-        let (fx, fy) = self.config.fishing_point;
-        let (lx, ly) = self.config.latency_point;
-        let (wx, wy) = self.config.weapon_point;
+        let (sx, sy) = self.config.status_point();
+        let (fx, fy) = self.config.fishing_point();
+        let (lx, ly) = self.config.latency_point();
+        let (wx, wy) = self.config.weapon_point();
         let b0 = sampler.sample(sx, sy);
         let b1 = sampler.sample(fx, fy);
         let b2 = sampler.sample(lx, ly);

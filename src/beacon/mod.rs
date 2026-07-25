@@ -222,6 +222,46 @@ pub fn render_manifest(effective: u32) -> String {
     rewrite_api_version(MANIFEST, effective)
 }
 
+/// Rewrites only the first `local BLOCK_PX = <n>` line of `existing`, setting the
+/// block size to `block_px`. Every other line is preserved byte for byte. The
+/// addon derives all of its geometry (strip width `BLOCK_PX * NUM_BLOCKS` and each
+/// block's placement `BLOCK_PX * index`) from this one constant, so rewriting it
+/// keeps the drawn squares in lockstep with the companion reader's `block_px`.
+pub fn rewrite_block_px(existing: &str, block_px: u32) -> String {
+    let mut replaced = false;
+    let out: Vec<String> = existing
+        .split('\n')
+        .map(|line| {
+            if !replaced {
+                if let Some(rest) = line.trim_start().strip_prefix("local BLOCK_PX") {
+                    if rest.trim_start().starts_with('=') {
+                        replaced = true;
+                        return format!("local BLOCK_PX = {block_px}");
+                    }
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+    out.join("\n")
+}
+
+/// Renders the addon Lua for install with the given block size as its `BLOCK_PX`.
+pub fn render_lua(block_px: u32) -> String {
+    rewrite_block_px(LUA, block_px)
+}
+
+/// The result of a block-size-driven re-deploy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RedeployOutcome {
+    /// A managed install was re-deployed at the new block size.
+    Redeployed(LifecycleOutcome),
+    /// The folder is unmanaged; nothing was written or removed.
+    SkippedUnmanaged,
+    /// No addon is installed; nothing was written.
+    SkippedNotInstalled,
+}
+
 /// The reload reminder rule: true when the game is running or the state is
 /// unknown (fail safe toward reminding), false when it is not running.
 pub fn reload_reminder(state: RunningState) -> bool {
@@ -257,15 +297,32 @@ pub fn status(addons_root: &Path) -> BeaconStatus {
     }
 }
 
-/// Installs (or safely updates) the embedded addon into `addons_root`, rendering
-/// the manifest with `api_version` as its primary `## APIVersion:` token.
-///
-/// The AddOns root must already exist; only the `PixelBeacon` subfolder is
-/// created and populated. Every write is confined to that subfolder.
+/// Installs (or safely updates) the embedded addon into `addons_root` at the
+/// default block size. See [`install_sized`].
 pub fn install(
     addons_root: &Path,
     running: RunningState,
     api_version: u32,
+) -> Result<LifecycleOutcome, LifecycleError> {
+    install_sized(
+        addons_root,
+        running,
+        api_version,
+        crate::pixelbus::DEFAULT_BLOCK_PX,
+    )
+}
+
+/// Installs (or safely updates) the embedded addon into `addons_root`, rendering
+/// the manifest with `api_version` as its primary `## APIVersion:` token and the
+/// Lua with `block_px` as its `BLOCK_PX` so the drawn squares match the reader.
+///
+/// The AddOns root must already exist; only the `PixelBeacon` subfolder is
+/// created and populated. Every write is confined to that subfolder.
+pub fn install_sized(
+    addons_root: &Path,
+    running: RunningState,
+    api_version: u32,
+    block_px: u32,
 ) -> Result<LifecycleOutcome, LifecycleError> {
     if !addons_root.is_dir() {
         tracing::warn!(
@@ -278,12 +335,44 @@ pub fn install(
     let dir = addons_root.join(SUBFOLDER);
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join(MANIFEST_FILE), render_manifest(api_version))?;
-    std::fs::write(dir.join(LUA_FILE), LUA)?;
-    tracing::info!(target: "beacon", path = %dir.display(), "installed PixelBeacon");
+    std::fs::write(dir.join(LUA_FILE), render_lua(block_px))?;
+    tracing::info!(target: "beacon", path = %dir.display(), block_px, "installed PixelBeacon");
     Ok(LifecycleOutcome {
         status: BeaconStatus::ManagedUpToDate,
         reload_required: reload_reminder(running),
     })
+}
+
+/// Re-deploys the addon at `block_px`, but only when the install is managed. An
+/// unmanaged folder is never overwritten (it may be a hand-installed or foreign
+/// copy), and a not-installed root is left alone (the reader adopts the new size
+/// on the next start regardless). This upholds the managed-marker guarantee the
+/// same way [`uninstall`] does for removal.
+pub fn redeploy_for_block_size(
+    addons_root: &Path,
+    running: RunningState,
+    api_version: u32,
+    block_px: u32,
+) -> Result<RedeployOutcome, LifecycleError> {
+    match status(addons_root) {
+        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch => {
+            Ok(RedeployOutcome::Redeployed(install_sized(
+                addons_root,
+                running,
+                api_version,
+                block_px,
+            )?))
+        }
+        BeaconStatus::Unmanaged => {
+            tracing::warn!(
+                target: "beacon",
+                path = %addons_root.join(SUBFOLDER).display(),
+                "block-size re-deploy skipped: PixelBeacon folder is unmanaged"
+            );
+            Ok(RedeployOutcome::SkippedUnmanaged)
+        }
+        BeaconStatus::NotInstalled => Ok(RedeployOutcome::SkippedNotInstalled),
+    }
 }
 
 /// Removes the `PixelBeacon` folder under `addons_root`, but only when the

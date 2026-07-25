@@ -876,6 +876,16 @@ fn settings_body(
                 .response
                 .clickable();
         });
+        setting(ui, palette, &strings::SET_BLOCK_PX, |ui| {
+            combo("set_block_px", draft.reader.block_px.to_string())
+                .show_ui(ui, |ui| {
+                    for size in [2u32, 4, 8, 16, 32] {
+                        ui.selectable_value(&mut draft.reader.block_px, size, size.to_string());
+                    }
+                })
+                .response
+                .clickable();
+        });
         setting(ui, palette, &strings::SET_TOLERANCE, |ui| {
             ui.add(egui::DragValue::new(&mut draft.reader.tolerance));
         });

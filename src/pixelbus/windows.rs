@@ -19,7 +19,7 @@ use windows_sys::Win32::Graphics::Gdi::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, GetClientRect};
 
-use crate::pixelbus::{strip_pixel, Rgb, SurfaceSampler};
+use crate::pixelbus::{capture_dims, strip_pixel, Rgb, SurfaceSampler};
 
 /// The captured beacon strip: a small top-left region of the client area, as
 /// composited on screen, in 32-bit BGRA (the layout `GetDIBits` fills).
@@ -29,27 +29,31 @@ struct CapturedStrip {
     pixels: Vec<u8>,
 }
 
-/// The strip captured each frame, covering the four block sample points
-/// (x = 8, 24, 40, 56) across 16 px blocks, so 64 by 16 points is enough.
-const CAPTURE_W: i32 = 64;
-const CAPTURE_H: i32 = 16;
-
-/// Samples the beacon strip from the composited desktop for one window.
+/// Samples the beacon strip from the composited desktop for one window. The strip
+/// dimensions are derived from the block size (`capture_dims`), so the capture
+/// region tracks the same single source of truth as the read points: at the
+/// default block size it is the historical 64 by 16.
 pub struct GdiSampler {
     hwnd: HWND,
+    capture_w: i32,
+    capture_h: i32,
     frame: RefCell<Option<CapturedStrip>>,
 }
 
 impl GdiSampler {
-    /// Resolves the window by its exact title, returning `None` if not found.
-    pub fn for_window(title: &str) -> Option<Self> {
+    /// Resolves the window by its exact title, sizing the capture region from
+    /// `block_px`. Returns `None` if the window is not found.
+    pub fn for_window(title: &str, block_px: u32) -> Option<Self> {
         let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
         let hwnd = unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) };
         if hwnd.is_null() {
             None
         } else {
+            let (w, h) = capture_dims(block_px);
             Some(Self {
                 hwnd,
+                capture_w: w as i32,
+                capture_h: h as i32,
                 frame: RefCell::new(None),
             })
         }
@@ -86,7 +90,7 @@ impl GdiSampler {
                 ReleaseDC(std::ptr::null_mut(), screen_dc);
                 return None;
             }
-            let bitmap = CreateCompatibleBitmap(screen_dc, CAPTURE_W, CAPTURE_H);
+            let bitmap = CreateCompatibleBitmap(screen_dc, self.capture_w, self.capture_h);
             if bitmap.is_null() {
                 DeleteDC(mem_dc);
                 ReleaseDC(std::ptr::null_mut(), screen_dc);
@@ -99,8 +103,8 @@ impl GdiSampler {
                 mem_dc,
                 0,
                 0,
-                CAPTURE_W,
-                CAPTURE_H,
+                self.capture_w,
+                self.capture_h,
                 screen_dc,
                 origin.x,
                 origin.y,
@@ -111,28 +115,28 @@ impl GdiSampler {
             if blitted != 0 {
                 let mut bmi: BITMAPINFO = std::mem::zeroed();
                 bmi.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
-                bmi.bmiHeader.biWidth = CAPTURE_W;
+                bmi.bmiHeader.biWidth = self.capture_w;
                 // A negative height requests top-down rows, so index 0 is the
                 // top-left pixel and the block coordinates map directly.
-                bmi.bmiHeader.biHeight = -CAPTURE_H;
+                bmi.bmiHeader.biHeight = -self.capture_h;
                 bmi.bmiHeader.biPlanes = 1;
                 bmi.bmiHeader.biBitCount = 32;
                 bmi.bmiHeader.biCompression = BI_RGB;
 
-                let mut pixels = vec![0u8; (CAPTURE_W * CAPTURE_H * 4) as usize];
+                let mut pixels = vec![0u8; (self.capture_w * self.capture_h * 4) as usize];
                 let lines = GetDIBits(
                     mem_dc,
                     bitmap,
                     0,
-                    CAPTURE_H as u32,
+                    self.capture_h as u32,
                     pixels.as_mut_ptr().cast(),
                     &mut bmi,
                     DIB_RGB_COLORS,
                 );
                 if lines != 0 {
                     result = Some(CapturedStrip {
-                        width: CAPTURE_W as u32,
-                        height: CAPTURE_H as u32,
+                        width: self.capture_w as u32,
+                        height: self.capture_h as u32,
                         pixels,
                     });
                 }

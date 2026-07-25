@@ -139,7 +139,7 @@ fn main() {
         thread::spawn(move || {
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink = RealFishingSink::new(SharedBackend(backend));
-            let mut sampler = resolve_sampler();
+            let mut sampler = resolve_sampler(reader_config.block_px);
             let origin = clock_origin;
             loop {
                 // Poll fast while a fishing session is active so transient cast
@@ -151,7 +151,7 @@ fn main() {
                     &reader_config,
                 )));
                 if sampler.is_none() {
-                    sampler = resolve_sampler();
+                    sampler = resolve_sampler(reader_config.block_px);
                 }
                 let Some(active) = sampler.as_ref() else {
                     continue;
@@ -350,13 +350,15 @@ fn make_backend() -> eso_weave::input::LinuxBackend {
 }
 
 #[cfg(windows)]
-fn resolve_sampler() -> Option<Box<dyn SurfaceSampler>> {
-    eso_weave::pixelbus::GdiSampler::for_window(WINDOW_TITLE)
+fn resolve_sampler(block_px: u32) -> Option<Box<dyn SurfaceSampler>> {
+    eso_weave::pixelbus::GdiSampler::for_window(WINDOW_TITLE, block_px)
         .map(|sampler| Box::new(sampler) as Box<dyn SurfaceSampler>)
 }
 
 #[cfg(target_os = "linux")]
-fn resolve_sampler() -> Option<Box<dyn SurfaceSampler>> {
+fn resolve_sampler(_block_px: u32) -> Option<Box<dyn SurfaceSampler>> {
+    // The X11 sampler reads each derived point with a 1x1 request, so it has no
+    // capture region to size from the block width.
     Some(Box::new(eso_weave::pixelbus::X11Sampler::for_window(
         WINDOW_TITLE,
     )))

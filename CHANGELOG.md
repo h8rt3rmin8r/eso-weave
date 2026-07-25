@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Advanced Pixel Beacon "Block size" setting: the physical-pixel size of each
+  beacon square is now configurable (even, 2 to 32; default 16), so the overlay
+  can be shrunk on screen. Changing it re-deploys a managed PixelBeacon at the new
+  size and takes full effect after an in-game `/reloadui` and an app restart. An
+  unmanaged or absent addon folder is never modified (issue #1).
+
+### Changed
+
+- The pixel-bus block geometry is now derived from a single `block_px` value on
+  both sides of the bus: the reader's four block-center sample points and the
+  Windows screen-capture region are computed from it, and the deployed addon's
+  `BLOCK_PX` is written to match at install time (mirroring the manifest's
+  API-version templating). At the default size the reader points (8,8), (24,8),
+  (40,8), (56,8) and the 64 by 16 capture are byte-for-byte unchanged.
+
+### Decisions
+
+- 2026-07-25: Slice 028 (pixel-bus block size single source of truth) closes
+  issue #1. `block_px` becomes the sole stored geometry value on `ReaderConfig`;
+  the four read points are computed methods (`block_center`) and the Windows
+  capture region is `capture_dims`, so the reader and addon can no longer drift.
+  The addon Lua is templated at deploy (`render_lua` rewrites only the
+  `local BLOCK_PX` line, preserving the managed marker), matching the existing
+  `rewrite_api_version` pattern; no codegen was added. A block-size change drives
+  a managed-only re-deploy (`redeploy_for_block_size`): `ManagedUpToDate` or
+  `ManagedVersionMismatch` are re-written, `Unmanaged` and `NotInstalled` are
+  skipped and reported, so the safety-critical managed-marker guarantee is
+  upheld. Reader geometry applies at the next app start, like the existing
+  tolerance and interval settings (the pixel-bus worker owns its config by move);
+  a settings-apply log line states the `/reloadui` plus restart requirement.
+  Supported sizes are even integers 2 to 32; `sanitize_block_px` corrects an
+  invalid value (odd rounds down, out-of-range clamps) with a non-fatal notice.
+  The default stays 16, so existing and fresh installs are unchanged; the
+  minimum reliably readable size is an owed in-game validation (quickstart
+  OV-1..OV-3), not a merge blocker, and the default is not lowered until then.
+  This is issue-driven work, so it carries no `docs/plans/` build-plan row (the
+  same convention as slice 027). Details in `specs/028-pixelbus-block-size/`.
+
 ## [0.7.0] - 2026-07-25
 
 ### Added

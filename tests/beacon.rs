@@ -10,9 +10,9 @@ use std::path::Path;
 use eso_weave::beacon::{
     self, addons_dir_under_documents, embedded_version, eso_addons_subpath, has_managed_marker,
     parse_api_version_primary, parse_manifest_version, prefs_from_value, prefs_to_value,
-    reload_reminder, render_manifest, rewrite_api_version, steam, BeaconPrefs, BeaconStatus,
-    DiscoveryError, Environment, LifecycleError, RunningState, DEFAULT_API_VERSION, LUA_FILE,
-    MANAGED_MARKER, MANIFEST, MANIFEST_FILE, SUBFOLDER,
+    reload_reminder, render_lua, render_manifest, rewrite_api_version, steam, BeaconPrefs,
+    BeaconStatus, DiscoveryError, Environment, LifecycleError, RunningState, DEFAULT_API_VERSION,
+    LUA_FILE, MANAGED_MARKER, MANIFEST, MANIFEST_FILE, SUBFOLDER,
 };
 
 fn tmp() -> tempfile::TempDir {
@@ -458,4 +458,111 @@ fn prefs_round_trip_and_default_on_null() {
     };
     let value = prefs_to_value(&prefs);
     assert_eq!(prefs_from_value(&value), prefs);
+}
+
+// Slice 028: block-size Lua templating and the managed-only re-deploy.
+
+#[test]
+fn render_lua_default_matches_embedded() {
+    // At the default size the rendered Lua is byte for byte the embedded Lua, so
+    // an unchanged install has no behavior change.
+    assert_eq!(render_lua(16), beacon::LUA);
+}
+
+#[test]
+fn render_lua_rewrites_only_block_px_line() {
+    let updated = render_lua(8);
+    assert!(updated.lines().any(|l| l.trim() == "local BLOCK_PX = 8"));
+    assert!(!updated.lines().any(|l| l.trim() == "local BLOCK_PX = 16"));
+    // Every other line is identical, and no line was inserted or removed.
+    let mut diffs = 0;
+    for (before, after) in beacon::LUA.lines().zip(updated.lines()) {
+        if before != after {
+            diffs += 1;
+            assert!(before.trim_start().starts_with("local BLOCK_PX"));
+        }
+    }
+    assert_eq!(diffs, 1);
+    assert_eq!(beacon::LUA.lines().count(), updated.lines().count());
+}
+
+#[test]
+fn install_sized_writes_block_px_and_keeps_marker() {
+    let root = tmp();
+    beacon::install_sized(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        8,
+    )
+    .unwrap();
+    let dir = beacon_dir(root.path());
+    let lua = fs::read_to_string(dir.join(LUA_FILE)).unwrap();
+    assert!(lua.lines().any(|l| l.trim() == "local BLOCK_PX = 8"));
+    let manifest = fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap();
+    assert!(has_managed_marker(&manifest));
+    assert_eq!(beacon::status(root.path()), BeaconStatus::ManagedUpToDate);
+}
+
+#[test]
+fn redeploy_updates_managed_folder_block_px() {
+    let root = tmp();
+    beacon::install_sized(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        16,
+    )
+    .unwrap();
+
+    let outcome = beacon::redeploy_for_block_size(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        4,
+    )
+    .unwrap();
+    assert!(matches!(outcome, beacon::RedeployOutcome::Redeployed(_)));
+
+    let dir = beacon_dir(root.path());
+    let lua = fs::read_to_string(dir.join(LUA_FILE)).unwrap();
+    assert!(lua.lines().any(|l| l.trim() == "local BLOCK_PX = 4"));
+    let manifest = fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap();
+    assert!(has_managed_marker(&manifest));
+}
+
+#[test]
+fn redeploy_refuses_unmanaged_folder() {
+    let root = tmp();
+    // An unmanaged folder (no marker) with a distinctive Lua stub.
+    write_beacon(root.path(), "## Title: PixelBeacon\n## Version: 1\n");
+
+    let outcome = beacon::redeploy_for_block_size(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        8,
+    )
+    .unwrap();
+    assert_eq!(outcome, beacon::RedeployOutcome::SkippedUnmanaged);
+    // Nothing was written or removed: the stub Lua and unmanaged status survive.
+    assert_eq!(
+        fs::read_to_string(beacon_dir(root.path()).join(LUA_FILE)).unwrap(),
+        "-- stub"
+    );
+    assert_eq!(beacon::status(root.path()), BeaconStatus::Unmanaged);
+}
+
+#[test]
+fn redeploy_skips_when_not_installed() {
+    let root = tmp();
+    let outcome = beacon::redeploy_for_block_size(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        8,
+    )
+    .unwrap();
+    assert_eq!(outcome, beacon::RedeployOutcome::SkippedNotInstalled);
+    assert!(!beacon_dir(root.path()).exists());
 }

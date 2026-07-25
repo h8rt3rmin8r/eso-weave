@@ -159,6 +159,10 @@ pub const SET_BEACON_ENV: Setting = Setting {
     label: "Game environment",
     help: "Which ESO install to target when detecting the AddOns folder.",
 };
+pub const SET_BLOCK_PX: Setting = Setting {
+    label: "Block size (px)",
+    help: "Advanced: the physical-pixel size of each beacon square. Smaller shrinks the on-screen overlay. Changing it re-deploys PixelBeacon and takes effect after a /reloadui and an app restart.",
+};
 pub const SET_TOLERANCE: Setting = Setting {
     label: "Color tolerance",
     help: "How much a sampled pixel may differ from the expected color and still match.",

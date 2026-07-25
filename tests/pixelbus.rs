@@ -1,9 +1,12 @@
 //! Decoder and state-machine tests for the Pixel Bus Reader.
 
+use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    decode_latency, decode_weapon_bar, fishing_signal, poll_interval, status_present, strip_pixel,
-    ActiveBar, FishingSignal, PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal,
-    WeaponClass,
+    block_center, capture_dims, decode_latency, decode_weapon_bar, fishing_signal,
+    load_reader_config, poll_interval, sanitize_block_px, status_present, store_reader_config,
+    strip_pixel, ActiveBar, FishingSignal, MockSampler, PixelBusEvent, PixelBusReader,
+    ReaderConfig, Rgb, WeaponBarSignal, WeaponClass, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX,
+    NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -263,4 +266,139 @@ fn weapon_bar_event_only_on_change() {
     assert!(changed
         .iter()
         .any(|e| matches!(e, PixelBusEvent::WeaponBar(_))));
+}
+
+// Slice 028: block-size single source of truth.
+
+#[test]
+fn block_center_and_capture_dims_match_contract_table() {
+    // (block_px, [B0, B1, B2, B3 centers], (capture_w, capture_h)) per
+    // specs/028-pixelbus-block-size/contracts/geometry.md.
+    let cases = [
+        (2u32, [(1u32, 1u32), (3, 1), (5, 1), (7, 1)], (8u32, 2u32)),
+        (4, [(2, 2), (6, 2), (10, 2), (14, 2)], (16, 4)),
+        (8, [(4, 4), (12, 4), (20, 4), (28, 4)], (32, 8)),
+        (16, [(8, 8), (24, 8), (40, 8), (56, 8)], (64, 16)),
+        (32, [(16, 16), (48, 16), (80, 16), (112, 16)], (128, 32)),
+    ];
+    for (block_px, centers, cap) in cases {
+        for (index, expected) in centers.iter().enumerate() {
+            assert_eq!(
+                block_center(block_px, index as u32),
+                *expected,
+                "block_px {block_px} index {index}"
+            );
+        }
+        assert_eq!(
+            capture_dims(block_px),
+            cap,
+            "capture dims block_px {block_px}"
+        );
+    }
+    assert_eq!(NUM_BLOCKS, 4);
+    assert_eq!(DEFAULT_BLOCK_PX, 16);
+}
+
+#[test]
+fn sanitize_block_px_corrects_and_notices() {
+    // A valid even value in range is unchanged and records no notice.
+    let mut notices = Vec::new();
+    assert_eq!(sanitize_block_px(16, &mut notices), 16);
+    assert_eq!(sanitize_block_px(MIN_BLOCK_PX, &mut notices), MIN_BLOCK_PX);
+    assert_eq!(sanitize_block_px(MAX_BLOCK_PX, &mut notices), MAX_BLOCK_PX);
+    assert!(notices.is_empty(), "in-range even values record no notice");
+
+    // Odd rounds down to the next even, with a notice.
+    let mut notices = Vec::new();
+    assert_eq!(sanitize_block_px(15, &mut notices), 14);
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].kind, NoticeKind::InvalidValue);
+
+    // Below range clamps to MIN; above range clamps to MAX (odd or even).
+    assert_eq!(sanitize_block_px(1, &mut Vec::new()), MIN_BLOCK_PX);
+    assert_eq!(sanitize_block_px(0, &mut Vec::new()), MIN_BLOCK_PX);
+    assert_eq!(sanitize_block_px(33, &mut Vec::new()), MAX_BLOCK_PX);
+    assert_eq!(sanitize_block_px(1000, &mut Vec::new()), MAX_BLOCK_PX);
+}
+
+#[test]
+fn reader_config_default_geometry_matches_release() {
+    let cfg = ReaderConfig::default();
+    assert_eq!(cfg.block_px, 16);
+    assert_eq!(cfg.status_point(), (8, 8));
+    assert_eq!(cfg.fishing_point(), (24, 8));
+    assert_eq!(cfg.latency_point(), (40, 8));
+    assert_eq!(cfg.weapon_point(), (56, 8));
+}
+
+#[test]
+fn reader_config_points_track_block_px() {
+    for block_px in [2u32, 4, 8, 16, 32] {
+        let cfg = ReaderConfig {
+            block_px,
+            ..ReaderConfig::default()
+        };
+        assert_eq!(cfg.status_point(), block_center(block_px, 0));
+        assert_eq!(cfg.fishing_point(), block_center(block_px, 1));
+        assert_eq!(cfg.latency_point(), block_center(block_px, 2));
+        assert_eq!(cfg.weapon_point(), block_center(block_px, 3));
+    }
+}
+
+#[test]
+fn sample_and_observe_reads_derived_points() {
+    // At block_px = 8 the status center is (4, 4); a heartbeat seeded there is
+    // read, proving the runtime path samples the derived points.
+    let cfg = ReaderConfig {
+        block_px: 8,
+        ..ReaderConfig::default()
+    };
+    let (sx, sy) = cfg.status_point();
+    let mut sampler = MockSampler::new();
+    sampler.set(sx, sy, MAGENTA);
+    let mut r = PixelBusReader::new(cfg);
+    let events = r.sample_and_observe(&sampler, 0);
+    assert!(events.contains(&PixelBusEvent::Heartbeat));
+}
+
+#[test]
+fn block_px_round_trips_through_settings() {
+    let cfg = ReaderConfig {
+        block_px: 8,
+        ..ReaderConfig::default()
+    };
+    let value = store_reader_config(&cfg);
+    let mut notices = Vec::new();
+    let loaded = load_reader_config(&value, &mut notices);
+    assert_eq!(loaded.block_px, 8);
+    assert!(notices.is_empty());
+}
+
+#[test]
+fn older_config_without_block_px_defaults_to_sixteen() {
+    let value = serde_json::json!({
+        "tolerance": 2,
+        "interval_fishing_ms": 100,
+        "interval_idle_ms": 1000,
+    });
+    let mut notices = Vec::new();
+    let loaded = load_reader_config(&value, &mut notices);
+    assert_eq!(loaded.block_px, DEFAULT_BLOCK_PX);
+    assert!(notices.is_empty());
+}
+
+#[test]
+fn load_reader_config_sanitizes_invalid_block_px() {
+    // An odd persisted value is corrected with a notice, never a crash.
+    let value = serde_json::json!({ "block_px": 15 });
+    let mut notices = Vec::new();
+    let loaded = load_reader_config(&value, &mut notices);
+    assert_eq!(loaded.block_px, 14);
+    assert!(notices.iter().any(|n| n.kind == NoticeKind::InvalidValue));
+
+    // A wrong-typed value falls back to the default with no crash.
+    let value = serde_json::json!({ "block_px": "huge" });
+    let mut notices = Vec::new();
+    let loaded = load_reader_config(&value, &mut notices);
+    assert_eq!(loaded.block_px, DEFAULT_BLOCK_PX);
 }

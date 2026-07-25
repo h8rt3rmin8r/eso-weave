@@ -1,6 +1,7 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders up to four 16 by 16 physical-pixel blocks anchored to the top-left
+-- It renders up to four square blocks (BLOCK_PX physical pixels on a side,
+-- default 16; the companion sets this value on deploy) anchored to the top-left
 -- of the client area, encoding load status (B0), fishing state (B1), server
 -- latency (B2), and the active weapon bar with each bar's weapon class (B3). It
 -- has no settings, no user interface beyond the blocks, no external libraries,
