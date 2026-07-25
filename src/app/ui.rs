@@ -90,6 +90,26 @@ const COMBO_WIDTH: f32 = 150.0;
 /// comfortably, right-aligned, in both the editable and greyed read-only states.
 const DELAY_FIELD_WIDTH: f32 = 56.0;
 
+/// The boot minimum inner size (points) used before the content extent has been
+/// measured. Mirrors `MIN_SIZE` in `main.rs`; once the first frames lay out, the
+/// measured content extent (issue #4) raises the real minimum above this floor.
+const BOOT_MIN_SIZE: egui::Vec2 = egui::vec2(480.0, 420.0);
+
+/// Extra minimum width (points) enforced while the live log viewer is open, so log
+/// lines wrap less than at the base content width (issue #5, FR-006).
+const LOG_WIDTH_BONUS: f32 = 100.0;
+
+/// The log text row height (points) used to size the six-line log minimum. Read
+/// from the monospace text style (its size is the same in either theme), falling
+/// back to a sensible default.
+fn log_row_height(ctx: &egui::Context) -> f32 {
+    ctx.style_of(egui::Theme::Dark)
+        .text_styles
+        .get(&egui::TextStyle::Monospace)
+        .map(|f| f.size)
+        .unwrap_or(14.0)
+}
+
 /// A dropdown preset to a fixed width, so its resting field does not track the
 /// selected option (which would reflow the rows below on selection or hover).
 fn combo(
@@ -126,6 +146,14 @@ pub struct EsoWeaveApp {
     /// The skill slot currently being edited in the Delay column and the digits
     /// typed so far, so the model value does not clobber in-progress input.
     delay_edit: Option<(u8, String)>,
+    /// The running maximum of the central panel's measured content extent
+    /// (points). Drives the window minimum inner size so it fits every control and
+    /// tracks new rows automatically (issue #4). Seeded from the boot floor and
+    /// never shrinks within a session.
+    content_min: egui::Vec2,
+    /// The last minimum inner size pushed to the viewport, so the command is sent
+    /// only when the target changes rather than every frame.
+    last_min_sent: Option<egui::Vec2>,
 }
 
 impl EsoWeaveApp {
@@ -154,6 +182,8 @@ impl EsoWeaveApp {
             toast: None,
             last_geometry: restored_geometry,
             delay_edit: None,
+            content_min: BOOT_MIN_SIZE,
+            last_min_sent: None,
         }
     }
 
@@ -257,9 +287,14 @@ impl eframe::App for EsoWeaveApp {
         // persisted as a layout preference.
         if self.log_panel_open {
             let window_h = ctx.content_rect().height();
-            let min_h = (window_h * 0.1).max(48.0);
-            let max_h = (window_h * 0.75).max(min_h);
-            let start = crate::app::clamp_log_height(self.log_height, window_h);
+            let row_h = log_row_height(&ctx);
+            // Minimum shows six lines of log; maximum stops before the interactive
+            // (Skills) area so the resize bar can never cover the controls (issue
+            // #5). Both bounds come from the shared pure helpers.
+            let min_h = crate::app::log_min_height(row_h);
+            let max_h = (window_h - self.content_min.y).max(min_h);
+            let start =
+                crate::app::clamp_log_height(self.log_height, window_h, row_h, self.content_min.y);
             let resp = egui::Panel::bottom("log_panel")
                 .resizable(true)
                 .min_size(min_h)
@@ -268,7 +303,7 @@ impl eframe::App for EsoWeaveApp {
                 .frame(
                     egui::Frame::new()
                         .fill(extreme_bg)
-                        .inner_margin(egui::Margin::same(6)),
+                        .inner_margin(egui::Margin::same(crate::app::LOG_FRAME_MARGIN as i8)),
                 )
                 .show(ui, |ui| {
                     self.log_view(ui, &mut intents);
@@ -280,6 +315,9 @@ impl eframe::App for EsoWeaveApp {
             }
         }
 
+        // Measured content extent of the central panel this frame, captured inside
+        // the closure and used after to drive the window minimum size (issue #4).
+        let mut measured = self.content_min;
         egui::CentralPanel::default().show(ui, |ui| {
             // Menu bar.
             egui::MenuBar::new().ui(ui, |ui| {
@@ -309,6 +347,22 @@ impl eframe::App for EsoWeaveApp {
                         .changed()
                     {
                         intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
+                        // Grow the window by the log pane's minimum height on open,
+                        // and shrink it back by the same amount on close, so the
+                        // pane never covers the Skills area and the toggle is
+                        // height-neutral (issue #5, FR-004/FR-008).
+                        let delta = crate::app::log_min_height(log_row_height(&ctx));
+                        if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
+                            let cur = inner.size();
+                            let new_h = if self.log_panel_open {
+                                cur.y + delta
+                            } else {
+                                (cur.y - delta).max(self.content_min.y)
+                            };
+                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                                cur.x, new_h,
+                            )));
+                        }
                     }
                 })
                 .response
@@ -317,7 +371,35 @@ impl eframe::App for EsoWeaveApp {
             ui.separator();
 
             self.main_view(ui, &mut intents);
+            // The tight bounding box of the laid-out content is what the window
+            // must be able to show; capture it here (issue #4).
+            measured = ui.min_rect().size();
         });
+
+        // Raise the running-max content floor (never shrinks from a transient
+        // under-measure), then push it as the window minimum inner size. While the
+        // log viewer is open the floor is widened and grown by the log minimum so
+        // both the controls and a six-line log always fit (issues #4, #5).
+        let floored = crate::app::content_min_size(
+            (measured.x, measured.y),
+            (BOOT_MIN_SIZE.x, BOOT_MIN_SIZE.y),
+        );
+        self.content_min = egui::vec2(
+            self.content_min.x.max(floored.0),
+            self.content_min.y.max(floored.1),
+        );
+        let target_min = if self.log_panel_open {
+            egui::vec2(
+                self.content_min.x + LOG_WIDTH_BONUS,
+                self.content_min.y + crate::app::log_min_height(log_row_height(&ctx)),
+            )
+        } else {
+            self.content_min
+        };
+        if self.last_min_sent != Some(target_min) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(target_min));
+            self.last_min_sent = Some(target_min);
+        }
 
         if self.settings_open {
             self.settings_modal(&ctx, &mut intents);
@@ -327,9 +409,12 @@ impl eframe::App for EsoWeaveApp {
             self.model.apply_intent(intent);
         }
 
-        // Coalesced auto-save: flush any settled changes and confirm with a toast.
+        // Coalesced auto-save: flush any settled changes. The confirmation toast
+        // fires only for a meaningful settings change, not for a pure layout write
+        // (window move/resize or log-pane resize), which persists silently
+        // (issue #6).
         let now = Instant::now();
-        if self.model.maybe_flush(now) {
+        if self.model.maybe_flush(now).notify {
             self.toast = Some(widgets::Toast::new(strings::SAVED_TOAST, now));
         }
         let mut clear_toast = false;

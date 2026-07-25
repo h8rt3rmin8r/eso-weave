@@ -363,12 +363,63 @@ pub enum UiIntent {
     SetWindowGeometry(WindowGeometry),
 }
 
-/// Clamps a live-log panel height (points) to a sensible range for the given
-/// window height: at least about a tenth of the window, at most enough to leave
-/// the interactive area visible.
-pub fn clamp_log_height(height: f32, window_height: f32) -> f32 {
-    let min = (window_height * 0.1).max(48.0);
-    let max = (window_height * 0.75).max(min);
+/// The number of log lines the live-log panel must show at its minimum height,
+/// so the panel is readable rather than a one-line sliver.
+pub const LOG_MIN_LINES: f32 = 6.0;
+
+/// The live-log panel frame's inner margin (points) on each edge. Shared with the
+/// egui bottom-panel frame in [`ui`], so the six-line minimum and the drawn frame
+/// agree on the space reserved around the text.
+pub const LOG_FRAME_MARGIN: f32 = 6.0;
+
+/// The fraction to scale interactive control heights by, a reduction of about
+/// twenty percent (see issue #7). Applied once in [`theme::apply`] so buttons,
+/// toggles, and dropdowns shrink consistently.
+pub const CONTROL_HEIGHT_SCALE: f32 = 0.8;
+
+/// The minimum interior padding (points) kept above and below a control's text
+/// line, so a reduced control height never clips its label.
+const CONTROL_MIN_TEXT_PADDING: f32 = 3.0;
+
+/// The reduced interactive-control height (points) for a base height and the
+/// control font's line height: about [`CONTROL_HEIGHT_SCALE`] of the base, but
+/// never so short that the text line plus its minimum padding would be clipped.
+/// Pure and deterministic. See issue #7 (FR-011, FR-012).
+pub fn reduced_interact_height(base: f32, font_line_height: f32) -> f32 {
+    (base * CONTROL_HEIGHT_SCALE).max(font_line_height + CONTROL_MIN_TEXT_PADDING)
+}
+
+/// The minimum live-log panel height (points) that shows [`LOG_MIN_LINES`] lines
+/// of log text at the given row height, plus the frame's top and bottom margins.
+/// Strictly increasing in `row_height`. Pure. See issue #5 (FR-005).
+pub fn log_min_height(row_height: f32) -> f32 {
+    LOG_MIN_LINES * row_height + 2.0 * LOG_FRAME_MARGIN
+}
+
+/// The minimum window content extent `(width, height)` in points: the measured
+/// laid-out content size raised to a boot floor per dimension, so the floor tracks
+/// the actual content (issue #4, FR-001/FR-002) but never drops below a safe
+/// starting size before the first measurement. Per-dimension independent; feeding
+/// a running maximum of `measured` keeps the result monotone (never shrinks from a
+/// transient under-measure). Pure.
+pub fn content_min_size(measured: (f32, f32), boot_floor: (f32, f32)) -> (f32, f32) {
+    (measured.0.max(boot_floor.0), measured.1.max(boot_floor.1))
+}
+
+/// Clamps a live-log panel height (points) into its valid range for the given
+/// window height: at least the six-line minimum ([`log_min_height`] at
+/// `row_height`), at most `window_height - content_min_height` so the pane top can
+/// never cross into the interactive (Skills) area. When the window is too short
+/// for both, the minimum wins and the pane collapses to its readable floor rather
+/// than covering the controls. See issue #5 (FR-005, FR-007).
+pub fn clamp_log_height(
+    height: f32,
+    window_height: f32,
+    row_height: f32,
+    content_min_height: f32,
+) -> f32 {
+    let min = log_min_height(row_height);
+    let max = (window_height - content_min_height).max(min);
     height.clamp(min, max)
 }
 
@@ -423,10 +474,17 @@ pub struct AppView {
 /// A change marks the config and/or session store dirty and records the time.
 /// [`should_flush`](SaveScheduler::should_flush) becomes true once the store is
 /// dirty and the most recent change has settled for the configured interval.
+///
+/// A change is either meaningful (a settings change: a toggle or a form-field
+/// edit) or layout-only (a window move/resize or a log-pane resize). Both persist
+/// identically, but only a meaningful change sets [`dirty_notify`], which is what
+/// gates the "Settings saved" confirmation so pure layout writes stay silent
+/// (issue #6, FR-009/FR-010). Invariant: `dirty_notify` implies dirty.
 #[derive(Debug)]
 pub struct SaveScheduler {
     dirty_config: bool,
     dirty_session: bool,
+    dirty_notify: bool,
     last_change: Option<Instant>,
     settle: Duration,
 }
@@ -437,19 +495,40 @@ impl SaveScheduler {
         Self {
             dirty_config: false,
             dirty_session: false,
+            dirty_notify: false,
             last_change: None,
             settle,
         }
     }
 
-    /// Marks the configuration store dirty as of `now`.
+    /// Marks the configuration store dirty for a meaningful settings change as of
+    /// `now` (raises the save confirmation on flush).
     pub fn mark_config(&mut self, now: Instant) {
+        self.dirty_config = true;
+        self.dirty_notify = true;
+        self.last_change = Some(now);
+    }
+
+    /// Marks the session store dirty for a meaningful settings change as of `now`
+    /// (raises the save confirmation on flush).
+    pub fn mark_session(&mut self, now: Instant) {
+        self.dirty_session = true;
+        self.dirty_notify = true;
+        self.last_change = Some(now);
+    }
+
+    /// Marks the configuration store dirty for a layout-only change (log-pane
+    /// height) as of `now`. Persists exactly like [`mark_config`](Self::mark_config)
+    /// but does not raise the save confirmation.
+    pub fn mark_config_layout(&mut self, now: Instant) {
         self.dirty_config = true;
         self.last_change = Some(now);
     }
 
-    /// Marks the session store dirty as of `now`.
-    pub fn mark_session(&mut self, now: Instant) {
+    /// Marks the session store dirty for a layout-only change (window geometry) as
+    /// of `now`. Persists exactly like [`mark_session`](Self::mark_session) but does
+    /// not raise the save confirmation.
+    pub fn mark_session_layout(&mut self, now: Instant) {
         self.dirty_session = true;
         self.last_change = Some(now);
     }
@@ -457,6 +536,11 @@ impl SaveScheduler {
     /// Whether anything is pending a write.
     pub fn is_dirty(&self) -> bool {
         self.dirty_config || self.dirty_session
+    }
+
+    /// Whether a meaningful (confirmation-worthy) change is pending.
+    pub fn pending_notify(&self) -> bool {
+        self.dirty_notify
     }
 
     /// Whether a flush is due: dirty and settled for the configured interval.
@@ -473,6 +557,7 @@ impl SaveScheduler {
         let flags = (self.dirty_config, self.dirty_session);
         self.dirty_config = false;
         self.dirty_session = false;
+        self.dirty_notify = false;
         self.last_change = None;
         flags
     }
@@ -485,6 +570,18 @@ impl SaveScheduler {
             self.last_change = None;
         }
     }
+}
+
+/// The result of a coalesced flush: whether any store was written, and whether the
+/// write included a meaningful settings change worth confirming to the user. A
+/// layout-only flush (window geometry or log-pane height) has `wrote == true` and
+/// `notify == false`, so it persists silently (issue #6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FlushOutcome {
+    /// Whether at least one store was written.
+    pub wrote: bool,
+    /// Whether a meaningful settings change was in the flushed batch.
+    pub notify: bool,
 }
 
 /// The application model: holds the shared subsystem handles, derives the view,
@@ -653,13 +750,17 @@ impl AppModel {
                 let mut prefs = settings_form::ui_from_value(&self.settings.ui).0;
                 prefs.log_panel_height = height;
                 self.settings.ui = settings_form::ui_to_value(&prefs);
-                self.scheduler.mark_config(Instant::now());
+                // Resizing the log pane is a layout change: it persists but does
+                // not raise the save confirmation (issue #6).
+                self.scheduler.mark_config_layout(Instant::now());
                 Vec::new()
             }
             UiIntent::SetWindowGeometry(geometry) => {
                 if self.window != Some(geometry) {
                     self.window = Some(geometry);
-                    self.scheduler.mark_session(Instant::now());
+                    // Moving or resizing the window is a layout change: it persists
+                    // but does not raise the save confirmation (issue #6).
+                    self.scheduler.mark_session_layout(Instant::now());
                 }
                 Vec::new()
             }
@@ -815,15 +916,18 @@ impl AppModel {
         }
     }
 
-    /// Flushes any pending coalesced writes if they have settled. Returns whether
-    /// a write occurred (so the caller can show a save confirmation).
-    pub fn maybe_flush(&mut self, now: Instant) -> bool {
+    /// Flushes any pending coalesced writes if they have settled. Returns whether a
+    /// write occurred and whether that write included a meaningful settings change
+    /// (so the caller can show the save confirmation only for real changes, not for
+    /// pure layout writes; issue #6).
+    pub fn maybe_flush(&mut self, now: Instant) -> FlushOutcome {
         if !self.scheduler.should_flush(now) {
-            return false;
+            return FlushOutcome::default();
         }
+        let notify = self.scheduler.pending_notify();
         let (write_config, write_session) = self.scheduler.take();
         let Some(dir) = self.config_dir.clone() else {
-            return false;
+            return FlushOutcome::default();
         };
         let mut saved = false;
         if write_config {
@@ -844,7 +948,10 @@ impl AppModel {
                 }
             }
         }
-        saved
+        FlushOutcome {
+            wrote: saved,
+            notify: notify && saved,
+        }
     }
 
     /// Forces an immediate write of the current session state, used on window

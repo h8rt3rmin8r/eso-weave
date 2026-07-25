@@ -234,8 +234,12 @@ fn main() {
     // pop a message box).
     gui_started.store(true, std::sync::atomic::Ordering::SeqCst);
 
-    // Default size and minimum size the window falls back to when no geometry is
-    // restored or a recorded value is rejected.
+    // Default size the window falls back to when no geometry is restored, and the
+    // boot minimum used before the content extent is measured. Once the GUI lays
+    // out, the authoritative minimum is derived from the actual content extent and
+    // pushed via ViewportCommand::MinInnerSize (see src/app/ui.rs, issue #4), so
+    // this constant is only the pre-measurement floor and no longer needs manual
+    // re-tuning when a UI row is added. Keep it in sync with BOOT_MIN_SIZE there.
     const DEFAULT_SIZE: [f32; 2] = [600.0, 720.0];
     const MIN_SIZE: [f32; 2] = [480.0, 420.0];
     let mut viewport = eframe::egui::ViewportBuilder::default().with_min_inner_size(MIN_SIZE);

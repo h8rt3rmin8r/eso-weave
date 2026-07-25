@@ -15,6 +15,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `gh-fix-ci` (inspects failing GitHub Actions PR checks with `gh`,
   summarizes the failure, and drafts a fix plan before implementing).
 
+### Fixed
+
+- The smallest allowed window now fits every interactive control. Previously,
+  at the minimum height the bottom Skills row was clipped (a regression from
+  adding the Weapon Bar row) and at the minimum width the Pixel Beacon
+  Install/Update/Uninstall row was cut off. The window minimum size is now
+  derived from the actual laid-out content extent and pushed at runtime, so it
+  fits the content and tracks new rows automatically instead of relying on a
+  hand-tuned constant (issue #4).
+- The live log viewer no longer covers the Skills area. Enabling it grows the
+  window height by the log pane's minimum instead of squeezing the controls,
+  the pane now shows at least six lines of text at its minimum height, the
+  window is wider while the pane is open so log lines wrap less, and the resize
+  bar is hard-clamped so its top can never cross into the Skills area.
+  Disabling the viewer shrinks the window back by the same amount, so toggling
+  it is height-neutral (issue #5).
+- The "Settings saved" confirmation no longer appears for window moves, window
+  resizes, or log-pane resizes. Those still persist silently (window geometry
+  and log height are saved as before); the confirmation now appears only for a
+  meaningful settings change such as a toggle or a form-field edit (issue #6).
+
+### Changed
+
+- Buttons, toggle switches, and dropdown menus are about 20 percent shorter,
+  applied consistently through the shared control style, with control text kept
+  fully legible in both themes (issue #7).
+
+### Decisions
+
+- 2026-07-24: Slice 027 (UI window-sizing and layout hardening) bundles issues
+  #4, #5, #6, #7. The window minimum size is derived from the measured
+  central-panel content extent (pushed via `ViewportCommand::MinInnerSize`)
+  rather than a fixed constant, so the floor tracks content and cannot silently
+  under-size when a UI row is added. Control heights were reduced by the full 20
+  percent (`interact_size.y` 22.0 to 17.6, `button_padding.y` 5.0 to 4.0), bounded
+  by a legibility floor of the font line height plus 3 points so text is never
+  clipped. The log viewer enforces a wider minimum width while open
+  (`LOG_WIDTH_BONUS = 100` points). The save-confirmation toast is gated on a new
+  meaningful-change signal in the save scheduler; window geometry and log height
+  are marked through silent layout paths so persistence is unchanged while the
+  toast stays quiet. All behavior is verified at the desk without the game.
+  Details in `specs/027-window-sizing-hardening/`.
+
 ## [0.6.2] - 2026-07-13
 
 ### Fixed

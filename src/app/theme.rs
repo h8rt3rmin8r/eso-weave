@@ -160,8 +160,20 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
 
     ctx.all_styles_mut(|style| {
         style.spacing.item_spacing = egui::vec2(8.0, 6.0);
-        style.spacing.button_padding = egui::vec2(10.0, 5.0);
-        style.spacing.interact_size.y = 22.0;
+        // Interactive controls (buttons, toggles, dropdowns) are set from one place
+        // here so they shrink consistently (issue #7). The height is a reduction of
+        // the former 22.0 baseline, floored so the control font is never clipped;
+        // toggle_switch and the combo helper both derive their height from
+        // interact_size.y, so this single change propagates everywhere.
+        let base_interact_height = 22.0;
+        let body_line_height = style
+            .text_styles
+            .get(&egui::TextStyle::Body)
+            .map(|f| f.size)
+            .unwrap_or(14.0);
+        style.spacing.button_padding = egui::vec2(10.0, 4.0);
+        style.spacing.interact_size.y =
+            crate::app::reduced_interact_height(base_interact_height, body_line_height);
         // Section headings use the bundled SemiBold weight at a larger size, so
         // they read as headings rather than bold body text.
         style.text_styles.insert(

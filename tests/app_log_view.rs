@@ -10,15 +10,20 @@ use eso_weave::logging::LogEvent;
 
 #[test]
 fn log_height_clamps_to_window() {
+    use eso_weave::app::log_min_height;
     let window = 800.0;
-    // Grows are capped so the interactive area stays visible.
-    assert!(clamp_log_height(10_000.0, window) <= window * 0.75 + 0.01);
-    // Shrinks are floored so the panel never disappears.
-    assert!(clamp_log_height(0.0, window) >= (window * 0.1).min(48.0));
+    let row = 14.0;
+    let content_min = 420.0;
+    let min = log_min_height(row);
+    let max = window - content_min;
+    // Grows are capped so the interactive (Skills) area stays visible.
+    assert!(clamp_log_height(10_000.0, window, row, content_min) <= max + 0.01);
+    // Shrinks are floored to the six-line minimum so the panel stays readable.
+    assert_eq!(clamp_log_height(0.0, window, row, content_min), min);
     // A reasonable height passes through unchanged.
-    assert_eq!(clamp_log_height(200.0, window), 200.0);
-    // A tiny window still yields a usable minimum.
-    assert!(clamp_log_height(10.0, 100.0) >= 48.0);
+    assert_eq!(clamp_log_height(200.0, window, row, content_min), 200.0);
+    // A tiny window still yields the readable minimum.
+    assert_eq!(clamp_log_height(10.0, 100.0, row, content_min), min);
 }
 
 fn event(level: Level, message: &str) -> LogEvent {

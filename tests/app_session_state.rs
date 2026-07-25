@@ -167,8 +167,11 @@ fn window_geometry_persists_and_restores_through_the_model() {
         maximized: false,
     };
     model.apply_intent(UiIntent::SetWindowGeometry(geo));
-    // The geometry change marks the session dirty and persists on settle.
-    assert!(model.maybe_flush(Instant::now() + Duration::from_millis(500)));
+    // The geometry change marks the session dirty and persists on settle, but is a
+    // layout-only change so it does not raise the save confirmation (issue #6).
+    let out = model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(out.wrote, "geometry still persists");
+    assert!(!out.notify, "a window move/resize does not confirm");
 
     let (loaded, _) = state::load(dir.path());
     assert_eq!(loaded.window, Some(geo));
@@ -195,7 +198,7 @@ fn flush_session_now_writes_immediately_without_settle() {
     };
     model.apply_intent(UiIntent::SetWindowGeometry(geo));
     // Nothing has settled, but a forced flush (used on window close) writes now.
-    assert!(!model.maybe_flush(Instant::now()));
+    assert!(!model.maybe_flush(Instant::now()).wrote);
     assert!(model.flush_session_now());
     let (loaded, _) = state::load(dir.path());
     assert_eq!(loaded.window, Some(geo));
@@ -227,7 +230,9 @@ fn hotkey_suspend_toggles_like_the_button() {
     // The suspend flip marks the session dirty and persists on settle, exactly
     // like the button path.
     press(&mut model, Action::ToggleSuspend);
-    assert!(model.maybe_flush(Instant::now() + Duration::from_millis(500)));
+    let out = model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(out.wrote, "hotkey suspend persists to session state");
+    assert!(out.notify, "toggling suspend is a meaningful change");
     let (loaded, _) = state::load(dir.path());
     assert!(loaded.suspended, "hotkey suspend persists to session state");
 }
@@ -255,9 +260,52 @@ fn skill_edit_persists_config_after_settle() {
 
     model.apply_intent(UiIntent::EditSkill(1, SkillEdit::Active(false)));
     // Nothing has settled yet.
-    assert!(!model.maybe_flush(Instant::now()));
-    // After the settle interval, exactly one write occurs.
-    let saved = model.maybe_flush(Instant::now() + Duration::from_millis(500));
-    assert!(saved, "a settled config change should flush");
+    assert!(!model.maybe_flush(Instant::now()).wrote);
+    // After the settle interval, exactly one write occurs and it is a meaningful
+    // settings change (raises the save confirmation).
+    let out = model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(out.wrote, "a settled config change should flush");
+    assert!(out.notify, "a skill edit is a meaningful change");
+    assert!(dir.path().join("config.json").exists());
+}
+
+// Save-confirmation gating: layout writes persist silently, real changes confirm
+// (feature 027 / issue #6).
+
+#[test]
+fn scheduler_notifies_only_for_meaningful_changes() {
+    let settle = Duration::from_millis(400);
+    let t0 = Instant::now();
+
+    // A layout-only change is dirty and flushes, but does not notify.
+    let mut s = SaveScheduler::new(settle);
+    s.mark_session_layout(t0);
+    assert!(s.should_flush(t0 + settle));
+    assert!(!s.pending_notify(), "a layout-only change does not confirm");
+    let (_cfg, sess) = s.take();
+    assert!(sess, "a layout change still persists");
+    assert!(!s.pending_notify(), "take clears the notify flag");
+
+    // A meaningful change notifies.
+    let mut s = SaveScheduler::new(settle);
+    s.mark_config(t0);
+    assert!(s.pending_notify(), "a meaningful change confirms");
+
+    // A mixed batch notifies, because a real settings change occurred in it.
+    let mut s = SaveScheduler::new(settle);
+    s.mark_config_layout(t0);
+    s.mark_session(t0);
+    assert!(s.pending_notify(), "a mixed batch confirms");
+}
+
+#[test]
+fn log_height_change_persists_but_does_not_confirm() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+
+    model.apply_intent(UiIntent::SetLogHeight(240));
+    let out = model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(out.wrote, "the log height still persists");
+    assert!(!out.notify, "resizing the log pane does not confirm");
     assert!(dir.path().join("config.json").exists());
 }
