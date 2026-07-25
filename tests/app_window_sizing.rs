@@ -5,8 +5,9 @@
 //! the control-height and log-minimum helpers date to feature 027.
 
 use eso_weave::app::{
-    clamp_log_height, content_min_size, log_min_height, measurement_stable, open_log_reserve,
-    reduced_interact_height, split_log_height, LOG_FRAME_MARGIN, LOG_MIN_LINES,
+    cap_to_work_area, clamp_log_height, content_min_size, intrinsic_extent, log_min_height,
+    measurement_stable, open_log_reserve, reduced_interact_height, split_log_height,
+    window_growth_request, CONTENT_PADDING, LOG_FRAME_MARGIN, LOG_MIN_LINES,
 };
 
 // US1 / issue #8: content_min_size (boot floor until stable, then measured wins).
@@ -175,4 +176,62 @@ fn reduced_interact_height_reduces_but_never_clips() {
     assert!(reduced_interact_height(22.0, tall_font) >= tall_font);
     // Monotonic in the base height.
     assert!(reduced_interact_height(30.0, 14.0) > reduced_interact_height(22.0, 14.0));
+}
+
+// Slice 030 / issue #12: the intrinsic extent and the two guards around it.
+
+#[test]
+fn intrinsic_extent_pads_the_measured_content() {
+    let (w, h) = intrinsic_extent(400.0, 600.0);
+    assert_eq!((w, h), (400.0 + CONTENT_PADDING, 600.0 + CONTENT_PADDING));
+    // Strictly increasing in both inputs, and independent per axis.
+    assert!(intrinsic_extent(500.0, 600.0).0 > w);
+    assert_eq!(intrinsic_extent(500.0, 600.0).1, h);
+}
+
+// FR-008: the enforced minimum is capped at the display work area, per axis.
+#[test]
+fn cap_to_work_area_clamps_each_axis_independently() {
+    // Fits: unchanged.
+    assert_eq!(
+        cap_to_work_area((500.0, 600.0), (1920.0, 1080.0)),
+        (500.0, 600.0)
+    );
+    // Too tall only: height capped, width untouched.
+    assert_eq!(
+        cap_to_work_area((500.0, 1400.0), (1920.0, 1080.0)),
+        (500.0, 1080.0)
+    );
+    // Too wide only.
+    assert_eq!(
+        cap_to_work_area((2400.0, 600.0), (1920.0, 1080.0)),
+        (1920.0, 600.0)
+    );
+    // Both.
+    assert_eq!(
+        cap_to_work_area((2400.0, 1400.0), (1920.0, 1080.0)),
+        (1920.0, 1080.0)
+    );
+}
+
+// FR-009: the window grows to fit content that no longer fits, and never shrinks
+// back when the content gets smaller.
+#[test]
+fn window_growth_request_grows_but_never_shrinks() {
+    // Content fits: no request.
+    assert_eq!(window_growth_request((500.0, 600.0), (800.0, 900.0)), None);
+    // Content taller than the window: grow height, keep the wider window width.
+    assert_eq!(
+        window_growth_request((500.0, 1000.0), (800.0, 900.0)),
+        Some((800.0, 1000.0))
+    );
+    // Content wider than the window: grow width, keep the taller window height.
+    assert_eq!(
+        window_growth_request((900.0, 600.0), (800.0, 900.0)),
+        Some((900.0, 900.0))
+    );
+    // Content shrinking never produces a request, so the user's size is kept.
+    assert_eq!(window_growth_request((100.0, 100.0), (800.0, 900.0)), None);
+    // A hairline difference is not a growth trigger (no per-frame churn).
+    assert_eq!(window_growth_request((800.2, 900.2), (800.0, 900.0)), None);
 }

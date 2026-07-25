@@ -3,9 +3,10 @@
 //! Everything correctness-bearing (display derivation, UI-intent handling, the
 //! settings mapping in [`settings_form`], the reader-event routing in
 //! [`routing`], and the log view in [`log_view`]) lives here and is unit-tested
-//! against the project's in-memory subsystems. The egui rendering in [`ui`] is a
-//! thin layer that reads this view-model and raises intents; it is validated
-//! manually because a native window cannot be exercised headlessly.
+//! against the project's in-memory subsystems. The egui rendering in [`ui`] reads
+//! this view-model and raises intents; its sizing behavior is covered by
+//! `tests/app_ui_sizing.rs` through a headless egui harness, which supersedes the
+//! former claim that a window could not be exercised headlessly (slice 030).
 
 pub mod beacon_light;
 pub mod log_view;
@@ -409,6 +410,47 @@ pub fn content_min_size(measured: (f32, f32), boot_floor: (f32, f32), stable: bo
     }
 }
 
+/// The padding (points) added around the measured content to form the intrinsic
+/// extent: the central panel's frame margins plus a hairline, so the enforced
+/// minimum shows the content without clipping its outermost pixel.
+pub const CONTENT_PADDING: f32 = 16.0;
+
+/// The intrinsic content extent `(width, height)` in points, from the widest
+/// content-sized block and the height the laid-out content actually occupied.
+///
+/// The distinction this encodes is the root fix of issue #12. Full-width chrome (a
+/// separator, the menu bar's background) must contribute height only: including its
+/// width would make the extent a function of the window, which is what pinned the
+/// enforced minimum to the window's own current size and produced the ratcheted
+/// shrink. Pure. See FR-001, FR-007.
+pub fn intrinsic_extent(content_width: f32, content_height: f32) -> (f32, f32) {
+    (
+        content_width + CONTENT_PADDING,
+        content_height + CONTENT_PADDING,
+    )
+}
+
+/// Caps an enforced minimum at the display work area, per axis. A minimum larger
+/// than the work area would leave the window unpositionable or unresizable on a
+/// small display at a high scale factor. Pure. See FR-008.
+pub fn cap_to_work_area(minimum: (f32, f32), work_area: (f32, f32)) -> (f32, f32) {
+    (minimum.0.min(work_area.0), minimum.1.min(work_area.1))
+}
+
+/// The window size to request when the intrinsic content no longer fits, or `None`
+/// when it already does. The window grows to fit its content but never shrinks
+/// back: taking away a size the user chose would be its own defect. Pure. See
+/// FR-009.
+pub fn window_growth_request(intrinsic: (f32, f32), window: (f32, f32)) -> Option<(f32, f32)> {
+    let grow_x = intrinsic.0 > window.0 + 0.5;
+    let grow_y = intrinsic.1 > window.1 + 0.5;
+    if grow_x || grow_y {
+        Some((intrinsic.0.max(window.0), intrinsic.1.max(window.1)))
+    } else {
+        None
+    }
+}
+
 /// Whether a content measurement is stable: true only when the previous frame's
 /// measurement exists and both dimensions are within `epsilon` of the current one.
 /// Two consecutive close measurements gate the switch from the boot floor to the
@@ -469,6 +511,20 @@ pub fn clamp_log_height(
     let min = log_min_height(row_height);
     let max = (window_height - content_min_height).max(min);
     height.clamp(min, max)
+}
+
+/// The greatest live-log panel height (points) that cannot overlap the central
+/// content, which is simply the space left above it. Never negative.
+///
+/// This is the unconditional half of the log-pane boundary. [`clamp_log_height`]
+/// resolves a window too short for both the content and a six-line log in favor of
+/// the log's readable floor, which lets the pane cover controls in that degenerate
+/// case; issue #13 states that covering an interactive control is always a hard
+/// fail, so the rendered height takes the minimum of the two. In any window large
+/// enough to satisfy the enforced minimum the two agree and this bound is inert.
+/// Pure. See FR-010.
+pub fn log_max_height_no_overlap(window_height: f32, content_height: f32) -> f32 {
+    (window_height - content_height).max(0.0)
 }
 
 /// Computes a settings-modal dimension (points) for a window dimension. The modal

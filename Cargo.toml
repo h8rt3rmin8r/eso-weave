@@ -48,6 +48,11 @@ x11rb = "0.13"
 winresource = "0.1"
 
 [dev-dependencies]
+# Headless egui harness for the rendered-frame sizing tests (slice 030). Zero
+# features are enabled by default, so no GPU, windowing, or image stack enters the
+# test build; the version tracks the pinned egui/eframe 0.35. Recorded as a dated
+# decision in CHANGELOG.md.
+egui_kittest = { version = "0.35.0", default-features = false }
 tempfile = "3"
 
 # Debian package metadata for cargo-deb (built by the pinned release pipeline with

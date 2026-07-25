@@ -632,8 +632,19 @@ flowchart TD
 
 ### 11.1 Main window
 
-A single resizable window (default 600 by 720, minimum 480 by 420) with the
-following regions:
+A single resizable window (default 600 by 720) with the following regions.
+
+The window minimum is not a fixed size. 480 by 420 is the boot floor, applied only
+until the content has been laid out and measured over two consecutive stable
+frames. From then on the enforced minimum is the intrinsic content extent: the
+widest content-sized block and the height the laid-out content occupies, plus the
+panel padding. It is a function of the controls, the theme, and the display scale
+only, and never of the current window size, so a single continuous drag can shrink
+the window to the content minimum on either axis. It follows the content down when
+a control row disappears, grows the window to fit when the content no longer fits
+(never shrinking the window the user chose), and is capped at the display work
+area. While the live log is open the minimum adds a width bonus and the open log
+reserve.
 
 ```mermaid
 flowchart TB
@@ -667,9 +678,26 @@ The live log panel displays the most recent log events from an in-memory ring
 buffer, colorized by level. It works whether or not file logging is enabled,
 autoscrolls while at the bottom, and offers a level filter local to the panel.
 
+The panel is resizable between a six-line readable minimum and the space above it,
+and it may never cover an interactive control. That boundary is unconditional: on
+every rendered frame the pane's top edge sits at or below the central content's
+bottom edge, during a splitter drag, during a window resize, and during both at
+once. A height produced by a drag is brought inside the boundary before it is
+displayed or persisted, and a restored height is brought inside it before the first
+frame. In a window too short for both the content and six log lines, the controls
+win and the pane gives up its readable floor rather than covering them.
+
 ### 11.3 Settings
 
-The settings modal fills its width, with its scrollbar at the right edge. It edits,
+The settings modal grows with the window on both axes, sub-linearly, so it takes a
+progressively smaller fraction of a larger window while its absolute size keeps
+increasing, bounded to a maximum of 1040 by 880 points and never exceeding 0.92 of
+the window. Its rendered rectangle equals that computed extent: the height is set
+as explicitly as the width, and the room reserved above the body is measured from
+the laid-out heading, separator, and close row rather than assumed. At the maximum
+size at least half the settings body is visible without scrolling.
+
+The modal fills its width, with its scrollbar at the right edge. It edits,
 and persists to the config file, all of: keybindings; global and per-slot delays;
 weapon-aware timing and per-class presets; latency adaptation and `k`; fishing
 timings and interact key; pixel-bus sampling interval and tolerance; AddOns path

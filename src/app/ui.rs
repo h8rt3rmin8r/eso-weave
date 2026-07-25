@@ -1,8 +1,19 @@
-//! egui rendering for the main window (thin; validated manually).
+//! egui rendering for the main window.
 //!
-//! This layer only reads the [`AppModel`] view and raises intents. It carries no
-//! correctness-bearing logic, so it is excluded from the unit-tested surface and
-//! validated with the manual checklist in the feature quickstart.
+//! This layer reads the [`AppModel`] view and raises intents. It was long treated
+//! as carrying no correctness-bearing logic and excluded from the tested surface,
+//! validated only by a manual checklist. That was wrong, and it cost four releases:
+//! the window-sizing defects of issues #4, #5, #8, #12, #13, and #14 all lived
+//! here, in the glue between the pure helpers in [`crate::app`] and egui, while
+//! every one of those helpers' own tests stayed green.
+//!
+//! The sizing behavior is therefore covered by `tests/app_ui_sizing.rs`, which
+//! drives [`EsoWeaveApp::frame_ui`] through a headless egui harness and asserts
+//! rendered geometry: the intrinsic content extent, the minimum pushed to the
+//! viewport across a simulated resize gesture, the log pane's never-overlap
+//! boundary under drag and resize, and the settings modal's rendered rectangle.
+//! What remains manual is appearance rather than geometry (color, wording, hover
+//! affordances) plus the real window-manager drag, which only a desk run exercises.
 //!
 //! Rendering uses a central panel (menu bar, status region, and skills), an
 //! optional resizable bottom panel for the live log, and a settings modal, keeping
@@ -99,6 +110,11 @@ const BOOT_MIN_SIZE: egui::Vec2 = egui::vec2(480.0, 420.0);
 /// lines wrap less than at the base content width (issue #5, FR-006).
 const LOG_WIDTH_BONUS: f32 = 100.0;
 
+/// The settings modal frame's inner margin (points) on each edge. Set explicitly
+/// rather than inherited, so the modal's outer rendered rectangle can be made to
+/// equal its computed extent exactly (issue #14, FR-014).
+const MODAL_FRAME_MARGIN: f32 = 8.0;
+
 /// The log text row height (points) used to size the six-line log minimum. Read
 /// from the monospace text style (its size is the same in either theme), falling
 /// back to a sensible default.
@@ -165,6 +181,24 @@ pub struct EsoWeaveApp {
     /// The last minimum inner size pushed to the viewport, so the command is sent
     /// only when the target changes rather than every frame.
     last_min_sent: Option<egui::Vec2>,
+    /// The widest content-sized block laid out this frame (points), accumulated as
+    /// the central content is built and reset at the start of each frame. Blocks
+    /// that expand to fill the available width are deliberately excluded, which is
+    /// what keeps the intrinsic extent independent of the window (issue #12).
+    content_width: f32,
+    /// The live-log pane's rendered top edge this frame, and the central content's
+    /// rendered bottom edge. Recorded so the never-overlap invariant can be
+    /// asserted per frame rather than inferred from the arithmetic (issue #13).
+    last_log_top: Option<f32>,
+    last_content_bottom: Option<f32>,
+    /// The settings modal's rendered size this frame, and the settings body's total
+    /// laid-out height at the modal's inner width. Recorded so the modal's rendered
+    /// extent can be compared against its computed extent (issue #14).
+    last_modal_size: Option<egui::Vec2>,
+    last_modal_target: Option<egui::Vec2>,
+    last_settings_body_height: Option<f32>,
+    /// The height of the settings body actually visible without scrolling.
+    last_settings_body_visible: Option<f32>,
 }
 
 impl EsoWeaveApp {
@@ -198,7 +232,60 @@ impl EsoWeaveApp {
             prev_window_h: None,
             log_reseed: false,
             last_min_sent: None,
+            content_width: 0.0,
+            last_log_top: None,
+            last_content_bottom: None,
+            last_modal_size: None,
+            last_modal_target: None,
+            last_settings_body_height: None,
+            last_settings_body_visible: None,
         }
+    }
+
+    /// The height of the settings body visible without scrolling on the last frame
+    /// the modal was open. Compared against the body's total height for FR-017.
+    pub fn last_settings_body_visible(&self) -> Option<f32> {
+        self.last_settings_body_visible
+    }
+
+    /// The size the modal's growth rule called for on the last frame it was open.
+    /// The rendered size must equal this (issue #14, contract C5).
+    pub fn last_modal_target(&self) -> Option<egui::Vec2> {
+        self.last_modal_target
+    }
+
+    /// The settings modal's rendered size from the last frame, or `None` when the
+    /// modal is closed. Compared against `modal_extent` by the rendered-frame tests
+    /// (issue #14, contract C5).
+    pub fn last_modal_size(&self) -> Option<egui::Vec2> {
+        self.last_modal_size
+    }
+
+    /// The settings body's total laid-out height at the modal's inner width, from
+    /// the last frame the modal was open (contract C6).
+    pub fn last_settings_body_height(&self) -> Option<f32> {
+        self.last_settings_body_height
+    }
+
+    /// The live-log pane's rendered top edge and the central content's rendered
+    /// bottom edge from the last frame, or `None` when the log is closed. The
+    /// never-overlap invariant is `log_top >= content_bottom` (issue #13,
+    /// contract C4). Exposed for the rendered-frame sizing tests.
+    pub fn last_log_top(&self) -> Option<f32> {
+        self.last_log_top
+    }
+
+    /// See [`Self::last_log_top`].
+    pub fn last_content_bottom(&self) -> Option<f32> {
+        self.last_content_bottom
+    }
+
+    /// Records a content-sized block's width toward this frame's intrinsic extent.
+    /// Only blocks that size to their content may be recorded; anything that
+    /// expands to fill the available width would reintroduce the window-tracking
+    /// measurement that issue #12 reported (FR-007).
+    fn note_content_width(&mut self, width: f32) {
+        self.content_width = self.content_width.max(width);
     }
 
     /// Captures the current window geometry from the egui viewport and raises an
@@ -280,6 +367,64 @@ impl EsoWeaveApp {
 
 impl eframe::App for EsoWeaveApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // The eframe frame handle is unused, so the whole body lives in an
+        // inherent method taking only the `Ui`. That is the seam the headless
+        // rendered-frame tests drive through `egui_kittest::Harness::new_ui`
+        // (slice 030, contract C7); without it this layer cannot be tested at all.
+        self.frame_ui(ui);
+    }
+}
+
+impl EsoWeaveApp {
+    /// The content extent enforced this frame (points). Exposed for the
+    /// rendered-frame sizing tests, which assert it is independent of the window
+    /// size (slice 030, contract C1).
+    pub fn content_extent(&self) -> egui::Vec2 {
+        self.content_extent
+    }
+
+    /// The last minimum inner size pushed to the viewport, or `None` if none has
+    /// been sent. Exposed for the rendered-frame sizing tests (contract C2).
+    pub fn last_min_sent(&self) -> Option<egui::Vec2> {
+        self.last_min_sent
+    }
+
+    /// The current live-log pane height (points). Exposed for the rendered-frame
+    /// sizing tests (contract C4).
+    pub fn log_height(&self) -> f32 {
+        self.log_height
+    }
+
+    /// Opens or closes the live-log pane directly, bypassing the menu. Exposed so
+    /// the rendered-frame sizing tests can reach the log-open cases.
+    pub fn set_log_panel_open(&mut self, open: bool) {
+        self.log_panel_open = open;
+        self.log_reseed = true;
+    }
+
+    /// Shows or hides the uninstall confirmation row, which is the app's one
+    /// transient control row. Exposed so the rendered-frame sizing tests can prove
+    /// the enforced minimum grows for a new row and shrinks again when it goes
+    /// (FR-004).
+    pub fn set_confirm_uninstall(&mut self, confirm: bool) {
+        self.confirm_uninstall = confirm;
+    }
+
+    /// Opens or closes the settings modal directly, bypassing the menu. Exposed so
+    /// the rendered-frame sizing tests can reach the modal cases (contract C5).
+    pub fn set_settings_open(&mut self, open: bool) {
+        if open {
+            let form = self.model.settings_form();
+            self.settings_applied = Some(form.clone());
+            self.settings_draft = Some(form);
+        }
+        self.settings_open = open;
+    }
+
+    /// Renders one frame. Reachable without an `eframe::Frame`, a window, or a
+    /// GPU, so `tests/app_ui_sizing.rs` can assert the rendered geometry that the
+    /// pure sizing helpers alone never proved (slice 030).
+    pub fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.apply_prefs(&ctx);
         // Apply any hotkey toggles before deriving the view, so a press taken this
@@ -307,7 +452,12 @@ impl eframe::App for EsoWeaveApp {
             // (Skills) area, computed against the true measured content height so no
             // phantom band is reserved (issue #8). Both bounds are shared helpers.
             let min_h = crate::app::log_min_height(row_h);
-            let max_h = (window_h - content_h).max(min_h);
+            // The non-overlap bound is unconditional: in a window too short for both
+            // the content and a six-line log, the controls win and the pane gives up
+            // its readable floor rather than covering them (issue #13, FR-010).
+            let no_overlap = crate::app::log_max_height_no_overlap(window_h, content_h);
+            let min_h = min_h.min(no_overlap);
+            let max_h = (window_h - content_h).max(min_h).min(no_overlap);
             // Force the pane height on two kinds of frame: the first frame after
             // opening (seed from the persisted height), and any frame where the
             // window height changed while open (split the change proportionally
@@ -336,12 +486,15 @@ impl eframe::App for EsoWeaveApp {
             } else {
                 None
             };
+            // Whatever produced the forced height, it can never breach the boundary.
+            let forced = forced.map(|h| h.clamp(0.0, no_overlap));
             let (panel_min, panel_max, start) = match forced {
                 Some(h) => (h, h, h),
                 None => (
                     min_h,
                     max_h,
-                    crate::app::clamp_log_height(self.log_height, window_h, row_h, content_h),
+                    crate::app::clamp_log_height(self.log_height, window_h, row_h, content_h)
+                        .clamp(0.0, no_overlap),
                 ),
             };
             let resp = egui::Panel::bottom("log_panel")
@@ -357,82 +510,117 @@ impl eframe::App for EsoWeaveApp {
                 .show(ui, |ui| {
                     self.log_view(ui, &mut intents);
                 });
-            let new_h = resp.response.rect.height();
-            if (new_h - self.log_height).abs() > 0.5 {
-                self.log_height = new_h;
-                intents.push(UiIntent::SetLogHeight(new_h.round() as u32));
+            // Re-clamp what egui committed BEFORE it is stored or persisted. In
+            // v0.8.0 the committed height was trusted, so a drag past the boundary
+            // was both rendered and remembered across restarts (issue #13, FR-011).
+            let committed = resp.response.rect.height();
+            let bounded = crate::app::clamp_log_height(committed, window_h, row_h, content_h)
+                .clamp(0.0, no_overlap);
+            if (committed - bounded).abs() > 0.5 {
+                // egui let the drag past the boundary; force the bounded height on
+                // the next frame rather than letting the overlap persist.
+                self.log_reseed = true;
             }
+            if (bounded - self.log_height).abs() > 0.5 {
+                self.log_height = bounded;
+                intents.push(UiIntent::SetLogHeight(bounded.round() as u32));
+            }
+            self.last_log_top = Some(resp.response.rect.top());
+        } else {
+            self.last_log_top = None;
+            self.last_content_bottom = None;
         }
 
         // Measured content extent of the central panel this frame, captured inside
         // the closure and used after to drive the window minimum size (issue #8).
+        //
+        // The measurement is INTRINSIC: the height comes from a scope whose rect
+        // grows only to what the content allocated, and the width from the widest
+        // content-sized block. Taking the panel's own `min_rect` instead (as v0.8.0
+        // did) returns the window size less the frame margins on both axes, so the
+        // enforced minimum pinned the window at its own current size and the window
+        // could not be shrunk in a single gesture (issue #12, FR-001).
         let mut measured = self.content_extent;
+        self.content_width = 0.0;
         egui::CentralPanel::default().show(ui, |ui| {
-            // Menu bar.
-            egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button(strings::MENU_FILE, |ui| {
-                    if ui
-                        .button(strings::MENU_SETTINGS)
-                        .on_hover_text(strings::MENU_SETTINGS_TOOLTIP)
-                        .clickable()
-                        .clicked()
-                    {
-                        let form = self.model.settings_form();
-                        self.settings_applied = Some(form.clone());
-                        self.settings_draft = Some(form);
-                        self.settings_open = true;
-                    }
-                    if ui.button(strings::MENU_EXIT).clickable().clicked() {
-                        exit = true;
-                    }
-                })
-                .response
-                .clickable();
-                ui.menu_button(strings::MENU_VIEW, |ui| {
-                    if ui
-                        .checkbox(&mut self.log_panel_open, strings::MENU_LOG_TOGGLE)
-                        .on_hover_text(strings::MENU_LOG_TOGGLE_TOOLTIP)
-                        .clickable()
-                        .changed()
-                    {
-                        intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
-                        // Height-neutral toggle (issue #8, FR-009): on open, grow the
-                        // window by the log height actually about to show (the
-                        // persisted height, clamped) and seed the pane to it; on
-                        // close, shrink by the pane's actual current height, not a
-                        // fixed minimum, so a user-enlarged log leaves no residual
-                        // band.
-                        if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
-                            let cur = inner.size();
-                            let row_h = log_row_height(&ctx);
-                            let window_h = ctx.content_rect().height();
-                            let new_h = if self.log_panel_open {
-                                self.log_reseed = true;
-                                let shown = crate::app::clamp_log_height(
-                                    self.log_height,
-                                    window_h,
-                                    row_h,
-                                    self.content_extent.y,
-                                );
-                                cur.y + shown
-                            } else {
-                                (cur.y - self.log_height).max(self.content_extent.y)
-                            };
-                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
-                                cur.x, new_h,
-                            )));
+            let scope = ui.scope(|ui| {
+                // Menu bar.
+                let menu_bar = egui::MenuBar::new().ui(ui, |ui| {
+                    ui.menu_button(strings::MENU_FILE, |ui| {
+                        if ui
+                            .button(strings::MENU_SETTINGS)
+                            .on_hover_text(strings::MENU_SETTINGS_TOOLTIP)
+                            .clickable()
+                            .clicked()
+                        {
+                            let form = self.model.settings_form();
+                            self.settings_applied = Some(form.clone());
+                            self.settings_draft = Some(form);
+                            self.settings_open = true;
                         }
-                    }
-                })
-                .response
-                .clickable();
-            });
-            ui.separator();
+                        if ui.button(strings::MENU_EXIT).clickable().clicked() {
+                            exit = true;
+                        }
+                    })
+                    .response
+                    .clickable();
+                    ui.menu_button(strings::MENU_VIEW, |ui| {
+                        if ui
+                            .checkbox(&mut self.log_panel_open, strings::MENU_LOG_TOGGLE)
+                            .on_hover_text(strings::MENU_LOG_TOGGLE_TOOLTIP)
+                            .clickable()
+                            .changed()
+                        {
+                            intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
+                            // Height-neutral toggle (issue #8, FR-009): on open, grow the
+                            // window by the log height actually about to show (the
+                            // persisted height, clamped) and seed the pane to it; on
+                            // close, shrink by the pane's actual current height, not a
+                            // fixed minimum, so a user-enlarged log leaves no residual
+                            // band.
+                            if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
+                                let cur = inner.size();
+                                let row_h = log_row_height(&ctx);
+                                let window_h = ctx.content_rect().height();
+                                let new_h = if self.log_panel_open {
+                                    self.log_reseed = true;
+                                    let shown = crate::app::clamp_log_height(
+                                        self.log_height,
+                                        window_h,
+                                        row_h,
+                                        self.content_extent.y,
+                                    );
+                                    cur.y + shown
+                                } else {
+                                    (cur.y - self.log_height).max(self.content_extent.y)
+                                };
+                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::vec2(cur.x, new_h),
+                                ));
+                            }
+                        }
+                    })
+                    .response
+                    .clickable();
+                });
+                // The menu bar spans the available width (measured, not assumed: it
+                // reports 1168 in a 1200 point window), so like the separator it is
+                // full-width chrome and contributes height only. Its buttons need far
+                // less width than the grids below, so nothing is clipped by excluding
+                // it (FR-007).
+                let _ = menu_bar;
+                ui.separator();
 
-            self.main_view(ui, &mut intents);
-            // The tight bounding box of the laid-out content is what the window
-            // must be able to show; capture it here (issue #4).
-            measured = ui.min_rect().size();
+                self.main_view(ui, &mut intents);
+            });
+            // The scope's rect grows only to what the content allocated, so its
+            // height is the content height rather than the panel height.
+            let extent =
+                crate::app::intrinsic_extent(self.content_width, scope.response.rect.height());
+            measured = egui::vec2(extent.0, extent.1);
+            if self.log_panel_open {
+                self.last_content_bottom = Some(scope.response.rect.bottom());
+            }
         });
 
         // Update the enforced content extent: the boot floor until the measurement
@@ -463,9 +651,34 @@ impl eframe::App for EsoWeaveApp {
         } else {
             self.content_extent
         };
+        // Cap at the display work area so a small display at a high scale factor
+        // cannot produce a window that is unpositionable or unresizable (FR-008).
+        // Making the central content scroll instead was rejected: a filling scroll
+        // area would reintroduce the window-tracking measurement this slice removes.
+        let target_min = ctx
+            .input(|i| i.viewport().monitor_size)
+            .map(|work| {
+                let capped =
+                    crate::app::cap_to_work_area((target_min.x, target_min.y), (work.x, work.y));
+                egui::vec2(capped.0, capped.1)
+            })
+            .unwrap_or(target_min);
+        // Sent only when the value itself changes, never in response to a window
+        // geometry change (FR-005). This is what makes a mid-gesture relaxation of
+        // the minimum impossible, which is the mechanism the ratchet depended on.
         if self.last_min_sent != Some(target_min) {
             ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(target_min));
             self.last_min_sent = Some(target_min);
+        }
+        // The window grows to fit content that no longer fits, but never shrinks
+        // back: taking away a size the user chose would be its own defect (FR-009).
+        if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
+            let cur = inner.size();
+            if let Some((w, h)) =
+                crate::app::window_growth_request((target_min.x, target_min.y), (cur.x, cur.y))
+            {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+            }
         }
         // Record this frame's window height for the next frame's proportional split.
         self.prev_window_h = Some(ctx.content_rect().height());
@@ -512,16 +725,14 @@ impl eframe::App for EsoWeaveApp {
         }
         ctx.request_repaint_after(Duration::from_millis(250));
     }
-}
 
-impl EsoWeaveApp {
     fn main_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
         let view = self.model.view();
 
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
 
         if self.confirm_uninstall {
-            ui.horizontal(|ui| {
+            let row = ui.horizontal(|ui| {
                 ui.label("Remove the PixelBeacon addon?");
                 if ui
                     .button("Uninstall")
@@ -541,12 +752,13 @@ impl EsoWeaveApp {
                     self.confirm_uninstall = false;
                 }
             });
+            self.note_content_width(row.response.rect.width());
             ui.separator();
         }
 
         // Status region: title, colorized state, and control, aligned in a grid
         // that spans the same width as the Skills grid below.
-        egui::Grid::new("status")
+        let status = egui::Grid::new("status")
             .num_columns(3)
             .spacing([12.0, 8.0])
             .min_col_width(110.0)
@@ -616,13 +828,16 @@ impl EsoWeaveApp {
                 ui.end_row();
             });
 
+        self.note_content_width(status.response.rect.width());
         ui.separator();
-        widgets::heading(ui, strings::SKILLS_TITLE).on_hover_text(strings::SKILLS_TOOLTIP);
+        let skills_title =
+            widgets::heading(ui, strings::SKILLS_TITLE).on_hover_text(strings::SKILLS_TOOLTIP);
+        self.note_content_width(skills_title.rect.width());
         // A single grid so the label, enabled toggle, weave selector, override
         // toggle, and delay align in labeled columns across every row. When a row
         // has no override, the Delay cell shows the inherited default (muted) so a
         // row never displays a meaningless zero.
-        egui::Grid::new("skills")
+        let skills = egui::Grid::new("skills")
             .num_columns(5)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
@@ -724,6 +939,7 @@ impl EsoWeaveApp {
                     ui.end_row();
                 }
             });
+        self.note_content_width(skills.response.rect.width());
     }
 
     fn log_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
@@ -782,30 +998,66 @@ impl EsoWeaveApp {
         // display) and never exceeding the window.
         let modal_w = modal_extent(screen.width(), 460.0, 1040.0, 0.92);
         let modal_h = modal_extent(screen.height(), 400.0, 880.0, 0.92);
-        // Reserve room for the heading, separator, and close row above the body.
-        let body_max_h = (modal_h - 52.0).max(120.0);
+        // The room above the body (heading, separator, close row) is measured from
+        // the laid-out chrome rather than reserved as a constant: the old fixed 52
+        // points understated the real chrome by about half, so the modal overshot
+        // its computed height at both ends of the range (issue #14).
 
-        let modal = egui::Modal::new(egui::Id::new("eso_weave_settings")).show(ctx, |ui| {
-            ui.set_width(modal_w);
-            ui.horizontal(|ui| {
-                widgets::heading(ui, strings::MENU_SETTINGS);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Close").clickable().clicked() {
-                        close = true;
-                    }
+        // The modal's own frame margin sits outside the inner Ui, so the inner size
+        // is the target less that margin on each edge. Setting it explicitly is what
+        // makes the OUTER rendered rectangle equal the computed extent; using the
+        // default frame left a constant overshoot on both axes (issue #14).
+        let modal_frame = egui::Frame::popup(&ctx.style_of(match self.ui_prefs.theme {
+            Theme::Light => egui::Theme::Light,
+            Theme::Dark => egui::Theme::Dark,
+        }))
+        .inner_margin(egui::Margin::same(MODAL_FRAME_MARGIN as i8));
+        // The margin and the frame's stroke both sit outside the inner Ui, so both
+        // come off the target. Reading the stroke from the frame keeps this exact if
+        // the style changes, rather than encoding today's one-point border.
+        let edge = MODAL_FRAME_MARGIN + modal_frame.stroke.width;
+        let inner_w = (modal_w - 2.0 * edge).max(0.0);
+        let inner_h = (modal_h - 2.0 * edge).max(0.0);
+        let modal = egui::Modal::new(egui::Id::new("eso_weave_settings"))
+            .frame(modal_frame)
+            .show(ctx, |ui| {
+                ui.set_width(inner_w);
+                // The height must be set as explicitly as the width. Without it the
+                // modal inherited whatever vertical space its centered area happened to
+                // leave, which is about half the window, so the body scrolled almost
+                // immediately no matter how large the window grew (issue #14, FR-014).
+                ui.set_height(inner_h);
+                let modal_top = ui.min_rect().top();
+                ui.horizontal(|ui| {
+                    widgets::heading(ui, strings::MENU_SETTINGS);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Close").clickable().clicked() {
+                            close = true;
+                        }
+                    });
                 });
+                ui.separator();
+                // Do not shrink to content width: fill the modal's inner width so the
+                // body spans the modal and the vertical scrollbar sits at the far right
+                // edge (matching the log-panel scroll area).
+                let chrome = ui.cursor().top() - modal_top;
+                let body_max_h = (inner_h - chrome).max(80.0);
+                let body = egui::ScrollArea::vertical()
+                    .max_height(body_max_h)
+                    // Pin the scrolled viewport to the reserved height as well, so the
+                    // body fills the modal instead of collapsing to whatever space the
+                    // area inherited.
+                    .min_scrolled_height(body_max_h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        settings_body(ui, &palette, &mut draft);
+                    });
+                (body.content_size.y, body_max_h)
             });
-            ui.separator();
-            // Do not shrink to content width: fill the modal's inner width so the
-            // body spans the modal and the vertical scrollbar sits at the far right
-            // edge (matching the log-panel scroll area).
-            egui::ScrollArea::vertical()
-                .max_height(body_max_h)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    settings_body(ui, &palette, &mut draft);
-                });
-        });
+        self.last_modal_size = Some(modal.response.rect.size());
+        self.last_modal_target = Some(egui::vec2(modal_w, modal_h));
+        self.last_settings_body_height = Some(modal.inner.0);
+        self.last_settings_body_visible = Some(modal.inner.1);
         if modal.should_close() {
             close = true;
         }

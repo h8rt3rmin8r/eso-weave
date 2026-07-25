@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The window can be shrunk to its content minimum in a single continuous drag
+  again, on both axes. The enforced minimum was measured from the central panel's
+  own rectangle, which is the window size less the frame margins, so the window
+  was pinned at approximately its own current size and each drag gesture yielded
+  only about one text line before locking. The minimum is now intrinsic: the
+  widest content-sized block and the height the laid-out content occupies, a
+  function of the controls, the theme, and the scale only, never of the window
+  (issue #12).
+- The live-log pane can no longer be dragged over the Skills controls. The
+  boundary is now enforced on every frame rather than computed from the inflated
+  content height, the height egui commits after a drag is clamped before it is
+  stored or persisted, and a window too short for both the content and six log
+  lines now compresses the log rather than covering the controls (issue #13).
+- The settings modal grows with the window again. Its height was never set, only
+  its width, so it inherited the roughly half-window space its centered area left
+  and stayed frozen at its 400 point floor no matter how large the window grew,
+  showing about 22 percent of the settings body. The rendered rectangle now equals
+  the computed extent on both axes, and 51 percent of the body is visible at the
+  maximum (issue #14).
+
+### Changed
+
+- The egui rendering layer is no longer excluded from the tested surface. Its
+  sizing behavior is covered by `tests/app_ui_sizing.rs`, which drives the real
+  frame body through a headless egui harness and asserts rendered geometry: the
+  intrinsic extent, the minimum pushed across a simulated resize gesture, the log
+  pane boundary under drag and resize, and the modal's rendered rectangle. Every
+  prior window-sizing defect shipped with a fully green suite because the tested
+  part (the pure arithmetic) was never the broken part.
+
+### Decisions
+
+- 2026-07-25: Added `egui_kittest` 0.35 as a dev-dependency with
+  `default-features = false`. It has five feature flags and zero enabled by
+  default, so the test build gains no GPU, windowing, or image stack; the three
+  crates added are `egui_kittest`, `kittest`, and `accesskit_consumer`. This
+  follows the `ureq` precedent from slice 018 for recording a new dependency. The
+  alternative, extracting still more arithmetic into pure functions, was rejected:
+  it is exactly the strategy that produced three consecutive green-suite failures.
+- 2026-07-25: The settings modal's configured maximum height stays at 880 points.
+  FR-017 permits raising it only if half the settings body is not visible at the
+  maximum; the measurement is 820 of 1612 points, or 51 percent, so the bar is met
+  and the constant is left alone. The margin is thin: adding settings rows will
+  push it below half and require revisiting.
+
 ## [0.8.0] - 2026-07-25
 
 ### Added

@@ -70,5 +70,5 @@ authorization requirement is unchanged: never push to `main` without it.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/029-window-sizing-rebuild/plan.md
+at specs/030-ui-sizing-correctness/plan.md
 <!-- SPECKIT END -->
