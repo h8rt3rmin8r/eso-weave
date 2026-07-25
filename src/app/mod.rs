@@ -396,14 +396,62 @@ pub fn log_min_height(row_height: f32) -> f32 {
     LOG_MIN_LINES * row_height + 2.0 * LOG_FRAME_MARGIN
 }
 
-/// The minimum window content extent `(width, height)` in points: the measured
-/// laid-out content size raised to a boot floor per dimension, so the floor tracks
-/// the actual content (issue #4, FR-001/FR-002) but never drops below a safe
-/// starting size before the first measurement. Per-dimension independent; feeding
-/// a running maximum of `measured` keeps the result monotone (never shrinks from a
-/// transient under-measure). Pure.
-pub fn content_min_size(measured: (f32, f32), boot_floor: (f32, f32)) -> (f32, f32) {
-    (measured.0.max(boot_floor.0), measured.1.max(boot_floor.1))
+/// The minimum window content extent `(width, height)` in points. Before the
+/// content has been measured and is stable, a safe boot floor applies so nothing is
+/// clipped; once `stable`, the measured extent sets the minimum per dimension and
+/// the boot floor no longer applies, so the minimum hugs the real content and can
+/// shrink when the content shrinks (issue #8, FR-001/FR-002/FR-004). Pure.
+pub fn content_min_size(measured: (f32, f32), boot_floor: (f32, f32), stable: bool) -> (f32, f32) {
+    if stable {
+        measured
+    } else {
+        boot_floor
+    }
+}
+
+/// Whether a content measurement is stable: true only when the previous frame's
+/// measurement exists and both dimensions are within `epsilon` of the current one.
+/// Two consecutive close measurements gate the switch from the boot floor to the
+/// measured extent, so a transient first-frame layout never latches the minimum
+/// (issue #8, FR-003). Pure.
+pub fn measurement_stable(prev: Option<(f32, f32)>, current: (f32, f32), epsilon: f32) -> bool {
+    match prev {
+        Some((px, py)) => (px - current.0).abs() <= epsilon && (py - current.1).abs() <= epsilon,
+        None => false,
+    }
+}
+
+/// The log height reserved in the enforced minimum open-window height: the six-line
+/// minimum plus one extra row. This keeps the pane resizable at the minimum (its
+/// maximum is one row above its minimum, so it is never frozen) while still letting
+/// the window shrink with the log compressing back toward six lines (issue #8,
+/// FR-006). Pure.
+pub fn open_log_reserve(row_height: f32) -> f32 {
+    log_min_height(row_height) + row_height
+}
+
+/// The new live-log panel height (points) after a window-height change, splitting
+/// the change proportionally between the central pane and the log pane. The log
+/// moves by its live fraction of the usable height (`log_h / prev_window_h`) applied
+/// to the delta, then is clamped to `[log_min, max(window_h - content_h, log_min)]`
+/// so the log never drops below six lines and the central pane never drops below its
+/// content; the central pane is the remainder, absorbing any rounding (issue #8,
+/// FR-007/FR-008). Pure. A non-positive `prev_window_h` falls back to clamping the
+/// current height.
+pub fn split_log_height(
+    prev_window_h: f32,
+    window_h: f32,
+    log_h: f32,
+    content_h: f32,
+    log_min: f32,
+) -> f32 {
+    let hi = (window_h - content_h).max(log_min);
+    if prev_window_h <= 0.0 {
+        return log_h.clamp(log_min, hi);
+    }
+    let fraction = log_h / prev_window_h;
+    let target = log_h + fraction * (window_h - prev_window_h);
+    target.clamp(log_min, hi)
 }
 
 /// Clamps a live-log panel height (points) into its valid range for the given

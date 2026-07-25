@@ -146,11 +146,22 @@ pub struct EsoWeaveApp {
     /// The skill slot currently being edited in the Delay column and the digits
     /// typed so far, so the model value does not clobber in-progress input.
     delay_edit: Option<(u8, String)>,
-    /// The running maximum of the central panel's measured content extent
-    /// (points). Drives the window minimum inner size so it fits every control and
-    /// tracks new rows automatically (issue #4). Seeded from the boot floor and
-    /// never shrinks within a session.
-    content_min: egui::Vec2,
+    /// The enforced central-content extent (points): the boot floor until the
+    /// measurement is stable, then the measured extent (which may shrink). Drives
+    /// the window minimum inner size so it hugs the real content and tracks new or
+    /// removed rows, with no permanent dead band (issue #8).
+    content_extent: egui::Vec2,
+    /// The previous frame's measured content extent, for the two-frame stability
+    /// gate that lets the measured extent supersede the boot floor.
+    prev_measured: Option<egui::Vec2>,
+    /// The previous frame's window inner height (points), used to detect a
+    /// window-height change and split it proportionally between the central pane
+    /// and the open log pane (issue #8).
+    prev_window_h: Option<f32>,
+    /// Set when the log pane is opened so the next log frame seeds the pane to the
+    /// persisted height (the single source of truth) rather than any egui-remembered
+    /// size, so `default_size` cannot fight the restore.
+    log_reseed: bool,
     /// The last minimum inner size pushed to the viewport, so the command is sent
     /// only when the target changes rather than every frame.
     last_min_sent: Option<egui::Vec2>,
@@ -182,7 +193,10 @@ impl EsoWeaveApp {
             toast: None,
             last_geometry: restored_geometry,
             delay_edit: None,
-            content_min: BOOT_MIN_SIZE,
+            content_extent: BOOT_MIN_SIZE,
+            prev_measured: None,
+            prev_window_h: None,
+            log_reseed: false,
             last_min_sent: None,
         }
     }
@@ -288,17 +302,52 @@ impl eframe::App for EsoWeaveApp {
         if self.log_panel_open {
             let window_h = ctx.content_rect().height();
             let row_h = log_row_height(&ctx);
+            let content_h = self.content_extent.y;
             // Minimum shows six lines of log; maximum stops before the interactive
-            // (Skills) area so the resize bar can never cover the controls (issue
-            // #5). Both bounds come from the shared pure helpers.
+            // (Skills) area, computed against the true measured content height so no
+            // phantom band is reserved (issue #8). Both bounds are shared helpers.
             let min_h = crate::app::log_min_height(row_h);
-            let max_h = (window_h - self.content_min.y).max(min_h);
-            let start =
-                crate::app::clamp_log_height(self.log_height, window_h, row_h, self.content_min.y);
+            let max_h = (window_h - content_h).max(min_h);
+            // Force the pane height on two kinds of frame: the first frame after
+            // opening (seed from the persisted height), and any frame where the
+            // window height changed while open (split the change proportionally
+            // between the central and log panes). On all other frames egui owns the
+            // height and the user can drag it freely.
+            let forced = if self.log_reseed {
+                self.log_reseed = false;
+                Some(crate::app::clamp_log_height(
+                    self.log_height,
+                    window_h,
+                    row_h,
+                    content_h,
+                ))
+            } else if let Some(prev) = self.prev_window_h {
+                if (window_h - prev).abs() > 0.5 {
+                    Some(crate::app::split_log_height(
+                        prev,
+                        window_h,
+                        self.log_height,
+                        content_h,
+                        min_h,
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let (panel_min, panel_max, start) = match forced {
+                Some(h) => (h, h, h),
+                None => (
+                    min_h,
+                    max_h,
+                    crate::app::clamp_log_height(self.log_height, window_h, row_h, content_h),
+                ),
+            };
             let resp = egui::Panel::bottom("log_panel")
                 .resizable(true)
-                .min_size(min_h)
-                .max_size(max_h)
+                .min_size(panel_min)
+                .max_size(panel_max)
                 .default_size(start)
                 .frame(
                     egui::Frame::new()
@@ -316,8 +365,8 @@ impl eframe::App for EsoWeaveApp {
         }
 
         // Measured content extent of the central panel this frame, captured inside
-        // the closure and used after to drive the window minimum size (issue #4).
-        let mut measured = self.content_min;
+        // the closure and used after to drive the window minimum size (issue #8).
+        let mut measured = self.content_extent;
         egui::CentralPanel::default().show(ui, |ui| {
             // Menu bar.
             egui::MenuBar::new().ui(ui, |ui| {
@@ -347,17 +396,27 @@ impl eframe::App for EsoWeaveApp {
                         .changed()
                     {
                         intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
-                        // Grow the window by the log pane's minimum height on open,
-                        // and shrink it back by the same amount on close, so the
-                        // pane never covers the Skills area and the toggle is
-                        // height-neutral (issue #5, FR-004/FR-008).
-                        let delta = crate::app::log_min_height(log_row_height(&ctx));
+                        // Height-neutral toggle (issue #8, FR-009): on open, grow the
+                        // window by the log height actually about to show (the
+                        // persisted height, clamped) and seed the pane to it; on
+                        // close, shrink by the pane's actual current height, not a
+                        // fixed minimum, so a user-enlarged log leaves no residual
+                        // band.
                         if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
                             let cur = inner.size();
+                            let row_h = log_row_height(&ctx);
+                            let window_h = ctx.content_rect().height();
                             let new_h = if self.log_panel_open {
-                                cur.y + delta
+                                self.log_reseed = true;
+                                let shown = crate::app::clamp_log_height(
+                                    self.log_height,
+                                    window_h,
+                                    row_h,
+                                    self.content_extent.y,
+                                );
+                                cur.y + shown
                             } else {
-                                (cur.y - delta).max(self.content_min.y)
+                                (cur.y - self.log_height).max(self.content_extent.y)
                             };
                             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
                                 cur.x, new_h,
@@ -376,30 +435,40 @@ impl eframe::App for EsoWeaveApp {
             measured = ui.min_rect().size();
         });
 
-        // Raise the running-max content floor (never shrinks from a transient
-        // under-measure), then push it as the window minimum inner size. While the
-        // log viewer is open the floor is widened and grown by the log minimum so
-        // both the controls and a six-line log always fit (issues #4, #5).
-        let floored = crate::app::content_min_size(
-            (measured.x, measured.y),
+        // Update the enforced content extent: the boot floor until the measurement
+        // is stable (two consecutive close frames), then the measured extent, which
+        // may shrink, so the minimum hugs the real content with no permanent dead
+        // band (issue #8). Then push it as the window minimum inner size. While the
+        // log viewer is open the minimum is widened and grown by the open log
+        // reserve (six lines plus one row of drag room) so the controls and a
+        // resizable log always fit.
+        let measured_tuple = (measured.x, measured.y);
+        let stable = crate::app::measurement_stable(
+            self.prev_measured.map(|v| (v.x, v.y)),
+            measured_tuple,
+            0.5,
+        );
+        let extent = crate::app::content_min_size(
+            measured_tuple,
             (BOOT_MIN_SIZE.x, BOOT_MIN_SIZE.y),
+            stable,
         );
-        self.content_min = egui::vec2(
-            self.content_min.x.max(floored.0),
-            self.content_min.y.max(floored.1),
-        );
+        self.content_extent = egui::vec2(extent.0, extent.1);
+        self.prev_measured = Some(measured);
         let target_min = if self.log_panel_open {
             egui::vec2(
-                self.content_min.x + LOG_WIDTH_BONUS,
-                self.content_min.y + crate::app::log_min_height(log_row_height(&ctx)),
+                self.content_extent.x + LOG_WIDTH_BONUS,
+                self.content_extent.y + crate::app::open_log_reserve(log_row_height(&ctx)),
             )
         } else {
-            self.content_min
+            self.content_extent
         };
         if self.last_min_sent != Some(target_min) {
             ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(target_min));
             self.last_min_sent = Some(target_min);
         }
+        // Record this frame's window height for the next frame's proportional split.
+        self.prev_window_h = Some(ctx.content_rect().height());
 
         if self.settings_open {
             self.settings_modal(&ctx, &mut intents);

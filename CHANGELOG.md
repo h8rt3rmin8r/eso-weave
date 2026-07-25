@@ -24,7 +24,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   API-version templating). At the default size the reader points (8,8), (24,8),
   (40,8), (56,8) and the 64 by 16 capture are byte-for-byte unchanged.
 
+### Fixed
+
+- The window no longer keeps a permanent empty band below the controls. The
+  enforced minimum height was latched at the 480 by 420 boot floor even after the
+  real content measured shorter; it now hugs the measured content once the layout
+  is stable and can shrink when a control row is removed (issue #8).
+- The live-log pane is resizable again and reserves no phantom band. Its available
+  height is computed against the true content height (not the inflated floor), and
+  the enforced minimum open-window height reserves one extra line of drag room so
+  the pane is never frozen while the window can still shrink and compress the log
+  to six lines (issue #8).
+- Enlarging the window with the log open now shares the added height between the
+  central area and the log pane in proportion to what each already occupies,
+  instead of giving it all to the central area (issue #8).
+- Opening then closing the log is height-neutral even when the pane was resized:
+  close shrinks the window by the pane's actual height rather than a fixed minimum,
+  leaving no residual empty band (issue #8).
+
 ### Decisions
+
+- 2026-07-25: Slice 029 (window sizing model rebuild) closes issue #8, a breaking
+  UI regression from slice 027. The permanent running-max `content_min` (seeded at
+  the boot floor, never released) is replaced by a stable-measured model:
+  `content_min_size(measured, boot_floor, stable)` returns the boot floor until
+  `measurement_stable` (two consecutive frames equal within 0.5pt) holds, then the
+  measured extent per dimension (which may shrink). The log pane's range is
+  computed against the true `content_extent.y`; the enforced minimum open-window
+  height reserves `open_log_reserve = log_min_height + one row` so the pane is
+  resizable at the minimum (max one row above min) while the window stays
+  shrinkable. Window-height changes are split proportionally by the live pane
+  fraction (`split_log_height`), driving the egui bottom panel to the computed
+  height on resize frames and reading the user's drag back otherwise. Open/close is
+  height-neutral by the pane's actual height, with the persisted `log_panel_height`
+  as the single source of truth. All sizing math is pure and unit-tested; the egui
+  glue is validated by build and a desk run. Consequence of the drag-room reserve:
+  at the absolute minimum open window with the log dragged to six lines, the
+  central area gains one row (~14pt) of slack, a deliberate tradeoff far smaller
+  than the fixed dead band it replaces. Issue-driven work, so no `docs/plans/` row
+  (same convention as slices 027 and 028). Details in
+  `specs/029-window-sizing-rebuild/`.
 
 - 2026-07-25: Slice 028 (pixel-bus block size single source of truth) closes
   issue #1. `block_px` becomes the sole stored geometry value on `ReaderConfig`;
