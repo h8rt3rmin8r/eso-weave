@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-27
+
 ### Added
 
 - The beacon blocks now wrap into a grid instead of extending one ever-widening
