@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{
-    app_state_label, beacon_light, default_delay_for, fishing_label, modal_extent,
+    app_state_label, beacon_light, combat_view, default_delay_for, fishing_label, modal_extent,
     override_edit_for, route_reader_event, skill_rows, status_line_app, status_line_beacon,
     status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition, SkillEdit,
     StatusRole, UiIntent,
@@ -18,7 +18,7 @@ use eso_weave::fishing::{
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
-use eso_weave::pixelbus::{ActiveBar, PixelBusEvent, WeaponBarSignal, WeaponClass};
+use eso_weave::pixelbus::{ActiveBar, CombatSignal, PixelBusEvent, WeaponBarSignal, WeaponClass};
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
 // Derivations.
@@ -527,4 +527,50 @@ fn edit_skill_intent_updates_weave_config() {
 
     model.apply_intent(UiIntent::EditSkill(1, SkillEdit::OverrideDWeave(None)));
     assert_eq!(model.view().skills[0].override_d_weave, None);
+}
+
+// Slice 031: the combat readout.
+
+#[test]
+fn combat_view_shows_both_states_and_unknown() {
+    let in_combat = combat_view(CombatSignal::InCombat);
+    assert!(in_combat.detected);
+    assert_eq!(in_combat.state, "In combat");
+    assert_eq!(in_combat.role, StatusRole::Active);
+
+    let out = combat_view(CombatSignal::OutOfCombat);
+    assert!(out.detected);
+    assert_eq!(out.state, "Out of combat");
+    assert_eq!(out.role, StatusRole::Active);
+
+    // The unavailable case renders exactly as the weapon-bar readout renders its
+    // own, so the two adjacent fields read with one convention.
+    let unknown = combat_view(CombatSignal::Unknown);
+    assert!(!unknown.detected);
+    assert_eq!(unknown.state, "Not detected");
+    assert_eq!(unknown.role, StatusRole::Muted);
+}
+
+#[test]
+fn routing_a_combat_event_stores_it_without_touching_fishing() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+
+    fishing.set_enabled(true, 0, &mut sink);
+    assert_eq!(fishing.state(), FishingState::Armed);
+
+    route_reader_event(
+        PixelBusEvent::Combat(CombatSignal::InCombat),
+        &mut weave,
+        &mut fishing,
+        1,
+        &mut sink,
+    );
+    assert_eq!(weave.combat(), CombatSignal::InCombat);
+    assert_eq!(
+        fishing.state(),
+        FishingState::Armed,
+        "combat state does not touch fishing"
+    );
 }

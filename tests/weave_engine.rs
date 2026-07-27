@@ -5,7 +5,7 @@ use eso_weave::config::{self, Settings};
 use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
-use eso_weave::pixelbus::{ActiveBar, WeaponBarSignal, WeaponClass};
+use eso_weave::pixelbus::{ActiveBar, CombatSignal, WeaponBarSignal, WeaponClass};
 use eso_weave::weave::types::{TimingConfig, WeaveType};
 use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
 
@@ -329,4 +329,49 @@ fn old_config_without_back_defaults_to_front() {
         "back mirrors front when absent"
     );
     assert!(!engine.config().auto_timing);
+}
+
+// Slice 031 (FR-016): the combat observable is stored on the engine but nothing
+// reads it. This is the boundary test that keeps that true.
+
+#[test]
+fn combat_state_changes_no_engine_behavior() {
+    // The engine is driven through an identical action sequence for each combat
+    // state, and every emitted input must match. If a later feature wires combat
+    // into timing or gating, this fails and forces the change to be deliberate
+    // rather than accidental.
+    fn run(combat: CombatSignal) -> Vec<String> {
+        let mut engine = WeaveEngine::new(WeaveConfig::default());
+        let mut sink = MockSink::new();
+        engine.set_combat(combat);
+        engine.set_weapon_bar(WeaponBarSignal {
+            bar: ActiveBar::Front,
+            front: WeaponClass::DualWield,
+            back: WeaponClass::Bow,
+        });
+
+        sink.set_now(0);
+        engine.handle(Action::Skill1, &mut sink);
+        sink.set_now(600);
+        engine.handle(Action::Skill2, &mut sink);
+        sink.set_now(1200);
+        engine.handle(Action::Skill3, &mut sink);
+
+        sink.log.iter().map(|op| format!("{op:?}")).collect()
+    }
+
+    let unknown = run(CombatSignal::Unknown);
+    assert!(!unknown.is_empty(), "the sequence must actually emit input");
+    assert_eq!(run(CombatSignal::InCombat), unknown);
+    assert_eq!(run(CombatSignal::OutOfCombat), unknown);
+}
+
+#[test]
+fn combat_state_round_trips_through_the_engine() {
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    assert_eq!(engine.combat(), CombatSignal::Unknown);
+    engine.set_combat(CombatSignal::InCombat);
+    assert_eq!(engine.combat(), CombatSignal::InCombat);
+    engine.set_combat(CombatSignal::Unknown);
+    assert_eq!(engine.combat(), CombatSignal::Unknown);
 }

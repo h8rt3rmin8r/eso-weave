@@ -2,11 +2,11 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_latency, decode_weapon_bar, fishing_signal,
+    block_center, capture_dims, decode_combat, decode_latency, decode_weapon_bar, fishing_signal,
     load_reader_config, poll_interval, sanitize_block_px, status_present, store_reader_config,
-    strip_pixel, ActiveBar, FishingSignal, MockSampler, PixelBusEvent, PixelBusReader,
-    ReaderConfig, Rgb, WeaponBarSignal, WeaponClass, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX,
-    NUM_BLOCKS,
+    strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal, MockSampler, PixelBusEvent,
+    PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS,
+    DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -73,6 +73,34 @@ fn poll_interval_tracks_fishing_state() {
 fn reader() -> PixelBusReader {
     PixelBusReader::new(ReaderConfig::default())
 }
+
+/// A sample set carrying only the status block, so the reader sees a live beacon
+/// and every other block reads as absent. Written as a base for struct-update
+/// syntax (`BlockSamples { fishing: Some(..), ..alive() }`), which is what lets a
+/// later block be added without touching these call sites.
+fn alive() -> BlockSamples {
+    BlockSamples {
+        status: Some(MAGENTA),
+        ..Default::default()
+    }
+}
+
+/// The combat block color for a state, mirroring the addon's encoder: the state
+/// code in red, the marker in green, and the complement checksum in blue.
+fn combat(red: u8) -> Rgb {
+    Rgb::new(red, 0x2D, 255 - red)
+}
+
+const COMBAT_IN: Rgb = Rgb {
+    r: 0xE0,
+    g: 0x2D,
+    b: 0x1F,
+};
+const COMBAT_OUT: Rgb = Rgb {
+    r: 0x20,
+    g: 0x2D,
+    b: 0xDF,
+};
 
 const MAGENTA: Rgb = Rgb {
     r: 0xFF,
@@ -175,43 +203,52 @@ fn decode_weapon_bar_requires_marker_within_tolerance() {
 fn heartbeat_then_signal_loss_then_recovery() {
     let mut r = reader();
 
-    assert!(r
-        .observe(Some(MAGENTA), None, None, None, 0)
-        .contains(&PixelBusEvent::Heartbeat));
+    assert!(r.observe(alive(), 0).contains(&PixelBusEvent::Heartbeat));
     assert!(!r.signal_lost());
 
     // Absent but within the timeout: no event.
-    assert!(r.observe(None, None, None, None, 1000).is_empty());
+    assert!(r.observe(BlockSamples::default(), 1000).is_empty());
     assert!(!r.signal_lost());
 
     // Absent past the 2000 ms timeout: exactly one SignalLost.
     assert_eq!(
-        r.observe(None, None, None, None, 2500),
+        r.observe(BlockSamples::default(), 2500),
         vec![PixelBusEvent::SignalLost]
     );
     assert!(r.signal_lost());
 
     // Still absent: no further events.
-    assert!(r.observe(None, None, None, None, 5000).is_empty());
+    assert!(r.observe(BlockSamples::default(), 5000).is_empty());
 
     // Status returns: heartbeat and lost state cleared.
-    assert!(r
-        .observe(Some(MAGENTA), None, None, None, 6000)
-        .contains(&PixelBusEvent::Heartbeat));
+    assert!(r.observe(alive(), 6000).contains(&PixelBusEvent::Heartbeat));
     assert!(!r.signal_lost());
 }
 
 #[test]
 fn fishing_and_latency_not_decoded_without_heartbeat() {
     let mut r = reader();
-    let events = r.observe(None, Some(WAITING), Some(Rgb::new(100, 0xA5, 155)), None, 0);
+    let events = r.observe(
+        BlockSamples {
+            fishing: Some(WAITING),
+            latency: Some(Rgb::new(100, 0xA5, 155)),
+            ..Default::default()
+        },
+        0,
+    );
     assert!(events.is_empty());
 }
 
 #[test]
 fn weapon_bar_not_decoded_without_heartbeat() {
     let mut r = reader();
-    let events = r.observe(None, None, None, Some(weapon(1, 2, 1)), 0);
+    let events = r.observe(
+        BlockSamples {
+            weapon: Some(weapon(1, 2, 1)),
+            ..Default::default()
+        },
+        0,
+    );
     assert!(events.is_empty());
 }
 
@@ -222,24 +259,48 @@ fn fishing_transitions_emit_events() {
     let mut r = reader();
 
     assert!(r
-        .observe(Some(MAGENTA), Some(WAITING), None, None, 0)
+        .observe(
+            BlockSamples {
+                fishing: Some(WAITING),
+                ..alive()
+            },
+            0
+        )
         .contains(&PixelBusEvent::FishingStarted));
     assert!(r
-        .observe(Some(MAGENTA), Some(BITE), None, None, 100)
+        .observe(
+            BlockSamples {
+                fishing: Some(BITE),
+                ..alive()
+            },
+            100
+        )
         .contains(&PixelBusEvent::BiteDetected));
     // Recast: bite back to waiting is a new cast.
     assert!(r
-        .observe(Some(MAGENTA), Some(WAITING), None, None, 200)
+        .observe(
+            BlockSamples {
+                fishing: Some(WAITING),
+                ..alive()
+            },
+            200
+        )
         .contains(&PixelBusEvent::FishingStarted));
     assert!(r
-        .observe(Some(MAGENTA), None, None, None, 300)
+        .observe(alive(), 300)
         .contains(&PixelBusEvent::FishingStopped));
 }
 
 #[test]
 fn latency_event_emitted_with_heartbeat() {
     let mut r = reader();
-    let events = r.observe(Some(MAGENTA), None, Some(Rgb::new(100, 0xA5, 155)), None, 0);
+    let events = r.observe(
+        BlockSamples {
+            latency: Some(Rgb::new(100, 0xA5, 155)),
+            ..alive()
+        },
+        0,
+    );
     assert!(events.contains(&PixelBusEvent::Latency(400)));
 }
 
@@ -248,7 +309,13 @@ fn weapon_bar_event_only_on_change() {
     let mut r = reader();
 
     // First decode with a heartbeat emits the event.
-    let first = r.observe(Some(MAGENTA), None, None, Some(weapon(1, 2, 1)), 0);
+    let first = r.observe(
+        BlockSamples {
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        0,
+    );
     assert!(first.contains(&PixelBusEvent::WeaponBar(WeaponBarSignal {
         bar: ActiveBar::Front,
         front: WeaponClass::DualWield,
@@ -256,13 +323,25 @@ fn weapon_bar_event_only_on_change() {
     })));
 
     // The same signal does not re-emit (per-attack redraws must not churn).
-    let repeat = r.observe(Some(MAGENTA), None, None, Some(weapon(1, 2, 1)), 100);
+    let repeat = r.observe(
+        BlockSamples {
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        100,
+    );
     assert!(!repeat
         .iter()
         .any(|e| matches!(e, PixelBusEvent::WeaponBar(_))));
 
     // A real change (bar swap to back) emits again.
-    let changed = r.observe(Some(MAGENTA), None, None, Some(weapon(1, 2, 2)), 200);
+    let changed = r.observe(
+        BlockSamples {
+            weapon: Some(weapon(1, 2, 2)),
+            ..alive()
+        },
+        200,
+    );
     assert!(changed
         .iter()
         .any(|e| matches!(e, PixelBusEvent::WeaponBar(_))));
@@ -272,14 +351,23 @@ fn weapon_bar_event_only_on_change() {
 
 #[test]
 fn block_center_and_capture_dims_match_contract_table() {
-    // (block_px, [B0, B1, B2, B3 centers], (capture_w, capture_h)) per
-    // specs/028-pixelbus-block-size/contracts/geometry.md.
+    // (block_px, [B0, B1, B2, B3, B4 centers], (capture_w, capture_h)) per
+    // specs/028-pixelbus-block-size/contracts/geometry.md, extended to the fifth
+    // block by specs/031-combat-state-block/contracts/pixel-bus-b4.md.
     let cases = [
-        (2u32, [(1u32, 1u32), (3, 1), (5, 1), (7, 1)], (8u32, 2u32)),
-        (4, [(2, 2), (6, 2), (10, 2), (14, 2)], (16, 4)),
-        (8, [(4, 4), (12, 4), (20, 4), (28, 4)], (32, 8)),
-        (16, [(8, 8), (24, 8), (40, 8), (56, 8)], (64, 16)),
-        (32, [(16, 16), (48, 16), (80, 16), (112, 16)], (128, 32)),
+        (
+            2u32,
+            [(1u32, 1u32), (3, 1), (5, 1), (7, 1), (9, 1)],
+            (10u32, 2u32),
+        ),
+        (4, [(2, 2), (6, 2), (10, 2), (14, 2), (18, 2)], (20, 4)),
+        (8, [(4, 4), (12, 4), (20, 4), (28, 4), (36, 4)], (40, 8)),
+        (16, [(8, 8), (24, 8), (40, 8), (56, 8), (72, 8)], (80, 16)),
+        (
+            32,
+            [(16, 16), (48, 16), (80, 16), (112, 16), (144, 16)],
+            (160, 32),
+        ),
     ];
     for (block_px, centers, cap) in cases {
         for (index, expected) in centers.iter().enumerate() {
@@ -295,8 +383,206 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 4);
+    assert_eq!(NUM_BLOCKS, 5);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
+}
+
+// Slice 031: the combat block (B4).
+
+#[test]
+fn decode_combat_decodes_both_states() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(decode_combat(COMBAT_IN, t), CombatSignal::InCombat);
+    assert_eq!(decode_combat(COMBAT_OUT, t), CombatSignal::OutOfCombat);
+}
+
+#[test]
+fn decode_combat_survives_capture_drift_within_tolerance() {
+    // Every channel off by the full default tolerance in both directions still
+    // decodes, because the checksum is validated within tolerance too.
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_combat(Rgb::new(0xE0 + 2, 0x2D + 2, 0x1F - 2), t),
+        CombatSignal::InCombat
+    );
+    assert_eq!(
+        decode_combat(Rgb::new(0x20 - 2, 0x2D - 2, 0xDF + 2), t),
+        CombatSignal::OutOfCombat
+    );
+}
+
+#[test]
+fn decode_combat_rejects_a_wrong_marker() {
+    let t = ReaderConfig::default().tolerance;
+    // Right payload and checksum, but the weapon block's marker.
+    assert_eq!(
+        decode_combat(Rgb::new(0xE0, 0x5A, 0x1F), t),
+        CombatSignal::Unknown
+    );
+}
+
+#[test]
+fn decode_combat_rejects_a_failed_checksum() {
+    let t = ReaderConfig::default().tolerance;
+    // Right marker and a valid state code, but blue is not the complement.
+    assert_eq!(
+        decode_combat(Rgb::new(0xE0, 0x2D, 0x00), t),
+        CombatSignal::Unknown
+    );
+}
+
+#[test]
+fn decode_combat_rejects_an_unrecognized_state_code() {
+    let t = ReaderConfig::default().tolerance;
+    // Right marker, valid checksum, red is neither state code.
+    assert_eq!(decode_combat(combat(0x80), t), CombatSignal::Unknown);
+}
+
+#[test]
+fn no_arbitrary_color_decodes_as_a_combat_state() {
+    // US2: an addon that draws no combat block leaves whatever the game is
+    // rendering at that point. Nothing there may be read as a combat state.
+    let t = ReaderConfig::default().tolerance;
+    let mut checked = 0u32;
+    for r in (0u32..=255).step_by(5) {
+        for g in (0u32..=255).step_by(5) {
+            for b in (0u32..=255).step_by(5) {
+                let sample = Rgb::new(r as u8, g as u8, b as u8);
+                // Skip the genuine encodings and their tolerance neighbourhood.
+                let is_real = sample.g.abs_diff(0x2D) <= t
+                    && (i32::from(sample.r) + i32::from(sample.b) - 255).unsigned_abs()
+                        <= u32::from(t);
+                if is_real {
+                    continue;
+                }
+                checked += 1;
+                assert_eq!(
+                    decode_combat(sample, t),
+                    CombatSignal::Unknown,
+                    "color {sample:?} decoded as a combat state"
+                );
+            }
+        }
+    }
+    assert!(checked > 100_000, "sweep covered only {checked} colors");
+
+    // The four colors the other blocks actually render must never decode either.
+    for other in [
+        MAGENTA,
+        WAITING,
+        BITE,
+        Rgb::new(100, 0xA5, 155),
+        weapon(1, 2, 1),
+    ] {
+        assert_eq!(
+            decode_combat(other, t),
+            CombatSignal::Unknown,
+            "another block's color {other:?} decoded as a combat state"
+        );
+    }
+}
+
+#[test]
+fn combat_event_only_on_change() {
+    let mut r = reader();
+
+    let first = r.observe(
+        BlockSamples {
+            combat: Some(COMBAT_OUT),
+            ..alive()
+        },
+        0,
+    );
+    assert!(first.contains(&PixelBusEvent::Combat(CombatSignal::OutOfCombat)));
+
+    // A steady state must not churn.
+    let repeat = r.observe(
+        BlockSamples {
+            combat: Some(COMBAT_OUT),
+            ..alive()
+        },
+        100,
+    );
+    assert!(!repeat.iter().any(|e| matches!(e, PixelBusEvent::Combat(_))));
+
+    let changed = r.observe(
+        BlockSamples {
+            combat: Some(COMBAT_IN),
+            ..alive()
+        },
+        200,
+    );
+    assert!(changed.contains(&PixelBusEvent::Combat(CombatSignal::InCombat)));
+}
+
+#[test]
+fn combat_clears_when_the_block_stops_decoding() {
+    // The deliberate divergence from the weapon block: with the beacon still
+    // alive, a combat block that stops decoding clears to Unknown rather than
+    // holding, so a stale "in combat" cannot survive an addon downgrade.
+    let mut r = reader();
+    r.observe(
+        BlockSamples {
+            combat: Some(COMBAT_IN),
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        0,
+    );
+
+    let gone = r.observe(alive(), 100);
+    assert!(gone.contains(&PixelBusEvent::Combat(CombatSignal::Unknown)));
+
+    // The weapon block, sampled identically, still holds its last value. If this
+    // ever fails, the two blocks have silently converged and the divergence
+    // recorded in specs/031-combat-state-block/spec.md needs revisiting.
+    assert!(!gone
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::WeaponBar(_))));
+}
+
+#[test]
+fn combat_clears_on_signal_loss() {
+    let mut r = reader();
+    r.observe(
+        BlockSamples {
+            combat: Some(COMBAT_IN),
+            ..alive()
+        },
+        0,
+    );
+
+    let lost = r.observe(BlockSamples::default(), 2500);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::Combat(CombatSignal::Unknown)));
+}
+
+#[test]
+fn combat_not_decoded_without_heartbeat() {
+    let mut r = reader();
+    let events = r.observe(
+        BlockSamples {
+            combat: Some(COMBAT_IN),
+            ..Default::default()
+        },
+        0,
+    );
+    assert!(events.is_empty());
+}
+
+#[test]
+fn block_center_greens_are_pairwise_separated() {
+    // FR-006, enforced rather than remembered: a later slice adding a colliding
+    // marker fails here and is told which pair collides.
+    let t = ReaderConfig::default().tolerance;
+    for (i, (name_a, a)) in BLOCK_CENTER_GREENS.iter().enumerate() {
+        for (name_b, b) in BLOCK_CENTER_GREENS.iter().skip(i + 1) {
+            assert!(
+                a.abs_diff(*b) > t,
+                "{name_a} ({a:#04X}) and {name_b} ({b:#04X}) are within the default tolerance {t}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -354,11 +640,17 @@ fn sample_and_observe_reads_derived_points() {
         ..ReaderConfig::default()
     };
     let (sx, sy) = cfg.status_point();
+    let (cx, cy) = cfg.combat_point();
     let mut sampler = MockSampler::new();
     sampler.set(sx, sy, MAGENTA);
+    // At block_px = 8 the combat center is (36, 4). Seeding it proves the runtime
+    // path samples the fifth derived point too, not just the original four.
+    assert_eq!((cx, cy), (36, 4));
+    sampler.set(cx, cy, COMBAT_IN);
     let mut r = PixelBusReader::new(cfg);
     let events = r.sample_and_observe(&sampler, 0);
     assert!(events.contains(&PixelBusEvent::Heartbeat));
+    assert!(events.contains(&PixelBusEvent::Combat(CombatSignal::InCombat)));
 }
 
 #[test]

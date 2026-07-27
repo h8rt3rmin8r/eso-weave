@@ -166,6 +166,37 @@ pub fn parse_manifest_version(manifest: &str) -> Option<u32> {
     None
 }
 
+/// Parses the value of the first `local <name> = <n>` line of Lua source as a
+/// `u32`, accepting a decimal or `0x` hexadecimal literal, or `None` when the
+/// name is absent or the value is unparsable.
+///
+/// This exists so the companion's own tests can read the constants out of the
+/// addon source it embeds in [`LUA`] and assert the two sides of the pixel-bus
+/// contract agree. Several values (the strip length and each block's colors) are
+/// necessarily stated once in Lua and once in Rust; without this the "shared byte
+/// for byte" discipline would rest on review alone.
+pub fn parse_lua_constant(source: &str, name: &str) -> Option<u32> {
+    let prefix = format!("local {name}");
+    for line in source.lines() {
+        let Some(rest) = line.trim().strip_prefix(&prefix) else {
+            continue;
+        };
+        // Guard against a prefix match on a longer name (`local NUM_BLOCKS_EXTRA`).
+        let Some(value) = rest.trim_start().strip_prefix('=') else {
+            continue;
+        };
+        let value = value.trim();
+        return match value
+            .strip_prefix("0x")
+            .or_else(|| value.strip_prefix("0X"))
+        {
+            Some(hex) => u32::from_str_radix(hex, 16).ok(),
+            None => value.parse::<u32>().ok(),
+        };
+    }
+    None
+}
+
 /// The embedded addon version, single-sourced from the embedded manifest.
 pub fn embedded_version() -> u32 {
     parse_manifest_version(MANIFEST).expect("embedded manifest carries a parseable ## Version:")

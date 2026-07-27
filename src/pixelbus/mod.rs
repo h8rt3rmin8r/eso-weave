@@ -124,6 +124,53 @@ pub struct WeaponBarSignal {
 /// marker `0xA5` so tolerance can never confuse the two).
 const WEAPON_MARKER: u8 = 0x5A;
 
+/// The decoded combat signal from the combat block.
+///
+/// [`CombatSignal::Unknown`] is not a fourth game state. It means the companion
+/// could not read the signal: the block is absent (an addon older than version 6
+/// draws only four blocks), the sample failed validation, or the beacon signal is
+/// lost. It is deliberately distinct from [`CombatSignal::OutOfCombat`], because
+/// collapsing the two would make a missing addon look like a peaceful session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CombatSignal {
+    /// The combat state could not be read.
+    #[default]
+    Unknown,
+    /// The player is not in combat.
+    OutOfCombat,
+    /// The player is in combat.
+    InCombat,
+}
+
+/// The green marker that identifies a combat sample.
+///
+/// Chosen at least 45 away from every other green that appears at a block center
+/// (see [`BLOCK_CENTER_GREENS`]), which is more than twenty times the default
+/// tolerance. Its nibble swap `0xD2` is reserved as the natural marker for the
+/// next block added to the strip, continuing the `0xA5` and `0x5A` pairing.
+const COMBAT_MARKER: u8 = 0x2D;
+/// The red channel encoding the in-combat state.
+const COMBAT_IN_RED: u8 = 0xE0;
+/// The red channel encoding the out-of-combat state.
+const COMBAT_OUT_RED: u8 = 0x20;
+
+/// Every green-channel value that appears at the center of a beacon block, with
+/// the block it belongs to.
+///
+/// This is the registry a new block's marker is chosen against. Adding a block
+/// means adding its green here; `tests/pixelbus.rs` asserts every pair is
+/// separated by more than the default tolerance, so a colliding marker fails the
+/// build and names the collision instead of silently decoding as its neighbour
+/// when the strip geometry is off by a block.
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 6] = [
+    ("B0 status", 0x00),
+    ("B1 fishing waiting", 0x80),
+    ("B1 fishing bite", 0xFF),
+    ("B2 latency marker", 0xA5),
+    ("B3 weapon marker", WEAPON_MARKER),
+    ("B4 combat marker", COMBAT_MARKER),
+];
+
 /// A typed event decoded from the pixel bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelBusEvent {
@@ -141,6 +188,32 @@ pub enum PixelBusEvent {
     Latency(u16),
     /// A change in the active weapon bar or a bar's weapon class.
     WeaponBar(WeaponBarSignal),
+    /// A change in the decoded combat state, including a change to
+    /// [`CombatSignal::Unknown`] when the block stops decoding.
+    Combat(CombatSignal),
+}
+
+/// The raw samples taken from one strip read, one field per block.
+///
+/// `None` means the surface could not be sampled at that point, which is distinct
+/// from a sample that was taken but does not decode. The derived [`Default`] is
+/// what makes this extensible: a construction using `..Default::default()` keeps
+/// compiling when a later feature adds a block, so adding one costs a field
+/// rather than a rewrite of every call site. Named fields also make it impossible
+/// to transpose two blocks, which the previous four positional arguments of the
+/// same type allowed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BlockSamples {
+    /// B0, the status block.
+    pub status: Option<Rgb>,
+    /// B1, the fishing block.
+    pub fishing: Option<Rgb>,
+    /// B2, the latency block.
+    pub latency: Option<Rgb>,
+    /// B3, the weapon-bar block.
+    pub weapon: Option<Rgb>,
+    /// B4, the combat block.
+    pub combat: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -204,8 +277,15 @@ impl SurfaceSampler for MockSampler {
 }
 
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
-/// B3 weapon. Fixed for now; adding blocks is a separate feature.
-pub const NUM_BLOCKS: u32 = 4;
+/// B3 weapon, B4 combat.
+///
+/// This is the companion's single statement of the strip length; the drawn width
+/// and the capture region both derive from it. The addon states the same number
+/// once, as `local NUM_BLOCKS` in `PixelBeacon.lua`, and `tests/beacon.rs`
+/// asserts the two agree by parsing the embedded addon source. Adding a block is
+/// a matter of raising this value, adding a sample point, and adding a field to
+/// [`BlockSamples`].
+pub const NUM_BLOCKS: u32 = 5;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -282,6 +362,10 @@ impl ReaderConfig {
     /// The weapon-bar block (B3) sample point, derived from `block_px`.
     pub fn weapon_point(&self) -> (u32, u32) {
         block_center(self.block_px, 3)
+    }
+    /// The combat block (B4) sample point, derived from `block_px`.
+    pub fn combat_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 4)
     }
 }
 
@@ -446,6 +530,29 @@ pub fn decode_weapon_bar(sample: Rgb, tolerance: u8) -> Option<WeaponBarSignal> 
     })
 }
 
+/// Decodes the combat block into its tri-state.
+///
+/// Validation follows the latency block's marker-and-checksum pattern rather than
+/// the weapon block's exact code match: the green marker and the `red + blue`
+/// complement are both checked within tolerance, then the red channel selects the
+/// state. Any failure yields [`CombatSignal::Unknown`]; there is no nearest match
+/// and no default to out of combat, so an addon that draws no combat block (or
+/// any unrelated screen content behind that point) can never be read as a state.
+pub fn decode_combat(sample: Rgb, tolerance: u8) -> CombatSignal {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, COMBAT_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance)
+    {
+        return CombatSignal::Unknown;
+    }
+    if within(sample.r, COMBAT_IN_RED, tolerance) {
+        CombatSignal::InCombat
+    } else if within(sample.r, COMBAT_OUT_RED, tolerance) {
+        CombatSignal::OutOfCombat
+    } else {
+        CombatSignal::Unknown
+    }
+}
+
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
@@ -453,6 +560,7 @@ pub struct PixelBusReader {
     signal_lost: bool,
     fishing: FishingSignal,
     weapon: Option<WeaponBarSignal>,
+    combat: CombatSignal,
     had_heartbeat: bool,
 }
 
@@ -465,6 +573,7 @@ impl PixelBusReader {
             signal_lost: false,
             fishing: FishingSignal::None,
             weapon: None,
+            combat: CombatSignal::Unknown,
             had_heartbeat: false,
         }
     }
@@ -474,15 +583,16 @@ impl PixelBusReader {
         self.signal_lost
     }
 
-    /// Observes the three samples at `now_ms` and returns the resulting events.
-    pub fn observe(
-        &mut self,
-        b0: Option<Rgb>,
-        b1: Option<Rgb>,
-        b2: Option<Rgb>,
-        b3: Option<Rgb>,
-        now_ms: u64,
-    ) -> Vec<PixelBusEvent> {
+    /// Observes one set of block samples at `now_ms` and returns the resulting
+    /// events.
+    pub fn observe(&mut self, samples: BlockSamples, now_ms: u64) -> Vec<PixelBusEvent> {
+        let BlockSamples {
+            status: b0,
+            fishing: b1,
+            latency: b2,
+            weapon: b3,
+            combat: b4,
+        } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
         let heartbeat = b0.is_some_and(|c| status_present(c, tolerance));
@@ -504,6 +614,7 @@ impl PixelBusReader {
             ?b1,
             ?b2,
             ?b3,
+            ?b4,
             now_ms,
             "pixel bus sample"
         );
@@ -547,6 +658,11 @@ impl PixelBusReader {
 
             // The weapon-bar block is optional (older addons omit it). Emit only on
             // a change in the decoded signal, so per-attack redraws never churn.
+            //
+            // Note the deliberate difference from the combat block below: a weapon
+            // sample that does not decode leaves the last good value in place, and
+            // only signal loss clears it. Combat state does not hold. See the
+            // clarification recorded in specs/031-combat-state-block/spec.md.
             let weapon = b3.and_then(|c| decode_weapon_bar(c, tolerance));
             if let Some(signal) = weapon {
                 if self.weapon != Some(signal) {
@@ -558,6 +674,22 @@ impl PixelBusReader {
                     );
                     events.push(PixelBusEvent::WeaponBar(signal));
                 }
+            }
+
+            // The combat block is optional in the same sense, but a sample that
+            // does not decode clears the state to Unknown rather than holding it.
+            // Holding would let a stale "in combat" survive an addon downgrade or a
+            // mid-session reload, which is exactly the false reading the tri-state
+            // exists to prevent.
+            let combat = b4.map_or(CombatSignal::Unknown, |c| decode_combat(c, tolerance));
+            if combat != self.combat {
+                self.combat = combat;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?combat,
+                    "combat state detected"
+                );
+                events.push(PixelBusEvent::Combat(combat));
             }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
@@ -571,28 +703,36 @@ impl PixelBusReader {
                 }
                 self.weapon = None;
                 events.push(PixelBusEvent::SignalLost);
+                if self.combat != CombatSignal::Unknown {
+                    self.combat = CombatSignal::Unknown;
+                    events.push(PixelBusEvent::Combat(CombatSignal::Unknown));
+                }
             }
         }
 
         events
     }
 
-    /// Samples the four configured points and observes them (the runtime path).
+    /// Samples every configured block point and observes them (the runtime path).
     pub fn sample_and_observe(
         &mut self,
         sampler: &dyn SurfaceSampler,
         now_ms: u64,
     ) -> Vec<PixelBusEvent> {
-        // Let the backend capture a fresh frame once, before the four point reads.
+        // Let the backend capture a fresh frame once, before the point reads.
         sampler.prepare();
         let (sx, sy) = self.config.status_point();
         let (fx, fy) = self.config.fishing_point();
         let (lx, ly) = self.config.latency_point();
         let (wx, wy) = self.config.weapon_point();
-        let b0 = sampler.sample(sx, sy);
-        let b1 = sampler.sample(fx, fy);
-        let b2 = sampler.sample(lx, ly);
-        let b3 = sampler.sample(wx, wy);
-        self.observe(b0, b1, b2, b3, now_ms)
+        let (cx, cy) = self.config.combat_point();
+        let samples = BlockSamples {
+            status: sampler.sample(sx, sy),
+            fishing: sampler.sample(fx, fy),
+            latency: sampler.sample(lx, ly),
+            weapon: sampler.sample(wx, wy),
+            combat: sampler.sample(cx, cy),
+        };
+        self.observe(samples, now_ms)
     }
 }

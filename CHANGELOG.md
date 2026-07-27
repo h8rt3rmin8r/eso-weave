@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The PixelBeacon addon publishes the player's combat state as a fifth beacon
+  block (B4), and the companion decodes it and shows it beside the weapon-bar
+  readout. Driven by `EVENT_PLAYER_COMBAT_STATE` with a re-baseline from
+  `IsUnitInCombat("player")` after each loading screen, so it is instant on a
+  transition and correct after a zone. Nothing in the application acts on the
+  value; it is an observable only. Addon version advances to 6 (issue #9).
+- The block count is now stated once on each side of the pixel-bus contract, with
+  `tests/beacon.rs` parsing the addon source embedded in the binary to assert the
+  two sides agree on the strip length and on every combat color. The "shared byte
+  for byte" discipline the weapon-class codes have always claimed is now enforced
+  by the suite rather than by review.
+- A block-center color registry (`pixelbus::BLOCK_CENTER_GREENS`) with a test
+  asserting every marker is separated from every other by more than the default
+  match tolerance, so a future block cannot introduce a colliding marker without
+  the build failing and naming the collision.
+
+### Decisions
+
+- 2026-07-27: The combat block uses green marker `0x2D`, red state codes `0xE0`
+  (in combat) and `0x20` (out of combat), and a blue complement checksum, adopting
+  the latency block's marker-and-checksum validation rather than the weapon
+  block's exact code match. The weapon block compares its blue channel exactly
+  against `0`, `1`, and `2`, codes one apart under a default tolerance of 2, so it
+  carries no margin and is safe only because the capture path happens to return
+  exact values; repeating that in a new block would build in a known fragility.
+  The marker is at least 45 from every other block-center green. Its nibble swap
+  `0xD2` is reserved as the next block's marker, continuing the `0xA5` and `0x5A`
+  pairing.
+- 2026-07-27: `PixelBusReader::observe` now takes a `BlockSamples` struct with a
+  derived `Default` instead of four positional `Option<Rgb>` arguments. Adding a
+  block becomes one new field, and existing constructions using
+  `..Default::default()` keep compiling, so the three following PixelBeacon slices
+  do not each rewrite every call site. Named fields also remove a latent hazard:
+  four arguments of the same type allowed two blocks to be transposed silently.
+- 2026-07-27: The combat block clears to unavailable on any sample that does not
+  decode, deliberately diverging from the weapon-bar block, which holds its last
+  decoded value while the beacon is alive and clears only on signal loss. Holding
+  would let a stale "in combat" survive an addon downgrade or a mid-session
+  reload, which is the false reading the tri-state exists to prevent. The cost, a
+  one-sample flap on a transient misread, is nil while nothing consumes the value;
+  a consumer needing hysteresis adds it at the consumer. Both blocks' behavior is
+  asserted in the same test so the divergence cannot drift unnoticed.
+- 2026-07-27: The decoded combat state is stored on the weave engine beside the
+  latency and weapon-bar state, because that is already the shared home for
+  beacon-derived observables and is already behind the mutex both the reader
+  thread and the interface thread take. Nothing reads it for any decision, and
+  `tests/weave_engine.rs` asserts the engine behaves identically for all three
+  values, so wiring combat into timing later has to break that test deliberately
+  rather than happen by accident.
+
 ## [0.8.1] - 2026-07-25
 
 ### Fixed

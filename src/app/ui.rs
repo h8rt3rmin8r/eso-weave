@@ -826,6 +826,16 @@ impl EsoWeaveApp {
                 ui.label(egui::RichText::new(text).color(color))
                     .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
                 ui.end_row();
+
+                // Combat state (from the updated Pixel Beacon addon), rendered as
+                // a grid row so it aligns with the weapon-bar row above it.
+                widgets::label_strong(ui, &palette, strings::COMBAT_TITLE)
+                    .on_hover_text(strings::COMBAT_TOOLTIP);
+                let cb = &view.combat;
+                let combat_color = crate::app::theme::status_color(&palette, cb.role);
+                ui.label(egui::RichText::new(cb.state).color(combat_color))
+                    .on_hover_text(strings::COMBAT_TOOLTIP);
+                ui.end_row();
             });
 
         self.note_content_width(status.response.rect.width());

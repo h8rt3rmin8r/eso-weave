@@ -490,10 +490,16 @@ state every frame):
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders up to four beacon blocks anchored to the top-left corner of the
-game window's client area. Blocks are 16 by 16 physical pixels; the addon
-compensates for the user's UI scale so block geometry is constant in physical
+PixelBeacon renders up to five beacon blocks anchored to the top-left corner of the
+game window's client area. Blocks are 16 by 16 physical pixels by default; the
+addon compensates for the user's UI scale so block geometry is constant in physical
 pixels. Blocks are hidden during loading screens by the game's UI lifecycle.
+
+The number of blocks is stated once on each side of the contract (`local
+NUM_BLOCKS` in `PixelBeacon.lua`, `pixelbus::NUM_BLOCKS` in the companion), and
+both the drawn strip width and the captured region derive from it. The companion's
+test suite parses the addon source it embeds and fails if the two disagree, so a
+divergence cannot ship as a silently dead signal.
 
 | Block | Position (px) | Sample (px) | Meaning |
 | --- | --- | --- | --- |
@@ -501,14 +507,28 @@ pixels. Blocks are hidden during loading screens by the game's UI lifecycle.
 | B1 Fishing | (16, 0) | (24, 8) | `#0080FF` while a cast is active and waiting; `#00FF00` on a detected bite; hidden otherwise. |
 | B2 Latency | (32, 0) | (40, 8) | Encodes `GetLatency()`: `R = clamp(latency, 0, 1020) / 4`, `G = 0xA5` marker, `B = 255 - R` checksum. Updated at 1 Hz. |
 | B3 Weapon bar | (48, 0) | (56, 8) | `G = 0x5A` marker, `R` packs front and back weapon-class nibbles (`front * 16 + back`), `B` is the active-bar code (0 unknown, 1 front, 2 back). |
+| B4 Combat | (64, 0) | (72, 8) | `G = 0x2D` marker, `R` is the state code (`0xE0` in combat, `0x20` out of combat), `B = 255 - R` checksum. Driven by `EVENT_PLAYER_COMBAT_STATE` and re-baselined from `IsUnitInCombat("player")` on `EVENT_PLAYER_ACTIVATED`. Never hidden to express a state. |
 
 Weapon-class codes are shared byte-for-byte between the addon and the reader: 0
 none, 1 dual wield, 2 two handed, 3 sword and shield, 4 bow, 5 destruction staff, 6
 restoration staff.
 
+Marker channels are chosen so no two blocks can be confused when the strip geometry
+is misaligned by a block: every green appearing at a block center is separated from
+every other by more than the match tolerance, and the companion asserts this.
+
+Combat state decodes to three values: in combat, out of combat, and unavailable.
+Unavailable is not a game state; it means the companion could not read the signal
+(an addon older than version 6 draws no B4, the sample failed validation, or the
+beacon signal is lost). Unlike B3, which holds its last decoded value while the
+beacon is alive, B4 clears to unavailable on any sample that does not decode, so a
+stale "in combat" cannot survive an addon downgrade or a mid-session reload. The
+decoded value is stored and displayed but nothing acts on it; no timing, input, or
+fishing behavior depends on combat state.
+
 ```mermaid
 flowchart LR
-    ADDON[PixelBeacon renders B0..B3] --> SURF[Game window surface]
+    ADDON[PixelBeacon renders B0..B4] --> SURF[Game window surface]
     SURF --> SMP[Surface sampler: GDI or X11]
     SMP --> RDR[Pixel Bus Reader decodes with tolerance and checksum]
     RDR --> EVT{Event}
@@ -516,9 +536,11 @@ flowchart LR
     EVT --> FISH[FishingStarted / BiteDetected / FishingStopped]
     EVT --> LAT[Latency]
     EVT --> WB[WeaponBar]
+    EVT --> CMB[Combat]
     FISH --> FC[Fishing Controller]
     LAT --> WE[Weave Engine]
     WB --> WE
+    CMB --> STORE[Stored and displayed only]
 ```
 
 The reader samples the block points at a configurable interval: fast (default 100

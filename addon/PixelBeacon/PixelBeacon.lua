@@ -1,12 +1,13 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders up to four square blocks (BLOCK_PX physical pixels on a side,
+-- It renders up to five square blocks (BLOCK_PX physical pixels on a side,
 -- default 16; the companion sets this value on deploy) anchored to the top-left
 -- of the client area, encoding load status (B0), fishing state (B1), server
--- latency (B2), and the active weapon bar with each bar's weapon class (B3). It
--- has no settings, no user interface beyond the blocks, no external libraries,
--- and no saved variables. Values follow the ESO Weave master specification
--- section 9.3 and the slice 014 weapon-bar block.
+-- latency (B2), the active weapon bar with each bar's weapon class (B3), and the
+-- player's combat state (B4). It has no settings, no user interface beyond the
+-- blocks, no external libraries, and no saved variables. Values follow the ESO
+-- Weave master specification section 9.3, the slice 014 weapon-bar block, and
+-- the slice 031 combat block.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -15,6 +16,10 @@
 
 local ADDON_NAME = "PixelBeacon"
 local BLOCK_PX = 16
+-- The strip length, stated once. The root width and every block placement derive
+-- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
+-- its test suite parses this line to assert the two agree.
+local NUM_BLOCKS = 5
 local LATENCY_UPDATE_MS = 1000
 local FISHING_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
@@ -30,6 +35,19 @@ local CLASS_RESTORATION_STAFF = 6
 
 -- The weapon-bar block marker (green channel), distinct from the latency marker.
 local WEAPON_MARKER = 0x5A
+
+-- The combat block marker (green channel) and its two state codes (red channel),
+-- shared byte for byte with the companion decoder. Blue carries the complement
+-- checksum, 255 minus red, so an unrelated color behind an absent block cannot
+-- pass validation. The marker is at least 45 away from every other green on the
+-- strip, and the two state codes are 192 apart.
+local COMBAT_MARKER = 0x2D
+local COMBAT_IN_RED = 0xE0
+local COMBAT_OUT_RED = 0x20
+
+-- The last rendered combat state, held so the block is redrawn only on a real
+-- transition. nil until the first render.
+local inCombat = nil
 
 -- The decoded weapon-bar state: active bar code (0 unknown, 1 front, 2 back) and
 -- each bar's class code. Held across indeterminate reads (locked or none pair).
@@ -185,6 +203,41 @@ local function renderWeapon()
     blocks.weapon:SetHidden(false)
 end
 
+-- B4 Combat ------------------------------------------------------------------
+
+-- Renders B4: the combat marker in green, the state code in red, and the
+-- complement checksum in blue. Rendered only while the status block renders, and
+-- never hidden to express a state: absence means an addon too old to draw it, so
+-- the companion can tell "no combat information" apart from "not in combat".
+local function renderCombat()
+    if blocks.status:IsHidden() then
+        blocks.combat:SetHidden(true)
+        return
+    end
+    local red = inCombat and COMBAT_IN_RED or COMBAT_OUT_RED
+    blocks.combat:SetCenterColor(channel(red), channel(COMBAT_MARKER), channel(255 - red), 1)
+    blocks.combat:SetHidden(false)
+end
+
+-- Recomputes the combat state from the game, returning true when it changed. The
+-- event carries the new state, but re-reading keeps one source of truth for both
+-- the event path and the post-loading-screen re-baseline.
+local function computeCombat()
+    local current = IsUnitInCombat("player") and true or false
+    if current == inCombat then
+        return false
+    end
+    inCombat = current
+    return true
+end
+
+-- Reacts to the combat state changing: re-render only on a real transition.
+local function onCombatStateChanged()
+    if computeCombat() then
+        renderCombat()
+    end
+end
+
 -- Reacts to a weapon-pair-changed event, which fires on nearly every attack:
 -- re-render only when the decoded state actually changes.
 local function onWeaponPairChanged()
@@ -275,24 +328,28 @@ end
 local function buildBlocks()
     root = wm:CreateTopLevelWindow(ADDON_NAME .. "Root")
     root:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, 0, 0)
-    root:SetDimensions(physicalToUi(BLOCK_PX * 4), physicalToUi(BLOCK_PX))
+    root:SetDimensions(physicalToUi(BLOCK_PX * NUM_BLOCKS), physicalToUi(BLOCK_PX))
     root:SetDrawLayer(DL_OVERLAY)
 
     blocks.status = createBlock("Status")
     blocks.fishing = createBlock("Fishing")
     blocks.latency = createBlock("Latency")
     blocks.weapon = createBlock("Weapon")
+    blocks.combat = createBlock("Combat")
 
     positionBlock(blocks.status, 0)
     positionBlock(blocks.fishing, BLOCK_PX)
     positionBlock(blocks.latency, BLOCK_PX * 2)
     positionBlock(blocks.weapon, BLOCK_PX * 3)
+    positionBlock(blocks.combat, BLOCK_PX * 4)
 
     renderStatus()
     renderFishing()
     renderLatency()
     computeWeaponBar()
     renderWeapon()
+    computeCombat()
+    renderCombat()
 end
 
 local function onLatencyTick()
@@ -302,6 +359,10 @@ local function onLatencyTick()
     -- read-back signal only changes on a real weapon or bar change.
     computeWeaponBar()
     renderWeapon()
+    -- A 1 Hz re-sync backstop for combat, idempotent like the weapon block, so a
+    -- missed event cannot strand the block in a stale state.
+    computeCombat()
+    renderCombat()
 end
 
 local function onAddOnLoaded(_, name)
@@ -321,9 +382,17 @@ local function onAddOnLoaded(_, name)
     -- after each loading screen (the pair-changed event may not fire for the
     -- initial state).
     em:RegisterForEvent(ADDON_NAME .. "Bar", EVENT_ACTIVE_WEAPON_PAIR_CHANGED, onWeaponPairChanged)
+
+    -- Combat tracking: react immediately to a real transition, and re-baseline
+    -- after each loading screen, because the combat event does not fire for a
+    -- state that is already true when the world finishes loading.
+    em:RegisterForEvent(ADDON_NAME .. "Combat", EVENT_PLAYER_COMBAT_STATE, onCombatStateChanged)
+
     em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
         computeWeaponBar()
         renderWeapon()
+        computeCombat()
+        renderCombat()
     end)
 end
 

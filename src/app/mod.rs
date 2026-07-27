@@ -28,7 +28,7 @@ use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
-use crate::pixelbus::{ActiveBar, WeaponClass};
+use crate::pixelbus::{ActiveBar, CombatSignal, WeaponClass};
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
@@ -232,6 +232,38 @@ pub fn weapon_bar_view(bar: ActiveBar, front: WeaponClass, back: WeaponClass) ->
         active_bar: active_bar_name(bar),
         front: weapon_class_name(front),
         back: weapon_class_name(back),
+        role: if detected {
+            StatusRole::Active
+        } else {
+            StatusRole::Muted
+        },
+    }
+}
+
+/// A normalized view of the detected combat state for the status region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CombatView {
+    /// Whether any combat signal has been decoded.
+    pub detected: bool,
+    /// The combat state display name.
+    pub state: &'static str,
+    /// The palette role for the state field.
+    pub role: StatusRole,
+}
+
+/// Derives the combat view from the decoded signal.
+///
+/// The unavailable case renders exactly as the weapon-bar readout renders its
+/// own, so the operator reads two adjacent fields with one convention.
+pub fn combat_view(signal: CombatSignal) -> CombatView {
+    let detected = signal != CombatSignal::Unknown;
+    CombatView {
+        detected,
+        state: match signal {
+            CombatSignal::InCombat => "In combat",
+            CombatSignal::OutOfCombat => "Out of combat",
+            CombatSignal::Unknown => "Not detected",
+        },
         role: if detected {
             StatusRole::Active
         } else {
@@ -567,6 +599,8 @@ pub struct AppView {
     pub skills: Vec<SkillRow>,
     /// The detected weapon-bar state.
     pub weapon_bar: WeaponBarView,
+    /// The detected combat state.
+    pub combat: CombatView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -762,12 +796,13 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason())
         };
-        let (skills, active_bar, classes) = {
+        let (skills, active_bar, classes, combat) = {
             let weave = self.weave.lock().unwrap();
             (
                 skill_rows(weave.config()),
                 weave.active_bar(),
                 weave.weapon_classes(),
+                weave.combat(),
             )
         };
         let suspended = self.input.is_suspended();
@@ -784,6 +819,7 @@ impl AppModel {
             uninstall_enabled: uninstall_enabled(condition),
             skills,
             weapon_bar: weapon_bar_view(active_bar, classes.0, classes.1),
+            combat: combat_view(combat),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }

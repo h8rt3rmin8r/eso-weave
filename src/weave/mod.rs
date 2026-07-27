@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
-use crate::pixelbus::{ActiveBar, WeaponBarSignal, WeaponClass};
+use crate::pixelbus::{ActiveBar, CombatSignal, WeaponBarSignal, WeaponClass};
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
 pub use types::{
@@ -215,6 +215,7 @@ pub struct WeaveEngine {
     active_bar: ActiveBar,
     front_class: WeaponClass,
     back_class: WeaponClass,
+    combat: CombatSignal,
 }
 
 impl WeaveEngine {
@@ -229,7 +230,26 @@ impl WeaveEngine {
             active_bar: ActiveBar::Unknown,
             front_class: WeaponClass::Unknown,
             back_class: WeaponClass::Unknown,
+            combat: CombatSignal::Unknown,
         }
+    }
+
+    /// Records the decoded combat state.
+    ///
+    /// Deliberately inert: nothing in this engine reads it, and no timing, input,
+    /// or fishing behavior depends on it. It lives here because the engine is
+    /// already the shared home for every beacon-derived observable and is already
+    /// behind the mutex both the reader thread and the interface thread take.
+    /// `tests/weave.rs` asserts the engine behaves identically for all three
+    /// values, so wiring combat into a decision has to be a deliberate change that
+    /// breaks that test rather than an accident.
+    pub fn set_combat(&mut self, combat: CombatSignal) {
+        self.combat = combat;
+    }
+
+    /// The last decoded combat state.
+    pub fn combat(&self) -> CombatSignal {
+        self.combat
     }
 
     /// Records the decoded weapon-bar state (active bar and each bar's weapon

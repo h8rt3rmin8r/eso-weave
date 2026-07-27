@@ -60,11 +60,13 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_five() {
-    // Bumped so the app classifies an existing on-disk version-4 install as
-    // outdated and refreshes it, delivering the corrected bite signal.
-    assert_eq!(embedded_version(), 5);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(5));
+fn embedded_manifest_version_is_six() {
+    // Bumped so the app classifies an existing on-disk version-5 install as
+    // outdated and refreshes it, delivering the combat state block. The beacon
+    // manager offers the update off this number, so it advances with every
+    // change to the addon's published contract.
+    assert_eq!(embedded_version(), 6);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(6));
 }
 
 #[test]
@@ -565,4 +567,47 @@ fn redeploy_skips_when_not_installed() {
     .unwrap();
     assert_eq!(outcome, beacon::RedeployOutcome::SkippedNotInstalled);
     assert!(!beacon_dir(root.path()).exists());
+}
+
+// Slice 031: the addon and the companion state the pixel-bus contract once each,
+// in two different languages. These assert they agree, so a divergence fails the
+// build instead of shipping as a silently dead signal.
+
+#[test]
+fn parse_lua_constant_reads_decimal_and_hex() {
+    let src = "local A = 5\nlocal B = 0x2D\n  local C   =   17  \nlocal D = notanumber\n";
+    assert_eq!(beacon::parse_lua_constant(src, "A"), Some(5));
+    assert_eq!(beacon::parse_lua_constant(src, "B"), Some(0x2D));
+    assert_eq!(beacon::parse_lua_constant(src, "C"), Some(17));
+    assert_eq!(beacon::parse_lua_constant(src, "D"), None);
+    assert_eq!(beacon::parse_lua_constant(src, "MISSING"), None);
+}
+
+#[test]
+fn parse_lua_constant_does_not_match_a_longer_name() {
+    // `local NUM_BLOCKS_EXTRA` must not satisfy a lookup for `NUM_BLOCKS`.
+    let src = "local NUM_BLOCKS_EXTRA = 9\nlocal NUM_BLOCKS = 5\n";
+    assert_eq!(beacon::parse_lua_constant(src, "NUM_BLOCKS"), Some(5));
+}
+
+#[test]
+fn addon_and_companion_agree_on_the_pixel_bus_contract() {
+    use eso_weave::pixelbus::NUM_BLOCKS;
+
+    let lua = beacon::LUA;
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "NUM_BLOCKS"),
+        Some(NUM_BLOCKS),
+        "the addon and the companion disagree on the strip length"
+    );
+    // The combat block colors, shared byte for byte. The companion keeps these
+    // private, so the expected values are the contract in
+    // specs/031-combat-state-block/contracts/pixel-bus-b4.md.
+    assert_eq!(beacon::parse_lua_constant(lua, "COMBAT_MARKER"), Some(0x2D));
+    assert_eq!(beacon::parse_lua_constant(lua, "COMBAT_IN_RED"), Some(0xE0));
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "COMBAT_OUT_RED"),
+        Some(0x20)
+    );
+    assert_eq!(beacon::parse_lua_constant(lua, "WEAPON_MARKER"), Some(0x5A));
 }

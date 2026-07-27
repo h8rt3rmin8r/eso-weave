@@ -46,6 +46,11 @@ pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
 pub const WEAPON_BAR_TOOLTIP: &str =
     "The active weapon bar and the weapon class detected on each bar. Requires the updated Pixel Beacon addon; shows Unknown without a signal.";
 
+// Combat-state section.
+pub const COMBAT_TITLE: &str = "Combat";
+pub const COMBAT_TOOLTIP: &str =
+    "Whether the character is in combat, read from the Pixel Beacon addon. Requires addon version 6 or later; shows Not detected without a signal. Nothing in the application acts on this yet.";
+
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
 pub const SKILLS_TOOLTIP: &str =
@@ -223,6 +228,7 @@ pub fn all_labels() -> Vec<&'static str> {
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,
+        COMBAT_TITLE,
         SKILLS_TITLE,
         LOG_TITLE,
         MENU_FILE,
@@ -259,6 +265,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         BEACON_UPDATE_TOOLTIP,
         BEACON_UNINSTALL_TOOLTIP,
         WEAPON_BAR_TOOLTIP,
+        COMBAT_TOOLTIP,
         SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,

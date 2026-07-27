@@ -27,6 +27,7 @@ pub fn app_toggle_intent(action: Action, fishing_on: bool) -> Option<UiIntent> {
 ///
 /// - `Latency(ms)` sets the weave engine's current latency (nothing to fishing).
 /// - `WeaponBar(signal)` sets the weave engine's active bar and weapon classes.
+/// - `Combat(signal)` stores the decoded combat state (nothing acts on it).
 /// - `SignalLost` clears the weave latency and disables fishing.
 /// - `FishingStarted`, `BiteDetected`, `FishingStopped` reach the controller.
 /// - `Heartbeat` is forwarded to the controller (a no-op there).
@@ -48,6 +49,10 @@ pub fn route_reader_event(
         }
         PixelBusEvent::WeaponBar(signal) => {
             weave.set_weapon_bar(signal);
+            return;
+        }
+        PixelBusEvent::Combat(signal) => {
+            weave.set_combat(signal);
             return;
         }
         PixelBusEvent::SignalLost => {
