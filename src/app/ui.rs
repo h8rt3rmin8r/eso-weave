@@ -836,6 +836,17 @@ impl EsoWeaveApp {
                 ui.label(egui::RichText::new(cb.state).color(combat_color))
                     .on_hover_text(strings::COMBAT_TOOLTIP);
                 ui.end_row();
+
+                // Game menu gate: when this is active the application is
+                // deliberately not intercepting, so the operator can see why
+                // their weaves are not firing.
+                widgets::label_strong(ui, &palette, strings::MENU_TITLE)
+                    .on_hover_text(strings::MENU_TOOLTIP);
+                let mv = &view.menu;
+                let menu_color = crate::app::theme::status_color(&palette, mv.role);
+                ui.label(egui::RichText::new(mv.state).color(menu_color))
+                    .on_hover_text(strings::MENU_TOOLTIP);
+                ui.end_row();
             });
 
         self.note_content_width(status.response.rect.width());

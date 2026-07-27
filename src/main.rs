@@ -136,6 +136,7 @@ fn main() {
         let backend = backend.clone();
         let weave = weave.clone();
         let fishing = fishing.clone();
+        let input = input.clone();
         thread::spawn(move || {
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink = RealFishingSink::new(SharedBackend(backend));
@@ -146,8 +147,12 @@ fn main() {
                 // and bite signals are sampled and the state machine ticks in
                 // time; poll slowly otherwise.
                 let fishing_active = fishing.lock().unwrap().state() != FishingState::Disabled;
+                // A suspended application intercepts and synthesizes nothing, so
+                // it has no menu gate to keep current and can sample slowly.
+                let can_intercept = !input.is_suspended();
                 thread::sleep(Duration::from_millis(poll_interval(
                     fishing_active,
+                    can_intercept,
                     &reader_config,
                 )));
                 if sampler.is_none() {
@@ -161,7 +166,7 @@ fn main() {
                 let mut weave = weave.lock().unwrap();
                 let mut fishing = fishing.lock().unwrap();
                 for event in events {
-                    route_reader_event(event, &mut weave, &mut fishing, now, &mut sink);
+                    route_reader_event(event, &mut weave, &mut fishing, &input, now, &mut sink);
                 }
                 fishing.tick(now, &mut sink);
             }

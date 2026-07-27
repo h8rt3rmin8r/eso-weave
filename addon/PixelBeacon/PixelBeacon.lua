@@ -1,13 +1,14 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders up to five square blocks (BLOCK_PX physical pixels on a side,
+-- It renders up to six square blocks (BLOCK_PX physical pixels on a side,
 -- default 16; the companion sets this value on deploy) anchored to the top-left
 -- of the client area, encoding load status (B0), fishing state (B1), server
 -- latency (B2), the active weapon bar with each bar's weapon class (B3), and the
--- player's combat state (B4). It has no settings, no user interface beyond the
--- blocks, no external libraries, and no saved variables. Values follow the ESO
--- Weave master specification section 9.3, the slice 014 weapon-bar block, and
--- the slice 031 combat block.
+-- player's combat state (B4), and which native game UI surface is active (B5).
+-- It has no settings, no user interface beyond the blocks, no external libraries,
+-- and no saved variables. Values follow the ESO Weave master specification
+-- section 10.3, the slice 014 weapon-bar block, the slice 031 combat block, and
+-- the slice 032 menu block.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -19,9 +20,9 @@ local BLOCK_PX = 16
 -- The strip length, stated once. The root width and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 5
+local NUM_BLOCKS = 6
 local LATENCY_UPDATE_MS = 1000
-local FISHING_UPDATE_MS = 100
+local FAST_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
 
 -- Weapon-class codes, shared byte-for-byte with the ESO Weave pixel-bus reader.
@@ -48,6 +49,50 @@ local COMBAT_OUT_RED = 0x20
 -- The last rendered combat state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
 local inCombat = nil
+
+-- The menu block marker (green channel) and its surface code spacing, shared byte
+-- for byte with the companion decoder. Red carries code * MENU_CODE_STEP, blue
+-- carries the 255 minus red complement checksum. Codes are 24 apart, twelve times
+-- the reader's default tolerance.
+local MENU_MARKER = 0xD2
+local MENU_CODE_STEP = 24
+local MENU_CODE_MAX = 10
+
+-- Surface codes, shared byte for byte with the companion.
+local MENU_NONE = 0
+local MENU_SYSTEM = 1
+local MENU_MAP = 2
+local MENU_INVENTORY = 3
+local MENU_MAIL = 4
+local MENU_CHARACTER = 5
+local MENU_GUILD_STORE = 6
+local MENU_CROWN_STORE = 7
+local MENU_JOURNAL = 8
+local MENU_CHAT_ENTRY = 9
+local MENU_OTHER = 10
+
+-- Scene name to surface code. A name missing from this table is NOT a problem:
+-- the active/inactive decision is made from the game's UI mode before this table
+-- is consulted, so an unlisted or renamed scene falls back to MENU_OTHER and
+-- still gates. The table only improves what the companion displays.
+local SCENE_CODES = {
+    gameMenuInGame = MENU_SYSTEM,
+    worldMap = MENU_MAP,
+    inventory = MENU_INVENTORY,
+    mailInbox = MENU_MAIL,
+    mailSend = MENU_MAIL,
+    mailManager = MENU_MAIL,
+    stats = MENU_CHARACTER,
+    skills = MENU_CHARACTER,
+    championPerks = MENU_CHARACTER,
+    tradinghouse = MENU_GUILD_STORE,
+    market = MENU_CROWN_STORE,
+    journal = MENU_JOURNAL,
+}
+
+-- The last rendered surface code, held so the block is redrawn only on a real
+-- transition. nil until the first render.
+local menuCode = nil
 
 -- The decoded weapon-bar state: active bar code (0 unknown, 1 front, 2 back) and
 -- each bar's class code. Held across indeterminate reads (locked or none pair).
@@ -238,6 +283,65 @@ local function onCombatStateChanged()
     end
 end
 
+-- B5 Menu ---------------------------------------------------------------------
+
+-- Whether any native UI surface is active.
+--
+-- This deliberately does NOT use the scene test that isMenuOpen() uses below.
+-- Opening chat does not hide the gameplay scenes, so a scene test reads "no menu"
+-- while the player is typing, which is the single most common case this block
+-- exists to cover. The game's own ZO_IngameSceneManager:ConsiderExitingUIMode
+-- refuses to leave UI mode while chat text entry is open, so UI mode is the flag
+-- that already means what we need. Chat entry is ORed in explicitly so the
+-- guarantee does not depend on that internal behavior staying the same.
+local function isChatEntryOpen()
+    local chat = ZO_GetChatSystem and ZO_GetChatSystem()
+    return chat ~= nil and chat.IsTextEntryOpen ~= nil and chat:IsTextEntryOpen()
+end
+
+local function isSurfaceActive()
+    if IsGameCameraUIModeActive and IsGameCameraUIModeActive() then
+        return true
+    end
+    return isChatEntryOpen() and true or false
+end
+
+-- Computes the surface code: the boolean first, the label second.
+local function computeMenuCode()
+    if not isSurfaceActive() then
+        return MENU_NONE
+    end
+    if isChatEntryOpen() then
+        return MENU_CHAT_ENTRY
+    end
+    local scene = SCENE_MANAGER and SCENE_MANAGER:GetCurrentScene()
+    local name = scene and scene.GetName and scene:GetName()
+    return (name and SCENE_CODES[name]) or MENU_OTHER
+end
+
+-- Renders B5: the menu marker in green, the surface code in red, and the
+-- complement checksum in blue. Rendered only while the status block renders, and
+-- never hidden to express a state.
+local function renderMenu()
+    if blocks.status:IsHidden() then
+        blocks.menu:SetHidden(true)
+        return
+    end
+    local red = (menuCode or MENU_NONE) * MENU_CODE_STEP
+    blocks.menu:SetCenterColor(channel(red), channel(MENU_MARKER), channel(255 - red), 1)
+    blocks.menu:SetHidden(false)
+end
+
+-- Recomputes the surface code, returning true when it changed.
+local function updateMenu()
+    local current = computeMenuCode()
+    if current == menuCode then
+        return false
+    end
+    menuCode = current
+    return true
+end
+
 -- Reacts to a weapon-pair-changed event, which fires on nearly every attack:
 -- re-render only when the decoded state actually changes.
 local function onWeaponPairChanged()
@@ -296,6 +400,19 @@ local function onFishingTick()
     end
 end
 
+-- The fast tick. It drives fishing detection and publishes the menu gate.
+--
+-- The gate rides this rather than the one-second latency tick on purpose: the
+-- companion samples the strip at its own fast cadence, so publishing slowly here
+-- would make the addon the dominant source of latency and the gate would engage
+-- long after the operator started typing.
+local function onFastTick()
+    if updateMenu() then
+        renderMenu()
+    end
+    onFishingTick()
+end
+
 -- The sole bite signal: the equipped bait's stack decreases by one while a cast
 -- is active and no menu is open (the game consumes the bait when the fish takes
 -- it). The lure sound category scopes the decrease to bait, so unrelated
@@ -336,12 +453,14 @@ local function buildBlocks()
     blocks.latency = createBlock("Latency")
     blocks.weapon = createBlock("Weapon")
     blocks.combat = createBlock("Combat")
+    blocks.menu = createBlock("Menu")
 
     positionBlock(blocks.status, 0)
     positionBlock(blocks.fishing, BLOCK_PX)
     positionBlock(blocks.latency, BLOCK_PX * 2)
     positionBlock(blocks.weapon, BLOCK_PX * 3)
     positionBlock(blocks.combat, BLOCK_PX * 4)
+    positionBlock(blocks.menu, BLOCK_PX * 5)
 
     renderStatus()
     renderFishing()
@@ -350,6 +469,8 @@ local function buildBlocks()
     renderWeapon()
     computeCombat()
     renderCombat()
+    updateMenu()
+    renderMenu()
 end
 
 local function onLatencyTick()
@@ -374,7 +495,7 @@ local function onAddOnLoaded(_, name)
     buildBlocks()
 
     em:RegisterForUpdate(ADDON_NAME .. "Latency", LATENCY_UPDATE_MS, onLatencyTick)
-    em:RegisterForUpdate(ADDON_NAME .. "Fishing", FISHING_UPDATE_MS, onFishingTick)
+    em:RegisterForUpdate(ADDON_NAME .. "Fast", FAST_UPDATE_MS, onFastTick)
     em:RegisterForEvent(ADDON_NAME .. "Inv", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, onInventorySlotUpdate)
     em:RegisterForEvent(ADDON_NAME .. "Chatter", EVENT_CHATTER_END, onChatterEnd)
 

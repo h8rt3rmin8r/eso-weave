@@ -154,6 +154,82 @@ const COMBAT_IN_RED: u8 = 0xE0;
 /// The red channel encoding the out-of-combat state.
 const COMBAT_OUT_RED: u8 = 0x20;
 
+/// Which native game UI surface is active, decoded from the menu block.
+///
+/// [`MenuSurface::None`] means gameplay: no surface is active. It is also the
+/// value produced by every failure mode (an addon older than version 7 draws no
+/// menu block, a sample fails validation, or the beacon signal is lost), which is
+/// what makes every failure degrade to the application's behavior without the
+/// menu gate rather than to a gate stuck on.
+///
+/// [`MenuSurface::Other`] is a surface the addon could not name. It gates exactly
+/// like a named one: the addon decides that a surface is active from the game's
+/// UI-mode state before it tries to label it, so an unrecognized or renamed scene
+/// costs precision in the readout and never costs the gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MenuSurface {
+    /// No surface is active; the operator is playing.
+    #[default]
+    None,
+    /// The system (Escape) menu.
+    SystemMenu,
+    /// The world map.
+    Map,
+    /// Inventory.
+    Inventory,
+    /// Mail.
+    Mail,
+    /// Character and skills.
+    Character,
+    /// The guild store.
+    GuildStore,
+    /// The crown store.
+    CrownStore,
+    /// The journal.
+    Journal,
+    /// Chat text entry is open.
+    ChatEntry,
+    /// A surface the addon does not enumerate.
+    Other,
+}
+
+impl MenuSurface {
+    /// Decodes a surface from its wire code (`0..=MENU_CODE_MAX`).
+    fn from_code(code: u8) -> Option<Self> {
+        Some(match code {
+            0 => MenuSurface::None,
+            1 => MenuSurface::SystemMenu,
+            2 => MenuSurface::Map,
+            3 => MenuSurface::Inventory,
+            4 => MenuSurface::Mail,
+            5 => MenuSurface::Character,
+            6 => MenuSurface::GuildStore,
+            7 => MenuSurface::CrownStore,
+            8 => MenuSurface::Journal,
+            9 => MenuSurface::ChatEntry,
+            10 => MenuSurface::Other,
+            _ => return None,
+        })
+    }
+
+    /// Whether this surface gates input. True for everything except gameplay.
+    ///
+    /// The gate never asks which surface it is, only that it is not
+    /// [`MenuSurface::None`], so a surface the addon could not name still gates.
+    pub fn gates(self) -> bool {
+        self != MenuSurface::None
+    }
+}
+
+/// The green marker that identifies a menu sample. The nibble swap of the combat
+/// marker, as that block's documentation reserved.
+const MENU_MARKER: u8 = 0xD2;
+/// The red-channel spacing between adjacent surface codes. Twelve times the
+/// default tolerance, so a code can never be read as its neighbour.
+const MENU_CODE_STEP: u8 = 24;
+/// The highest surface code (the generic "other" value).
+const MENU_CODE_MAX: u8 = 10;
+
 /// Every green-channel value that appears at the center of a beacon block, with
 /// the block it belongs to.
 ///
@@ -162,13 +238,14 @@ const COMBAT_OUT_RED: u8 = 0x20;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 6] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 7] = [
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
     ("B2 latency marker", 0xA5),
     ("B3 weapon marker", WEAPON_MARKER),
     ("B4 combat marker", COMBAT_MARKER),
+    ("B5 menu marker", MENU_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -191,6 +268,11 @@ pub enum PixelBusEvent {
     /// A change in the decoded combat state, including a change to
     /// [`CombatSignal::Unknown`] when the block stops decoding.
     Combat(CombatSignal),
+    /// A change in the decoded menu surface, including a change to
+    /// [`MenuSurface::None`] when the block stops decoding. While the carried
+    /// surface gates, the application starts no new weave and no new fishing
+    /// interaction.
+    MenuGate(MenuSurface),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -214,6 +296,8 @@ pub struct BlockSamples {
     pub weapon: Option<Rgb>,
     /// B4, the combat block.
     pub combat: Option<Rgb>,
+    /// B5, the menu-state block.
+    pub menu: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -277,7 +361,7 @@ impl SurfaceSampler for MockSampler {
 }
 
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
-/// B3 weapon, B4 combat.
+/// B3 weapon, B4 combat, B5 menu.
 ///
 /// This is the companion's single statement of the strip length; the drawn width
 /// and the capture region both derive from it. The addon states the same number
@@ -285,7 +369,7 @@ impl SurfaceSampler for MockSampler {
 /// asserts the two agree by parsing the embedded addon source. Adding a block is
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
-pub const NUM_BLOCKS: u32 = 5;
+pub const NUM_BLOCKS: u32 = 6;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -367,6 +451,10 @@ impl ReaderConfig {
     pub fn combat_point(&self) -> (u32, u32) {
         block_center(self.block_px, 4)
     }
+    /// The menu block (B5) sample point, derived from `block_px`.
+    pub fn menu_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 5)
+    }
 }
 
 impl Default for ReaderConfig {
@@ -381,14 +469,24 @@ impl Default for ReaderConfig {
     }
 }
 
-/// Selects the worker poll interval from whether a fishing session is active.
+/// Selects the worker poll interval from whether a fishing session is active and
+/// whether the application is in a position to intercept input.
 ///
 /// While fishing is active the reader must sample, and the fishing state machine
-/// must tick, at the fast fishing cadence so transient cast and bite signals are
-/// observed in time and the reel is not delayed; while idle the slower interval
-/// avoids needless screen sampling.
-pub fn poll_interval(fishing_active: bool, cfg: &ReaderConfig) -> u64 {
-    if fishing_active {
+/// must tick, at the fast cadence so transient cast and bite signals are observed
+/// in time and the reel is not delayed.
+///
+/// The fast cadence also applies whenever the application can intercept, because
+/// the menu gate is only useful if it engages before the operator has typed half a
+/// sentence. Note what this deliberately is not: an unconditional fast cadence.
+/// That would leave `interval_idle_ms` with no effect at all, which is the mirror
+/// image of the defect where `interval_fishing_ms` was the dead setting and every
+/// fishing session sampled once a second. A suspended application intercepts
+/// nothing and synthesizes nothing, so it has no gate to keep current and can
+/// sample slowly; both settings keep a real meaning and the extra capture cost is
+/// paid only while the application is actually working.
+pub fn poll_interval(fishing_active: bool, can_intercept: bool, cfg: &ReaderConfig) -> u64 {
+    if fishing_active || can_intercept {
         cfg.interval_fishing_ms
     } else {
         cfg.interval_idle_ms
@@ -553,6 +651,36 @@ pub fn decode_combat(sample: Rgb, tolerance: u8) -> CombatSignal {
     }
 }
 
+/// Decodes the menu block into its surface.
+///
+/// Validation mirrors the combat block: the green marker and the `red + blue`
+/// complement checksum are both checked within tolerance, then the red channel
+/// selects the surface code. Any failure yields [`MenuSurface::None`], which is
+/// the safe value, because it means the application behaves exactly as it does
+/// without the menu gate.
+pub fn decode_menu(sample: Rgb, tolerance: u8) -> MenuSurface {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, MENU_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        return MenuSurface::None;
+    }
+    // Codes are spaced MENU_CODE_STEP apart, so the nearest code is found by
+    // rounding and then confirming the sample really is within tolerance of it
+    // rather than sitting between two codes.
+    let step = u16::from(MENU_CODE_STEP);
+    let code = (u16::from(sample.r) + step / 2) / step;
+    let Ok(code) = u8::try_from(code) else {
+        return MenuSurface::None;
+    };
+    if code > MENU_CODE_MAX {
+        return MenuSurface::None;
+    }
+    let expected = code.saturating_mul(MENU_CODE_STEP);
+    if !within(sample.r, expected, tolerance) {
+        return MenuSurface::None;
+    }
+    MenuSurface::from_code(code).unwrap_or(MenuSurface::None)
+}
+
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
@@ -561,6 +689,7 @@ pub struct PixelBusReader {
     fishing: FishingSignal,
     weapon: Option<WeaponBarSignal>,
     combat: CombatSignal,
+    menu: MenuSurface,
     had_heartbeat: bool,
 }
 
@@ -574,6 +703,7 @@ impl PixelBusReader {
             fishing: FishingSignal::None,
             weapon: None,
             combat: CombatSignal::Unknown,
+            menu: MenuSurface::None,
             had_heartbeat: false,
         }
     }
@@ -592,6 +722,7 @@ impl PixelBusReader {
             latency: b2,
             weapon: b3,
             combat: b4,
+            menu: b5,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -615,6 +746,7 @@ impl PixelBusReader {
             ?b2,
             ?b3,
             ?b4,
+            ?b5,
             now_ms,
             "pixel bus sample"
         );
@@ -691,6 +823,22 @@ impl PixelBusReader {
                 );
                 events.push(PixelBusEvent::Combat(combat));
             }
+
+            // The menu block gates input, so a sample that does not decode must
+            // clear it rather than hold it: holding a stale gate would leave the
+            // application silently not intercepting long after the menu closed,
+            // which looks exactly like a crash.
+            let menu = b5.map_or(MenuSurface::None, |c| decode_menu(c, tolerance));
+            if menu != self.menu {
+                self.menu = menu;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    surface = ?menu,
+                    gates = menu.gates(),
+                    "menu surface changed"
+                );
+                events.push(PixelBusEvent::MenuGate(menu));
+            }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
                 self.signal_lost = true;
@@ -706,6 +854,11 @@ impl PixelBusReader {
                 if self.combat != CombatSignal::Unknown {
                     self.combat = CombatSignal::Unknown;
                     events.push(PixelBusEvent::Combat(CombatSignal::Unknown));
+                }
+                // Losing the signal must open the gate, never close it.
+                if self.menu != MenuSurface::None {
+                    self.menu = MenuSurface::None;
+                    events.push(PixelBusEvent::MenuGate(MenuSurface::None));
                 }
             }
         }
@@ -726,12 +879,14 @@ impl PixelBusReader {
         let (lx, ly) = self.config.latency_point();
         let (wx, wy) = self.config.weapon_point();
         let (cx, cy) = self.config.combat_point();
+        let (mx, my) = self.config.menu_point();
         let samples = BlockSamples {
             status: sampler.sample(sx, sy),
             fishing: sampler.sample(fx, fy),
             latency: sampler.sample(lx, ly),
             weapon: sampler.sample(wx, wy),
             combat: sampler.sample(cx, cy),
+            menu: sampler.sample(mx, my),
         };
         self.observe(samples, now_ms)
     }

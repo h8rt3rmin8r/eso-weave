@@ -20,6 +20,7 @@ pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
         PixelBusEvent::Latency(_) => None,
         PixelBusEvent::WeaponBar(_) => None,
         PixelBusEvent::Combat(_) => None,
+        PixelBusEvent::MenuGate(_) => None,
     }
 }
 

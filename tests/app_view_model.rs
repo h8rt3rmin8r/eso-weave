@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{
-    app_state_label, beacon_light, combat_view, default_delay_for, fishing_label, modal_extent,
-    override_edit_for, route_reader_event, skill_rows, status_line_app, status_line_beacon,
-    status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition, SkillEdit,
-    StatusRole, UiIntent,
+    app_state_label, beacon_light, combat_view, default_delay_for, fishing_label, menu_view,
+    modal_extent, override_edit_for, route_reader_event, skill_rows, status_line_app,
+    status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel,
+    BeaconCondition, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -18,7 +18,9 @@ use eso_weave::fishing::{
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
-use eso_weave::pixelbus::{ActiveBar, CombatSignal, PixelBusEvent, WeaponBarSignal, WeaponClass};
+use eso_weave::pixelbus::{
+    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, WeaponBarSignal, WeaponClass,
+};
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
 // Derivations.
@@ -237,6 +239,7 @@ fn routing_directs_events_to_the_right_subsystems() {
     });
     let mut fishing = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
     fishing.set_enabled(true, 0, &mut sink); // Armed
     assert_eq!(fishing.state(), FishingState::Armed);
@@ -245,6 +248,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::Latency(120),
         &mut weave,
         &mut fishing,
+        &input,
         1,
         &mut sink,
     );
@@ -259,6 +263,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::FishingStarted,
         &mut weave,
         &mut fishing,
+        &input,
         2,
         &mut sink,
     );
@@ -268,6 +273,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::BiteDetected,
         &mut weave,
         &mut fishing,
+        &input,
         3,
         &mut sink,
     );
@@ -277,6 +283,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::SignalLost,
         &mut weave,
         &mut fishing,
+        &input,
         4,
         &mut sink,
     );
@@ -295,6 +302,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::Heartbeat,
         &mut weave,
         &mut fishing,
+        &input,
         5,
         &mut sink,
     );
@@ -332,6 +340,7 @@ fn routing_a_weapon_bar_event_updates_the_engine() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
     route_reader_event(
         PixelBusEvent::WeaponBar(WeaponBarSignal {
@@ -341,6 +350,7 @@ fn routing_a_weapon_bar_event_updates_the_engine() {
         }),
         &mut weave,
         &mut fishing,
+        &input,
         1,
         &mut sink,
     );
@@ -556,6 +566,7 @@ fn routing_a_combat_event_stores_it_without_touching_fishing() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
     fishing.set_enabled(true, 0, &mut sink);
     assert_eq!(fishing.state(), FishingState::Armed);
@@ -564,6 +575,7 @@ fn routing_a_combat_event_stores_it_without_touching_fishing() {
         PixelBusEvent::Combat(CombatSignal::InCombat),
         &mut weave,
         &mut fishing,
+        &input,
         1,
         &mut sink,
     );
@@ -573,4 +585,63 @@ fn routing_a_combat_event_stores_it_without_touching_fishing() {
         FishingState::Armed,
         "combat state does not touch fishing"
     );
+}
+
+// Slice 032: the menu-gate readout and routing.
+
+#[test]
+fn menu_view_names_each_surface_and_marks_gating() {
+    let gameplay = menu_view(MenuSurface::None);
+    assert!(!gameplay.gating);
+    assert_eq!(gameplay.state, "Gameplay");
+    assert_eq!(gameplay.role, StatusRole::Muted);
+
+    let map = menu_view(MenuSurface::Map);
+    assert!(map.gating);
+    assert_eq!(map.state, "Map");
+    assert_eq!(map.role, StatusRole::Active);
+
+    let chat = menu_view(MenuSurface::ChatEntry);
+    assert!(chat.gating);
+    assert_eq!(chat.state, "Chat entry");
+
+    // The unenumerated surface still reads as gating, so the operator can see why
+    // the application stopped intercepting even when it cannot name the screen.
+    let other = menu_view(MenuSurface::Other);
+    assert!(other.gating);
+    assert_eq!(other.state, "Menu");
+    assert_eq!(other.role, StatusRole::Active);
+}
+
+#[test]
+fn routing_a_menu_event_gates_both_synthesis_paths() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    assert!(!input.is_menu_gated(), "the default must be ungated");
+
+    route_reader_event(
+        PixelBusEvent::MenuGate(MenuSurface::Mail),
+        &mut weave,
+        &mut fishing,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert!(input.is_menu_gated());
+    assert_eq!(weave.menu(), MenuSurface::Mail);
+
+    // Returning to gameplay releases it.
+    route_reader_event(
+        PixelBusEvent::MenuGate(MenuSurface::None),
+        &mut weave,
+        &mut fishing,
+        &input,
+        2,
+        &mut sink,
+    );
+    assert!(!input.is_menu_gated());
+    assert_eq!(weave.menu(), MenuSurface::None);
 }

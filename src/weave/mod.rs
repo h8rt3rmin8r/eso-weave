@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
-use crate::pixelbus::{ActiveBar, CombatSignal, WeaponBarSignal, WeaponClass};
+use crate::pixelbus::{ActiveBar, CombatSignal, MenuSurface, WeaponBarSignal, WeaponClass};
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
 pub use types::{
@@ -216,6 +216,7 @@ pub struct WeaveEngine {
     front_class: WeaponClass,
     back_class: WeaponClass,
     combat: CombatSignal,
+    menu: MenuSurface,
 }
 
 impl WeaveEngine {
@@ -231,6 +232,7 @@ impl WeaveEngine {
             front_class: WeaponClass::Unknown,
             back_class: WeaponClass::Unknown,
             combat: CombatSignal::Unknown,
+            menu: MenuSurface::None,
         }
     }
 
@@ -250,6 +252,21 @@ impl WeaveEngine {
     /// The last decoded combat state.
     pub fn combat(&self) -> CombatSignal {
         self.combat
+    }
+
+    /// Records the decoded game UI surface, for display only.
+    ///
+    /// The gate that actually suppresses input lives on the input engine and the
+    /// fishing controller; this copy exists so the interface can show the operator
+    /// which surface is responsible when the application stops intercepting.
+    /// Nothing in this engine reads it.
+    pub fn set_menu(&mut self, menu: MenuSurface) {
+        self.menu = menu;
+    }
+
+    /// The last decoded game UI surface.
+    pub fn menu(&self) -> MenuSurface {
+        self.menu
     }
 
     /// Records the decoded weapon-bar state (active bar and each bar's weapon

@@ -28,7 +28,7 @@ use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
-use crate::pixelbus::{ActiveBar, CombatSignal, WeaponClass};
+use crate::pixelbus::{ActiveBar, CombatSignal, MenuSurface, WeaponClass};
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
@@ -265,6 +265,46 @@ pub fn combat_view(signal: CombatSignal) -> CombatView {
             CombatSignal::Unknown => "Not detected",
         },
         role: if detected {
+            StatusRole::Active
+        } else {
+            StatusRole::Muted
+        },
+    }
+}
+
+/// A normalized view of the detected game UI surface for the status region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MenuView {
+    /// Whether the application currently believes a surface is gating input.
+    pub gating: bool,
+    /// The surface display name.
+    pub state: &'static str,
+    /// The palette role for the state field.
+    pub role: StatusRole,
+}
+
+/// Derives the menu view from the decoded surface.
+///
+/// Gameplay is shown in the muted role because it is the resting state; an active
+/// surface is highlighted, since it means the application is deliberately not
+/// intercepting and the operator should be able to see why.
+pub fn menu_view(surface: MenuSurface) -> MenuView {
+    MenuView {
+        gating: surface.gates(),
+        state: match surface {
+            MenuSurface::None => "Gameplay",
+            MenuSurface::SystemMenu => "System menu",
+            MenuSurface::Map => "Map",
+            MenuSurface::Inventory => "Inventory",
+            MenuSurface::Mail => "Mail",
+            MenuSurface::Character => "Character",
+            MenuSurface::GuildStore => "Guild store",
+            MenuSurface::CrownStore => "Crown store",
+            MenuSurface::Journal => "Journal",
+            MenuSurface::ChatEntry => "Chat entry",
+            MenuSurface::Other => "Menu",
+        },
+        role: if surface.gates() {
             StatusRole::Active
         } else {
             StatusRole::Muted
@@ -601,6 +641,8 @@ pub struct AppView {
     pub weapon_bar: WeaponBarView,
     /// The detected combat state.
     pub combat: CombatView,
+    /// The detected game UI surface, and whether it is gating input.
+    pub menu: MenuView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -796,13 +838,14 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason())
         };
-        let (skills, active_bar, classes, combat) = {
+        let (skills, active_bar, classes, combat, menu) = {
             let weave = self.weave.lock().unwrap();
             (
                 skill_rows(weave.config()),
                 weave.active_bar(),
                 weave.weapon_classes(),
                 weave.combat(),
+                weave.menu(),
             )
         };
         let suspended = self.input.is_suspended();
@@ -820,6 +863,7 @@ impl AppModel {
             skills,
             weapon_bar: weapon_bar_view(active_bar, classes.0, classes.1),
             combat: combat_view(combat),
+            menu: menu_view(menu),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }

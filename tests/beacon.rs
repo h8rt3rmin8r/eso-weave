@@ -60,13 +60,13 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_six() {
-    // Bumped so the app classifies an existing on-disk version-5 install as
-    // outdated and refreshes it, delivering the combat state block. The beacon
+fn embedded_manifest_version_is_seven() {
+    // Bumped so the app classifies an existing on-disk version-6 install as
+    // outdated and refreshes it, delivering the menu-state gate. The beacon
     // manager offers the update off this number, so it advances with every
     // change to the addon's published contract.
-    assert_eq!(embedded_version(), 6);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(6));
+    assert_eq!(embedded_version(), 7);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(7));
 }
 
 #[test]
@@ -610,4 +610,8 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(0x20)
     );
     assert_eq!(beacon::parse_lua_constant(lua, "WEAPON_MARKER"), Some(0x5A));
+    // Slice 032: the menu block's constants.
+    assert_eq!(beacon::parse_lua_constant(lua, "MENU_MARKER"), Some(0xD2));
+    assert_eq!(beacon::parse_lua_constant(lua, "MENU_CODE_STEP"), Some(24));
+    assert_eq!(beacon::parse_lua_constant(lua, "MENU_CODE_MAX"), Some(10));
 }

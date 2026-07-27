@@ -248,7 +248,13 @@ pub struct FishingController {
     state: FishingState,
     deadline: Option<(u64, TimerKind)>,
     stop_reason: Option<StopReason>,
+    gated: bool,
 }
+
+/// How long an interact deferred by the menu gate waits before trying again.
+/// Short enough that fishing resumes promptly when the surface closes, and long
+/// enough that a gated session is not busy-retrying.
+const GATE_DEFER_MS: u64 = 100;
 
 impl FishingController {
     /// Creates a controller in the Disabled state.
@@ -258,6 +264,7 @@ impl FishingController {
             state: FishingState::Disabled,
             deadline: None,
             stop_reason: None,
+            gated: false,
         }
     }
 
@@ -350,6 +357,18 @@ impl FishingController {
         if now_ms < at_ms {
             return;
         }
+        // The menu gate defers the two autonomous interacts. They are the ones
+        // that fire unbidden while the operator may be typing; re-arming the same
+        // deadline keeps the state machine consistent with what the game actually
+        // received, which dropping the interact would not.
+        if self.gated && matches!(kind, TimerKind::ReelDue | TimerKind::RecastDue) {
+            tracing::debug!(
+                target: "eso_weave::fishing",
+                "menu gate active; deferring {kind:?}"
+            );
+            self.deadline = Some((now_ms + GATE_DEFER_MS, kind));
+            return;
+        }
         match kind {
             TimerKind::ArmTimeout => self.disable(StopReason::NoCastDetected),
             TimerKind::ReelDue => {
@@ -385,6 +404,21 @@ impl FishingController {
                 self.cast(now_ms, sink);
             }
         }
+    }
+
+    /// Sets whether a native game UI surface is gating input.
+    ///
+    /// While set, the controller defers the reel and recast interacts rather than
+    /// sending them, so an autonomous keypress cannot land in a chat message the
+    /// operator is composing. A deferred interact retries shortly, so a session
+    /// resumes on its own when the surface closes; the state machine is never
+    /// advanced past an interact that was not actually sent, so its state always
+    /// matches what the game received.
+    ///
+    /// Defaults to `false`, the value that reproduces the controller's behavior
+    /// before this gate existed.
+    pub fn set_gated(&mut self, gated: bool) {
+        self.gated = gated;
     }
 
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and

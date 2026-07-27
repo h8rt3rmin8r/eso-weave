@@ -97,6 +97,7 @@ pub struct InputEngine {
     bindings: Mutex<BindingTable>,
     focused: AtomicBool,
     suspended: AtomicBool,
+    menu_gated: AtomicBool,
     held: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
     tx: SyncSender<Action>,
@@ -111,6 +112,7 @@ impl InputEngine {
             bindings: Mutex::new(bindings),
             focused: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
+            menu_gated: AtomicBool::new(false),
             held: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
             tx,
@@ -131,6 +133,27 @@ impl InputEngine {
     /// Whether the engine is suspended.
     pub fn is_suspended(&self) -> bool {
         self.suspended.load(Ordering::Relaxed)
+    }
+
+    /// Sets whether a native game UI surface is active, as read from the beacon.
+    ///
+    /// While set, [`classify`](Self::classify) passes every non-exempt key through
+    /// instead of intercepting it, so the operator can type in an in-game text
+    /// field without a weave firing or a keystroke being swallowed. This is an
+    /// automatic, game-driven form of suspend and carries the same exemption for
+    /// the application's own toggle hotkeys.
+    ///
+    /// Defaults to `false`, which is the value that reproduces the engine's
+    /// behavior before this gate existed. Every failure mode (an addon too old to
+    /// publish the signal, a sample that does not decode, a lost beacon signal)
+    /// leaves it there, so the gate can never fail closed.
+    pub fn set_menu_gated(&self, gated: bool) {
+        self.menu_gated.store(gated, Ordering::Relaxed);
+    }
+
+    /// Whether a native game UI surface is currently gating input.
+    pub fn is_menu_gated(&self) -> bool {
+        self.menu_gated.load(Ordering::Relaxed)
     }
 
     /// Sets whether an action is active. An inactive action's bound key passes
@@ -164,6 +187,13 @@ impl InputEngine {
             return Decision::Pass;
         }
         if self.suspended.load(Ordering::Relaxed) && !suspend_exempt {
+            return Decision::Pass;
+        }
+        // The menu gate: a native game UI surface is up, so the operator may be
+        // typing. Same shape and same exemption as the suspend check above, and
+        // like every other check here it can only produce a Pass, which is what
+        // makes it impossible for this gate to widen interception.
+        if self.menu_gated.load(Ordering::Relaxed) && !suspend_exempt {
             return Decision::Pass;
         }
 

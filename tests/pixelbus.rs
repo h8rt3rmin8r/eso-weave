@@ -2,11 +2,11 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_combat, decode_latency, decode_weapon_bar, fishing_signal,
-    load_reader_config, poll_interval, sanitize_block_px, status_present, store_reader_config,
-    strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal, MockSampler, PixelBusEvent,
-    PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS,
-    DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_weapon_bar,
+    fishing_signal, load_reader_config, poll_interval, sanitize_block_px, status_present,
+    store_reader_config, strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal,
+    MenuSurface, MockSampler, PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal,
+    WeaponClass, BLOCK_CENTER_GREENS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -57,8 +57,8 @@ fn strip_pixel_rejects_truncated_buffer() {
 #[test]
 fn poll_interval_tracks_fishing_state() {
     let cfg = ReaderConfig::default();
-    assert_eq!(poll_interval(true, &cfg), cfg.interval_fishing_ms);
-    assert_eq!(poll_interval(false, &cfg), cfg.interval_idle_ms);
+    assert_eq!(poll_interval(true, false, &cfg), cfg.interval_fishing_ms);
+    assert_eq!(poll_interval(false, false, &cfg), cfg.interval_idle_ms);
 
     // A custom config is honored, not the defaults.
     let cfg = ReaderConfig {
@@ -66,8 +66,35 @@ fn poll_interval_tracks_fishing_state() {
         interval_idle_ms: 1500,
         ..ReaderConfig::default()
     };
-    assert_eq!(poll_interval(true, &cfg), 75);
-    assert_eq!(poll_interval(false, &cfg), 1500);
+    assert_eq!(poll_interval(true, false, &cfg), 75);
+    assert_eq!(poll_interval(false, false, &cfg), 1500);
+}
+
+#[test]
+fn poll_interval_is_fast_whenever_the_gate_matters() {
+    // Slice 032: the menu gate is useless if it engages a second late, so the
+    // fast cadence also applies whenever the application can intercept.
+    let cfg = ReaderConfig {
+        interval_fishing_ms: 75,
+        interval_idle_ms: 1500,
+        ..ReaderConfig::default()
+    };
+    assert_eq!(poll_interval(true, true, &cfg), 75);
+    assert_eq!(
+        poll_interval(false, true, &cfg),
+        75,
+        "gate needs the fast cadence"
+    );
+    assert_eq!(poll_interval(true, false, &cfg), 75);
+
+    // And the idle setting is still reachable, so it is not dead configuration.
+    // This is the assertion that would fail if someone "simplified" the condition
+    // to always-fast, which is the mirror image of the bug slice 016 fixed.
+    assert_eq!(
+        poll_interval(false, false, &cfg),
+        1500,
+        "a suspended application with no fishing session has no gate to keep current"
+    );
 }
 
 fn reader() -> PixelBusReader {
@@ -351,22 +378,42 @@ fn weapon_bar_event_only_on_change() {
 
 #[test]
 fn block_center_and_capture_dims_match_contract_table() {
-    // (block_px, [B0, B1, B2, B3, B4 centers], (capture_w, capture_h)) per
-    // specs/028-pixelbus-block-size/contracts/geometry.md, extended to the fifth
-    // block by specs/031-combat-state-block/contracts/pixel-bus-b4.md.
+    // (block_px, [B0..B5 centers], (capture_w, capture_h)) per
+    // specs/028-pixelbus-block-size/contracts/geometry.md, extended by
+    // specs/031-combat-state-block/contracts/pixel-bus-b4.md and
+    // specs/032-menu-state-gate/contracts/pixel-bus-b5.md.
     let cases = [
         (
             2u32,
-            [(1u32, 1u32), (3, 1), (5, 1), (7, 1), (9, 1)],
-            (10u32, 2u32),
+            [(1u32, 1u32), (3, 1), (5, 1), (7, 1), (9, 1), (11, 1)],
+            (12u32, 2u32),
         ),
-        (4, [(2, 2), (6, 2), (10, 2), (14, 2), (18, 2)], (20, 4)),
-        (8, [(4, 4), (12, 4), (20, 4), (28, 4), (36, 4)], (40, 8)),
-        (16, [(8, 8), (24, 8), (40, 8), (56, 8), (72, 8)], (80, 16)),
+        (
+            4,
+            [(2, 2), (6, 2), (10, 2), (14, 2), (18, 2), (22, 2)],
+            (24, 4),
+        ),
+        (
+            8,
+            [(4, 4), (12, 4), (20, 4), (28, 4), (36, 4), (44, 4)],
+            (48, 8),
+        ),
+        (
+            16,
+            [(8, 8), (24, 8), (40, 8), (56, 8), (72, 8), (88, 8)],
+            (96, 16),
+        ),
         (
             32,
-            [(16, 16), (48, 16), (80, 16), (112, 16), (144, 16)],
-            (160, 32),
+            [
+                (16, 16),
+                (48, 16),
+                (80, 16),
+                (112, 16),
+                (144, 16),
+                (176, 16),
+            ],
+            (192, 32),
         ),
     ];
     for (block_px, centers, cap) in cases {
@@ -383,7 +430,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 5);
+    assert_eq!(NUM_BLOCKS, 6);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -693,4 +740,138 @@ fn load_reader_config_sanitizes_invalid_block_px() {
     let mut notices = Vec::new();
     let loaded = load_reader_config(&value, &mut notices);
     assert_eq!(loaded.block_px, DEFAULT_BLOCK_PX);
+}
+
+// Slice 032: the menu block (B5) and its gate.
+
+/// The menu block color for a surface code, mirroring the addon's encoder.
+fn menu(code: u8) -> Rgb {
+    let red = code * 24;
+    Rgb::new(red, 0xD2, 255 - red)
+}
+
+#[test]
+fn decode_menu_reads_every_surface_code() {
+    let t = ReaderConfig::default().tolerance;
+    let expected = [
+        MenuSurface::None,
+        MenuSurface::SystemMenu,
+        MenuSurface::Map,
+        MenuSurface::Inventory,
+        MenuSurface::Mail,
+        MenuSurface::Character,
+        MenuSurface::GuildStore,
+        MenuSurface::CrownStore,
+        MenuSurface::Journal,
+        MenuSurface::ChatEntry,
+        MenuSurface::Other,
+    ];
+    for (code, want) in expected.iter().enumerate() {
+        assert_eq!(decode_menu(menu(code as u8), t), *want, "code {code}");
+    }
+}
+
+#[test]
+fn every_surface_except_gameplay_gates() {
+    assert!(!MenuSurface::None.gates());
+    for code in 1..=10u8 {
+        let surface = decode_menu(menu(code), ReaderConfig::default().tolerance);
+        assert!(surface.gates(), "code {code} must gate");
+    }
+    // The unenumerated surface gates too. This is what keeps the gate correct for
+    // a scene the addon could not name.
+    assert!(MenuSurface::Other.gates());
+}
+
+#[test]
+fn decode_menu_rejects_invalid_samples() {
+    let t = ReaderConfig::default().tolerance;
+    // Wrong marker (the combat block's).
+    assert_eq!(decode_menu(Rgb::new(48, 0x2D, 207), t), MenuSurface::None);
+    // Valid marker, broken checksum.
+    assert_eq!(decode_menu(Rgb::new(48, 0xD2, 0), t), MenuSurface::None);
+    // Valid marker and checksum, red sitting between two codes.
+    assert_eq!(decode_menu(Rgb::new(36, 0xD2, 219), t), MenuSurface::None);
+    // Valid marker and checksum, red beyond the highest code.
+    assert_eq!(decode_menu(Rgb::new(252, 0xD2, 3), t), MenuSurface::None);
+}
+
+#[test]
+fn no_arbitrary_color_decodes_as_a_gating_surface() {
+    // The failure this guards: an addon too old to draw B5 leaves whatever the
+    // game renders there, and a false gate would silently stop interception.
+    let t = ReaderConfig::default().tolerance;
+    for r in (0u32..=255).step_by(3) {
+        for g in (0u32..=255).step_by(3) {
+            for b in (0u32..=255).step_by(3) {
+                let sample = Rgb::new(r as u8, g as u8, b as u8);
+                let is_real = sample.g.abs_diff(0xD2) <= t
+                    && (i32::from(sample.r) + i32::from(sample.b) - 255).unsigned_abs()
+                        <= u32::from(t);
+                if is_real {
+                    continue;
+                }
+                assert_eq!(
+                    decode_menu(sample, t),
+                    MenuSurface::None,
+                    "color {sample:?} decoded as a surface"
+                );
+            }
+        }
+    }
+    // The other blocks' rendered colors must never gate either.
+    for other in [
+        MAGENTA,
+        WAITING,
+        BITE,
+        Rgb::new(100, 0xA5, 155),
+        weapon(1, 2, 1),
+        COMBAT_IN,
+    ] {
+        assert!(
+            !decode_menu(other, t).gates(),
+            "another block's color {other:?} gated input"
+        );
+    }
+}
+
+#[test]
+fn menu_event_only_on_change_and_clears_on_loss() {
+    let mut r = reader();
+
+    let first = r.observe(
+        BlockSamples {
+            menu: Some(menu(2)),
+            ..alive()
+        },
+        0,
+    );
+    assert!(first.contains(&PixelBusEvent::MenuGate(MenuSurface::Map)));
+
+    let repeat = r.observe(
+        BlockSamples {
+            menu: Some(menu(2)),
+            ..alive()
+        },
+        100,
+    );
+    assert!(!repeat
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::MenuGate(_))));
+
+    // A block that stops decoding opens the gate, never closes it.
+    let gone = r.observe(alive(), 200);
+    assert!(gone.contains(&PixelBusEvent::MenuGate(MenuSurface::None)));
+
+    // And so does losing the signal entirely.
+    r.observe(
+        BlockSamples {
+            menu: Some(menu(1)),
+            ..alive()
+        },
+        300,
+    );
+    let lost = r.observe(BlockSamples::default(), 3000);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::MenuGate(MenuSurface::None)));
 }

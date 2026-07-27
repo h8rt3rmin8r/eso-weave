@@ -51,6 +51,11 @@ pub const COMBAT_TITLE: &str = "Combat";
 pub const COMBAT_TOOLTIP: &str =
     "Whether the character is in combat, read from the Pixel Beacon addon. Requires addon version 6 or later; shows Not detected without a signal. Nothing in the application acts on this yet.";
 
+// Menu-gate section.
+pub const MENU_TITLE: &str = "Game Menu";
+pub const MENU_TOOLTIP: &str =
+    "Whether a native game menu or text field is open, read from the Pixel Beacon addon. While one is, the application stops intercepting keys and stops sending its own, so typing in game is not disturbed. Requires addon version 7 or later.";
+
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
 pub const SKILLS_TOOLTIP: &str =
@@ -229,6 +234,7 @@ pub fn all_labels() -> Vec<&'static str> {
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,
         COMBAT_TITLE,
+        MENU_TITLE,
         SKILLS_TITLE,
         LOG_TITLE,
         MENU_FILE,
@@ -266,6 +272,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         BEACON_UNINSTALL_TOOLTIP,
         WEAPON_BAR_TOOLTIP,
         COMBAT_TOOLTIP,
+        MENU_TOOLTIP,
         SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,

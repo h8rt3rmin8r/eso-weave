@@ -390,3 +390,101 @@ fn real_sink_drives_the_input_backend() {
     let ops = recorded.lock().unwrap().clone();
     assert_eq!(ops, press_release(FishingConfig::default().interact_key));
 }
+
+// Slice 032: the menu gate on the fishing synthesis path.
+//
+// This path does not go through the interception decision at all: the controller
+// presses the interact key on its own timers in response to beacon events. A gate
+// placed only on interception would leave it free to send a reel into a chat
+// message the operator is composing, and waiting for a bite is exactly when
+// someone opens chat.
+
+#[test]
+fn a_gated_controller_defers_the_reel_instead_of_sending_it() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    sink.clear();
+
+    // A surface opens before the reel is due.
+    c.set_gated(true);
+    let reel_at = 20 + u64::from(cfg.reel_delay_ms);
+    c.tick(reel_at, &mut sink);
+    assert!(
+        sink.ops.is_empty(),
+        "a gated controller must not send the reel interact"
+    );
+    assert_eq!(
+        c.state(),
+        FishingState::Reeling,
+        "state must not advance past an interact the game never received"
+    );
+
+    // Still gated a while later: still nothing, and still consistent.
+    c.tick(reel_at + 1_000, &mut sink);
+    assert!(sink.ops.is_empty());
+    assert_eq!(c.state(), FishingState::Reeling);
+
+    // The surface closes and the deferred reel goes through on its own.
+    c.set_gated(false);
+    c.tick(reel_at + 2_000, &mut sink);
+    assert_eq!(sink.ops, press_release(cfg.interact_key));
+    assert_eq!(c.state(), FishingState::Recast);
+}
+
+#[test]
+fn a_gated_controller_defers_the_recast_too() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    let reel_at = 20 + u64::from(cfg.reel_delay_ms);
+    c.tick(reel_at, &mut sink);
+    sink.clear();
+
+    c.set_gated(true);
+    let recast_at = reel_at + u64::from(cfg.recast_delay_ms);
+    c.tick(recast_at, &mut sink);
+    assert!(sink.ops.is_empty(), "recast must be deferred while gated");
+
+    c.set_gated(false);
+    c.tick(recast_at + 500, &mut sink);
+    assert_eq!(sink.ops, press_release(cfg.interact_key));
+}
+
+#[test]
+fn an_ungated_controller_is_unchanged() {
+    // The default is ungated, so every other test in this file already asserts
+    // the pre-feature behavior. This states it explicitly.
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    assert_eq!(
+        sink.ops,
+        press_release(FishingConfig::default().interact_key)
+    );
+}
+
+#[test]
+fn the_arm_timeout_still_fires_while_gated() {
+    // Only the two autonomous interacts are deferred. A timeout that merely ends
+    // the session must not be, or a gated session could hang forever waiting for
+    // a cast confirmation that will never come.
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+
+    c.set_enabled(true, 0, &mut sink);
+    sink.clear();
+    c.set_gated(true);
+    c.tick(u64::from(cfg.arm_timeout_ms), &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert!(sink.ops.is_empty());
+}

@@ -237,3 +237,151 @@ fn persisted_unknown_key_falls_back_with_notice() {
     assert!(!notices.is_empty());
     assert_eq!(table.key_for(Action::Ultimate), Key::R);
 }
+
+// Slice 032: the menu gate. Constitution principle II surface.
+//
+// The gate edits the safety-critical interception decision, so its correctness is
+// established by exhaustive comparison rather than by chosen scenarios: the whole
+// risk is the combination nobody thought to try.
+
+/// Every input the interception decision reads, as a closed set.
+fn decision_inputs() -> Vec<(Key, Transition, Origin, bool, bool, bool)> {
+    // A weave key (not exempt), an exempt toggle key, and an unbound key.
+    let weave_key = BindingTable::default().key_for(Action::Skill1);
+    let exempt_key = BindingTable::default().key_for(Action::ToggleSuspend);
+    let unbound = Key::Q;
+    let keys = [weave_key, exempt_key, unbound];
+
+    let mut out = Vec::new();
+    for key in keys {
+        for transition in [Transition::Down, Transition::Up] {
+            for origin in [Origin::Real, Origin::SelfOriginated] {
+                for focused in [false, true] {
+                    for suspended in [false, true] {
+                        for active in [false, true] {
+                            out.push((key, transition, origin, focused, suspended, active));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+fn classify_with(input: (Key, Transition, Origin, bool, bool, bool), gated: bool) -> Decision {
+    let (key, transition, origin, focused, suspended, active) = input;
+    let (engine, _rx) = engine();
+    engine.set_focused(focused);
+    engine.set_suspended(suspended);
+    engine.set_menu_gated(gated);
+    for action in Action::ALL {
+        engine.set_action_active(action, active);
+    }
+    engine.classify(ev(key, transition, origin))
+}
+
+#[test]
+fn menu_gate_can_only_relax_interception_never_tighten_it() {
+    // FR-015. For every point in the decision's input space, the gated outcome is
+    // either identical to the ungated one or more permissive. There is no input
+    // for which turning the gate on causes a key to be suppressed.
+    let inputs = decision_inputs();
+    // 3 keys (weave, exempt toggle, unbound) x 2 transitions x 2 origins x
+    // focused x suspended x active. Pinned rather than bounded, so a change that
+    // silently shrinks the space fails here instead of quietly proving less.
+    assert_eq!(inputs.len(), 3 * 2 * 2 * 2 * 2 * 2);
+
+    let mut relaxed = 0;
+    for input in inputs {
+        let ungated = classify_with(input, false);
+        let gated = classify_with(input, true);
+
+        if ungated == Decision::Pass {
+            assert_eq!(
+                gated,
+                Decision::Pass,
+                "gate turned a pass into {gated:?} for {input:?}"
+            );
+        }
+        if gated != ungated {
+            assert_eq!(
+                (ungated, gated),
+                (Decision::Suppress, Decision::Pass),
+                "the only permitted difference is suppress becoming pass, at {input:?}"
+            );
+            relaxed += 1;
+        }
+    }
+    assert!(
+        relaxed > 0,
+        "the gate must actually change something, or this test proves nothing"
+    );
+}
+
+#[test]
+fn focus_scoping_is_unconditional_regardless_of_the_gate() {
+    // FR-016. An unfocused game window passes everything, whatever else is true.
+    for input in decision_inputs() {
+        let (_, _, _, focused, _, _) = input;
+        if focused {
+            continue;
+        }
+        for gated in [false, true] {
+            assert_eq!(
+                classify_with(input, gated),
+                Decision::Pass,
+                "unfocused window suppressed a key at {input:?} gated={gated}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_fresh_engine_is_ungated() {
+    // FR-013. The default is the value that reproduces the pre-feature behavior,
+    // so an addon too old to publish the signal changes nothing.
+    let (engine, _rx) = engine();
+    assert!(!engine.is_menu_gated());
+}
+
+#[test]
+fn the_gate_exempts_the_toggle_hotkeys() {
+    // FR-010. The operator keeps control from inside a menu, exactly as they do
+    // while manually suspended.
+    let exempt_key = BindingTable::default().key_for(Action::ToggleSuspend);
+    let (engine, _rx) = engine();
+    engine.set_focused(true);
+    engine.set_action_active(Action::ToggleSuspend, true);
+    engine.set_menu_gated(true);
+    assert_eq!(
+        engine.classify(ev(exempt_key, Transition::Down, Origin::Real)),
+        Decision::Suppress,
+        "the suspend hotkey must still be intercepted while gated"
+    );
+}
+
+#[test]
+fn ungating_restores_the_previous_decision_everywhere() {
+    // FR-012. A gate that engages but never releases is worse than no gate.
+    for input in decision_inputs() {
+        let before = classify_with(input, false);
+
+        let (key, transition, origin, focused, suspended, active) = input;
+        let (engine, _rx) = engine();
+        engine.set_focused(focused);
+        engine.set_suspended(suspended);
+        for action in Action::ALL {
+            engine.set_action_active(action, active);
+        }
+        engine.set_menu_gated(true);
+        engine.classify(ev(key, transition, origin));
+        engine.set_menu_gated(false);
+
+        assert_eq!(
+            engine.classify(ev(key, transition, origin)),
+            before,
+            "ungating left residue at {input:?}"
+        );
+    }
+}

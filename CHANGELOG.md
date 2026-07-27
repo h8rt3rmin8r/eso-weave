@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The application stops interfering while a native game menu or text field is
+  open. PixelBeacon publishes which UI surface is active as a sixth block (B5),
+  and while any is up the application suspends key interception and starts no new
+  weave or fishing interact, so typing in chat, composing a mail, renaming an item,
+  or searching the guild store is no longer disturbed. The application's own
+  suspend and fishing hotkeys keep working, exactly as they do while manually
+  suspended. Addon version advances to 7 (issue #10).
+- The strip is now sampled at the fast cadence whenever the application can
+  intercept, not only during a fishing session, because a gate that engages a
+  second late does not solve the problem it exists for. A suspended application
+  still samples slowly.
+
 - The PixelBeacon addon publishes the player's combat state as a fifth beacon
   block (B4), and the companion decodes it and shows it beside the weapon-bar
   readout. Driven by `EVENT_PLAYER_COMBAT_STATE` with a re-baseline from
@@ -27,6 +39,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-07-27: The menu gate reads the game's UI-mode state, not the addon's
+  existing HUD scene test, reversing what issue #10 proposed. Opening chat does not
+  hide the gameplay scenes, so the scene test reads "no menu" while the player is
+  typing in the most common in-game text field, which is the case the gate exists
+  to cover. Verified against the live `esoui/esoui` source: the game's own
+  `ZO_IngameSceneManager:ConsiderExitingUIMode` declines to leave UI mode while
+  chat text entry is open. Chat entry is ORed in explicitly so the guarantee does
+  not rest on that internal behavior staying the same.
+- 2026-07-27: The gate covers two synthesis paths, not one. The weave path is
+  gated at the interception decision; the fishing controller synthesizes on its own
+  timers in response to beacon events and never passes through that decision, so
+  its autonomous reel and recast are deferred separately. They are deferred and
+  retried rather than dropped, so the controller's state never advances past an
+  interact the game did not receive. Gating only the interception decision would
+  have left a reel free to land in a chat message, and waiting for a bite is
+  exactly when someone opens chat. The operator-initiated first cast is not
+  deferred: the fishing hotkey is exempt from the gate, and the cast is the direct
+  and immediate result of pressing it.
+- 2026-07-27: Both gates default to inactive and are set through methods rather
+  than constructor parameters. Inactive reproduces the pre-feature behavior, so
+  every existing safety test keeps passing with no edit at all, and every failure
+  mode (an addon too old to draw the block, a sample that fails validation, a lost
+  signal) lands on the safe value by construction rather than by handling. The
+  one-way property is proven by an exhaustive cross product over the interception
+  decision's inputs rather than by chosen scenarios, because the risk it guards
+  against is the combination nobody thought to try.
+- 2026-07-27: The fast sampling cadence now applies whenever the application can
+  intercept, not unconditionally. Making it unconditional would have left
+  `interval_idle_ms` with no effect, which is the mirror image of the defect where
+  `interval_fishing_ms` was dead and every fishing session sampled once a second. A
+  suspended application intercepts and synthesizes nothing, so it has no gate to
+  keep current; both settings keep a real meaning and the extra capture cost is
+  paid only while the application is working.
 - 2026-07-27: The combat block uses green marker `0x2D`, red state codes `0xE0`
   (in combat) and `0x20` (out of combat), and a blue complement checksum, adopting
   the latency block's marker-and-checksum validation rather than the weapon

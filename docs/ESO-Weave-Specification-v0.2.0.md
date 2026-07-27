@@ -490,7 +490,7 @@ state every frame):
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders up to five beacon blocks anchored to the top-left corner of the
+PixelBeacon renders up to six beacon blocks anchored to the top-left corner of the
 game window's client area. Blocks are 16 by 16 physical pixels by default; the
 addon compensates for the user's UI scale so block geometry is constant in physical
 pixels. Blocks are hidden during loading screens by the game's UI lifecycle.
@@ -508,6 +508,7 @@ divergence cannot ship as a silently dead signal.
 | B2 Latency | (32, 0) | (40, 8) | Encodes `GetLatency()`: `R = clamp(latency, 0, 1020) / 4`, `G = 0xA5` marker, `B = 255 - R` checksum. Updated at 1 Hz. |
 | B3 Weapon bar | (48, 0) | (56, 8) | `G = 0x5A` marker, `R` packs front and back weapon-class nibbles (`front * 16 + back`), `B` is the active-bar code (0 unknown, 1 front, 2 back). |
 | B4 Combat | (64, 0) | (72, 8) | `G = 0x2D` marker, `R` is the state code (`0xE0` in combat, `0x20` out of combat), `B = 255 - R` checksum. Driven by `EVENT_PLAYER_COMBAT_STATE` and re-baselined from `IsUnitInCombat("player")` on `EVENT_PLAYER_ACTIVATED`. Never hidden to express a state. |
+| B5 Menu | (80, 0) | (88, 8) | `G = 0xD2` marker, `R` is the surface code times 24 (0 gameplay, 1 system menu, 2 map, 3 inventory, 4 mail, 5 character, 6 guild store, 7 crown store, 8 journal, 9 chat entry, 10 other), `B = 255 - R` checksum. Published on the addon's fast tick. Never hidden to express a state. |
 
 Weapon-class codes are shared byte-for-byte between the addon and the reader: 0
 none, 1 dual wield, 2 two handed, 3 sword and shield, 4 bow, 5 destruction staff, 6
@@ -526,6 +527,37 @@ stale "in combat" cannot survive an addon downgrade or a mid-session reload. The
 decoded value is stored and displayed but nothing acts on it; no timing, input, or
 fishing behavior depends on combat state.
 
+The menu block (B5) is the one signal that does act. While it decodes to any
+surface other than gameplay, the application suspends keystroke interception and
+declines to start new synthesis. Three properties are load-bearing:
+
+- **The active/inactive answer comes from the game's UI-mode state**, ORed with the
+  chat text-entry state, and never from which gameplay scene is showing. Opening
+  chat does not hide the gameplay scenes, so a scene test reads "no menu" while the
+  player is typing, which is the case the gate exists to cover. The game's own
+  `ZO_IngameSceneManager:ConsiderExitingUIMode` declines to leave UI mode while
+  chat text entry is open, which is why UI mode is the correct flag. The addon
+  decides the boolean before it maps the scene to a surface code, so an unlisted or
+  renamed scene falls back to the generic code and still gates.
+- **The gate can only relax interception.** It is an additional early pass in the
+  interception decision, so for every combination of that decision's inputs the
+  gated outcome is either identical to the ungated one or more permissive. Focus
+  scoping remains unconditional; the gate ANDs with focus and never replaces it,
+  so suppression outside the focused game window remains impossible.
+- **Two synthesis paths are covered, not one.** The weave path is gated at the
+  interception decision. The fishing controller synthesizes on its own timers in
+  response to beacon events and never passes through that decision, so its
+  autonomous reel and recast interacts are deferred separately while gated, and
+  retried rather than dropped so its state never advances past an interact the game
+  did not receive. The operator-initiated first cast is not deferred, because the
+  fishing hotkey is exempt from the gate and the cast is the direct, immediate
+  result of pressing it.
+
+Both gates default to inactive, and inactive reproduces the application's behavior
+without this feature, so an addon too old to draw B5, a sample that fails
+validation, and a lost beacon signal all degrade to the prior behavior rather than
+to a gate stuck on.
+
 ```mermaid
 flowchart LR
     ADDON[PixelBeacon renders B0..B4] --> SURF[Game window surface]
@@ -537,14 +569,20 @@ flowchart LR
     EVT --> LAT[Latency]
     EVT --> WB[WeaponBar]
     EVT --> CMB[Combat]
+    EVT --> MENU[MenuGate]
     FISH --> FC[Fishing Controller]
     LAT --> WE[Weave Engine]
     WB --> WE
     CMB --> STORE[Stored and displayed only]
+    MENU --> GATE[Input engine and fishing controller gates]
 ```
 
 The reader samples the block points at a configurable interval: fast (default 100
-ms) while a fishing session is active, slow (default 1000 ms) otherwise. Sample
+ms) while a fishing session is active or while the application is in a position to
+intercept input, slow (default 1000 ms) otherwise. The second condition exists for
+the menu gate, which is worthless if it engages a second after the operator starts
+typing; a suspended application intercepts and synthesizes nothing, so it has no
+gate to keep current and samples slowly. Sample
 matching allows a small per-channel tolerance (default plus or minus 2) to absorb
 compositor rounding, and the marker and checksum channels guard against misreads.
 Loss of B0 for more than `heartbeat_timeout_ms` (default 2000) raises `SignalLost`.

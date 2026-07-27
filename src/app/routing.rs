@@ -2,7 +2,7 @@
 
 use crate::app::UiIntent;
 use crate::fishing::{map_event, FishingController, FishingSink};
-use crate::input::Action;
+use crate::input::{Action, InputEngine};
 use crate::pixelbus::PixelBusEvent;
 use crate::weave::WeaveEngine;
 
@@ -28,6 +28,8 @@ pub fn app_toggle_intent(action: Action, fishing_on: bool) -> Option<UiIntent> {
 /// - `Latency(ms)` sets the weave engine's current latency (nothing to fishing).
 /// - `WeaponBar(signal)` sets the weave engine's active bar and weapon classes.
 /// - `Combat(signal)` stores the decoded combat state (nothing acts on it).
+/// - `MenuGate(surface)` sets the menu gate on the input engine and the fishing
+///   controller, so neither starts new work while a game UI surface is up.
 /// - `SignalLost` clears the weave latency and disables fishing.
 /// - `FishingStarted`, `BiteDetected`, `FishingStopped` reach the controller.
 /// - `Heartbeat` is forwarded to the controller (a no-op there).
@@ -39,6 +41,7 @@ pub fn route_reader_event(
     event: PixelBusEvent,
     weave: &mut WeaveEngine,
     fishing: &mut FishingController,
+    input: &InputEngine,
     now_ms: u64,
     sink: &mut dyn FishingSink,
 ) {
@@ -53,6 +56,13 @@ pub fn route_reader_event(
         }
         PixelBusEvent::Combat(signal) => {
             weave.set_combat(signal);
+            return;
+        }
+        PixelBusEvent::MenuGate(surface) => {
+            let gates = surface.gates();
+            input.set_menu_gated(gates);
+            fishing.set_gated(gates);
+            weave.set_menu(surface);
             return;
         }
         PixelBusEvent::SignalLost => {
