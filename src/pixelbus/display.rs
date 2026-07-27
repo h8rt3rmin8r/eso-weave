@@ -71,6 +71,100 @@ impl Point {
     }
 }
 
+/// Whether the beacon grid fits inside the game's client area.
+///
+/// Advisory in the strongest sense: nothing in the application branches on this.
+/// Refusing to sample a grid that overflows would turn a partial loss into a
+/// total one, because the blocks that do fit still decode correctly.
+///
+/// The failure it exists to name is otherwise very hard to attribute. A block
+/// drawn past the client edge is captured as black, fails its marker check, and
+/// decodes as absent, which looks exactly like an addon that was never
+/// installed, so an operator can spend a long time debugging an addon that is
+/// installed, loaded, and drawing correctly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GridFit {
+    /// The grid lies within the client area.
+    Fits,
+    /// The grid is wider or taller than the client area.
+    Exceeds {
+        /// The grid's extent in physical pixels.
+        grid: Size,
+        /// The client area it did not fit inside.
+        surface: Size,
+    },
+}
+
+/// Compares the grid's extent against a measured client area.
+///
+/// Extents only. The grid is anchored at the client area's top-left, so its
+/// offset within that area is always zero, and where the window sits on the
+/// desktop is a capture concern the sampler already handles rather than a layout
+/// one. Equality on either axis fits: a grid exactly as wide as the client area
+/// is entirely on screen.
+pub fn grid_fit(grid: Size, surface: Size) -> GridFit {
+    if grid.width <= surface.width && grid.height <= surface.height {
+        GridFit::Fits
+    } else {
+        GridFit::Exceeds { grid, surface }
+    }
+}
+
+/// Reports a change in whether the grid fits, and only a change.
+///
+/// This is worth being a type rather than a comparison at the call site because
+/// the distinction it draws is easy to lose: two successive descriptor changes
+/// can both overflow (a too-small window resized to a differently too-small
+/// one), and what is wanted is one report per change of *outcome*, not one per
+/// change of descriptor.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GridFitWatch {
+    /// Whether the grid fitted last time, and nothing else.
+    ///
+    /// Deliberately a boolean rather than the [`GridFit`] itself. `Exceeds`
+    /// carries the extents that did not fit, so comparing whole values would
+    /// make a resize from one too-small window to a differently too-small window
+    /// look like a change of outcome, which is exactly the repeat this type
+    /// exists to suppress. The extents are still reported, they are just not
+    /// what "changed" is decided on.
+    last_fitted: Option<bool>,
+}
+
+impl GridFitWatch {
+    /// Creates a watch with no remembered outcome.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Folds in the current grid extent and descriptor, returning `Some` only
+    /// when the outcome changed.
+    ///
+    /// A missing descriptor, or one derived from stored settings rather than a
+    /// live window, yields `None` and forgets the previous outcome, so a later
+    /// measurement reports afresh. A configured descriptor is produced only when
+    /// there is no window, and no window means no drawn grid to be about.
+    pub fn observe(
+        &mut self,
+        grid: Size,
+        descriptor: Option<&DisplayDescriptor>,
+    ) -> Option<GridFit> {
+        let surface = match descriptor {
+            Some(descriptor) if descriptor.source == DisplaySource::Measured => descriptor.surface,
+            _ => {
+                self.last_fitted = None;
+                return None;
+            }
+        };
+        let outcome = grid_fit(grid, surface);
+        let fitted = outcome == GridFit::Fits;
+        if self.last_fitted == Some(fitted) {
+            return None;
+        }
+        self.last_fitted = Some(fitted);
+        Some(outcome)
+    }
+}
+
 /// What a platform probe measured about the game window and the display it is
 /// on. Produced only by [`SurfaceSampler::display`](super::SurfaceSampler::display).
 ///

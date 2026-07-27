@@ -60,13 +60,15 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_eight() {
-    // Bumped so the app classifies an existing on-disk version-7 install as
-    // outdated and refreshes it, delivering the resource blocks. The beacon
-    // manager offers the update off this number, so it advances with every
-    // change to the addon's published contract.
-    assert_eq!(embedded_version(), 8);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(8));
+fn embedded_manifest_version_is_nine() {
+    // Slice 035 bumped this for the grid wrap, and the usual reason does not
+    // apply: at nine blocks the wrapped layout draws exactly the pixels the
+    // strip did, so nothing breaks for an operator who never updates. It
+    // advances so the deployed addon actually carries the wrapping logic, which
+    // means the next slice to add a block inherits a working grid instead of
+    // shipping the wrap and the block together and bumping twice.
+    assert_eq!(embedded_version(), 9);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(9));
 }
 
 #[test]
@@ -598,7 +600,16 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(
         beacon::parse_lua_constant(lua, "NUM_BLOCKS"),
         Some(NUM_BLOCKS),
-        "the addon and the companion disagree on the strip length"
+        "the addon and the companion disagree on the block count"
+    );
+    // Slice 035: the column count the grid wraps at. A disagreement here would
+    // not degrade, it would shift every block from row 1 onward and the
+    // companion would read valid, checksum-passing colours from the wrong
+    // blocks, so the build refuses to ship one.
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "COLUMNS"),
+        Some(eso_weave::pixelbus::COLUMNS),
+        "the addon and the companion disagree on the grid column count"
     );
     // The combat block colors, shared byte for byte. The companion keeps these
     // private, so the expected values are the contract in

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The beacon blocks now wrap into a grid instead of extending one ever-widening
+  row, so the number of signals PixelBeacon can publish is no longer bounded by
+  the width of the screen. At the current nine blocks the grid is exactly the row
+  it replaces, block for block and pixel for pixel, which is asserted by test:
+  this is a change to the contract and not to what anything draws or reads. The
+  application also warns if a block size and block count combination would put
+  part of the grid outside the game's client area, because a block drawn past the
+  edge reads as absent and looks exactly like a missing addon. Addon version
+  advances to 9 (issue #16).
+
 - The application now knows how big the game's render surface is, which physical
   display it is on, how that display is scaled, and where the surface sits on it,
   resolved from the operating system without reading a single pixel of the beacon
@@ -54,6 +64,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-07-27: The beacon grid's column count is a fixed constant (16) stated once
+  on each side of the contract and asserted equal by the build, not a value each
+  side derives from the live client width. This reverses the premise of issue #3,
+  which justified out-of-band display detection partly as the input to the wrap,
+  and it demotes that descriptor to a fit check. The argument is about failure
+  modes rather than difficulty: a derived count requires the addon (from its
+  interface root, scaled) and the application (from the window's client
+  rectangle) to produce the identical integer from independent measurements, and
+  a disagreement of one does not degrade. It shifts every block from the second
+  row onward, so the application reads real blocks that pass their marker and
+  checksum checks and reports each signal as another signal's value, with the
+  error sitting underneath the validation built to catch precisely that.
+  Rounding, UI-scale handling, overscan, and a mid-session resolution change are
+  four independent ways to cause it, none of which announce themselves. 16 was
+  chosen because it is at least the block count, so no block moved when the grid
+  landed, and one row at the maximum block size is 512 pixels, half the narrowest
+  supported client width. Capture cost played no part: the captured area depends
+  on the block count and block size, not on how the blocks are arranged.
 - 2026-07-27: The game's stored window-mode value is reported exactly as read and
   is never mapped to a named window mode. Issue #3 records that the integer's
   meaning is unconfirmed and asks that it be verified before shipping; instead the

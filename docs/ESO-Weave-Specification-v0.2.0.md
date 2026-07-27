@@ -495,11 +495,41 @@ game window's client area. Blocks are 16 by 16 physical pixels by default; the
 addon compensates for the user's UI scale so block geometry is constant in physical
 pixels. Blocks are hidden during loading screens by the game's UI lifecycle.
 
-The number of blocks is stated once on each side of the contract (`local
-NUM_BLOCKS` in `PixelBeacon.lua`, `pixelbus::NUM_BLOCKS` in the companion), and
-both the drawn strip width and the captured region derive from it. The companion's
-test suite parses the addon source it embeds and fails if the two disagree, so a
+Blocks are laid out in a **grid**, not a strip. Block `index` occupies column
+`index mod COLUMNS` and row `index div COLUMNS`, so the beacon wraps to a new row
+when a row is full and grows downward rather than sideways. Its width is
+therefore bounded forever at `BLOCK_PX * COLUMNS`, which is what lets the number
+of published signals scale into the hundreds without the beacon running off the
+side of the client area.
+
+Two numbers are stated once on each side of the contract (`local NUM_BLOCKS` and
+`local COLUMNS` in `PixelBeacon.lua`, `pixelbus::NUM_BLOCKS` and
+`pixelbus::COLUMNS` in the companion): the block count and the column count. Both
+the drawn extent and the captured region derive from them. The companion's test
+suite parses the addon source it embeds and fails if either disagrees, so a
 divergence cannot ship as a silently dead signal.
+
+The column count is 16 and is **fixed**. It is deliberately not derived from the
+display resolution or the client area on either side, even though both sides
+could measure one. A derived count would require two independently obtained
+measurements to yield the identical integer, and a disagreement of one does not
+degrade: it shifts every block from row 1 onward, so the companion reads real
+blocks that pass their marker and checksum checks while reporting each signal as
+another signal's value, with the error sitting underneath the validation built to
+catch exactly that. The value 16 is at least the block count, so no block moved
+when the grid replaced the strip, and one row at the maximum block size is 512
+pixels, half the narrowest client width the game supports.
+
+The occupied extent is `BLOCK_PX * min(NUM_BLOCKS, COLUMNS)` wide by
+`BLOCK_PX * ceil(NUM_BLOCKS / COLUMNS)` tall. The width uses the lesser of the two
+counts so a grid occupying part of one row does not claim a full row's width. When
+the block count is not a multiple of the column count the final row is partial;
+the cells beside the last block are neither drawn nor read.
+
+At the current nine blocks, every block is in row 0 and the grid is identical to
+the single row that preceded it, block for block and pixel for pixel. The
+positions in the table below are grid coordinates that currently coincide with the
+old strip offsets.
 
 | Block | Position (px) | Sample (px) | Meaning |
 | --- | --- | --- | --- |
@@ -621,7 +651,7 @@ reads the block points from it, so pixels rendered through a hardware-accelerate
 returns the GDI front buffer, which does not contain the accelerated content. On
 Linux the sampler uses X11 or XWayland capture.
 
-**Out-of-band display detection.** Alongside the strip, and reading none of it,
+**Out-of-band display detection.** Alongside the grid, and reading none of it,
 the companion resolves a display descriptor: the render surface size in physical
 pixels, its origin in screen coordinates, the position, size, and scale of the
 physical display it sits on, and whether the reading was measured or configured.
@@ -632,12 +662,17 @@ serves as a cross-check and as a pre-launch fallback, and is never permitted to
 override a live measurement. Every value is in physical pixels, the same unit as
 the block geometry, and the scale is reported rather than applied.
 
-This exists because the strip does not scale, and a grid does. Wrapping the
-blocks into rows requires both sides of the contract to agree on how many columns
-fit inside the client area, which cannot be published on the bus without knowing
-where the bus is. The descriptor is that out-of-band input, and the grid contract
-that consumes it is a separate feature; detection itself adds no block, changes
-no block, and does not advance the addon manifest version.
+This existed originally because the strip did not scale and a grid does. The grid
+landed with a fixed column count rather than a measured one (see above), so the
+descriptor's role is narrower than first anticipated and worth stating exactly:
+it confirms the grid's extent fits inside the measured client area, and the
+application warns when it does not. That check is not decoration. A block drawn
+past the client edge is captured as black, fails its marker check, and decodes as
+absent, which is indistinguishable from an addon that was never installed, so
+without the warning an operator would debug an addon that is installed, loaded,
+and drawing correctly. The check is advisory: nothing branches on it, because the
+blocks that do fit still decode and refusing to sample would turn a partial loss
+into a total one.
 
 Two limits are deliberate. The stored window-mode value is reported exactly as
 read and is never mapped to a named mode, because no verified mapping exists; a

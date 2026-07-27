@@ -182,7 +182,12 @@ descriptor exists. Two verification items carry into the slice: the
 data point, and the key names should be re-verified against a live install
 in case a patch has version-suffixed one. Feature under `specs/034-<name>/`.
 
-### Slice 035: PixelBeacon Movement-State Block
+### Slice 036: PixelBeacon Movement-State Block
+
+Numbered 035 when this plan was written. Because it stayed blocked while later
+work proceeded, the grid wrap (build plan 011, issue #16) took 035 as the next
+free spec directory, and this slice takes 036. Its position in this plan's
+ordering, last, is unchanged.
 
 Scope: add a movement-mode block covering mounted and sprinting state.
 Closes issue #11.
@@ -198,4 +203,4 @@ and gamepad UIs, the slice ships the mounted axis alone and sprint is filed
 as a follow-up; encoding a flaky signal into a shared color contract is the
 outcome this ordering exists to avoid. One block with a small code table
 covering both axes is preferred over two boolean blocks. Feature under
-`specs/035-<name>/`.
+`specs/036-<name>/`.

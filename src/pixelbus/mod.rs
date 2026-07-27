@@ -12,8 +12,9 @@ mod linux;
 mod windows;
 
 pub use display::{
-    parse_user_settings, reconcile, DisplayDescriptor, DisplayDetector, DisplaySource,
-    DisplayUpdate, MeasuredDisplay, Point, Reconciliation, Size, StoredPair, StoredVideoSettings,
+    grid_fit, parse_user_settings, reconcile, DisplayDescriptor, DisplayDetector, DisplaySource,
+    DisplayUpdate, GridFit, GridFitWatch, MeasuredDisplay, Point, Reconciliation, Size, StoredPair,
+    StoredVideoSettings,
 };
 #[cfg(target_os = "linux")]
 pub use linux::X11Sampler;
@@ -474,19 +475,83 @@ pub const MIN_BLOCK_PX: u32 = 2;
 /// The largest supported block edge length in physical pixels.
 pub const MAX_BLOCK_PX: u32 = 32;
 
-/// The sampled center of block `index`, derived solely from `block_px`. This is
-/// the single geometry contract shared byte for byte with the PixelBeacon addon,
-/// which draws block `index` spanning `[block_px * index, block_px * index +
-/// block_px]` and fills it with its center color. `block_px` is even, so the
-/// center is always a whole pixel.
-pub fn block_center(block_px: u32, index: u32) -> (u32, u32) {
-    (block_px * index + block_px / 2, block_px / 2)
+/// The number of blocks in one row of the beacon grid.
+///
+/// Blocks wrap to the next row when a row is full, so the beacon grows downward
+/// and its width is bounded forever at `block_px * COLUMNS`. Without this the
+/// strip widened by one block per signal and would have run off the side of the
+/// client area long before the observables worth publishing were exhausted.
+///
+/// Like [`NUM_BLOCKS`], this is stated once on each side of the contract (`local
+/// COLUMNS` in `PixelBeacon.lua`) and `tests/beacon.rs` asserts the two agree by
+/// parsing the embedded addon source.
+///
+/// It is deliberately **not** derived from the display resolution or the client
+/// area on either side, which is what the issue that prompted the out-of-band
+/// display detection originally assumed it would be. Two independently obtained
+/// measurements would have to yield the identical integer, and a disagreement of
+/// one does not degrade: it shifts every block from row 1 onward, so the reader
+/// samples real blocks that pass their marker and checksum checks and reports
+/// each signal as another signal's value. That error would sit underneath the
+/// validation built to catch exactly it. The measured surface is used to check
+/// the grid *fits* (see [`display::grid_fit`]), which is a job only a
+/// measurement can do.
+///
+/// The value 16 satisfies two bounds: it is at least [`NUM_BLOCKS`], so no
+/// existing block moved when the wrap landed, and one row at [`MAX_BLOCK_PX`] is
+/// 512 pixels, half the narrowest client width the game supports.
+pub const COLUMNS: u32 = 16;
+
+/// The column and row of block `index` in a grid `columns` wide.
+///
+/// Takes the column count as a parameter rather than reading [`COLUMNS`] so the
+/// wrap's properties can be exercised at other widths without changing what
+/// ships.
+pub fn grid_position(index: u32, columns: u32) -> (u32, u32) {
+    (index % columns, index / columns)
 }
 
-/// The screen-capture region for the whole strip, derived from `block_px`: wide
-/// enough for all `NUM_BLOCKS` blocks and one block tall.
+/// The number of rows `count` blocks occupy in a grid `columns` wide. An exact
+/// multiple does not gain an empty trailing row.
+pub fn grid_rows(count: u32, columns: u32) -> u32 {
+    count.div_ceil(columns)
+}
+
+/// The region `count` blocks occupy, in physical pixels.
+///
+/// The width is the lesser of the block count and the column count, so a grid
+/// using a fraction of one row does not claim a full row's width. That keeps the
+/// captured region as small as the blocks in use require, which matters because
+/// the capture is a screen blit running at up to 10 Hz.
+pub fn grid_extent(block_px: u32, count: u32, columns: u32) -> display::Size {
+    display::Size::new(
+        block_px * count.min(columns),
+        block_px * grid_rows(count, columns),
+    )
+}
+
+/// The sampled center of block `index`, derived solely from `block_px`. This is
+/// the single geometry contract shared byte for byte with the PixelBeacon addon,
+/// which draws block `index` at grid position `grid_position(index, COLUMNS)`
+/// and fills it with its center color. `block_px` is even, so the center is
+/// always a whole pixel on both axes.
+///
+/// For `index < COLUMNS` this reduces to the pre-wrap strip formula
+/// `(block_px * index + block_px / 2, block_px / 2)`, which is why introducing
+/// the grid moved no existing block.
+pub fn block_center(block_px: u32, index: u32) -> (u32, u32) {
+    let (col, row) = grid_position(index, COLUMNS);
+    (block_px * col + block_px / 2, block_px * row + block_px / 2)
+}
+
+/// The screen-capture region for the whole grid, derived from `block_px`: wide
+/// enough for the blocks in use and tall enough for the rows they occupy.
+///
+/// For `NUM_BLOCKS <= COLUMNS` this reduces to the pre-wrap
+/// `(block_px * NUM_BLOCKS, block_px)`.
 pub fn capture_dims(block_px: u32) -> (u32, u32) {
-    (block_px * NUM_BLOCKS, block_px)
+    let extent = grid_extent(block_px, NUM_BLOCKS, COLUMNS);
+    (extent.width, extent.height)
 }
 
 /// Corrects a block size to the supported set (even, `MIN_BLOCK_PX..=MAX_BLOCK_PX`),

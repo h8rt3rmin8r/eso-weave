@@ -1,12 +1,16 @@
-//! Windows surface sampler: a screen-composited capture of the beacon strip.
+//! Windows surface sampler: a screen-composited capture of the beacon grid.
 //!
 //! `GetPixel` on the game window device context reads that window's GDI front
 //! buffer, which for a hardware-accelerated (DirectX) game does not contain the
 //! rendered content, so it returns black or stale pixels and the beacon signal is
-//! never read. Instead this backend captures a small strip from the composited
+//! never read. Instead this backend captures a small region from the composited
 //! desktop (a `BitBlt` from the screen device context, the same mechanism as the
-//! CopyFromScreen workaround that captures accelerated content) and reads the four
+//! CopyFromScreen workaround that captures accelerated content) and reads the
 //! block points from it.
+//!
+//! The captured region is two-dimensional and always was: it is sized from
+//! `capture_dims`, which since the grid wrap returns the extent of however many
+//! rows the blocks occupy. At the current block count that is still one row.
 
 use std::cell::RefCell;
 use std::mem::size_of;
@@ -32,10 +36,10 @@ struct CapturedStrip {
     pixels: Vec<u8>,
 }
 
-/// Samples the beacon strip from the composited desktop for one window. The strip
-/// dimensions are derived from the block size (`capture_dims`), so the capture
-/// region tracks the same single source of truth as the read points: at the
-/// default block size it is the historical 64 by 16.
+/// Samples the beacon grid from the composited desktop for one window. The
+/// captured dimensions are derived from the block size (`capture_dims`), so the
+/// capture region tracks the same single source of truth as the read points: at
+/// the default block size and the current block count it is 144 by 16.
 pub struct GdiSampler {
     hwnd: HWND,
     capture_w: i32,

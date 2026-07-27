@@ -3,11 +3,12 @@
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
     block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_resource,
-    decode_resources, decode_weapon_bar, fishing_signal, load_reader_config, poll_interval,
-    sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
-    CombatSignal, FishingSignal, MenuSurface, MockSampler, PixelBusEvent, PixelBusReader,
-    ReaderConfig, ResourceLevel, ResourceSet, Rgb, WeaponBarSignal, WeaponClass,
-    BLOCK_CENTER_GREENS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    decode_resources, decode_weapon_bar, fishing_signal, grid_extent, grid_position, grid_rows,
+    load_reader_config, poll_interval, sanitize_block_px, status_present, store_reader_config,
+    strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal, MenuSurface, MockSampler,
+    PixelBusEvent, PixelBusReader, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size,
+    WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX,
+    MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -1146,4 +1147,231 @@ fn resource_event_only_on_change_and_clears_on_loss() {
     let lost = r.observe(BlockSamples::default(), 3000);
     assert!(lost.contains(&PixelBusEvent::SignalLost));
     assert!(lost.contains(&PixelBusEvent::Resources(ResourceSet::new_unknown())));
+}
+
+// Slice 035: the grid wrap. The beacon stopped being a strip and became a grid,
+// and these tests carry two separate obligations. The first set is about the
+// wrap working at block counts nobody has reached yet. The second, and the more
+// important one today, is that at the current block count the wrap changes
+// absolutely nothing: same positions, same captured region, same everything.
+
+/// The narrowest client width the game is assumed to support, from the feature
+/// specification's Assumptions section. Named rather than written inline so the
+/// bound below is traceable to the thing that justifies it.
+const NARROWEST_CLIENT_WIDTH: u32 = 1024;
+
+#[test]
+fn grid_position_wraps_column_then_row() {
+    // Column first, then row, which is the whole contract in one line.
+    assert_eq!(grid_position(0, 4), (0, 0));
+    assert_eq!(grid_position(3, 4), (3, 0));
+    assert_eq!(grid_position(4, 4), (0, 1));
+    assert_eq!(grid_position(9, 4), (1, 2));
+    // The shipped count, where every current block is still in row 0.
+    for index in 0..NUM_BLOCKS {
+        assert_eq!(grid_position(index, COLUMNS), (index, 0));
+    }
+    // A single column degenerates to one block per row.
+    for index in 0..5 {
+        assert_eq!(grid_position(index, 1), (0, index));
+    }
+}
+
+#[test]
+fn grid_rows_is_the_ceiling_with_no_phantom_row() {
+    assert_eq!(grid_rows(0, 16), 0);
+    assert_eq!(grid_rows(1, 16), 1);
+    assert_eq!(grid_rows(16, 16), 1, "an exact multiple must not add a row");
+    assert_eq!(grid_rows(17, 16), 2);
+    assert_eq!(grid_rows(32, 16), 2);
+    assert_eq!(grid_rows(33, 16), 3);
+    assert_eq!(grid_rows(9, COLUMNS), 1);
+}
+
+#[test]
+fn grid_extent_width_is_the_lesser_of_the_count_and_the_columns() {
+    // A grid using a fraction of one row must not claim a full row's width.
+    assert_eq!(grid_extent(16, 9, 16), Size::new(144, 16));
+    // A full row.
+    assert_eq!(grid_extent(16, 16, 16), Size::new(256, 16));
+    // Past a row: full width, and one row taller for the partial row.
+    assert_eq!(grid_extent(16, 17, 16), Size::new(256, 32));
+    assert_eq!(grid_extent(16, 32, 16), Size::new(256, 32));
+    // Block size scales both axes.
+    assert_eq!(grid_extent(2, 17, 16), Size::new(32, 4));
+    assert_eq!(grid_extent(32, 17, 16), Size::new(512, 64));
+    // Nothing is nothing.
+    assert_eq!(grid_extent(16, 0, 16), Size::new(0, 0));
+}
+
+#[test]
+fn grid_positions_are_distinct_and_contained() {
+    // The two properties that matter, over a spread of counts and column counts
+    // rather than only the shipped pair.
+    for columns in [1u32, 2, 3, 4, 7, 16, 32] {
+        for count in [1u32, 5, 9, 16, 17, 31, 32, 33, 100] {
+            let extent = grid_extent(1, count, columns);
+            let mut seen = std::collections::HashSet::new();
+            for index in 0..count {
+                let (col, row) = grid_position(index, columns);
+                assert!(
+                    seen.insert((col, row)),
+                    "columns {columns} count {count}: index {index} collides at ({col}, {row})"
+                );
+                assert!(
+                    col < extent.width && row < extent.height,
+                    "columns {columns} count {count}: index {index} at ({col}, {row}) \
+                     falls outside the extent {extent:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_partial_final_row_leaves_unreachable_cells_and_that_is_correct() {
+    // The converse of containment does NOT hold, deliberately. At 17 blocks in
+    // 16 columns the extent holds 32 cells and only 17 are reachable; the other
+    // 15 sit beside the last block, undrawn and unread. Requiring surjectivity
+    // would forbid every block count that is not a multiple of the column count,
+    // so this asserts the gap exists rather than leaving a later reader to
+    // "fix" the arithmetic into producing it.
+    let count = 17;
+    let columns = 16;
+    let extent = grid_extent(1, count, columns);
+    let cells = extent.width * extent.height;
+    assert_eq!(cells, 32);
+    assert!(
+        cells > count,
+        "a partial final row must leave cells no index maps to"
+    );
+}
+
+#[test]
+fn the_extent_grows_downward_and_never_sideways() {
+    // The property the whole feature exists for: width is bounded forever, and
+    // height is the only dimension that grows with the block count.
+    let block_px = 16;
+    let row_width = block_px * COLUMNS;
+    let mut previous_height = 0;
+    for count in [1u32, 16, 17, 100, 256, 1000, 5000] {
+        let extent = grid_extent(block_px, count, COLUMNS);
+        assert!(
+            extent.width <= row_width,
+            "count {count}: width {} exceeded one row",
+            extent.width
+        );
+        assert!(
+            extent.height >= previous_height,
+            "count {count}: height went backwards"
+        );
+        previous_height = extent.height;
+    }
+    // And it really does grow: a thousand blocks is far taller than one row.
+    assert!(grid_extent(block_px, 1000, COLUMNS).height > block_px * 60);
+}
+
+#[test]
+fn the_column_count_satisfies_both_bounds_that_governed_its_choice() {
+    // Pinned so a future change to the block count, the maximum block size, or
+    // the column count fails here rather than silently violating the reasoning
+    // recorded in the feature research.
+    // Compile-time rather than runtime, because every operand is a constant and
+    // a violated bound should fail the build rather than wait for the suite. The
+    // messages are what a future reader gets when they raise the block count past
+    // the column count or widen the largest supported block.
+    const {
+        assert!(
+            COLUMNS >= NUM_BLOCKS,
+            "the column count must be at least the block count, or the wrap would \
+             move an existing block and forfeit the no-change property"
+        );
+    }
+    const {
+        assert!(
+            COLUMNS * MAX_BLOCK_PX <= NARROWEST_CLIENT_WIDTH,
+            "one row at the largest block size must fit the narrowest supported client"
+        );
+    }
+}
+
+// The no-change obligation. These assertions spell out the pre-wrap arithmetic
+// rather than referencing the current implementation, so the test and the code
+// cannot drift together into agreeing on something wrong.
+
+#[test]
+fn every_current_block_sits_exactly_where_the_strip_put_it() {
+    for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 30, MAX_BLOCK_PX] {
+        for index in 0..NUM_BLOCKS {
+            let strip = (block_px * index + block_px / 2, block_px / 2);
+            assert_eq!(
+                block_center(block_px, index),
+                strip,
+                "block_px {block_px} index {index} moved"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_captured_region_is_exactly_what_the_strip_captured() {
+    for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 30, MAX_BLOCK_PX] {
+        let strip = (block_px * NUM_BLOCKS, block_px);
+        assert_eq!(
+            capture_dims(block_px),
+            strip,
+            "capture region changed at block_px {block_px}"
+        );
+    }
+}
+
+#[test]
+fn the_heartbeat_block_is_the_grid_origin_at_any_column_count() {
+    // Signal-loss detection anchors on B0, so its position must not depend on
+    // the layout.
+    for columns in [1u32, 2, 9, 16, 32, 64] {
+        assert_eq!(grid_position(0, columns), (0, 0));
+    }
+    for block_px in [MIN_BLOCK_PX, DEFAULT_BLOCK_PX, MAX_BLOCK_PX] {
+        assert_eq!(block_center(block_px, 0), (block_px / 2, block_px / 2));
+    }
+}
+
+#[test]
+fn sampled_centres_stay_whole_pixels_on_both_axes() {
+    // Block sizes are even by sanitization, so the half-block offset is exact.
+    // The new axis has to inherit that, not only the old one.
+    for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 30, MAX_BLOCK_PX] {
+        assert_eq!(block_px % 2, 0, "supported block sizes are even");
+        for index in 0..40u32 {
+            let (x, y) = block_center(block_px, index);
+            let (col, row) = grid_position(index, COLUMNS);
+            assert_eq!(x, block_px * col + block_px / 2);
+            assert_eq!(y, block_px * row + block_px / 2);
+        }
+    }
+}
+
+#[test]
+fn the_shipped_column_count_is_pinned() {
+    // Changing this is a breaking change to the contract shared with the addon,
+    // so it fails here first and names itself.
+    assert_eq!(COLUMNS, 16);
+}
+
+#[test]
+fn block_center_wraps_past_the_first_row() {
+    // The public entry point, at indices no block has reached yet. Row 1 starts
+    // back at x = block_px / 2 and drops one block height.
+    let px = 16;
+    assert_eq!(block_center(px, 15), (15 * px + px / 2, px / 2));
+    assert_eq!(block_center(px, 16), (px / 2, px + px / 2));
+    assert_eq!(block_center(px, 17), (px + px / 2, px + px / 2));
+    assert_eq!(block_center(px, 32), (px / 2, 2 * px + px / 2));
+    assert_eq!(block_center(px, 47), (15 * px + px / 2, 2 * px + px / 2));
+    // And the x coordinate never runs past one row, whatever the index.
+    for index in 0..200u32 {
+        let (x, _) = block_center(px, index);
+        assert!(x < px * COLUMNS, "index {index} escaped the row width");
+    }
 }

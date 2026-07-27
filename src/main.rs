@@ -158,6 +158,14 @@ fn main() {
             // It is change-detected, so a stationary window costs nothing beyond
             // the operating system queries the capture already performs.
             let mut display = pixelbus::DisplayDetector::new();
+            // Whether the beacon grid fits inside the client area. The block size
+            // is fixed for this thread's lifetime, so the answer can only change
+            // when the measurement does, which is exactly when the detector hands
+            // back an update; the watch is still needed so two successive
+            // overflowing measurements report once rather than twice.
+            let mut grid_fit = pixelbus::GridFitWatch::new();
+            let (grid_w, grid_h) = pixelbus::capture_dims(reader_config.block_px);
+            let grid_extent = pixelbus::Size::new(grid_w, grid_h);
             let origin = clock_origin;
             loop {
                 // Poll fast while a fishing session is active so transient cast
@@ -185,6 +193,13 @@ fn main() {
                         .map(|text| pixelbus::parse_user_settings(&text))
                 }) {
                     log_display_update(&update);
+                    // Advisory only: a grid that overflows the client area is
+                    // reported and changes nothing, because the blocks that do
+                    // fit still decode and refusing to sample would turn a
+                    // partial loss into a total one.
+                    if let Some(fit) = grid_fit.observe(grid_extent, update.descriptor.as_ref()) {
+                        log_grid_fit(fit);
+                    }
                 }
                 let Some(active) = sampler.as_ref() else {
                     continue;
@@ -414,6 +429,34 @@ fn log_display_update(update: &eso_weave::pixelbus::DisplayUpdate) {
             outcome = ?reconciliation,
             "display reconciled against stored video settings"
         );
+    }
+}
+
+/// Records a change in whether the beacon grid fits inside the game's client
+/// area.
+///
+/// A grid that overflows is a warning rather than the debug level the signal
+/// slices use, and the difference is deliberate. Those record observations about
+/// the game, which are interesting while diagnosing and noise otherwise. This is
+/// a misconfiguration the operator can act on, and its symptom is badly
+/// misleading: a block drawn past the client edge is captured as black, fails
+/// its marker check, and decodes as absent, which looks exactly like an addon
+/// that was never installed. A line at a level nobody runs at would not do the
+/// job the check exists for.
+fn log_grid_fit(fit: eso_weave::pixelbus::GridFit) {
+    use eso_weave::pixelbus::GridFit;
+    match fit {
+        GridFit::Fits => tracing::debug!(
+            target: "eso_weave::pixelbus",
+            "beacon grid fits the game client area"
+        ),
+        GridFit::Exceeds { grid, surface } => tracing::warn!(
+            target: "eso_weave::pixelbus",
+            grid = format!("{}x{}", grid.width, grid.height),
+            client = format!("{}x{}", surface.width, surface.height),
+            "beacon grid does not fit the game client area; blocks drawn past the \
+             edge will read as absent"
+        ),
     }
 }
 

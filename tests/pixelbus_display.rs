@@ -834,3 +834,166 @@ fn detection_writes_nothing_to_disk() {
     );
     assert!(entries(empty.path()).is_empty(), "nothing may appear");
 }
+
+// ---------------------------------------------------------------------------
+// Slice 035: does the beacon grid fit inside the client area?
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_grid_inside_the_surface_fits() {
+    use eso_weave::pixelbus::{grid_fit, GridFit};
+    assert_eq!(
+        grid_fit(Size::new(144, 16), Size::new(1920, 1080)),
+        GridFit::Fits
+    );
+    // Equality on either axis is still inside the screen.
+    assert_eq!(
+        grid_fit(Size::new(1920, 16), Size::new(1920, 1080)),
+        GridFit::Fits
+    );
+    assert_eq!(
+        grid_fit(Size::new(144, 1080), Size::new(1920, 1080)),
+        GridFit::Fits
+    );
+    assert_eq!(
+        grid_fit(Size::new(1920, 1080), Size::new(1920, 1080)),
+        GridFit::Fits
+    );
+}
+
+#[test]
+fn a_grid_larger_on_either_axis_exceeds() {
+    use eso_weave::pixelbus::{grid_fit, GridFit};
+    let surface = Size::new(800, 600);
+    for grid in [
+        Size::new(801, 600),
+        Size::new(800, 601),
+        Size::new(801, 601),
+        Size::new(4096, 4096),
+    ] {
+        assert_eq!(
+            grid_fit(grid, surface),
+            GridFit::Exceeds { grid, surface },
+            "grid {grid:?} should not fit {surface:?}"
+        );
+    }
+}
+
+/// A measured descriptor of the given surface size, for the watch tests.
+fn measured_surface(w: u32, h: u32) -> DisplayDescriptor {
+    DisplayDescriptor::from_measured(measured(w, h)).expect("descriptor")
+}
+
+#[test]
+fn the_fit_watch_reports_nothing_without_a_measurement() {
+    use eso_weave::pixelbus::GridFitWatch;
+    let mut watch = GridFitWatch::new();
+    // A grid that would plainly overflow, but there is nothing to compare it to.
+    assert_eq!(watch.observe(Size::new(9999, 9999), None), None);
+}
+
+#[test]
+fn the_fit_watch_ignores_a_configured_descriptor() {
+    use eso_weave::pixelbus::GridFitWatch;
+    // A configured descriptor exists only when there is no window, and no window
+    // means no drawn grid for the check to be about.
+    let pair = Some(Size::new(640, 480));
+    let stored = StoredVideoSettings {
+        fullscreen: pair,
+        windowed: pair,
+        ..Default::default()
+    };
+    let configured = DisplayDescriptor::from_stored(&stored).expect("configured descriptor");
+    assert_eq!(configured.source, DisplaySource::Configured);
+
+    let mut watch = GridFitWatch::new();
+    assert_eq!(
+        watch.observe(Size::new(9999, 9999), Some(&configured)),
+        None
+    );
+}
+
+#[test]
+fn the_fit_watch_reports_once_per_change_of_outcome() {
+    use eso_weave::pixelbus::{GridFit, GridFitWatch};
+    let mut watch = GridFitWatch::new();
+    let big = measured_surface(1920, 1080);
+    let grid = Size::new(144, 16);
+
+    assert_eq!(watch.observe(grid, Some(&big)), Some(GridFit::Fits));
+    for _ in 0..20 {
+        assert_eq!(
+            watch.observe(grid, Some(&big)),
+            None,
+            "an unchanged outcome is not news"
+        );
+    }
+
+    let tiny = measured_surface(100, 10);
+    assert_eq!(
+        watch.observe(grid, Some(&tiny)),
+        Some(GridFit::Exceeds {
+            grid,
+            surface: Size::new(100, 10)
+        })
+    );
+    // Back to fitting is a change again.
+    assert_eq!(watch.observe(grid, Some(&big)), Some(GridFit::Fits));
+}
+
+#[test]
+fn two_successive_overflowing_surfaces_report_once() {
+    // This is the case that makes the watch worth being a type: the descriptor
+    // changed twice and the outcome did not, so there is one thing to say, not
+    // two. Reporting per descriptor change instead of per outcome change would
+    // fail here.
+    use eso_weave::pixelbus::{GridFit, GridFitWatch};
+    let mut watch = GridFitWatch::new();
+    let grid = Size::new(400, 64);
+
+    let first = measured_surface(100, 10);
+    assert_eq!(
+        watch.observe(grid, Some(&first)),
+        Some(GridFit::Exceeds {
+            grid,
+            surface: Size::new(100, 10)
+        })
+    );
+    let second = measured_surface(120, 12);
+    assert_eq!(
+        watch.observe(grid, Some(&second)),
+        None,
+        "still overflowing is the same outcome"
+    );
+}
+
+#[test]
+fn losing_the_measurement_lets_a_later_one_report_afresh() {
+    use eso_weave::pixelbus::{GridFit, GridFitWatch};
+    let mut watch = GridFitWatch::new();
+    let big = measured_surface(1920, 1080);
+    let grid = Size::new(144, 16);
+
+    assert_eq!(watch.observe(grid, Some(&big)), Some(GridFit::Fits));
+    assert_eq!(watch.observe(grid, None), None);
+    assert_eq!(
+        watch.observe(grid, Some(&big)),
+        Some(GridFit::Fits),
+        "after losing the window, the first reading is worth stating again"
+    );
+}
+
+#[test]
+fn the_shipped_grid_fits_every_plausible_client_area() {
+    // Not a property of the code so much as a check on the shipped constants:
+    // at every supported block size, nine blocks fit inside a small window.
+    use eso_weave::pixelbus::{capture_dims, grid_fit, GridFit, MAX_BLOCK_PX, MIN_BLOCK_PX};
+    for block_px in [MIN_BLOCK_PX, 16, MAX_BLOCK_PX] {
+        let (w, h) = capture_dims(block_px);
+        assert_eq!(
+            grid_fit(Size::new(w, h), Size::new(1024, 768)),
+            GridFit::Fits,
+            "block_px {block_px} does not fit the narrowest supported client"
+        );
+    }
+}

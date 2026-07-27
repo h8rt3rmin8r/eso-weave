@@ -18,10 +18,18 @@
 
 local ADDON_NAME = "PixelBeacon"
 local BLOCK_PX = 16
--- The strip length, stated once. The root width and every block placement derive
+-- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
 local NUM_BLOCKS = 9
+-- The blocks in one row. Blocks wrap to the next row when a row is full, so the
+-- beacon grows downward and its width is bounded forever at BLOCK_PX * COLUMNS.
+-- The companion states the same number once as pixelbus::COLUMNS and its test
+-- suite parses this line too, because a disagreement here would not degrade: it
+-- would shift every block from row 1 onward, and the companion would read real
+-- blocks that pass their marker and checksum checks while reporting each signal
+-- as another signal's value.
+local COLUMNS = 16
 local LATENCY_UPDATE_MS = 1000
 local FAST_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
@@ -142,9 +150,22 @@ local function physicalToUi(px)
     return px / scale
 end
 
-local function positionBlock(control, xPhysical)
+-- Places block `index` at its grid position: column first, then row. This is the
+-- geometry contract shared byte for byte with the companion's
+-- pixelbus::block_center. For index < COLUMNS the row is 0 and this reduces to
+-- the single-row placement it replaced, which is why introducing the grid moved
+-- no existing block.
+local function positionBlock(control, index)
+    local col = index % COLUMNS
+    local row = math.floor(index / COLUMNS)
     control:ClearAnchors()
-    control:SetAnchor(TOPLEFT, root, TOPLEFT, physicalToUi(xPhysical), 0)
+    control:SetAnchor(
+        TOPLEFT,
+        root,
+        TOPLEFT,
+        physicalToUi(BLOCK_PX * col),
+        physicalToUi(BLOCK_PX * row)
+    )
     local dimension = physicalToUi(BLOCK_PX)
     control:SetDimensions(dimension, dimension)
 end
@@ -527,7 +548,15 @@ end
 local function buildBlocks()
     root = wm:CreateTopLevelWindow(ADDON_NAME .. "Root")
     root:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, 0, 0)
-    root:SetDimensions(physicalToUi(BLOCK_PX * NUM_BLOCKS), physicalToUi(BLOCK_PX))
+    -- The grid extent, derived rather than restated: as wide as the blocks in use
+    -- require (never a full row's width for a partial row) and as tall as the
+    -- rows they occupy.
+    local columnsUsed = math.min(NUM_BLOCKS, COLUMNS)
+    local rows = math.ceil(NUM_BLOCKS / COLUMNS)
+    root:SetDimensions(
+        physicalToUi(BLOCK_PX * columnsUsed),
+        physicalToUi(BLOCK_PX * rows)
+    )
     root:SetDrawLayer(DL_OVERLAY)
 
     blocks.status = createBlock("Status")
@@ -540,15 +569,16 @@ local function buildBlocks()
     blocks.stamina = createBlock("Stamina")
     blocks.magicka = createBlock("Magicka")
 
+    -- Block indices, not pixel offsets: the grid decides where an index lands.
     positionBlock(blocks.status, 0)
-    positionBlock(blocks.fishing, BLOCK_PX)
-    positionBlock(blocks.latency, BLOCK_PX * 2)
-    positionBlock(blocks.weapon, BLOCK_PX * 3)
-    positionBlock(blocks.combat, BLOCK_PX * 4)
-    positionBlock(blocks.menu, BLOCK_PX * 5)
-    positionBlock(blocks.health, BLOCK_PX * 6)
-    positionBlock(blocks.stamina, BLOCK_PX * 7)
-    positionBlock(blocks.magicka, BLOCK_PX * 8)
+    positionBlock(blocks.fishing, 1)
+    positionBlock(blocks.latency, 2)
+    positionBlock(blocks.weapon, 3)
+    positionBlock(blocks.combat, 4)
+    positionBlock(blocks.menu, 5)
+    positionBlock(blocks.health, 6)
+    positionBlock(blocks.stamina, 7)
+    positionBlock(blocks.magicka, 8)
 
     renderStatus()
     renderFishing()
