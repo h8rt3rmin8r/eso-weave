@@ -21,7 +21,7 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 9
+local NUM_BLOCKS = 10
 -- The blocks in one row. Blocks wrap to the next row when a row is full, so the
 -- beacon grows downward and its width is bounded forever at BLOCK_PX * COLUMNS.
 -- The companion states the same number once as pixelbus::COLUMNS and its test
@@ -58,6 +58,27 @@ local COMBAT_OUT_RED = 0x20
 -- The last rendered combat state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
 local inCombat = nil
+
+-- The movement block marker (green channel) and its state codes (red channel),
+-- shared byte for byte with the companion decoder. Blue carries the complement
+-- checksum, 255 minus red. The marker is 22 away from the nearest other green on
+-- the grid, eleven times the reader's default tolerance, and the codes are 64
+-- apart.
+--
+-- The code is two bits: bit 0 is mounted, bit 1 is sprint. Only the two codes
+-- with the sprint bit clear are defined here, because the game exposes no sprint
+-- observable to an addon and this addon therefore never emits one. The companion
+-- reserves 0xA0 and 0xE0 for that axis and decodes them as unavailable. They are
+-- deliberately absent from this file: a constant the addon never emits would have
+-- no counterpart for the agreement check to compare against, and tests/beacon.rs
+-- asserts their absence.
+local MOVEMENT_MARKER = 0x43
+local MOVEMENT_ON_FOOT_RED = 0x20
+local MOVEMENT_MOUNTED_RED = 0x60
+
+-- The last rendered mounted state, held so the block is redrawn only on a real
+-- transition. nil until the first render.
+local isMounted = nil
 
 -- The menu block marker (green channel) and its surface code spacing, shared byte
 -- for byte with the companion decoder. Red carries code * MENU_CODE_STEP, blue
@@ -324,6 +345,44 @@ local function onCombatStateChanged()
     end
 end
 
+-- B9 Movement -----------------------------------------------------------------
+
+-- Renders B9: the movement marker in green, the state code in red, and the
+-- complement checksum in blue. Follows B4 exactly, including never hiding to
+-- express a state, so absence means only an addon too old to draw it.
+--
+-- Only the mounted axis is published. The sprint codes (bit 1 of the two-bit
+-- code) are reserved on the companion side and never emitted here, because the
+-- game exposes no sprint state to an addon.
+local function renderMovement()
+    if blocks.status:IsHidden() then
+        blocks.movement:SetHidden(true)
+        return
+    end
+    local red = isMounted and MOVEMENT_MOUNTED_RED or MOVEMENT_ON_FOOT_RED
+    blocks.movement:SetCenterColor(channel(red), channel(MOVEMENT_MARKER), channel(255 - red), 1)
+    blocks.movement:SetHidden(false)
+end
+
+-- Recomputes the mounted state from the game, returning true when it changed.
+-- The event carries the new state, but re-reading keeps one source of truth for
+-- both the event path and the post-loading-screen re-baseline.
+local function computeMovement()
+    local current = IsMounted() and true or false
+    if current == isMounted then
+        return false
+    end
+    isMounted = current
+    return true
+end
+
+-- Reacts to the mounted state changing: re-render only on a real transition.
+local function onMountedStateChanged()
+    if computeMovement() then
+        renderMovement()
+    end
+end
+
 -- B5 Menu ---------------------------------------------------------------------
 
 -- Whether any native UI surface is active.
@@ -568,6 +627,7 @@ local function buildBlocks()
     blocks.health = createBlock("Health")
     blocks.stamina = createBlock("Stamina")
     blocks.magicka = createBlock("Magicka")
+    blocks.movement = createBlock("Movement")
 
     -- Block indices, not pixel offsets: the grid decides where an index lands.
     positionBlock(blocks.status, 0)
@@ -579,6 +639,7 @@ local function buildBlocks()
     positionBlock(blocks.health, 6)
     positionBlock(blocks.stamina, 7)
     positionBlock(blocks.magicka, 8)
+    positionBlock(blocks.movement, 9)
 
     renderStatus()
     renderFishing()
@@ -591,6 +652,8 @@ local function buildBlocks()
     renderMenu()
     updateResources()
     renderResources()
+    computeMovement()
+    renderMovement()
 end
 
 local function onLatencyTick()
@@ -604,6 +667,10 @@ local function onLatencyTick()
     -- missed event cannot strand the block in a stale state.
     computeCombat()
     renderCombat()
+    -- The same backstop for movement, which also keeps the block hidden in step
+    -- with the status block when the beacon is hidden entirely.
+    computeMovement()
+    renderMovement()
 end
 
 local function onAddOnLoaded(_, name)
@@ -629,6 +696,11 @@ local function onAddOnLoaded(_, name)
     -- state that is already true when the world finishes loading.
     em:RegisterForEvent(ADDON_NAME .. "Combat", EVENT_PLAYER_COMBAT_STATE, onCombatStateChanged)
 
+    -- Movement tracking: same shape as combat. The mount event is authoritative
+    -- and instant, and the re-baseline covers a state already true when the world
+    -- finishes loading (zoning while mounted, most obviously).
+    em:RegisterForEvent(ADDON_NAME .. "Mount", EVENT_MOUNTED_STATE_CHANGED, onMountedStateChanged)
+
     -- Resource tracking: react to the game's own power updates, filtered to the
     -- player so other units' pools never drive our blocks.
     em:RegisterForEvent(ADDON_NAME .. "Power", EVENT_POWER_UPDATE, onPowerUpdate)
@@ -641,6 +713,8 @@ local function onAddOnLoaded(_, name)
         renderCombat()
         updateResources()
         renderResources()
+        computeMovement()
+        renderMovement()
     end)
 end
 

@@ -837,6 +837,16 @@ impl EsoWeaveApp {
                     .on_hover_text(strings::COMBAT_TOOLTIP);
                 ui.end_row();
 
+                // Movement state, beside combat: the same kind of decoded
+                // player-state observable, read the same way.
+                widgets::label_strong(ui, &palette, strings::MOVEMENT_TITLE)
+                    .on_hover_text(strings::MOVEMENT_TOOLTIP);
+                let mo = &view.movement;
+                let movement_color = crate::app::theme::status_color(&palette, mo.role);
+                ui.label(egui::RichText::new(mo.state).color(movement_color))
+                    .on_hover_text(strings::MOVEMENT_TOOLTIP);
+                ui.end_row();
+
                 // Game menu gate: when this is active the application is
                 // deliberately not intercepting, so the operator can see why
                 // their weaves are not firing.

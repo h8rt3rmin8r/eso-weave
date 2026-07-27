@@ -284,6 +284,54 @@ pub const RESOURCE_UNAVAILABLE: u8 = 0xFF;
 /// The highest publishable percentage.
 const RESOURCE_MAX_PERCENT: u8 = 100;
 
+/// The player's movement mode, decoded from the movement block.
+///
+/// The sprint axis issue #11 proposed is absent on purpose. The game exposes no
+/// sprint observable to an addon: `IsUnitSprinting`, `IsPlayerSprinting`, and
+/// `EVENT_SPRINT_STATE_CHANGED` do not exist, and the only `Sprint` references in
+/// the interface source are a keybind action, a hold-versus-toggle preference,
+/// and a `sprintf`. The verification is recorded in
+/// `specs/036-movement-state-block/spec.md`. The wire encoding reserves two codes
+/// for it, so adding the axis later adds variants here without changing the
+/// meaning or the colour of either existing one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MovementSignal {
+    /// The movement state could not be read.
+    #[default]
+    Unknown,
+    /// The player is not mounted.
+    OnFoot,
+    /// The player is mounted.
+    Mounted,
+}
+
+/// The green marker that identifies a movement sample.
+///
+/// Chosen as the midpoint of the widest gap left in [`BLOCK_CENTER_GREENS`]
+/// (`0x2D` to `0x5A`), which puts it 22 from its nearest neighbour, eleven times
+/// the default tolerance. `0xE8`, the midpoint of the equally wide `0xD2` to
+/// `0xFF` gap, ties on separation and lost the tiebreak: unrelated screen content
+/// behind the overlay clusters at the channel extremes, and `0xE8` sits 23 from
+/// `0xFF` where this sits 67 from `0x00` and 188 from `0xFF`.
+///
+/// The nibble-swap convention (`0xA5`/`0x5A`, then `0x2D`/`0xD2`) is deliberately
+/// not continued: it was a mnemonic for picking a second value near a first, the
+/// resource markers already abandoned it, and `0x34` would sit 7 from `0x2D`.
+const MOVEMENT_MARKER: u8 = 0x43;
+/// The red channel encoding the on-foot state. Code `0b00`.
+const MOVEMENT_ON_FOOT_RED: u8 = 0x20;
+/// The red channel encoding the mounted state. Code `0b01`.
+const MOVEMENT_MOUNTED_RED: u8 = 0x60;
+/// Reserved for the deferred sprint axis, on foot. Code `0b10`.
+///
+/// Never emitted by the addon, which defines no constant for it, and decoded as
+/// [`MovementSignal::Unknown`]. Bit 1 is the sprint bit, so a future feature that
+/// gains a sprint observable emits this and [`MOVEMENT_SPRINT_MOUNTED_RED`]
+/// without renumbering, recolouring, or reserving anything further.
+const MOVEMENT_SPRINT_ON_FOOT_RED: u8 = 0xA0;
+/// Reserved for the deferred sprint axis, mounted. Code `0b11`.
+const MOVEMENT_SPRINT_MOUNTED_RED: u8 = 0xE0;
+
 /// Every green-channel value that appears at the center of a beacon block, with
 /// the block it belongs to.
 ///
@@ -292,7 +340,7 @@ const RESOURCE_MAX_PERCENT: u8 = 100;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 10] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 11] = [
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
@@ -303,6 +351,7 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 10] = [
     ("B6 health marker", HEALTH_MARKER),
     ("B7 stamina marker", STAMINA_MARKER),
     ("B8 magicka marker", MAGICKA_MARKER),
+    ("B9 movement marker", MOVEMENT_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -334,6 +383,9 @@ pub enum PixelBusEvent {
     /// which several move at once (the common case in combat) is one event rather
     /// than three.
     Resources(ResourceSet),
+    /// A change in the decoded movement state. Nothing acts on it; it is an
+    /// observable, like combat state.
+    Movement(MovementSignal),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -365,6 +417,8 @@ pub struct BlockSamples {
     pub stamina: Option<Rgb>,
     /// B8, the magicka block.
     pub magicka: Option<Rgb>,
+    /// B9, the movement block.
+    pub movement: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -458,7 +512,8 @@ impl SurfaceSampler for MockSampler {
 }
 
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
-/// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka.
+/// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka,
+/// B9 movement.
 ///
 /// This is the companion's single statement of the strip length; the drawn width
 /// and the capture region both derive from it. The addon states the same number
@@ -466,7 +521,7 @@ impl SurfaceSampler for MockSampler {
 /// asserts the two agree by parsing the embedded addon source. Adding a block is
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
-pub const NUM_BLOCKS: u32 = 9;
+pub const NUM_BLOCKS: u32 = 10;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -627,6 +682,10 @@ impl ReaderConfig {
     /// The magicka block (B8) sample point, derived from `block_px`.
     pub fn magicka_point(&self) -> (u32, u32) {
         block_center(self.block_px, 8)
+    }
+    /// The movement block (B9) sample point, derived from `block_px`.
+    pub fn movement_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 9)
     }
 }
 
@@ -824,6 +883,43 @@ pub fn decode_combat(sample: Rgb, tolerance: u8) -> CombatSignal {
     }
 }
 
+/// Decodes the movement block into its tri-state.
+///
+/// Validation mirrors the combat block exactly: the green marker and the
+/// `red + blue` complement are both checked within tolerance, then the red
+/// channel selects the state. Any failure yields [`MovementSignal::Unknown`];
+/// there is no nearest match and no default to on foot, so an addon older than
+/// version 10 (which draws no movement block) and any unrelated screen content
+/// behind that point can never be read as a state.
+///
+/// The two reserved sprint codes are matched explicitly rather than left to the
+/// catch-all. The behavior is the same either way, but the explicit arm documents
+/// the deferred axis in executable form, and it means a future companion that
+/// gains sprint support changes this arm rather than discovering the reservation
+/// in a comment somewhere else.
+pub fn decode_movement(sample: Rgb, tolerance: u8) -> MovementSignal {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, MOVEMENT_MARKER, tolerance)
+        || checksum.abs_diff(255) > u16::from(tolerance)
+    {
+        return MovementSignal::Unknown;
+    }
+    if within(sample.r, MOVEMENT_ON_FOOT_RED, tolerance) {
+        MovementSignal::OnFoot
+    } else if within(sample.r, MOVEMENT_MOUNTED_RED, tolerance) {
+        MovementSignal::Mounted
+    } else if within(sample.r, MOVEMENT_SPRINT_ON_FOOT_RED, tolerance)
+        || within(sample.r, MOVEMENT_SPRINT_MOUNTED_RED, tolerance)
+    {
+        // Reserved for the deferred sprint axis. No addon emits these, and until
+        // one does they are unavailable rather than a state, so no half-built
+        // sprint behavior is ever observable.
+        MovementSignal::Unknown
+    } else {
+        MovementSignal::Unknown
+    }
+}
+
 /// Decodes the menu block into its surface.
 ///
 /// Validation mirrors the combat block: the green marker and the `red + blue`
@@ -909,6 +1005,7 @@ pub struct PixelBusReader {
     combat: CombatSignal,
     menu: MenuSurface,
     resources: ResourceSet,
+    movement: MovementSignal,
     had_heartbeat: bool,
 }
 
@@ -924,6 +1021,7 @@ impl PixelBusReader {
             combat: CombatSignal::Unknown,
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
+            movement: MovementSignal::Unknown,
             had_heartbeat: false,
         }
     }
@@ -946,6 +1044,7 @@ impl PixelBusReader {
             health: b6,
             stamina: b7,
             magicka: b8,
+            movement: b9,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -1047,6 +1146,20 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Combat(combat));
             }
 
+            // The movement block follows the combat block byte for byte, including
+            // the clear-on-non-decode behaviour: a stale "mounted" surviving an
+            // addon downgrade is the same false reading in a different signal.
+            let movement = b9.map_or(MovementSignal::Unknown, |c| decode_movement(c, tolerance));
+            if movement != self.movement {
+                self.movement = movement;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?movement,
+                    "movement state detected"
+                );
+                events.push(PixelBusEvent::Movement(movement));
+            }
+
             // The menu block gates input, so a sample that does not decode must
             // clear it rather than hold it: holding a stale gate would leave the
             // application silently not intercepting long after the menu closed,
@@ -1103,6 +1216,10 @@ impl PixelBusReader {
                     self.resources = cleared;
                     events.push(PixelBusEvent::Resources(cleared));
                 }
+                if self.movement != MovementSignal::Unknown {
+                    self.movement = MovementSignal::Unknown;
+                    events.push(PixelBusEvent::Movement(MovementSignal::Unknown));
+                }
             }
         }
 
@@ -1126,6 +1243,7 @@ impl PixelBusReader {
         let (hx, hy) = self.config.health_point();
         let (tx, ty) = self.config.stamina_point();
         let (gx, gy) = self.config.magicka_point();
+        let (vx, vy) = self.config.movement_point();
         let samples = BlockSamples {
             status: sampler.sample(sx, sy),
             fishing: sampler.sample(fx, fy),
@@ -1136,6 +1254,7 @@ impl PixelBusReader {
             health: sampler.sample(hx, hy),
             stamina: sampler.sample(tx, ty),
             magicka: sampler.sample(gx, gy),
+            movement: sampler.sample(vx, vy),
         };
         self.observe(samples, now_ms)
     }

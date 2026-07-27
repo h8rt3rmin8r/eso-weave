@@ -51,6 +51,11 @@ pub const COMBAT_TITLE: &str = "Combat";
 pub const COMBAT_TOOLTIP: &str =
     "Whether the character is in combat, read from the Pixel Beacon addon. Requires addon version 6 or later; shows Not detected without a signal. Nothing in the application acts on this yet.";
 
+// Movement-state section.
+pub const MOVEMENT_TITLE: &str = "Movement";
+pub const MOVEMENT_TOOLTIP: &str =
+    "Whether the character is mounted, read from the Pixel Beacon addon. Requires addon version 10 or later; shows Not detected without a signal. Sprinting is not shown because the game exposes no sprint state to an addon. Nothing in the application acts on this yet.";
+
 // Menu-gate section.
 pub const MENU_TITLE: &str = "Game Menu";
 pub const MENU_TOOLTIP: &str =

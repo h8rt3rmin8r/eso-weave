@@ -29,7 +29,7 @@ use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, ResourceLevel, ResourceSet, WeaponClass,
+    ActiveBar, CombatSignal, MenuSurface, MovementSignal, ResourceLevel, ResourceSet, WeaponClass,
 };
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
@@ -265,6 +265,39 @@ pub fn combat_view(signal: CombatSignal) -> CombatView {
             CombatSignal::InCombat => "In combat",
             CombatSignal::OutOfCombat => "Out of combat",
             CombatSignal::Unknown => "Not detected",
+        },
+        role: if detected {
+            StatusRole::Active
+        } else {
+            StatusRole::Muted
+        },
+    }
+}
+
+/// A normalized view of the detected movement state for the status region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MovementView {
+    /// Whether any movement signal has been decoded.
+    pub detected: bool,
+    /// The movement state display name.
+    pub state: &'static str,
+    /// The palette role for the state field.
+    pub role: StatusRole,
+}
+
+/// Derives the movement view from the decoded signal.
+///
+/// The wording and the role mapping follow [`combat_view`] rather than inventing
+/// a second convention, so the operator reads the three adjacent player-state
+/// fields the same way.
+pub fn movement_view(signal: MovementSignal) -> MovementView {
+    let detected = signal != MovementSignal::Unknown;
+    MovementView {
+        detected,
+        state: match signal {
+            MovementSignal::Mounted => "Mounted",
+            MovementSignal::OnFoot => "On foot",
+            MovementSignal::Unknown => "Not detected",
         },
         role: if detected {
             StatusRole::Active
@@ -690,6 +723,8 @@ pub struct AppView {
     pub weapon_bar: WeaponBarView,
     /// The detected combat state.
     pub combat: CombatView,
+    /// The detected movement state.
+    pub movement: MovementView,
     /// The detected game UI surface, and whether it is gating input.
     pub menu: MenuView,
     /// The detected resource levels.
@@ -889,13 +924,14 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason())
         };
-        let (skills, active_bar, classes, combat, menu, resources) = {
+        let (skills, active_bar, classes, combat, movement, menu, resources) = {
             let weave = self.weave.lock().unwrap();
             (
                 skill_rows(weave.config()),
                 weave.active_bar(),
                 weave.weapon_classes(),
                 weave.combat(),
+                weave.movement(),
                 weave.menu(),
                 weave.resources(),
             )
@@ -915,6 +951,7 @@ impl AppModel {
             skills,
             weapon_bar: weapon_bar_view(active_bar, classes.0, classes.1),
             combat: combat_view(combat),
+            movement: movement_view(movement),
             menu: menu_view(menu),
             resources: resources_view(resources),
             log_panel_open: self.log_panel_open,

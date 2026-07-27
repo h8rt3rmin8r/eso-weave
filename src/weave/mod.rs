@@ -17,7 +17,7 @@ use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, ResourceSet, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, MenuSurface, MovementSignal, ResourceSet, WeaponBarSignal, WeaponClass,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -218,6 +218,7 @@ pub struct WeaveEngine {
     front_class: WeaponClass,
     back_class: WeaponClass,
     combat: CombatSignal,
+    movement: MovementSignal,
     menu: MenuSurface,
     resources: ResourceSet,
 }
@@ -235,6 +236,7 @@ impl WeaveEngine {
             front_class: WeaponClass::Unknown,
             back_class: WeaponClass::Unknown,
             combat: CombatSignal::Unknown,
+            movement: MovementSignal::Unknown,
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
         }
@@ -256,6 +258,22 @@ impl WeaveEngine {
     /// The last decoded combat state.
     pub fn combat(&self) -> CombatSignal {
         self.combat
+    }
+
+    /// Records the decoded movement state, for display only.
+    ///
+    /// Inert for the same reasons and in the same way as [`Self::set_combat`]:
+    /// nothing in this engine reads it, and no timing, input, or fishing behavior
+    /// depends on it. `tests/weave.rs` asserts the engine behaves identically for
+    /// every value, so gating anything on movement has to be a deliberate change
+    /// that breaks that test rather than an accident.
+    pub fn set_movement(&mut self, movement: MovementSignal) {
+        self.movement = movement;
+    }
+
+    /// The last decoded movement state.
+    pub fn movement(&self) -> MovementSignal {
+        self.movement
     }
 
     /// Records the decoded game UI surface, for display only.

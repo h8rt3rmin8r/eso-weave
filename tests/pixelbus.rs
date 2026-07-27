@@ -2,13 +2,13 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_resource,
-    decode_resources, decode_weapon_bar, fishing_signal, grid_extent, grid_position, grid_rows,
-    load_reader_config, poll_interval, sanitize_block_px, status_present, store_reader_config,
-    strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal, MenuSurface, MockSampler,
-    PixelBusEvent, PixelBusReader, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size,
-    WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX,
-    MIN_BLOCK_PX, NUM_BLOCKS,
+    block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_movement,
+    decode_resource, decode_resources, decode_weapon_bar, fishing_signal, grid_extent,
+    grid_position, grid_rows, load_reader_config, poll_interval, sanitize_block_px, status_present,
+    store_reader_config, strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal,
+    MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader, ReaderConfig,
+    ResourceLevel, ResourceSet, Rgb, Size, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS,
+    COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -380,9 +380,9 @@ fn weapon_bar_event_only_on_change() {
 
 #[test]
 fn block_center_and_capture_dims_match_contract_table() {
-    // (block_px, [B0..B8 centers], (capture_w, capture_h)) per
+    // (block_px, [B0..B9 centers], (capture_w, capture_h)) per
     // specs/028-pixelbus-block-size/contracts/geometry.md, extended by the B4, B5,
-    // and B6-to-B8 contracts in slices 031, 032, and 033.
+    // B6-to-B8, and B9 contracts in slices 031, 032, 033, and 036.
     let cases = [
         (
             2u32,
@@ -396,8 +396,9 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (13, 1),
                 (15, 1),
                 (17, 1),
+                (19, 1),
             ],
-            (18u32, 2u32),
+            (20u32, 2u32),
         ),
         (
             4,
@@ -411,8 +412,9 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (26, 2),
                 (30, 2),
                 (34, 2),
+                (38, 2),
             ],
-            (36, 4),
+            (40, 4),
         ),
         (
             8,
@@ -426,8 +428,9 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (52, 4),
                 (60, 4),
                 (68, 4),
+                (76, 4),
             ],
-            (72, 8),
+            (80, 8),
         ),
         (
             16,
@@ -441,8 +444,9 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (104, 8),
                 (120, 8),
                 (136, 8),
+                (152, 8),
             ],
-            (144, 16),
+            (160, 16),
         ),
         (
             32,
@@ -456,8 +460,9 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (208, 16),
                 (240, 16),
                 (272, 16),
+                (304, 16),
             ],
-            (288, 32),
+            (320, 32),
         ),
     ];
     for (block_px, centers, cap) in cases {
@@ -474,7 +479,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 9);
+    assert_eq!(NUM_BLOCKS, 10);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -1374,4 +1379,232 @@ fn block_center_wraps_past_the_first_row() {
         let (x, _) = block_center(px, index);
         assert!(x < px * COLUMNS, "index {index} escaped the row width");
     }
+}
+
+// Slice 036: the movement block (B9). Mounted only; the sprint axis is reserved
+// in the encoding and never emitted, because the game exposes no sprint
+// observable (see specs/036-movement-state-block/spec.md).
+
+// The premise the single-row capture extent depends on, enforced at compile time
+// rather than by a test that has to be run to be believed. The seventeenth block
+// breaks this and should fail here, at the edit that adds it.
+const _: () = assert!(
+    NUM_BLOCKS <= COLUMNS,
+    "the capture region is one row only while the block count fits the columns"
+);
+
+/// The movement block color for a code, mirroring the addon encoder: the code in
+/// red, the marker in green, and the complement checksum in blue.
+fn movement(red: u8) -> Rgb {
+    Rgb::new(red, 0x43, 255 - red)
+}
+
+const MOVEMENT_ON_FOOT: Rgb = Rgb {
+    r: 0x20,
+    g: 0x43,
+    b: 0xDF,
+};
+const MOVEMENT_MOUNTED: Rgb = Rgb {
+    r: 0x60,
+    g: 0x43,
+    b: 0x9F,
+};
+
+#[test]
+fn decode_movement_decodes_both_live_states() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(decode_movement(MOVEMENT_ON_FOOT, t), MovementSignal::OnFoot);
+    assert_eq!(
+        decode_movement(MOVEMENT_MOUNTED, t),
+        MovementSignal::Mounted
+    );
+}
+
+#[test]
+fn decode_movement_survives_capture_drift_within_tolerance() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_movement(Rgb::new(0x20 + 2, 0x43 + 2, 0xDF - 2), t),
+        MovementSignal::OnFoot
+    );
+    assert_eq!(
+        decode_movement(Rgb::new(0x60 - 2, 0x43 - 2, 0x9F + 2), t),
+        MovementSignal::Mounted
+    );
+}
+
+#[test]
+fn decode_movement_rejects_every_other_blocks_marker() {
+    // The tenth block is the one most likely to be sampled against a grid drawn
+    // by an older addon, so every incumbent marker is rejected by name.
+    let t = ReaderConfig::default().tolerance;
+    for (name, green) in BLOCK_CENTER_GREENS {
+        if green.abs_diff(0x43) <= t {
+            continue;
+        }
+        assert_eq!(
+            decode_movement(Rgb::new(0x60, green, 0x9F), t),
+            MovementSignal::Unknown,
+            "{name} decoded as a movement state"
+        );
+    }
+}
+
+#[test]
+fn decode_movement_rejects_a_failed_checksum() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_movement(Rgb::new(0x60, 0x43, 0x00), t),
+        MovementSignal::Unknown
+    );
+}
+
+#[test]
+fn decode_movement_rejects_the_reserved_sprint_codes() {
+    // US3: the sprint axis is reserved, not implemented. Its two codes read as
+    // unavailable so no half-built state is reachable by an operator, and so a
+    // future addon that emits them against an older companion degrades safely.
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(decode_movement(movement(0xA0), t), MovementSignal::Unknown);
+    assert_eq!(decode_movement(movement(0xE0), t), MovementSignal::Unknown);
+}
+
+#[test]
+fn decode_movement_rejects_an_unrecognized_state_code() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(decode_movement(movement(0x80), t), MovementSignal::Unknown);
+    assert_eq!(decode_movement(movement(0x00), t), MovementSignal::Unknown);
+}
+
+#[test]
+fn no_arbitrary_color_decodes_as_a_movement_state() {
+    // US2: an addon older than version 10 draws no tenth block, leaving whatever
+    // the game renders at that point. Nothing there may be read as a state.
+    let t = ReaderConfig::default().tolerance;
+    let mut checked = 0u32;
+    for r in (0u32..=255).step_by(5) {
+        for g in (0u32..=255).step_by(5) {
+            for b in (0u32..=255).step_by(5) {
+                let sample = Rgb::new(r as u8, g as u8, b as u8);
+                let is_real = sample.g.abs_diff(0x43) <= t
+                    && (i32::from(sample.r) + i32::from(sample.b) - 255).unsigned_abs()
+                        <= u32::from(t);
+                if is_real {
+                    continue;
+                }
+                checked += 1;
+                assert_eq!(
+                    decode_movement(sample, t),
+                    MovementSignal::Unknown,
+                    "color {sample:?} decoded as a movement state"
+                );
+            }
+        }
+    }
+    assert!(checked > 100_000, "sweep covered only {checked} colors");
+}
+
+#[test]
+fn movement_point_is_the_tenth_block_center() {
+    // Derived, never restated: the point follows both the configured block size
+    // and the shared column count.
+    for block_px in [MIN_BLOCK_PX, DEFAULT_BLOCK_PX, 24, MAX_BLOCK_PX] {
+        let config = ReaderConfig {
+            block_px,
+            ..Default::default()
+        };
+        assert_eq!(config.movement_point(), block_center(block_px, 9));
+    }
+    // Ten blocks in a sixteen-column grid: still row 0, column 9.
+    assert_eq!(grid_position(9, COLUMNS), (9, 0));
+}
+
+#[test]
+fn movement_change_emits_exactly_one_event() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let mut samples = alive();
+    samples.movement = Some(MOVEMENT_ON_FOOT);
+    let events = reader.observe(samples, 0);
+    assert!(events.contains(&PixelBusEvent::Movement(MovementSignal::OnFoot)));
+
+    // The same state again announces nothing.
+    let events = reader.observe(samples, 100);
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::Movement(_))));
+
+    // A real transition announces once.
+    samples.movement = Some(MOVEMENT_MOUNTED);
+    let events = reader.observe(samples, 200);
+    let movements: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, PixelBusEvent::Movement(_)))
+        .collect();
+    assert_eq!(movements.len(), 1);
+    assert_eq!(
+        movements[0],
+        &PixelBusEvent::Movement(MovementSignal::Mounted)
+    );
+}
+
+#[test]
+fn movement_clears_to_unknown_when_the_block_stops_decoding() {
+    // Follows the combat block rather than the weapon block: a stale "mounted"
+    // surviving an addon downgrade is exactly the false reading US2 forbids.
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let mut samples = alive();
+    samples.movement = Some(MOVEMENT_MOUNTED);
+    reader.observe(samples, 0);
+
+    samples.movement = Some(Rgb::new(0x11, 0x22, 0x33));
+    let events = reader.observe(samples, 100);
+    assert!(events.contains(&PixelBusEvent::Movement(MovementSignal::Unknown)));
+
+    // And it does not announce again once already unknown.
+    let events = reader.observe(samples, 200);
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::Movement(_))));
+}
+
+#[test]
+fn movement_clears_to_unknown_on_signal_loss() {
+    let config = ReaderConfig::default();
+    let timeout = config.heartbeat_timeout_ms;
+    let mut reader = PixelBusReader::new(config);
+    let mut samples = alive();
+    samples.movement = Some(MOVEMENT_MOUNTED);
+    reader.observe(samples, 0);
+
+    // The status block goes away and stays away past the timeout.
+    let gone = BlockSamples::default();
+    let events = reader.observe(gone, timeout + 500);
+    assert!(events.contains(&PixelBusEvent::SignalLost));
+    assert!(events.contains(&PixelBusEvent::Movement(MovementSignal::Unknown)));
+}
+
+#[test]
+fn the_capture_region_is_one_row_while_the_count_fits_the_columns() {
+    // FR-017, stated on what the invariant actually depends on. The region is one
+    // row because NUM_BLOCKS is at most COLUMNS, not because the count happens to
+    // be ten. Blocks eleven through sixteen keep this true for the same reason;
+    // the seventeenth adds a row, and this test says so before anyone gets there.
+    let block_px = DEFAULT_BLOCK_PX;
+    for count in 1..=COLUMNS {
+        assert_eq!(
+            grid_extent(block_px, count, COLUMNS),
+            Size::new(block_px * count, block_px),
+            "{count} blocks should still be a single row"
+        );
+    }
+    assert_eq!(
+        grid_extent(block_px, COLUMNS + 1, COLUMNS),
+        Size::new(block_px * COLUMNS, block_px * 2),
+        "the first block past the column count must start a second row"
+    );
+
+    // And the concrete instance for the constants this slice ships. The premise
+    // itself is enforced at compile time by the const assertion above, so this
+    // asserts the extent rather than restating the premise.
+    assert_eq!(capture_dims(block_px), (block_px * NUM_BLOCKS, block_px));
 }

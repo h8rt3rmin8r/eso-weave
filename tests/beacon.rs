@@ -60,15 +60,14 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_nine() {
-    // Slice 035 bumped this for the grid wrap, and the usual reason does not
-    // apply: at nine blocks the wrapped layout draws exactly the pixels the
-    // strip did, so nothing breaks for an operator who never updates. It
-    // advances so the deployed addon actually carries the wrapping logic, which
-    // means the next slice to add a block inherits a working grid instead of
-    // shipping the wrap and the block together and bumping twice.
-    assert_eq!(embedded_version(), 9);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(9));
+fn embedded_manifest_version_is_ten() {
+    // Slice 036 adds the movement block (B9), so an operator running version 9
+    // draws no tenth block and the companion must report movement as unavailable
+    // rather than guess. The bump is what makes the beacon manager offer them the
+    // update. Slice 035 bumped to 9 for the grid wrap, which is why the wrapping
+    // logic is already deployed and this slice inherits a working grid.
+    assert_eq!(embedded_version(), 10);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(10));
 }
 
 #[test]
@@ -642,6 +641,50 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(
         beacon::parse_lua_constant(lua, "RESOURCE_MAX_PERCENT"),
         Some(100)
+    );
+    // Slice 036: the movement block's constants. Only the two live codes are
+    // shared; the reserved sprint codes are companion-only by design, which
+    // `addon_defines_no_sprint_constant` below is what enforces.
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "MOVEMENT_MARKER"),
+        Some(0x43)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "MOVEMENT_ON_FOOT_RED"),
+        Some(0x20)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "MOVEMENT_MOUNTED_RED"),
+        Some(0x60)
+    );
+}
+
+/// Slice 036: the reserved sprint codes exist on the companion side only.
+///
+/// The sprint axis has no observable in the game API (see the verification
+/// recorded in `specs/036-movement-state-block/spec.md`), so the addon never
+/// emits it and defines no constant for it. Were the addon to define one, the
+/// agreement check above would need a special case for a value living on one
+/// side of the contract, which is exactly the kind of exception that makes a
+/// cross-language check stop being trustworthy. This asserts the absence so the
+/// design decision is enforced rather than assumed.
+#[test]
+fn addon_defines_no_sprint_constant() {
+    let lua = beacon::LUA;
+    for name in [
+        "MOVEMENT_SPRINT_ON_FOOT_RED",
+        "MOVEMENT_SPRINT_MOUNTED_RED",
+        "SPRINT_MARKER",
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            None,
+            "the addon defines {name}, but the sprint axis is companion-side reserved only"
+        );
+    }
+    assert!(
+        !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
+        "the addon references a sprint API that the verification found does not exist"
     );
 }
 

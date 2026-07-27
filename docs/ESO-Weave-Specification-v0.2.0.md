@@ -543,6 +543,7 @@ old strip offsets.
 | B6 Health | (96, 0) | (104, 8) | `G = 0x16` marker, `R` is the percentage of the current maximum (0 to 100, or `0xFF` for unavailable), `B = 255 - R` checksum. |
 | B7 Stamina | (112, 0) | (120, 8) | As B6 with `G = 0x6D`. |
 | B8 Magicka | (128, 0) | (136, 8) | As B6 with `G = 0xBB`. |
+| B9 Movement | (144, 0) | (152, 8) | `G = 0x43` marker, `R` is a two-bit state code (bit 0 mounted, bit 1 sprint) scaled to `0x20` on foot, `0x60` mounted, `B = 255 - R` checksum. Driven by `EVENT_MOUNTED_STATE_CHANGED` and re-baselined from `IsMounted()` on `EVENT_PLAYER_ACTIVATED`, with a 1 Hz re-sync backstop. Never hidden to express a state. The two sprint codes (`0xA0` and `0xE0`) are reserved and never emitted: the game exposes no sprint state to an addon, so the reader decodes them as unavailable. |
 
 Weapon-class codes are shared byte-for-byte between the addon and the reader: 0
 none, 1 dual wield, 2 two handed, 3 sword and shield, 4 bow, 5 destruction staff, 6

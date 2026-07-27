@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The application shows whether the player is mounted, published by PixelBeacon
+  as a tenth block (B9). Nothing acts on the value; it is an observable, like
+  combat state. Addon version advances to 10 (issue #11).
+
+### Decisions
+
+- 2026-07-27: Issue #11 asked for one block covering mounted and sprinting, and
+  made verifying the sprint observable a blocking entry condition. The
+  verification is done and conclusive: the game exposes no sprint state to an
+  addon. `IsUnitSprinting`, `IsPlayerSprinting`, and `EVENT_SPRINT_STATE_CHANGED`
+  return zero hits against both the indexed API database and the live
+  `esoui/esoui` source, and the only four `Sprint` references in that source are
+  the `SPECIAL_MOVE_SPRINT` keybind actions (which call into the engine and
+  expose no state), the `IN_WORLD_UI_SETTING_TOGGLE_SPRINT` preference, and a
+  `sprintf`. The same evidence shows sprint is toggled on gamepad but held on
+  keyboard, with a preference letting keyboard users opt into toggle, so any
+  heuristic reconstruction would have to model three input semantics. The slice
+  therefore ships the mounted axis alone, which issue #11 names as the sanctioned
+  fallback, and sprint becomes a follow-up. This is the entry condition that
+  unblocked build plan 010's last slice.
+- 2026-07-27: The movement marker is `0x43`. It is the midpoint of the widest gap
+  left in the block-center green registry (`0x2D` to `0x5A`), 22 from its nearest
+  neighbour, eleven times the default tolerance. `0xE8` tied on separation and
+  lost the tiebreak because unrelated screen content clusters at the channel
+  extremes and `0xE8` sits 23 from `0xFF`. The nibble-swap convention
+  (`0xA5`/`0x5A`, `0x2D`/`0xD2`) is not continued: it was a mnemonic, the
+  resource markers already abandoned it, and `0x34` would sit 7 from `0x2D`.
+- 2026-07-27: The movement code is two bits (bit 0 mounted, bit 1 sprint) with
+  four evenly spaced reds, of which `0xA0` and `0xE0` are reserved for the
+  deferred sprint axis and never emitted. Reserving them costs nothing now and
+  means a future sprint feature adds its axis without a second block, a second
+  marker, or recolouring either live value. They are defined and rejection-tested
+  on the companion side only: a constant the addon never emits would have no
+  counterpart for the cross-language agreement check, and exempting it would
+  weaken the mechanism that makes that check trustworthy. Later slices adding a
+  block inherit both the reservation pattern and the naming rule that a signal is
+  named for the concept it will grow into, not the axis that ships first.
+
 ## [0.9.0] - 2026-07-27
 
 ### Added

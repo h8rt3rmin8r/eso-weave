@@ -31,6 +31,7 @@ pub fn app_toggle_intent(action: Action, fishing_on: bool) -> Option<UiIntent> {
 /// - `MenuGate(surface)` sets the menu gate on the input engine and the fishing
 ///   controller, so neither starts new work while a game UI surface is up.
 /// - `Resources(set)` stores the decoded resource levels (nothing acts on them).
+/// - `Movement(signal)` stores the decoded movement state (nothing acts on it).
 /// - `SignalLost` clears the weave latency and disables fishing.
 /// - `FishingStarted`, `BiteDetected`, `FishingStopped` reach the controller.
 /// - `Heartbeat` is forwarded to the controller (a no-op there).
@@ -61,6 +62,10 @@ pub fn route_reader_event(
         }
         PixelBusEvent::Resources(set) => {
             weave.set_resources(set);
+            return;
+        }
+        PixelBusEvent::Movement(signal) => {
+            weave.set_movement(signal);
             return;
         }
         PixelBusEvent::MenuGate(surface) => {
