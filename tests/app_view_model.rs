@@ -119,7 +119,10 @@ fn beacon_light_maps_every_condition() {
 
 #[test]
 fn skill_rows_label_ultimate_and_synergy() {
-    let rows = skill_rows(&WeaveConfig::default());
+    let rows = skill_rows(
+        &WeaveConfig::default(),
+        eso_weave::pixelbus::CooldownSet::new_unknown(),
+    );
     assert_eq!(rows.len(), 7);
     assert_eq!(rows[0].label, "Skill 1");
     assert_eq!(rows[5].label, "Ultimate (R)");
@@ -193,7 +196,7 @@ fn status_line_beacon_maps_conditions() {
 #[test]
 fn skill_row_shows_inherited_default_when_no_override() {
     let config = WeaveConfig::default();
-    let rows = skill_rows(&config);
+    let rows = skill_rows(&config, eso_weave::pixelbus::CooldownSet::new_unknown());
     // Default slots are light attacks; the effective delay is the global d_weave
     // default, and the row is not marked as overridden (so it is shown muted,
     // never as a literal zero).
@@ -224,7 +227,7 @@ fn skill_override_targets_the_rows_weave_type() {
     let mut config = WeaveConfig::default();
     config.slots[0].weave_type = WeaveType::HeavyAttack;
     config.slots[0].overrides.d_heavy = Some(700);
-    let rows = skill_rows(&config);
+    let rows = skill_rows(&config, eso_weave::pixelbus::CooldownSet::new_unknown());
     assert!(rows[0].is_override);
     assert_eq!(rows[0].effective_delay, 700);
 }

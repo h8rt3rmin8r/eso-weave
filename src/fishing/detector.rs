@@ -23,6 +23,7 @@ pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
         PixelBusEvent::MenuGate(_) => None,
         PixelBusEvent::Resources(_) => None,
         PixelBusEvent::Movement(_) => None,
+        PixelBusEvent::Cooldowns(_) => None,
     }
 }
 

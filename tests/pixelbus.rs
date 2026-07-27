@@ -2,13 +2,14 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_movement,
-    decode_resource, decode_resources, decode_weapon_bar, fishing_signal, grid_extent,
-    grid_position, grid_rows, load_reader_config, poll_interval, sanitize_block_px, status_present,
-    store_reader_config, strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal,
-    MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader, ReaderConfig,
-    ResourceLevel, ResourceSet, Rgb, Size, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS,
-    COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    block_center, capture_dims, decode_combat, decode_cooldown, decode_latency, decode_menu,
+    decode_movement, decode_resource, decode_resources, decode_weapon_bar, fishing_signal,
+    grid_extent, grid_position, grid_rows, load_reader_config, poll_interval, sanitize_block_px,
+    status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples, CombatSignal,
+    CooldownSet, FishingSignal, MenuSurface, MockSampler, MovementSignal, PixelBusEvent,
+    PixelBusReader, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown,
+    WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX,
+    MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -380,9 +381,9 @@ fn weapon_bar_event_only_on_change() {
 
 #[test]
 fn block_center_and_capture_dims_match_contract_table() {
-    // (block_px, [B0..B9 centers], (capture_w, capture_h)) per
+    // (block_px, [B0..B15 centers], (capture_w, capture_h)) per
     // specs/028-pixelbus-block-size/contracts/geometry.md, extended by the B4, B5,
-    // B6-to-B8, and B9 contracts in slices 031, 032, 033, and 036.
+    // B6-to-B8, B9, and B10-to-B15 contracts in slices 031, 032, 033, 036, and 037.
     let cases = [
         (
             2u32,
@@ -397,8 +398,14 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (15, 1),
                 (17, 1),
                 (19, 1),
+                (21, 1),
+                (23, 1),
+                (25, 1),
+                (27, 1),
+                (29, 1),
+                (31, 1),
             ],
-            (20u32, 2u32),
+            (32u32, 2u32),
         ),
         (
             4,
@@ -413,8 +420,14 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (30, 2),
                 (34, 2),
                 (38, 2),
+                (42, 2),
+                (46, 2),
+                (50, 2),
+                (54, 2),
+                (58, 2),
+                (62, 2),
             ],
-            (40, 4),
+            (64, 4),
         ),
         (
             8,
@@ -429,8 +442,14 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (60, 4),
                 (68, 4),
                 (76, 4),
+                (84, 4),
+                (92, 4),
+                (100, 4),
+                (108, 4),
+                (116, 4),
+                (124, 4),
             ],
-            (80, 8),
+            (128, 8),
         ),
         (
             16,
@@ -445,8 +464,14 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (120, 8),
                 (136, 8),
                 (152, 8),
+                (168, 8),
+                (184, 8),
+                (200, 8),
+                (216, 8),
+                (232, 8),
+                (248, 8),
             ],
-            (160, 16),
+            (256, 16),
         ),
         (
             32,
@@ -461,8 +486,14 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (240, 16),
                 (272, 16),
                 (304, 16),
+                (336, 16),
+                (368, 16),
+                (400, 16),
+                (432, 16),
+                (464, 16),
+                (496, 16),
             ],
-            (320, 32),
+            (512, 32),
         ),
     ];
     for (block_px, centers, cap) in cases {
@@ -479,7 +510,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 10);
+    assert_eq!(NUM_BLOCKS, 16);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -1388,6 +1419,11 @@ fn block_center_wraps_past_the_first_row() {
 // The premise the single-row capture extent depends on, enforced at compile time
 // rather than by a test that has to be run to be believed. The seventeenth block
 // breaks this and should fail here, at the edit that adds it.
+// Slice 037 took the count to exactly COLUMNS, so this now holds with no margin
+// left. It is deliberately NOT relaxed: the next block added anywhere in this
+// family trips it, which is precisely when the warning is worth having. Widening
+// it here to spare a later slice an inconvenience would discard the signal at the
+// moment it starts earning its keep.
 const _: () = assert!(
     NUM_BLOCKS <= COLUMNS,
     "the capture region is one row only while the block count fits the columns"
@@ -1585,10 +1621,11 @@ fn movement_clears_to_unknown_on_signal_loss() {
 
 #[test]
 fn the_capture_region_is_one_row_while_the_count_fits_the_columns() {
-    // FR-017, stated on what the invariant actually depends on. The region is one
-    // row because NUM_BLOCKS is at most COLUMNS, not because the count happens to
-    // be ten. Blocks eleven through sixteen keep this true for the same reason;
-    // the seventeenth adds a row, and this test says so before anyone gets there.
+    // Stated on what the invariant actually depends on. The region is one row
+    // because NUM_BLOCKS is at most COLUMNS, not because of any particular count.
+    // Slice 037 took the count to exactly COLUMNS, so the grid now fills one row
+    // completely and the seventeenth block adds a row. This test said so before
+    // anyone got there, and still does.
     let block_px = DEFAULT_BLOCK_PX;
     for count in 1..=COLUMNS {
         assert_eq!(
@@ -1607,4 +1644,211 @@ fn the_capture_region_is_one_row_while_the_count_fits_the_columns() {
     // itself is enforced at compile time by the const assertion above, so this
     // asserts the extent rather than restating the premise.
     assert_eq!(capture_dims(block_px), (block_px * NUM_BLOCKS, block_px));
+
+    // Slice 037 lands the grid exactly on the single-row maximum, which is the
+    // boundary case worth pinning: the region is a full row wide, still one row
+    // tall, and there is no spare column left.
+    assert_eq!(NUM_BLOCKS, COLUMNS, "the grid should fill the row exactly");
+    assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px));
+}
+
+// Slice 037: the six skill-cooldown blocks (B10 to B15).
+
+/// The six marks in block order, mirroring the addon encoder.
+const COOLDOWN_MARKS: [(&str, u8); 6] = [
+    ("skill 1", 0x0B),
+    ("skill 2", 0x21),
+    ("skill 3", 0x4E),
+    ("skill 4", 0x92),
+    ("skill 5", 0xC6),
+    ("ultimate", 0xE8),
+];
+
+/// A cooldown block color: the step count in red, the mark in green, and the
+/// complement checksum in blue.
+fn cooldown(steps: u8, mark: u8) -> Rgb {
+    Rgb::new(steps, mark, 255 - steps)
+}
+
+#[test]
+fn decode_cooldown_reads_ready_durations_and_unavailable() {
+    let t = ReaderConfig::default().tolerance;
+    for (name, mark) in COOLDOWN_MARKS {
+        assert_eq!(
+            decode_cooldown(cooldown(0, mark), mark, t),
+            SlotCooldown::Ready,
+            "{name} at zero steps should be ready"
+        );
+        assert_eq!(
+            decode_cooldown(cooldown(1, mark), mark, t),
+            SlotCooldown::RemainingMs(50),
+            "{name} at one step"
+        );
+        assert_eq!(
+            decode_cooldown(cooldown(24, mark), mark, t),
+            SlotCooldown::RemainingMs(1200),
+            "{name} at twenty four steps"
+        );
+        assert_eq!(
+            decode_cooldown(cooldown(254, mark), mark, t),
+            SlotCooldown::RemainingMs(12700),
+            "{name} at the maximum step count"
+        );
+        assert_eq!(
+            decode_cooldown(cooldown(255, mark), mark, t),
+            SlotCooldown::Unknown,
+            "{name} at the unavailable sentinel"
+        );
+    }
+}
+
+#[test]
+fn decode_cooldown_rejects_every_other_blocks_marker() {
+    // Six adjacent blocks carrying the same kind of value are exactly where an
+    // off-by-one geometry error would decode a neighbour's cooldown as this
+    // slot's. Each block must reject every other mark on the grid, including the
+    // five sibling cooldown marks.
+    let t = ReaderConfig::default().tolerance;
+    for (name, mark) in COOLDOWN_MARKS {
+        for (other_name, other) in BLOCK_CENTER_GREENS {
+            if other.abs_diff(mark) <= t {
+                continue;
+            }
+            assert_eq!(
+                decode_cooldown(cooldown(24, other), mark, t),
+                SlotCooldown::Unknown,
+                "{other_name} decoded as the {name} cooldown"
+            );
+        }
+    }
+}
+
+#[test]
+fn decode_cooldown_rejects_a_failed_checksum() {
+    let t = ReaderConfig::default().tolerance;
+    for (name, mark) in COOLDOWN_MARKS {
+        assert_eq!(
+            decode_cooldown(Rgb::new(24, mark, 0), mark, t),
+            SlotCooldown::Unknown,
+            "{name} with a broken checksum"
+        );
+    }
+}
+
+#[test]
+fn no_arbitrary_color_decodes_as_a_cooldown() {
+    // US2: an addon older than version 11 draws none of these blocks, leaving
+    // whatever the game renders at those points.
+    let t = ReaderConfig::default().tolerance;
+    let mark = COOLDOWN_MARKS[0].1;
+    let mut checked = 0u32;
+    for r in (0u32..=255).step_by(5) {
+        for g in (0u32..=255).step_by(5) {
+            for b in (0u32..=255).step_by(5) {
+                let sample = Rgb::new(r as u8, g as u8, b as u8);
+                let is_real = sample.g.abs_diff(mark) <= t
+                    && (i32::from(sample.r) + i32::from(sample.b) - 255).unsigned_abs()
+                        <= u32::from(t);
+                if is_real {
+                    continue;
+                }
+                checked += 1;
+                assert_eq!(
+                    decode_cooldown(sample, mark, t),
+                    SlotCooldown::Unknown,
+                    "color {sample:?} decoded as a cooldown"
+                );
+            }
+        }
+    }
+    assert!(checked > 100_000, "sweep covered only {checked} colors");
+}
+
+#[test]
+fn cooldown_points_are_the_eleventh_through_sixteenth_block_centers() {
+    for block_px in [MIN_BLOCK_PX, DEFAULT_BLOCK_PX, 24, MAX_BLOCK_PX] {
+        let config = ReaderConfig {
+            block_px,
+            ..Default::default()
+        };
+        let points = [
+            config.cooldown_skill_1_point(),
+            config.cooldown_skill_2_point(),
+            config.cooldown_skill_3_point(),
+            config.cooldown_skill_4_point(),
+            config.cooldown_skill_5_point(),
+            config.cooldown_ultimate_point(),
+        ];
+        for (offset, point) in points.iter().enumerate() {
+            let index = 10 + offset as u32;
+            assert_eq!(*point, block_center(block_px, index));
+            // All six stay on row 0: the grid fills the row exactly.
+            assert_eq!(grid_position(index, COLUMNS), (index, 0));
+        }
+    }
+}
+
+#[test]
+fn cooldown_change_emits_one_aggregate_event() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let mut samples = alive();
+    samples.cooldown_skill_1 = Some(cooldown(0, COOLDOWN_MARKS[0].1));
+    let events = reader.observe(samples, 0);
+    let count = events
+        .iter()
+        .filter(|e| matches!(e, PixelBusEvent::Cooldowns(_)))
+        .count();
+    assert_eq!(count, 1);
+
+    // The same samples again announce nothing.
+    let events = reader.observe(samples, 100);
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::Cooldowns(_))));
+
+    // Three slots moving at once is still one event, which is the whole reason
+    // the six values travel as a set.
+    samples.cooldown_skill_1 = Some(cooldown(20, COOLDOWN_MARKS[0].1));
+    samples.cooldown_skill_2 = Some(cooldown(20, COOLDOWN_MARKS[1].1));
+    samples.cooldown_skill_3 = Some(cooldown(20, COOLDOWN_MARKS[2].1));
+    let events = reader.observe(samples, 200);
+    let cooldown_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, PixelBusEvent::Cooldowns(_)))
+        .collect();
+    assert_eq!(cooldown_events.len(), 1);
+}
+
+#[test]
+fn cooldowns_clear_when_a_block_stops_decoding() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let mut samples = alive();
+    samples.cooldown_skill_1 = Some(cooldown(20, COOLDOWN_MARKS[0].1));
+    reader.observe(samples, 0);
+
+    samples.cooldown_skill_1 = Some(Rgb::new(0x11, 0x22, 0x33));
+    let events = reader.observe(samples, 100);
+    match events
+        .iter()
+        .find(|e| matches!(e, PixelBusEvent::Cooldowns(_)))
+    {
+        Some(PixelBusEvent::Cooldowns(set)) => {
+            assert_eq!(set.skill_1, SlotCooldown::Unknown)
+        }
+        _ => panic!("a non-decoding block must clear that slot"),
+    }
+}
+
+#[test]
+fn cooldowns_clear_on_signal_loss() {
+    let config = ReaderConfig::default();
+    let timeout = config.heartbeat_timeout_ms;
+    let mut reader = PixelBusReader::new(config);
+    let mut samples = alive();
+    samples.cooldown_skill_1 = Some(cooldown(20, COOLDOWN_MARKS[0].1));
+    reader.observe(samples, 0);
+
+    let events = reader.observe(BlockSamples::default(), timeout + 500);
+    assert!(events.contains(&PixelBusEvent::SignalLost));
+    assert!(events.contains(&PixelBusEvent::Cooldowns(CooldownSet::new_unknown())));
 }

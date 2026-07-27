@@ -1,15 +1,22 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders up to nine square blocks (BLOCK_PX physical pixels on a side,
--- default 16; the companion sets this value on deploy) anchored to the top-left
--- of the client area, encoding load status (B0), fishing state (B1), server
--- latency (B2), the active weapon bar with each bar's weapon class (B3), and the
--- player's combat state (B4), and which native game UI surface is active (B5).
+-- It renders sixteen square blocks (BLOCK_PX physical pixels on a side, default
+-- 16; the companion sets this value on deploy) anchored to the top-left of the
+-- client area, encoding load status (B0), fishing state (B1), server latency
+-- (B2), the active weapon bar with each bar's weapon class (B3), the player's
+-- combat state (B4), which native game UI surface is active (B5), the player's
+-- health, stamina, and magicka (B6 to B8), whether the player is mounted (B9),
+-- and the remaining cooldown of each action slot the game exposes one for, the
+-- five skills and the ultimate (B10 to B15).
+--
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
--- section 10.3, the slice 014 weapon-bar block, the slice 031 combat block, and
--- the slice 032 menu block, and the slice 033 resource blocks (B6 health,
--- B7 stamina, B8 magicka).
+-- section 10.3, the slice 014 weapon-bar block, the slice 031 combat block, the
+-- slice 032 menu block, the slice 033 resource blocks, the slice 036 movement
+-- block, and the slice 037 cooldown blocks.
+--
+-- At sixteen blocks the grid exactly fills one row of COLUMNS. The next block
+-- added wraps onto a second row.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -21,7 +28,7 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 10
+local NUM_BLOCKS = 16
 -- The blocks in one row. Blocks wrap to the next row when a row is full, so the
 -- beacon grows downward and its width is bounded forever at BLOCK_PX * COLUMNS.
 -- The companion states the same number once as pixelbus::COLUMNS and its test
@@ -79,6 +86,33 @@ local MOVEMENT_MOUNTED_RED = 0x60
 -- The last rendered mounted state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
 local isMounted = nil
+
+-- The six cooldown block markers (green channel), shared byte for byte with the
+-- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
+-- blue carries the 255 minus red complement checksum.
+--
+-- The marks are the midpoints of the six widest gaps left in the companion's
+-- block-centre green registry, which puts the minimum separation across the whole
+-- registry at 11, five and a half times the reader's default tolerance. Six
+-- distinct marks rather than one shared mark, because six adjacent squares
+-- carrying the same kind of value are exactly where an off-by-one geometry error
+-- would otherwise decode a neighbour's cooldown as this slot's.
+local COOLDOWN_SKILL1_MARKER = 0x0B
+local COOLDOWN_SKILL2_MARKER = 0x21
+local COOLDOWN_SKILL3_MARKER = 0x4E
+local COOLDOWN_SKILL4_MARKER = 0x92
+local COOLDOWN_SKILL5_MARKER = 0xC6
+local COOLDOWN_ULTIMATE_MARKER = 0xE8
+-- Milliseconds per encoded step, the largest encodable step count, and the value
+-- meaning "empty, or the game reports no cooldown". A longer cooldown saturates
+-- at the maximum rather than wrapping, so it reads as "at least this long".
+local COOLDOWN_STEP_MS = 50
+local COOLDOWN_MAX_STEPS = 254
+local COOLDOWN_UNAVAILABLE = 255
+
+-- The last rendered step count per slot, held so a block is redrawn only when its
+-- value actually changes. Empty until the first render.
+local cooldownSteps = {}
 
 -- The menu block marker (green channel) and its surface code spacing, shared byte
 -- for byte with the companion decoder. Red carries code * MENU_CODE_STEP, blue
@@ -383,6 +417,85 @@ local function onMountedStateChanged()
     end
 end
 
+-- B10 to B15 Skill cooldowns ---------------------------------------------------
+
+-- The action slots the game exposes a cooldown for, in application slot order:
+-- the five normal slots then the ultimate. Derived from the game's own named
+-- constants rather than hardcoded integers, so a change to the bar layout cannot
+-- silently misalign the blocks against the slots. Synergy is absent because it is
+-- a contextual prompt rather than an action slot, so there is nothing to read.
+local COOLDOWN_SLOTS = {
+    ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 1,
+    ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 2,
+    ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 3,
+    ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 4,
+    ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 5,
+    ACTION_BAR_ULTIMATE_SLOT_INDEX + 1,
+}
+
+local COOLDOWN_MARKERS = {
+    COOLDOWN_SKILL1_MARKER,
+    COOLDOWN_SKILL2_MARKER,
+    COOLDOWN_SKILL3_MARKER,
+    COOLDOWN_SKILL4_MARKER,
+    COOLDOWN_SKILL5_MARKER,
+    COOLDOWN_ULTIMATE_MARKER,
+}
+
+local COOLDOWN_BLOCK_KEYS = {
+    "cooldown1",
+    "cooldown2",
+    "cooldown3",
+    "cooldown4",
+    "cooldown5",
+    "cooldownUltimate",
+}
+
+-- The remaining cooldown of one action slot as an encoded step count, or the
+-- unavailable value when the game reports nothing for it.
+local function cooldownStepsFor(slotIndex)
+    local remaining = GetSlotCooldownInfo(slotIndex)
+    if remaining == nil then
+        return COOLDOWN_UNAVAILABLE
+    end
+    if remaining <= 0 then
+        return 0
+    end
+    local steps = zo_floor(remaining / COOLDOWN_STEP_MS + 0.5)
+    if steps < 1 then
+        steps = 1
+    elseif steps > COOLDOWN_MAX_STEPS then
+        steps = COOLDOWN_MAX_STEPS
+    end
+    return steps
+end
+
+-- Recomputes all six, returning true when any changed.
+local function updateCooldowns()
+    local changed = false
+    for i = 1, #COOLDOWN_SLOTS do
+        local steps = cooldownStepsFor(COOLDOWN_SLOTS[i])
+        if steps ~= cooldownSteps[i] then
+            cooldownSteps[i] = steps
+            changed = true
+        end
+    end
+    return changed
+end
+
+local function renderCooldowns()
+    for i = 1, #COOLDOWN_BLOCK_KEYS do
+        local block = blocks[COOLDOWN_BLOCK_KEYS[i]]
+        if blocks.status:IsHidden() then
+            block:SetHidden(true)
+        else
+            local steps = cooldownSteps[i] or COOLDOWN_UNAVAILABLE
+            block:SetCenterColor(channel(steps), channel(COOLDOWN_MARKERS[i]), channel(255 - steps), 1)
+            block:SetHidden(false)
+        end
+    end
+end
+
 -- B5 Menu ---------------------------------------------------------------------
 
 -- Whether any native UI surface is active.
@@ -628,6 +741,12 @@ local function buildBlocks()
     blocks.stamina = createBlock("Stamina")
     blocks.magicka = createBlock("Magicka")
     blocks.movement = createBlock("Movement")
+    blocks.cooldown1 = createBlock("Cooldown1")
+    blocks.cooldown2 = createBlock("Cooldown2")
+    blocks.cooldown3 = createBlock("Cooldown3")
+    blocks.cooldown4 = createBlock("Cooldown4")
+    blocks.cooldown5 = createBlock("Cooldown5")
+    blocks.cooldownUltimate = createBlock("CooldownUltimate")
 
     -- Block indices, not pixel offsets: the grid decides where an index lands.
     positionBlock(blocks.status, 0)
@@ -640,6 +759,9 @@ local function buildBlocks()
     positionBlock(blocks.stamina, 7)
     positionBlock(blocks.magicka, 8)
     positionBlock(blocks.movement, 9)
+    for i = 1, #COOLDOWN_BLOCK_KEYS do
+        positionBlock(blocks[COOLDOWN_BLOCK_KEYS[i]], 9 + i)
+    end
 
     renderStatus()
     renderFishing()
@@ -654,6 +776,8 @@ local function buildBlocks()
     renderResources()
     computeMovement()
     renderMovement()
+    updateCooldowns()
+    renderCooldowns()
 end
 
 local function onLatencyTick()
@@ -671,6 +795,10 @@ local function onLatencyTick()
     -- with the status block when the beacon is hidden entirely.
     computeMovement()
     renderMovement()
+    -- Cooldowns are polled rather than evented: the game fires no per-slot
+    -- cooldown notification, and a running cooldown changes on every tick anyway.
+    updateCooldowns()
+    renderCooldowns()
 end
 
 local function onAddOnLoaded(_, name)
@@ -715,6 +843,8 @@ local function onAddOnLoaded(_, name)
         renderResources()
         computeMovement()
         renderMovement()
+        updateCooldowns()
+        renderCooldowns()
     end)
 end
 

@@ -9,12 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The application shows how long each skill slot has left before it can be used
+  again, published by PixelBeacon as six new blocks (B10 to B15) covering the five
+  skills and the ultimate. The Skills grid gains a Cooldown column. Nothing acts
+  on the values; they are observables, like combat state. Addon version advances
+  to 11 (issue #18).
+
+  The reason to add this signal rather than another is that the weave engine
+  currently guesses at exactly this information: the global cooldown is a fixed
+  setting and the per-weapon heavy-attack delays are, by the admission of the
+  comment beside them, community estimates never validated in game. The game knows
+  the real answer per slot and had never been asked.
+
 - The application shows whether the player is mounted, published by PixelBeacon
   as a tenth block (B9). Nothing acts on the value; it is an observable, like
   combat state. Addon version advances to 10 (issue #11).
 
 ### Decisions
 
+- 2026-07-27: The cooldown blocks cover six slots, not the seven the application
+  displays. Synergy gets no block. This was settled by checking the game's own
+  action bar, which iterates its slots from the first normal slot index through
+  the ultimate slot index; Synergy is outside that range because it is a
+  contextual prompt rather than an action slot, so there is no cooldown to read in
+  any state. A seventh permanently-unavailable block would have cost a square, a
+  marker, a permanently muted interface cell, and would have pushed the grid onto
+  a second row to carry nothing. The Synergy row simply shows a dash.
+- 2026-07-27: The six cooldown markers are `0x0B`, `0x21`, `0x4E`, `0x92`, `0xC6`,
+  and `0xE8`, the midpoints of the six widest gaps left in the block-centre green
+  registry. This puts the minimum separation across the whole registry at 11,
+  five and a half times the default tolerance, which is tighter than the 22 a
+  single added marker achieved and is the honest price of adding six at once: with
+  seventeen values in a 256-wide channel and the incumbents fixed, 11 is the best
+  achievable minimum. Six distinct markers rather than one shared marker, because
+  six adjacent blocks carrying the same kind of value are exactly where an
+  off-by-one geometry error would otherwise decode a neighbour's cooldown as this
+  slot's, silently and plausibly.
+- 2026-07-27: The block count now equals the column count exactly: the grid fills
+  one row completely and the next block added anywhere wraps onto a second row.
+  The compile-time assertion that the count does not exceed the column count is
+  deliberately left in force rather than relaxed. It now sits at its limit with no
+  margin, which is precisely when it becomes valuable, and the slice that adds the
+  seventeenth block is the one that should be told.
 - 2026-07-27: Issue #11 asked for one block covering mounted and sprinting, and
   made verifying the sprint observable a blocking entry condition. The
   verification is done and conclusive: the game exposes no sprint state to an

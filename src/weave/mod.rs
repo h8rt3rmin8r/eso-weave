@@ -17,7 +17,8 @@ use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, MovementSignal, ResourceSet, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, ResourceSet,
+    WeaponBarSignal, WeaponClass,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -219,6 +220,7 @@ pub struct WeaveEngine {
     back_class: WeaponClass,
     combat: CombatSignal,
     movement: MovementSignal,
+    cooldowns: CooldownSet,
     menu: MenuSurface,
     resources: ResourceSet,
 }
@@ -237,6 +239,7 @@ impl WeaveEngine {
             back_class: WeaponClass::Unknown,
             combat: CombatSignal::Unknown,
             movement: MovementSignal::Unknown,
+            cooldowns: CooldownSet::new_unknown(),
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
         }
@@ -274,6 +277,22 @@ impl WeaveEngine {
     /// The last decoded movement state.
     pub fn movement(&self) -> MovementSignal {
         self.movement
+    }
+
+    /// Records the decoded slot cooldowns, for display only.
+    ///
+    /// Inert for the same reasons as [`Self::set_combat`]: nothing in this engine
+    /// reads them, and no timing, input, or fishing behavior depends on them.
+    /// They are stored here on the expectation that a later feature schedules
+    /// against real cooldowns instead of the estimated presets, and wiring that up
+    /// has to be a deliberate change that breaks a test rather than an accident.
+    pub fn set_cooldowns(&mut self, cooldowns: CooldownSet) {
+        self.cooldowns = cooldowns;
+    }
+
+    /// The last decoded slot cooldowns.
+    pub fn cooldowns(&self) -> CooldownSet {
+        self.cooldowns
     }
 
     /// Records the decoded game UI surface, for display only.

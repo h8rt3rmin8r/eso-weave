@@ -29,7 +29,8 @@ use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, MovementSignal, ResourceLevel, ResourceSet, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, ResourceLevel, ResourceSet,
+    SlotCooldown, WeaponClass,
 };
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
@@ -394,6 +395,57 @@ pub fn resources_view(set: ResourceSet) -> ResourcesView {
     }
 }
 
+/// A normalized view of one slot's cooldown for the skills region.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CooldownView {
+    /// The cooldown display text.
+    pub text: String,
+    /// The palette role for the field.
+    pub role: StatusRole,
+}
+
+/// Derives the cooldown view from one decoded slot value.
+///
+/// A running cooldown is shown to a tenth of a second, which is finer than the
+/// operator can act on but coarse enough to read at a glance; the encoded
+/// resolution is finer still, so nothing is rounded that a later consumer needs.
+/// The unknown case renders as the same muted placeholder the other decoded
+/// readouts use, and covers both an absent block and a slot the game reports no
+/// cooldown for, which is why the Synergy row shows it permanently.
+pub fn cooldown_view(cooldown: SlotCooldown) -> CooldownView {
+    match cooldown {
+        SlotCooldown::Ready => CooldownView {
+            text: "Ready".to_string(),
+            role: StatusRole::Active,
+        },
+        SlotCooldown::RemainingMs(ms) => CooldownView {
+            text: format!("{:.1}s", f32::from(ms) / 1000.0),
+            role: StatusRole::Warning,
+        },
+        SlotCooldown::Unknown => CooldownView {
+            text: "-".to_string(),
+            role: StatusRole::Muted,
+        },
+    }
+}
+
+/// The decoded cooldown for one application slot index, or unknown for a slot the
+/// game exposes none for.
+///
+/// Slot 7 is Synergy, which is a contextual prompt rather than an action slot, so
+/// the game reports no cooldown for it in any state and it has no beacon block.
+fn cooldown_for_slot(cooldowns: CooldownSet, index: u8) -> SlotCooldown {
+    match index {
+        1 => cooldowns.skill_1,
+        2 => cooldowns.skill_2,
+        3 => cooldowns.skill_3,
+        4 => cooldowns.skill_4,
+        5 => cooldowns.skill_5,
+        6 => cooldowns.ultimate,
+        _ => SlotCooldown::Unknown,
+    }
+}
+
 /// A view of one skill slot for the skills region.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillRow {
@@ -413,6 +465,8 @@ pub struct SkillRow {
     pub override_d_bash: Option<u32>,
     /// Whether the delay for this row's weave type is overridden.
     pub is_override: bool,
+    /// The decoded cooldown for this slot.
+    pub cooldown: CooldownView,
     /// The delay in effect for this row's weave type: the override when set,
     /// otherwise the global default for that weave type.
     pub effective_delay: u32,
@@ -446,7 +500,7 @@ pub fn override_edit_for(weave_type: WeaveType, value: Option<u32>) -> SkillEdit
 }
 
 /// Derives the skill rows from the weave configuration.
-pub fn skill_rows(config: &WeaveConfig) -> Vec<SkillRow> {
+pub fn skill_rows(config: &WeaveConfig, cooldowns: CooldownSet) -> Vec<SkillRow> {
     config
         .slots
         .iter()
@@ -454,6 +508,7 @@ pub fn skill_rows(config: &WeaveConfig) -> Vec<SkillRow> {
             let over = override_for(&slot.overrides, slot.weave_type);
             SkillRow {
                 index: slot.index,
+                cooldown: cooldown_view(cooldown_for_slot(cooldowns, slot.index)),
                 label: slot_label(slot.index),
                 active: slot.active,
                 weave_type: slot.weave_type,
@@ -925,9 +980,10 @@ impl AppModel {
             (fishing.state(), fishing.stop_reason())
         };
         let (skills, active_bar, classes, combat, movement, menu, resources) = {
+            let cooldowns = self.weave.lock().unwrap().cooldowns();
             let weave = self.weave.lock().unwrap();
             (
-                skill_rows(weave.config()),
+                skill_rows(weave.config(), cooldowns),
                 weave.active_bar(),
                 weave.weapon_classes(),
                 weave.combat(),

@@ -982,6 +982,14 @@ impl EsoWeaveApp {
                         )
                         .on_hover_text(tip);
                     }
+
+                    // Cooldown: read-only, from the beacon. The Synergy row always
+                    // shows the muted placeholder, because the game exposes no
+                    // cooldown for a contextual prompt and it has no block.
+                    let cd = &row.cooldown;
+                    let cd_color = crate::app::theme::status_color(&palette, cd.role);
+                    ui.label(egui::RichText::new(&cd.text).color(cd_color))
+                        .on_hover_text(strings::SKILL_COLUMNS[5].1);
                     ui.end_row();
                 }
             });

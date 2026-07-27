@@ -74,7 +74,7 @@ pub const SKILLS_TOOLTIP: &str =
     "Per-slot weave configuration: which slots are active, their weave type, and any delay override.";
 
 /// The Skills grid columns as (header label, tooltip), left to right.
-pub const SKILL_COLUMNS: [(&str, &str); 5] = [
+pub const SKILL_COLUMNS: [(&str, &str); 6] = [
     ("Skill", "The action slot this row configures."),
     ("Enabled", "Whether this slot takes part in the weave."),
     (
@@ -88,6 +88,10 @@ pub const SKILL_COLUMNS: [(&str, &str); 5] = [
     (
         "Delay (ms)",
         "The delay in milliseconds in effect for this slot: the override when set, otherwise the global default.",
+    ),
+    (
+        "Cooldown",
+        "How long this slot has left before it can be used again, read from the Pixel Beacon addon. Requires addon version 11 or later; shows a dash without a signal. Synergy always shows a dash because the game exposes no cooldown for it. Nothing in the application acts on this yet.",
     ),
 ];
 

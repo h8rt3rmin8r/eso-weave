@@ -60,14 +60,13 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_ten() {
-    // Slice 036 adds the movement block (B9), so an operator running version 9
-    // draws no tenth block and the companion must report movement as unavailable
-    // rather than guess. The bump is what makes the beacon manager offer them the
-    // update. Slice 035 bumped to 9 for the grid wrap, which is why the wrapping
-    // logic is already deployed and this slice inherits a working grid.
-    assert_eq!(embedded_version(), 10);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(10));
+fn embedded_manifest_version_is_eleven() {
+    // Slice 037 adds the six cooldown blocks (B10 to B15), so an operator running
+    // version 10 draws none of them and the companion must report every slot as
+    // unavailable rather than guess. The bump is what makes the beacon manager
+    // offer them the update.
+    assert_eq!(embedded_version(), 11);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(11));
 }
 
 #[test]
@@ -656,6 +655,36 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(
         beacon::parse_lua_constant(lua, "MOVEMENT_MOUNTED_RED"),
         Some(0x60)
+    );
+    // Slice 037: the six cooldown marks and the quantization contract. The marks
+    // are the midpoints of the six widest gaps left in the green registry; the
+    // expected values are the contract in
+    // specs/037-cooldown-blocks/contracts/cooldown-blocks.md.
+    for (name, expected) in [
+        ("COOLDOWN_SKILL1_MARKER", 0x0B),
+        ("COOLDOWN_SKILL2_MARKER", 0x21),
+        ("COOLDOWN_SKILL3_MARKER", 0x4E),
+        ("COOLDOWN_SKILL4_MARKER", 0x92),
+        ("COOLDOWN_SKILL5_MARKER", 0xC6),
+        ("COOLDOWN_ULTIMATE_MARKER", 0xE8),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            Some(expected),
+            "the addon and the companion disagree on {name}"
+        );
+    }
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "COOLDOWN_STEP_MS"),
+        Some(50)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "COOLDOWN_MAX_STEPS"),
+        Some(254)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "COOLDOWN_UNAVAILABLE"),
+        Some(255)
     );
 }
 

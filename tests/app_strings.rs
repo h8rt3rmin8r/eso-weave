@@ -30,7 +30,11 @@ fn settings_labels_and_help_are_present() {
 
 #[test]
 fn skill_columns_have_headers_and_tooltips() {
-    assert_eq!(strings::SKILL_COLUMNS.len(), 5);
+    // Six since slice 037 added the Cooldown column. This count is pinned on
+    // purpose: the skills grid is the widest content-sized block in the window, so
+    // a column added without thinking changes the window's intrinsic width, which
+    // is what `tests/app_ui_sizing.rs` then has to account for.
+    assert_eq!(strings::SKILL_COLUMNS.len(), 6);
     for (header, tip) in strings::SKILL_COLUMNS {
         assert!(!header.is_empty());
         assert!(!header.contains('_'));

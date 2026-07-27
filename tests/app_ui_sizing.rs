@@ -224,6 +224,47 @@ fn content_fits_within_the_enforced_minimum() {
     );
 }
 
+/// Slice 037: the skills grid gained a Cooldown column, and that grid is the
+/// widest content-sized block in the window, so it is what the intrinsic width is
+/// computed from.
+///
+/// This is the assertion that would have caught the column being added without
+/// anyone thinking about the window: it pins the relationship between the column
+/// count and the enforced minimum, rather than trusting that a wider grid happens
+/// to still fit. The bound is deliberately loose, because the point is to catch a
+/// column being added while the minimum stays put, not to freeze a pixel width
+/// that legitimate styling changes would move.
+#[test]
+fn the_enforced_minimum_accounts_for_every_skills_column() {
+    use eso_weave::app::strings;
+
+    let app = render_at(egui::vec2(1200.0, 1000.0), SETTLE);
+    let extent = app.content_extent();
+    let sent = app
+        .last_min_sent()
+        .expect("a minimum should have been sent");
+
+    assert_eq!(
+        strings::SKILL_COLUMNS.len(),
+        6,
+        "this test is calibrated against the shipping column count"
+    );
+
+    // Every column needs somewhere to be drawn, so the intrinsic width cannot be
+    // narrower than the columns require, and the enforced minimum cannot be
+    // narrower than the intrinsic width.
+    let columns = strings::SKILL_COLUMNS.len() as f32;
+    assert!(
+        extent.x > columns * 40.0,
+        "intrinsic width {} is too narrow to hold {columns} skills columns",
+        extent.x
+    );
+    assert!(
+        sent.x >= extent.x - 0.5,
+        "the enforced minimum {sent:?} does not cover the widened skills grid {extent:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // US2 / issue #13: the live log pane never covers an interactive control.
 // ---------------------------------------------------------------------------

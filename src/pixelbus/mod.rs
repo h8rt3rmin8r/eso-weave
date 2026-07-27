@@ -332,6 +332,86 @@ const MOVEMENT_SPRINT_ON_FOOT_RED: u8 = 0xA0;
 /// Reserved for the deferred sprint axis, mounted. Code `0b11`.
 const MOVEMENT_SPRINT_MOUNTED_RED: u8 = 0xE0;
 
+/// One skill slot's cooldown, decoded from its block.
+///
+/// [`SlotCooldown::Ready`] is a distinct variant rather than a zero duration so
+/// that "usable now" cannot be confused with "a duration that rounds to zero",
+/// and so a consumer can match on readiness without a comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SlotCooldown {
+    /// The cooldown could not be read, or the game reports none for this slot.
+    #[default]
+    Unknown,
+    /// The slot is off cooldown.
+    Ready,
+    /// Milliseconds remaining, quantized to [`COOLDOWN_STEP_MS`] steps and
+    /// saturating at `COOLDOWN_STEP_MS * COOLDOWN_MAX_STEPS`.
+    RemainingMs(u16),
+}
+
+/// The six action slots the game exposes a cooldown for, as one value, so they
+/// travel and are stored together.
+///
+/// Synergy has no field. It is a contextual prompt rather than an action slot,
+/// so the game reports no cooldown for it in any state; see
+/// `specs/037-cooldown-blocks/research.md` R1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CooldownSet {
+    /// Skill slot 1.
+    pub skill_1: SlotCooldown,
+    /// Skill slot 2.
+    pub skill_2: SlotCooldown,
+    /// Skill slot 3.
+    pub skill_3: SlotCooldown,
+    /// Skill slot 4.
+    pub skill_4: SlotCooldown,
+    /// Skill slot 5.
+    pub skill_5: SlotCooldown,
+    /// The ultimate slot.
+    pub ultimate: SlotCooldown,
+}
+
+impl CooldownSet {
+    /// A set in which every slot is unknown.
+    pub fn new_unknown() -> Self {
+        Self::default()
+    }
+}
+
+/// The green markers identifying each cooldown sample.
+///
+/// Chosen as the midpoints of the six widest gaps left in
+/// [`BLOCK_CENTER_GREENS`], which puts the minimum separation across the whole
+/// registry at 11, five and a half times the default tolerance. That is tighter
+/// than a single added mark can achieve, and it is the honest price of adding six
+/// at once: with seventeen values in a 256-wide channel and the incumbents fixed,
+/// 11 is the best achievable minimum.
+///
+/// Six distinct marks rather than one shared mark, because six adjacent squares
+/// carrying the same kind of value are exactly where a geometry error off by one
+/// block would otherwise decode a neighbour's cooldown as this slot's, silently
+/// and plausibly.
+const COOLDOWN_SKILL1_MARKER: u8 = 0x0B;
+/// The green marker identifying the skill 2 cooldown sample.
+const COOLDOWN_SKILL2_MARKER: u8 = 0x21;
+/// The green marker identifying the skill 3 cooldown sample.
+const COOLDOWN_SKILL3_MARKER: u8 = 0x4E;
+/// The green marker identifying the skill 4 cooldown sample.
+const COOLDOWN_SKILL4_MARKER: u8 = 0x92;
+/// The green marker identifying the skill 5 cooldown sample.
+const COOLDOWN_SKILL5_MARKER: u8 = 0xC6;
+/// The green marker identifying the ultimate cooldown sample.
+const COOLDOWN_ULTIMATE_MARKER: u8 = 0xE8;
+/// Milliseconds per encoded step.
+const COOLDOWN_STEP_MS: u16 = 50;
+/// The largest encodable step count. A longer cooldown saturates here rather than
+/// wrapping, so it reads as "at least this long" instead of as a small number.
+const COOLDOWN_MAX_STEPS: u8 = 254;
+/// The payload the addon publishes when a slot is empty or the game reports no
+/// cooldown. Like [`RESOURCE_UNAVAILABLE`] it passes the marker and checksum
+/// checks and fails the range check, so it needs no special case in the decoder.
+const COOLDOWN_UNAVAILABLE: u8 = 255;
+
 /// Every green-channel value that appears at the center of a beacon block, with
 /// the block it belongs to.
 ///
@@ -340,7 +420,7 @@ const MOVEMENT_SPRINT_MOUNTED_RED: u8 = 0xE0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 11] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 17] = [
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
@@ -352,6 +432,12 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 11] = [
     ("B7 stamina marker", STAMINA_MARKER),
     ("B8 magicka marker", MAGICKA_MARKER),
     ("B9 movement marker", MOVEMENT_MARKER),
+    ("B10 cooldown skill 1 marker", COOLDOWN_SKILL1_MARKER),
+    ("B11 cooldown skill 2 marker", COOLDOWN_SKILL2_MARKER),
+    ("B12 cooldown skill 3 marker", COOLDOWN_SKILL3_MARKER),
+    ("B13 cooldown skill 4 marker", COOLDOWN_SKILL4_MARKER),
+    ("B14 cooldown skill 5 marker", COOLDOWN_SKILL5_MARKER),
+    ("B15 cooldown ultimate marker", COOLDOWN_ULTIMATE_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -386,6 +472,10 @@ pub enum PixelBusEvent {
     /// A change in the decoded movement state. Nothing acts on it; it is an
     /// observable, like combat state.
     Movement(MovementSignal),
+    /// A change in any decoded slot cooldown. Carries all six, so a single weave
+    /// that moves several slots is one event rather than six, following the
+    /// resource blocks.
+    Cooldowns(CooldownSet),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -419,6 +509,18 @@ pub struct BlockSamples {
     pub magicka: Option<Rgb>,
     /// B9, the movement block.
     pub movement: Option<Rgb>,
+    /// B10, the skill 1 cooldown block.
+    pub cooldown_skill_1: Option<Rgb>,
+    /// B11, the skill 2 cooldown block.
+    pub cooldown_skill_2: Option<Rgb>,
+    /// B12, the skill 3 cooldown block.
+    pub cooldown_skill_3: Option<Rgb>,
+    /// B13, the skill 4 cooldown block.
+    pub cooldown_skill_4: Option<Rgb>,
+    /// B14, the skill 5 cooldown block.
+    pub cooldown_skill_5: Option<Rgb>,
+    /// B15, the ultimate cooldown block.
+    pub cooldown_ultimate: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -513,7 +615,7 @@ impl SurfaceSampler for MockSampler {
 
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
 /// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka,
-/// B9 movement.
+/// B9 movement, B10 to B15 skill cooldowns.
 ///
 /// This is the companion's single statement of the strip length; the drawn width
 /// and the capture region both derive from it. The addon states the same number
@@ -521,7 +623,7 @@ impl SurfaceSampler for MockSampler {
 /// asserts the two agree by parsing the embedded addon source. Adding a block is
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
-pub const NUM_BLOCKS: u32 = 10;
+pub const NUM_BLOCKS: u32 = 16;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -686,6 +788,30 @@ impl ReaderConfig {
     /// The movement block (B9) sample point, derived from `block_px`.
     pub fn movement_point(&self) -> (u32, u32) {
         block_center(self.block_px, 9)
+    }
+    /// The skill 1 cooldown block (B10) sample point, derived from `block_px`.
+    pub fn cooldown_skill_1_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 10)
+    }
+    /// The skill 2 cooldown block (B11) sample point, derived from `block_px`.
+    pub fn cooldown_skill_2_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 11)
+    }
+    /// The skill 3 cooldown block (B12) sample point, derived from `block_px`.
+    pub fn cooldown_skill_3_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 12)
+    }
+    /// The skill 4 cooldown block (B13) sample point, derived from `block_px`.
+    pub fn cooldown_skill_4_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 13)
+    }
+    /// The skill 5 cooldown block (B14) sample point, derived from `block_px`.
+    pub fn cooldown_skill_5_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 14)
+    }
+    /// The ultimate cooldown block (B15) sample point, derived from `block_px`.
+    pub fn cooldown_ultimate_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 15)
     }
 }
 
@@ -995,6 +1121,82 @@ pub fn decode_resources(
     }
 }
 
+/// Decodes one cooldown block against its marker.
+///
+/// Validation follows [`decode_resource`]: the marker and the `red + blue`
+/// complement are checked within tolerance, then the red channel is read as a
+/// step count. Any failure yields [`SlotCooldown::Unknown`]; there is no nearest
+/// match and no default to ready, so an addon older than version 11 (which draws
+/// no cooldown blocks) and any unrelated screen content behind those points can
+/// never be read as a cooldown.
+///
+/// The step count saturates at [`COOLDOWN_MAX_STEPS`] rather than wrapping, so a
+/// cooldown longer than the encodable range reads as "at least this long" instead
+/// of as a small number.
+pub fn decode_cooldown(sample: Rgb, marker: u8, tolerance: u8) -> SlotCooldown {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, marker, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        return SlotCooldown::Unknown;
+    }
+    match sample.r {
+        COOLDOWN_UNAVAILABLE => SlotCooldown::Unknown,
+        0 => SlotCooldown::Ready,
+        steps => {
+            SlotCooldown::RemainingMs(u16::from(steps.min(COOLDOWN_MAX_STEPS)) * COOLDOWN_STEP_MS)
+        }
+    }
+}
+
+/// Names the slots whose cooldown changed between two sets, for the log entry.
+///
+/// One entry per changed sample naming only what moved, rather than all six every
+/// time. Six slots change constantly during combat, so an entry that always
+/// listed all of them would bury the change it exists to make visible, and an
+/// entry that said only "cooldowns changed" would be useless for confirming the
+/// signal in the field.
+fn changed_cooldown_slots(previous: CooldownSet, current: CooldownSet) -> String {
+    let mut names = Vec::new();
+    for (name, before, after) in [
+        ("skill1", previous.skill_1, current.skill_1),
+        ("skill2", previous.skill_2, current.skill_2),
+        ("skill3", previous.skill_3, current.skill_3),
+        ("skill4", previous.skill_4, current.skill_4),
+        ("skill5", previous.skill_5, current.skill_5),
+        ("ultimate", previous.ultimate, current.ultimate),
+    ] {
+        if before != after {
+            names.push(name);
+        }
+    }
+    names.join(",")
+}
+
+/// Decodes the six cooldown blocks into one set, each against its own marker.
+#[allow(clippy::too_many_arguments)]
+pub fn decode_cooldowns(
+    skill_1: Option<Rgb>,
+    skill_2: Option<Rgb>,
+    skill_3: Option<Rgb>,
+    skill_4: Option<Rgb>,
+    skill_5: Option<Rgb>,
+    ultimate: Option<Rgb>,
+    tolerance: u8,
+) -> CooldownSet {
+    let decode = |sample: Option<Rgb>, marker: u8| {
+        sample.map_or(SlotCooldown::Unknown, |c| {
+            decode_cooldown(c, marker, tolerance)
+        })
+    };
+    CooldownSet {
+        skill_1: decode(skill_1, COOLDOWN_SKILL1_MARKER),
+        skill_2: decode(skill_2, COOLDOWN_SKILL2_MARKER),
+        skill_3: decode(skill_3, COOLDOWN_SKILL3_MARKER),
+        skill_4: decode(skill_4, COOLDOWN_SKILL4_MARKER),
+        skill_5: decode(skill_5, COOLDOWN_SKILL5_MARKER),
+        ultimate: decode(ultimate, COOLDOWN_ULTIMATE_MARKER),
+    }
+}
+
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
@@ -1006,6 +1208,7 @@ pub struct PixelBusReader {
     menu: MenuSurface,
     resources: ResourceSet,
     movement: MovementSignal,
+    cooldowns: CooldownSet,
     had_heartbeat: bool,
 }
 
@@ -1022,6 +1225,7 @@ impl PixelBusReader {
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
             movement: MovementSignal::Unknown,
+            cooldowns: CooldownSet::new_unknown(),
             had_heartbeat: false,
         }
     }
@@ -1045,6 +1249,12 @@ impl PixelBusReader {
             stamina: b7,
             magicka: b8,
             movement: b9,
+            cooldown_skill_1: b10,
+            cooldown_skill_2: b11,
+            cooldown_skill_3: b12,
+            cooldown_skill_4: b13,
+            cooldown_skill_5: b14,
+            cooldown_ultimate: b15,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -1160,6 +1370,22 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Movement(movement));
             }
 
+            // The six cooldown blocks travel as one set, following the resource
+            // blocks: a single weave can move most of them within one sample, and
+            // six events plus six log lines for one action would bury the signal
+            // this block exists to make visible.
+            let cooldowns = decode_cooldowns(b10, b11, b12, b13, b14, b15, tolerance);
+            if cooldowns != self.cooldowns {
+                let previous = self.cooldowns;
+                self.cooldowns = cooldowns;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    changed = %changed_cooldown_slots(previous, cooldowns),
+                    "slot cooldowns detected"
+                );
+                events.push(PixelBusEvent::Cooldowns(cooldowns));
+            }
+
             // The menu block gates input, so a sample that does not decode must
             // clear it rather than hold it: holding a stale gate would leave the
             // application silently not intercepting long after the menu closed,
@@ -1220,6 +1446,11 @@ impl PixelBusReader {
                     self.movement = MovementSignal::Unknown;
                     events.push(PixelBusEvent::Movement(MovementSignal::Unknown));
                 }
+                let cleared_cooldowns = CooldownSet::new_unknown();
+                if self.cooldowns != cleared_cooldowns {
+                    self.cooldowns = cleared_cooldowns;
+                    events.push(PixelBusEvent::Cooldowns(cleared_cooldowns));
+                }
             }
         }
 
@@ -1244,6 +1475,12 @@ impl PixelBusReader {
         let (tx, ty) = self.config.stamina_point();
         let (gx, gy) = self.config.magicka_point();
         let (vx, vy) = self.config.movement_point();
+        let (c1x, c1y) = self.config.cooldown_skill_1_point();
+        let (c2x, c2y) = self.config.cooldown_skill_2_point();
+        let (c3x, c3y) = self.config.cooldown_skill_3_point();
+        let (c4x, c4y) = self.config.cooldown_skill_4_point();
+        let (c5x, c5y) = self.config.cooldown_skill_5_point();
+        let (cux, cuy) = self.config.cooldown_ultimate_point();
         let samples = BlockSamples {
             status: sampler.sample(sx, sy),
             fishing: sampler.sample(fx, fy),
@@ -1255,6 +1492,12 @@ impl PixelBusReader {
             stamina: sampler.sample(tx, ty),
             magicka: sampler.sample(gx, gy),
             movement: sampler.sample(vx, vy),
+            cooldown_skill_1: sampler.sample(c1x, c1y),
+            cooldown_skill_2: sampler.sample(c2x, c2y),
+            cooldown_skill_3: sampler.sample(c3x, c3y),
+            cooldown_skill_4: sampler.sample(c4x, c4y),
+            cooldown_skill_5: sampler.sample(c5x, c5y),
+            cooldown_ultimate: sampler.sample(cux, cuy),
         };
         self.observe(samples, now_ms)
     }
