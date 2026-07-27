@@ -111,3 +111,37 @@ fn settings_form_round_trips_custom_values() {
     assert_eq!(loaded.weave.timing.d_weave, 77);
     assert!(!loaded.weave.slots[0].active);
 }
+
+// Slice 038: the overlay footprint caption beside the block-size setting.
+
+#[test]
+fn the_footprint_caption_follows_the_block_size() {
+    use eso_weave::app::grid_footprint_caption;
+    use eso_weave::pixelbus::{grid_extent, COLUMNS, NUM_BLOCKS};
+
+    // At every supported size the caption states the extent the reader and the
+    // addon actually use, rather than a number written beside them.
+    for block_px in [2u32, 4, 8, 16, 32] {
+        let caption = grid_footprint_caption(block_px);
+        let extent = grid_extent(block_px, NUM_BLOCKS, COLUMNS);
+        assert!(
+            caption.contains(&format!("{} by {} pixels", extent.width, extent.height)),
+            "caption at block_px {block_px} does not state the real extent: {caption}"
+        );
+        assert!(
+            caption.contains(&format!("{NUM_BLOCKS} squares")),
+            "caption at block_px {block_px} does not state the block count: {caption}"
+        );
+    }
+
+    // And it really does move with the setting, which is the whole point of
+    // showing it beside the control rather than in a fixed help string.
+    assert_ne!(grid_footprint_caption(2), grid_footprint_caption(32));
+
+    // The shipped default, spelled out: two rows, 256 by 32 physical pixels.
+    let default = grid_footprint_caption(16);
+    assert!(
+        default.contains("2 rows") && default.contains("256 by 32 pixels"),
+        "the default footprint should be two rows of 256 by 32: {default}"
+    );
+}

@@ -29,8 +29,8 @@ use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, ResourceLevel, ResourceSet,
-    SlotCooldown, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState,
+    ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
 };
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
@@ -429,6 +429,80 @@ pub fn cooldown_view(cooldown: SlotCooldown) -> CooldownView {
     }
 }
 
+/// A one-line description of the beacon overlay's footprint at a given square
+/// size: how many squares, how they are arranged, and the physical pixels they
+/// cover.
+///
+/// This exists because slice 038 doubled the overlay's height, taking it onto a
+/// second row for the first time, and an operator should be able to learn what it
+/// covers from the application rather than by measuring their own screen. It is
+/// shown beside the square-size setting, which is where someone stands when they
+/// want the overlay smaller, and it follows the value being edited rather than the
+/// value in effect.
+///
+/// Pure, so the arithmetic is testable without a frame. Derived from the same
+/// [`pixelbus::grid_extent`] the reader and the addon use, so it cannot describe a
+/// grid other than the one actually drawn.
+pub fn grid_footprint_caption(block_px: u32) -> String {
+    let extent = crate::pixelbus::grid_extent(
+        block_px,
+        crate::pixelbus::NUM_BLOCKS,
+        crate::pixelbus::COLUMNS,
+    );
+    let rows = crate::pixelbus::grid_rows(crate::pixelbus::NUM_BLOCKS, crate::pixelbus::COLUMNS);
+    // Deliberately one short line. The settings body is bounded by FR-017 (at
+    // least half of it visible at the modal maximum), and a caption that wrapped
+    // to three lines pushed it past that bound.
+    format!(
+        "Overlay: {} squares, {} rows, {} by {} pixels.",
+        crate::pixelbus::NUM_BLOCKS,
+        rows,
+        extent.width,
+        extent.height
+    )
+}
+
+/// A normalized view of the decoded quickslot for the status region.
+///
+/// Two independently degrading halves rather than one string. The state where the
+/// cooldown decodes and the identity does not is reachable whenever exactly one
+/// of the three identity blocks is disturbed, and collapsing the whole readout to
+/// unknown there would discard a value that was read correctly and make a
+/// one-block disturbance look identical to a missing addon.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuickslotView {
+    /// The quickslot cooldown field.
+    pub cooldown: CooldownView,
+    /// The slotted item's identity field.
+    pub identity: CooldownView,
+}
+
+/// Derives the quickslot view from the decoded state.
+///
+/// The cooldown half reuses [`cooldown_view`] outright, so the quickslot and the
+/// skill slots read identically for identical values.
+///
+/// The identity is shown as the game's own number, with no name lookup. Showing a
+/// name would need a bundled item table, which would be locale-dependent, would go
+/// stale every patch, and would be a large data dependency added for a readout
+/// with no consumer. The number is enough for what the readout is for: confirming
+/// the signal is live in the field, and seeing that a swap was noticed.
+pub fn quickslot_view(state: QuickslotState) -> QuickslotView {
+    QuickslotView {
+        cooldown: cooldown_view(state.cooldown),
+        identity: match state.item_id {
+            Some(id) => CooldownView {
+                text: id.to_string(),
+                role: StatusRole::Active,
+            },
+            None => CooldownView {
+                text: "-".to_string(),
+                role: StatusRole::Muted,
+            },
+        },
+    }
+}
+
 /// The decoded cooldown for one application slot index, or unknown for a slot the
 /// game exposes none for.
 ///
@@ -784,6 +858,8 @@ pub struct AppView {
     pub menu: MenuView,
     /// The detected resource levels.
     pub resources: ResourcesView,
+    /// The detected quickslot state.
+    pub quickslot: QuickslotView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -979,7 +1055,7 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason())
         };
-        let (skills, active_bar, classes, combat, movement, menu, resources) = {
+        let (skills, active_bar, classes, combat, movement, menu, resources, quickslot) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
             let weave = self.weave.lock().unwrap();
             (
@@ -990,6 +1066,7 @@ impl AppModel {
                 weave.movement(),
                 weave.menu(),
                 weave.resources(),
+                weave.quickslot(),
             )
         };
         let suspended = self.input.is_suspended();
@@ -1010,6 +1087,7 @@ impl AppModel {
             movement: movement_view(movement),
             menu: menu_view(menu),
             resources: resources_view(resources),
+            quickslot: quickslot_view(quickslot),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }

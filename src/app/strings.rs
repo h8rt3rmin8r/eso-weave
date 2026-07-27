@@ -68,6 +68,14 @@ pub const MAGICKA_TITLE: &str = "Magicka";
 pub const RESOURCE_TOOLTIP: &str =
     "The pool as a percentage of its current maximum, read from the Pixel Beacon addon. Requires addon version 8 or later; shows Not detected without a signal. Nothing in the application acts on these yet.";
 
+// Quickslot section.
+pub const QUICKSLOT_TITLE: &str = "Quickslot";
+pub const QUICKSLOT_ITEM_TITLE: &str = "Quickslot item";
+pub const QUICKSLOT_TOOLTIP: &str =
+    "How long the active quickslot has before it can be used again, read from the Pixel Beacon addon. Requires addon version 12 or later. Shows a dash when the quickslot is empty, holds something that is not a potion, or cannot be read; those cases are deliberately not told apart. Nothing in the application acts on this yet.";
+pub const QUICKSLOT_ITEM_TOOLTIP: &str =
+    "The game's own numeric id for the item in the active quickslot, read from the Pixel Beacon addon. Shown as a number rather than a name because the game does not expose the name to the application. It is here so a swap is visible and the signal can be confirmed in the field. Shows a dash when there is nothing to identify or the id could not be read in full.";
+
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
 pub const SKILLS_TOOLTIP: &str =
@@ -187,7 +195,7 @@ pub const SET_BEACON_ENV: Setting = Setting {
 };
 pub const SET_BLOCK_PX: Setting = Setting {
     label: "Block size (px)",
-    help: "Advanced: the physical-pixel size of each beacon square. Smaller shrinks the on-screen overlay. Changing it re-deploys PixelBeacon and takes effect after a /reloadui and an app restart.",
+    help: "Advanced: the physical-pixel size of each beacon square, and the only way to shrink the on-screen overlay (which cannot be moved). Changing it re-deploys PixelBeacon and takes effect after a /reloadui and an app restart.",
 };
 pub const SET_TOLERANCE: Setting = Setting {
     label: "Color tolerance",
@@ -250,10 +258,13 @@ pub fn all_labels() -> Vec<&'static str> {
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,
         COMBAT_TITLE,
+        MOVEMENT_TITLE,
         MENU_TITLE,
         HEALTH_TITLE,
         STAMINA_TITLE,
         MAGICKA_TITLE,
+        QUICKSLOT_TITLE,
+        QUICKSLOT_ITEM_TITLE,
         SKILLS_TITLE,
         LOG_TITLE,
         MENU_FILE,
@@ -291,8 +302,11 @@ pub fn all_tooltips() -> Vec<&'static str> {
         BEACON_UNINSTALL_TOOLTIP,
         WEAPON_BAR_TOOLTIP,
         COMBAT_TOOLTIP,
+        MOVEMENT_TOOLTIP,
         MENU_TOOLTIP,
         RESOURCE_TOOLTIP,
+        QUICKSLOT_TOOLTIP,
+        QUICKSLOT_ITEM_TOOLTIP,
         SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,

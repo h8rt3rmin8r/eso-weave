@@ -126,6 +126,24 @@ fn log_row_height(ctx: &egui::Context) -> f32 {
         .unwrap_or(14.0)
 }
 
+/// The width (points) of the live-log panel's top separator stroke.
+///
+/// The bottom panel draws this stroke above the height egui is given, so the
+/// panel's outer rect is this much taller than the height it was asked for. The
+/// never-overlap boundary is about the outer rect, so the stroke has to come out
+/// of the bound. Read from the style rather than written as 1.0, so a theme that
+/// draws a thicker separator stays correct. Mirrors [`log_row_height`], which
+/// reads the dark style for the same reason: the value is identical in either
+/// theme.
+fn log_panel_separator(ctx: &egui::Context) -> f32 {
+    ctx.style_of(egui::Theme::Dark)
+        .visuals
+        .widgets
+        .noninteractive
+        .bg_stroke
+        .width
+}
+
 /// A dropdown preset to a fixed width, so its resting field does not track the
 /// selected option (which would reflow the rows below on selection or hover).
 fn combo(
@@ -455,7 +473,23 @@ impl EsoWeaveApp {
             // The non-overlap bound is unconditional: in a window too short for both
             // the content and a six-line log, the controls win and the pane gives up
             // its readable floor rather than covering them (issue #13, FR-010).
-            let no_overlap = crate::app::log_max_height_no_overlap(window_h, content_h);
+            //
+            // The panel's frame overhead is subtracted because the bound constrains
+            // the *inner* height egui is given, while the boundary is about the
+            // space the panel actually occupies. The frame adds an inner margin on
+            // the top and bottom edges plus the separator stroke above them, so a
+            // pane granted the whole remaining budget as inner height overruns the
+            // content by that overhead.
+            //
+            // This was latent from slice 030 until slice 038: the bound only binds
+            // when the content comes within the overhead of filling the window, and
+            // until four quickslot blocks added two status rows the content never
+            // did. Derived from the margin constant and the style rather than
+            // written as a number, so a theme change cannot silently reintroduce it.
+            let frame_overhead = 2.0 * crate::app::LOG_FRAME_MARGIN + log_panel_separator(&ctx);
+            let no_overlap = (crate::app::log_max_height_no_overlap(window_h, content_h)
+                - frame_overhead)
+                .max(0.0);
             let min_h = min_h.min(no_overlap);
             let max_h = (window_h - content_h).max(min_h).min(no_overlap);
             // Force the pane height on two kinds of frame: the first frame after
@@ -872,6 +906,29 @@ impl EsoWeaveApp {
                         .on_hover_text(strings::RESOURCE_TOOLTIP);
                     ui.end_row();
                 }
+
+                // The quickslot, as two rows rather than one. The cooldown and
+                // the identity are read from separate blocks and degrade
+                // separately, so one disturbed identity block costs the identity
+                // and leaves the cooldown showing what it correctly read.
+                for (title, tooltip, field) in [
+                    (
+                        strings::QUICKSLOT_TITLE,
+                        strings::QUICKSLOT_TOOLTIP,
+                        &view.quickslot.cooldown,
+                    ),
+                    (
+                        strings::QUICKSLOT_ITEM_TITLE,
+                        strings::QUICKSLOT_ITEM_TOOLTIP,
+                        &view.quickslot.identity,
+                    ),
+                ] {
+                    widgets::label_strong(ui, &palette, title).on_hover_text(tooltip);
+                    let color = crate::app::theme::status_color(&palette, field.role);
+                    ui.label(egui::RichText::new(field.text.clone()).color(color))
+                        .on_hover_text(tooltip);
+                    ui.end_row();
+                }
             });
 
         self.note_content_width(status.response.rect.width());
@@ -1261,6 +1318,15 @@ fn settings_body(
                 .response
                 .clickable();
         });
+        // The overlay's footprint at the size being edited, so the operator can see
+        // what the setting does to the thing on their screen without measuring it.
+        // Derived from the drafted value rather than the one in effect, because the
+        // question being asked here is what it will become.
+        widgets::muted_help(
+            ui,
+            palette,
+            &crate::app::grid_footprint_caption(draft.reader.block_px),
+        );
         setting(ui, palette, &strings::SET_TOLERANCE, |ui| {
             ui.add(egui::DragValue::new(&mut draft.reader.tolerance));
         });

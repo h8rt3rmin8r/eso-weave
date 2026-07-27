@@ -879,6 +879,40 @@ fn a_grid_larger_on_either_axis_exceeds() {
     }
 }
 
+/// Slice 038: a client area wide enough for the grid but too short for its second
+/// row must be reported.
+///
+/// Vertical overflow was unreachable for every count that shipped before this
+/// one, because the grid was a single block row tall and no supported client area
+/// is shorter than 32 pixels. It is reachable now. The symptom is the same one
+/// the whole check exists to name and is worse for being partial: the four
+/// quickslot blocks are drawn past the client edge, captured as black, fail their
+/// marker checks, and read as an addon that was never installed, while the
+/// sixteen blocks above them keep decoding perfectly.
+#[test]
+fn a_grid_too_short_for_its_second_row_exceeds() {
+    use eso_weave::pixelbus::{capture_dims, grid_fit, GridFit, COLUMNS, DEFAULT_BLOCK_PX};
+    let (grid_w, grid_h) = capture_dims(DEFAULT_BLOCK_PX);
+    let grid = Size::new(grid_w, grid_h);
+    assert_eq!(
+        grid_h,
+        DEFAULT_BLOCK_PX * 2,
+        "this test is about the second row; the grid should be two rows tall"
+    );
+
+    // Wide enough for a full row, one pixel short of two rows tall.
+    let surface = Size::new(DEFAULT_BLOCK_PX * COLUMNS, grid_h - 1);
+    assert_eq!(
+        grid_fit(grid, surface),
+        GridFit::Exceeds { grid, surface },
+        "a client area too short for row 1 must be reported"
+    );
+
+    // And exactly two rows tall fits, because equality on either axis fits.
+    let exact = Size::new(DEFAULT_BLOCK_PX * COLUMNS, grid_h);
+    assert_eq!(grid_fit(grid, exact), GridFit::Fits);
+}
+
 /// A measured descriptor of the given surface size, for the watch tests.
 fn measured_surface(w: u32, h: u32) -> DisplayDescriptor {
     DisplayDescriptor::from_measured(measured(w, h)).expect("descriptor")

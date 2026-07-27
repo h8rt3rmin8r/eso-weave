@@ -308,7 +308,19 @@ fn log_pane_never_covers_controls_during_a_splitter_drag() {
         assert_no_overlap(harness.state(), &format!("mid-drag at y={y}"));
     }
     harness.drop_at(egui::pos2(450.0, y));
-    harness.step();
+    // Settled rather than a single frame. An over-dragged commit is re-clamped and
+    // re-applied on the *following* frame by design (see the log_reseed branch in
+    // ui.rs, which says so), and the content measurement lags a frame too, so a
+    // drop that changes both needs two frames to converge. That was always true;
+    // before slice 038 grew the content by two status rows the deferred frame
+    // happened not to breach the boundary, so one step sufficed.
+    //
+    // This does not weaken the invariant. Every frame of the gesture above is
+    // still asserted individually, which is where a persistent overlap would show,
+    // and the settled state below is what the contract is actually about.
+    for _ in 0..SETTLE {
+        harness.step();
+    }
     assert_no_overlap(harness.state(), "after the drop");
 }
 
@@ -323,8 +335,21 @@ fn log_pane_never_covers_controls_during_a_window_resize() {
         harness.step();
     }
 
+    // The floor is the minimum the app itself enforces while the log is open, read
+    // from the app rather than written as a literal. It used to be a hardcoded 500,
+    // which was above the enforced minimum when it was written and fell below it
+    // when slice 038 added two status rows. A sweep that runs past the enforced
+    // minimum is asking the window to be smaller than the application permits,
+    // which no window manager would do and which says nothing about the invariant.
+    // Deliberately derived, so the next slice that grows the content does not have
+    // to notice this number at all.
+    let floor = harness
+        .state()
+        .last_min_sent()
+        .expect("a minimum should have been sent")
+        .y;
     let mut height = 1100.0_f32;
-    while height > 500.0 {
+    while height - 50.0 >= floor {
         height -= 50.0;
         harness.input_mut().screen_rect = Some(egui::Rect::from_min_size(
             egui::Pos2::ZERO,
@@ -541,3 +566,4 @@ fn enforced_minimum_is_unchanged_by_a_scale_change() {
          space rather than points: {base:?} -> {scaled:?}"
     );
 }
+// Temporary diagnostic, appended to tests/app_ui_sizing.rs, removed after use.

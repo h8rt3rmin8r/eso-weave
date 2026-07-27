@@ -1,22 +1,27 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders sixteen square blocks (BLOCK_PX physical pixels on a side, default
+-- It renders twenty square blocks (BLOCK_PX physical pixels on a side, default
 -- 16; the companion sets this value on deploy) anchored to the top-left of the
 -- client area, encoding load status (B0), fishing state (B1), server latency
 -- (B2), the active weapon bar with each bar's weapon class (B3), the player's
 -- combat state (B4), which native game UI surface is active (B5), the player's
 -- health, stamina, and magicka (B6 to B8), whether the player is mounted (B9),
--- and the remaining cooldown of each action slot the game exposes one for, the
--- five skills and the ultimate (B10 to B15).
+-- the remaining cooldown of each action slot the game exposes one for, the five
+-- skills and the ultimate (B10 to B15), and the active quickslot's remaining
+-- cooldown (B16) and item identity (B17 to B19).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
 -- section 10.3, the slice 014 weapon-bar block, the slice 031 combat block, the
 -- slice 032 menu block, the slice 033 resource blocks, the slice 036 movement
--- block, and the slice 037 cooldown blocks.
+-- block, the slice 037 cooldown blocks, and the slice 038 quickslot blocks.
 --
--- At sixteen blocks the grid exactly fills one row of COLUMNS. The next block
--- added wraps onto a second row.
+-- At twenty blocks the grid occupies two rows: row 0 is full at COLUMNS, and the
+-- four quickslot blocks are the first four positions of row 1. Slice 038 is the
+-- first shipping count to cross that boundary, so the overlay is twice as tall as
+-- it was. Nothing here needed changing for the crossing: the grid arithmetic has
+-- handled multiple rows since it was written, and every block position is a call
+-- to positionBlock with an index.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -28,7 +33,7 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 16
+local NUM_BLOCKS = 20
 -- The blocks in one row. Blocks wrap to the next row when a row is full, so the
 -- beacon grows downward and its width is bounded forever at BLOCK_PX * COLUMNS.
 -- The companion states the same number once as pixelbus::COLUMNS and its test
@@ -113,6 +118,37 @@ local COOLDOWN_UNAVAILABLE = 255
 -- The last rendered step count per slot, held so a block is redrawn only when its
 -- value actually changes. Empty until the first render.
 local cooldownSteps = {}
+
+-- The four quickslot block markers (green channel), shared byte for byte with the
+-- companion decoder.
+--
+-- B16 carries the remaining quickslot cooldown using the COOLDOWN_STEP_MS scheme
+-- above, reusing those three constants rather than defining quickslot-named
+-- copies: a second name for the same number is how two numbers eventually become
+-- different. COOLDOWN_UNAVAILABLE on this block means "empty, or not a usable
+-- potion", folding that flag into the payload the way RESOURCE_UNAVAILABLE
+-- already does rather than spending a whole block on one bit.
+--
+-- B17 to B19 carry the 24-bit item id, one byte each, most significant byte
+-- first, so the blocks read left to right in the order the number is written.
+-- Every byte value is legal, so these blocks have no reserved payload and their
+-- validity rests entirely on the marker and the complement checksum. That is
+-- exactly why each carries its own distinct marker: with a shared one, an
+-- off-by-one in the geometry would read the middle byte as the high byte and
+-- every check would still pass.
+--
+-- The marks are the midpoints of the four widest gaps left in the companion's
+-- block-centre green registry, leaving the minimum separation across the whole
+-- registry unchanged at 11.
+local QUICKSLOT_MARKER = 0x38
+local QUICKSLOT_ID_HI_MARKER = 0xB0
+local QUICKSLOT_ID_MID_MARKER = 0xDD
+local QUICKSLOT_ID_LO_MARKER = 0xF3
+
+-- The last rendered quickslot payloads, held so the blocks are redrawn only when
+-- a value actually changes. nil until the first render.
+local quickslotSteps = nil
+local quickslotId = nil
 
 -- The menu block marker (green channel) and its surface code spacing, shared byte
 -- for byte with the companion decoder. Red carries code * MENU_CODE_STEP, blue
@@ -496,6 +532,148 @@ local function renderCooldowns()
     end
 end
 
+-- B16 to B19 Quickslot ---------------------------------------------------------
+
+local QUICKSLOT_ID_BLOCK_KEYS = {
+    "quickslotIdHi",
+    "quickslotIdMid",
+    "quickslotIdLo",
+}
+
+local QUICKSLOT_ID_MARKERS = {
+    QUICKSLOT_ID_HI_MARKER,
+    QUICKSLOT_ID_MID_MARKER,
+    QUICKSLOT_ID_LO_MARKER,
+}
+
+-- The active quickslot as a step count and an item id, or the unavailable payload
+-- and a zero id when there is nothing usable in it.
+--
+-- Every failure here returns unavailable rather than guessing. That includes the
+-- two game globals: if HOTBAR_CATEGORY_QUICKSLOT_WHEEL or ITEMTYPE_POTION is ever
+-- renamed it arrives as nil rather than as an error, and passing a nil hotbar
+-- category would let the game resolve some other hotbar. The companion would then
+-- receive a valid, checksum-passing colour describing a slot nobody asked about,
+-- which is a false reading with full integrity checks behind it. Publishing
+-- unavailable costs the operator a muted readout and costs the consumer nothing,
+-- because its precondition is not met either way.
+local function computeQuickslot()
+    local hotbar = HOTBAR_CATEGORY_QUICKSLOT_WHEEL
+    if hotbar == nil or ITEMTYPE_POTION == nil then
+        return COOLDOWN_UNAVAILABLE, 0
+    end
+    local slot = GetCurrentQuickslot()
+    if slot == nil then
+        return COOLDOWN_UNAVAILABLE, 0
+    end
+    local link = GetSlotItemLink(slot, hotbar)
+    if link == nil or link == "" then
+        return COOLDOWN_UNAVAILABLE, 0
+    end
+    if GetItemLinkItemType(link) ~= ITEMTYPE_POTION then
+        return COOLDOWN_UNAVAILABLE, 0
+    end
+    -- A potion with no on-use ability is not something to fire a key at. This is
+    -- the only thing GetItemLinkOnUseAbilityInfo is used for: its remaining
+    -- cooldown describes the item's ability, whereas the slot is the authority on
+    -- whether the thing can be drunk right now (potions share a cooldown). See
+    -- specs/038-quickslot-blocks/research.md R2.
+    local hasAbility = GetItemLinkOnUseAbilityInfo(link)
+    if not hasAbility then
+        return COOLDOWN_UNAVAILABLE, 0
+    end
+
+    -- The same call, and therefore the same quantization, as the skill cooldown
+    -- blocks above.
+    local remaining = GetSlotCooldownInfo(slot, hotbar)
+    local steps
+    if remaining == nil then
+        return COOLDOWN_UNAVAILABLE, 0
+    elseif remaining <= 0 then
+        steps = 0
+    else
+        steps = zo_floor(remaining / COOLDOWN_STEP_MS + 0.5)
+        if steps < 1 then
+            steps = 1
+        elseif steps > COOLDOWN_MAX_STEPS then
+            steps = COOLDOWN_MAX_STEPS
+        end
+    end
+
+    local id = GetItemLinkItemId(link) or 0
+    -- Reduced to 24 bits here, on the publishing side, so every block always
+    -- carries a whole byte. Letting an oversized id produce an out-of-range byte
+    -- would fail that block's checksum, and a failed checksum reports the whole
+    -- quickslot as unknown, which claims there is no potion rather than that its
+    -- identity is not known. Aliasing an id we cannot name is much the lesser
+    -- error, and the consumer uses the id for display and swap detection rather
+    -- than for a safety decision.
+    id = id % 0x1000000
+
+    return steps, id
+end
+
+-- Recomputes the quickslot, returning true when anything changed. Compute then
+-- render-if-changed, following updateCooldowns, so a steady quickslot redraws
+-- nothing and the read-back signal is steady too.
+local function updateQuickslot()
+    local steps, id = computeQuickslot()
+    if steps == quickslotSteps and id == quickslotId then
+        return false
+    end
+    quickslotSteps = steps
+    quickslotId = id
+    return true
+end
+
+local function renderQuickslot()
+    local hidden = blocks.status:IsHidden()
+    local steps = quickslotSteps or COOLDOWN_UNAVAILABLE
+    local id = quickslotId or 0
+
+    if hidden then
+        blocks.quickslot:SetHidden(true)
+    else
+        blocks.quickslot:SetCenterColor(
+            channel(steps),
+            channel(QUICKSLOT_MARKER),
+            channel(255 - steps),
+            1
+        )
+        blocks.quickslot:SetHidden(false)
+    end
+
+    -- The id bytes, most significant first. Drawn even when there is nothing to
+    -- identify (as zero), so an absent block continues to mean only that the
+    -- addon is too old to draw it.
+    local bytes = {
+        zo_floor(id / 0x10000) % 0x100,
+        zo_floor(id / 0x100) % 0x100,
+        id % 0x100,
+    }
+    for i = 1, #QUICKSLOT_ID_BLOCK_KEYS do
+        local block = blocks[QUICKSLOT_ID_BLOCK_KEYS[i]]
+        if hidden then
+            block:SetHidden(true)
+        else
+            local byte = bytes[i]
+            block:SetCenterColor(
+                channel(byte),
+                channel(QUICKSLOT_ID_MARKERS[i]),
+                channel(255 - byte),
+                1
+            )
+            block:SetHidden(false)
+        end
+    end
+end
+
+local function onQuickslotChanged()
+    if updateQuickslot() then
+        renderQuickslot()
+    end
+end
+
 -- B5 Menu ---------------------------------------------------------------------
 
 -- Whether any native UI surface is active.
@@ -747,6 +925,10 @@ local function buildBlocks()
     blocks.cooldown4 = createBlock("Cooldown4")
     blocks.cooldown5 = createBlock("Cooldown5")
     blocks.cooldownUltimate = createBlock("CooldownUltimate")
+    blocks.quickslot = createBlock("Quickslot")
+    blocks.quickslotIdHi = createBlock("QuickslotIdHi")
+    blocks.quickslotIdMid = createBlock("QuickslotIdMid")
+    blocks.quickslotIdLo = createBlock("QuickslotIdLo")
 
     -- Block indices, not pixel offsets: the grid decides where an index lands.
     positionBlock(blocks.status, 0)
@@ -761,6 +943,13 @@ local function buildBlocks()
     positionBlock(blocks.movement, 9)
     for i = 1, #COOLDOWN_BLOCK_KEYS do
         positionBlock(blocks[COOLDOWN_BLOCK_KEYS[i]], 9 + i)
+    end
+    -- Indices 16 to 19, which the grid places on row 1. Nothing here says so:
+    -- positionBlock takes an index and works out the column and row itself, which
+    -- is why crossing the boundary needed no new placement code.
+    positionBlock(blocks.quickslot, 16)
+    for i = 1, #QUICKSLOT_ID_BLOCK_KEYS do
+        positionBlock(blocks[QUICKSLOT_ID_BLOCK_KEYS[i]], 16 + i)
     end
 
     renderStatus()
@@ -778,6 +967,8 @@ local function buildBlocks()
     renderMovement()
     updateCooldowns()
     renderCooldowns()
+    updateQuickslot()
+    renderQuickslot()
 end
 
 local function onLatencyTick()
@@ -799,6 +990,13 @@ local function onLatencyTick()
     -- cooldown notification, and a running cooldown changes on every tick anyway.
     updateCooldowns()
     renderCooldowns()
+    -- The quickslot cooldown counts down continuously and no event fires per
+    -- step, so the tick is what makes the value correct rather than merely
+    -- eventually correct. It also backstops a contents change that arrives by no
+    -- event. Render-if-changed, so a steady quickslot still redraws nothing.
+    if updateQuickslot() then
+        renderQuickslot()
+    end
 end
 
 local function onAddOnLoaded(_, name)
@@ -834,6 +1032,12 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "Power", EVENT_POWER_UPDATE, onPowerUpdate)
     em:AddFilterForEvent(ADDON_NAME .. "Power", EVENT_POWER_UPDATE, REGISTER_FILTER_UNIT_TAG, "player")
 
+    -- Quickslot tracking: the active quickslot changing and the slot's contents
+    -- changing are the two ways the published values move by an operator action.
+    -- The tick above is the backstop for the countdown itself.
+    em:RegisterForEvent(ADDON_NAME .. "Quickslot", EVENT_ACTIVE_QUICKSLOT_CHANGED, onQuickslotChanged)
+    em:RegisterForEvent(ADDON_NAME .. "ActionSlot", EVENT_ACTION_SLOT_UPDATED, onQuickslotChanged)
+
     em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
         computeWeaponBar()
         renderWeapon()
@@ -845,6 +1049,11 @@ local function onAddOnLoaded(_, name)
         renderMovement()
         updateCooldowns()
         renderCooldowns()
+        -- The quickslot re-baseline after a loading screen, for the same reason
+        -- as every block above it: the change events do not fire for a state that
+        -- is already true when the world finishes loading.
+        updateQuickslot()
+        renderQuickslot()
     end)
 end
 

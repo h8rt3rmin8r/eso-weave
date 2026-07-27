@@ -75,9 +75,29 @@ For fishing to work, all of the following must be true:
   the addon) or tick "Allow out of date AddOns" in the AddOns menu. After the app
   refreshes the addon, reload the UI in game (type `/reloadui`) or log out and
   back in so ESO picks up the new files.
-- The beacon strip the addon draws is on screen and not covered by other UI.
+- The beacon grid the addon draws is on screen and not covered by other UI.
 - The ESO window is focused. ESO Weave only sends input while the game window is
   the active window.
+
+### The on-screen overlay
+
+PixelBeacon draws a small grid of colored squares in the **top-left corner of the
+game client**. That grid is the entire channel between the addon and the app, so
+it has to be visible: anything drawn over it reads as a missing signal.
+
+As of addon version 12 the grid is **twenty squares in two rows**, which at the
+default square size covers **256 by 32 physical pixels**. It was one row until
+that version; the second row arrived with the quickslot signals.
+
+If the footprint is in your way, lower **Block size (px)** in Settings, under the
+beacon group. The app shows the resulting footprint next to that setting as you
+change it, and records it in the log at startup. At the smallest supported size
+the overlay is 32 by 4 pixels. Changing the size re-deploys the addon so both
+sides stay in agreement; it takes effect after a `/reloadui` and an app restart.
+
+The overlay cannot be moved. Its position is part of the contract the addon and
+the app share, so relocating it would have to change both sides at once, and a
+disagreement about where the grid starts is not something either side can detect.
 
 ### Using it
 

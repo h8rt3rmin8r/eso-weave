@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The application shows what is in the active quickslot and whether it is ready:
+  the remaining quickslot cooldown and the slotted item's identity, published by
+  PixelBeacon as four new blocks (B16 to B19) and shown as two new rows in the
+  Status region. Nothing acts on the values; they are observables, like combat
+  state. Addon version advances to 12 (issue #19).
+
+  **This takes the beacon grid onto a second row for the first time.** The block
+  count goes from sixteen to twenty against a fixed column count of sixteen, so
+  the overlay in the corner of the game client is now two squares tall (256 by 32
+  physical pixels at the default size) where it was one. No existing block moved.
+  The application now reports the overlay's footprint beside the Block size
+  setting and in its log, and the README documents it.
+
+  The reason to add this signal rather than another is that the feature which
+  follows it, drinking a potion automatically when a resource runs low, cannot
+  safely fire anything without all three facts: that the quickslot holds a potion,
+  that it is off cooldown, and which item it is. That consumer is a separate slice
+  because it synthesizes a keypress and therefore lands on a constitution
+  NON-NEGOTIABLE surface; publishing the observable first means that when a potion
+  fires at the wrong moment, the reading underneath it is already known good.
+
 - The application shows how long each skill slot has left before it can be used
   again, published by PixelBeacon as six new blocks (B10 to B15) covering the five
   skills and the ultimate. The Skills grid gains a Cooldown column. Nothing acts
@@ -27,6 +48,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-07-27: The quickslot cooldown is read with
+  `GetSlotCooldownInfo(GetCurrentQuickslot(), HOTBAR_CATEGORY_QUICKSLOT_WHEEL)`,
+  not the `remainingCooldown` return of `GetItemLinkOnUseAbilityInfo` that issue
+  #19 proposed. Three reasons, in order of weight: the slot rather than the item
+  link is authoritative on whether the thing can be used right now, because
+  potions share a cooldown; it is the same call the skill cooldown blocks already
+  make, so the quantization contract is shared by construction rather than
+  reimplemented beside itself; and the signature turned out to take an explicit
+  nilable hotbar category, which is the doubt that sent the issue to the item link
+  in the first place. `GetItemLinkOnUseAbilityInfo` is still used, for its
+  `hasAbility` return only.
+- 2026-07-27: The quickslot publishes the item's identity, not what the potion
+  restores. The restore types are not available as structured data: they appear
+  only inside a localized human-readable ability description that the game's own
+  interface consumes as tooltip text. Parsing it would be a locale-dependent
+  heuristic baked into a colour contract shared byte for byte between two
+  codebases, which is the same class of construct the sprint verification rejected
+  in slice 036. The identity is machine-readable, gives the consumer swap
+  detection, and leaves restore awareness addable later in the companion without
+  touching the bus contract.
+- 2026-07-27: The decoded quickslot carries a cooldown and an optional identity,
+  and answers "is there a potion" as the cooldown not being unknown, rather than
+  storing that as a third field the way issue #19 proposed. The three-field shape
+  is equivalent but admits states that cannot exist, such as a flag claiming a
+  potion while the cooldown says unknown. Making those unrepresentable matters
+  more here than elsewhere, because the next slice acts on this value by
+  synthesizing a keypress.
+- 2026-07-27: "Empty quickslot", "not a potion", "no readable cooldown", and
+  "unreadable block" are one outcome, not four. The reserved payload and an absent
+  block are indistinguishable by construction, so naming them apart would invent a
+  distinction the transport cannot carry and tempt the consumer to branch on it.
+  This follows the skill cooldown blocks, which settled the same question one
+  slice earlier.
+- 2026-07-27: The compile-time assertion that the block count does not exceed the
+  column count, which slice 037 deliberately left at its limit to fail here, is
+  **replaced** rather than relaxed. It did exactly its job: the build stopped at
+  the edit that raised the count. Three assertions succeed it, stating that the
+  grid is exactly two rows, that the first row is full, and that the last row is
+  partial, so the slice that adds a twenty-first block is told just as clearly.
+  `grid_rows` and `grid_position` became `const fn` so the assertion calls the
+  real function instead of open-coding its arithmetic. Separately, the bound
+  `COLUMNS >= NUM_BLOCKS` in the column-count test was restated as
+  `COLUMNS >= BLOCKS_AT_WRAP`: its stated justification was always about the block
+  count at the moment the wrap shipped, and it was written in terms of the current
+  count only because the two were the same number at the time.
+- 2026-07-27: The doubled overlay is reported, not managed. The anchor is not
+  moved and the square size is not adjusted automatically; both would change
+  shared geometry on one side of a byte-for-byte contract, and an origin
+  disagreement is exactly the failure neither side can detect. What the
+  application owes instead is that the footprint is knowable: a derived caption
+  beside the Block size setting, which is where an operator stands when they want
+  the overlay smaller, and a debug log line at sampler start, which is the record
+  that explains a field report afterwards.
+- 2026-07-27: A latent defect in the live-log boundary was found and fixed while
+  landing this slice. The no-overlap bound constrained the log panel's *inner*
+  height while the boundary is about the space the panel occupies, so the panel's
+  frame overhead (two 8-point margins plus the separator stroke) was never
+  budgeted. It has been wrong since slice 030 and was unreachable until now: the
+  bound only binds when the content comes within that overhead of filling the
+  window, and until two status rows were added the content never did. The fix
+  derives the overhead from the margin constant and the style rather than a
+  literal.
 - 2026-07-27: The cooldown blocks cover six slots, not the seven the application
   displays. Synergy gets no block. This was settled by checking the game's own
   action bar, which iterates its slots from the first normal slot index through

@@ -3,13 +3,13 @@
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
     block_center, capture_dims, decode_combat, decode_cooldown, decode_latency, decode_menu,
-    decode_movement, decode_resource, decode_resources, decode_weapon_bar, fishing_signal,
-    grid_extent, grid_position, grid_rows, load_reader_config, poll_interval, sanitize_block_px,
-    status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples, CombatSignal,
-    CooldownSet, FishingSignal, MenuSurface, MockSampler, MovementSignal, PixelBusEvent,
-    PixelBusReader, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown,
-    WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX,
-    MIN_BLOCK_PX, NUM_BLOCKS,
+    decode_movement, decode_quickslot, decode_resource, decode_resources, decode_weapon_bar,
+    fishing_signal, grid_extent, grid_position, grid_rows, load_reader_config, poll_interval,
+    sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
+    CombatSignal, CooldownSet, FishingSignal, MenuSurface, MockSampler, MovementSignal,
+    PixelBusEvent, PixelBusReader, QuickslotState, ReaderConfig, ResourceLevel, ResourceSet, Rgb,
+    Size, SlotCooldown, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS,
+    DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -381,9 +381,14 @@ fn weapon_bar_event_only_on_change() {
 
 #[test]
 fn block_center_and_capture_dims_match_contract_table() {
-    // (block_px, [B0..B15 centers], (capture_w, capture_h)) per
+    // (block_px, [B0..B19 centers], (capture_w, capture_h)) per
     // specs/028-pixelbus-block-size/contracts/geometry.md, extended by the B4, B5,
-    // B6-to-B8, B9, and B10-to-B15 contracts in slices 031, 032, 033, 036, and 037.
+    // B6-to-B8, B9, B10-to-B15, and B16-to-B19 contracts in slices 031, 032, 033,
+    // 036, 037, and 038.
+    //
+    // The last four entries of each case are on row 1, so their y is
+    // block_px + block_px / 2 rather than block_px / 2, and their x restarts at
+    // the left edge. The capture height is two block rows for the first time.
     let cases = [
         (
             2u32,
@@ -404,8 +409,13 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (27, 1),
                 (29, 1),
                 (31, 1),
+                // Row 1.
+                (1, 3),
+                (3, 3),
+                (5, 3),
+                (7, 3),
             ],
-            (32u32, 2u32),
+            (32u32, 4u32),
         ),
         (
             4,
@@ -426,8 +436,13 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (54, 2),
                 (58, 2),
                 (62, 2),
+                // Row 1.
+                (2, 6),
+                (6, 6),
+                (10, 6),
+                (14, 6),
             ],
-            (64, 4),
+            (64, 8),
         ),
         (
             8,
@@ -448,8 +463,13 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (108, 4),
                 (116, 4),
                 (124, 4),
+                // Row 1.
+                (4, 12),
+                (12, 12),
+                (20, 12),
+                (28, 12),
             ],
-            (128, 8),
+            (128, 16),
         ),
         (
             16,
@@ -470,8 +490,13 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (216, 8),
                 (232, 8),
                 (248, 8),
+                // Row 1.
+                (8, 24),
+                (24, 24),
+                (40, 24),
+                (56, 24),
             ],
-            (256, 16),
+            (256, 32),
         ),
         (
             32,
@@ -492,8 +517,13 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (432, 16),
                 (464, 16),
                 (496, 16),
+                // Row 1.
+                (16, 48),
+                (48, 48),
+                (80, 48),
+                (112, 48),
             ],
-            (512, 32),
+            (512, 64),
         ),
     ];
     for (block_px, centers, cap) in cases {
@@ -510,7 +540,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 16);
+    assert_eq!(NUM_BLOCKS, 20);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -1196,6 +1226,20 @@ fn resource_event_only_on_change_and_clears_on_loss() {
 /// bound below is traceable to the thing that justifies it.
 const NARROWEST_CLIENT_WIDTH: u32 = 1024;
 
+/// The block count at the moment the grid wrap shipped (slice 035).
+///
+/// The bound below was originally written as `COLUMNS >= NUM_BLOCKS`, justified
+/// as "or the wrap would move an existing block and forfeit the no-change
+/// property". That justification was always about the blocks that existed *when
+/// the wrap shipped*, and it was expressed in terms of NUM_BLOCKS only because at
+/// the time the two were the same number. They stopped being the same number at
+/// slice 038, when the count crossed the column boundary on purpose.
+///
+/// Naming the wrap-era count keeps the actual invariant (no block that predates
+/// the wrap may move) while letting the count grow, which is the entire point of
+/// having wrapped.
+const BLOCKS_AT_WRAP: u32 = 9;
+
 #[test]
 fn grid_position_wraps_column_then_row() {
     // Column first, then row, which is the whole contract in one line.
@@ -1203,9 +1247,14 @@ fn grid_position_wraps_column_then_row() {
     assert_eq!(grid_position(3, 4), (3, 0));
     assert_eq!(grid_position(4, 4), (0, 1));
     assert_eq!(grid_position(9, 4), (1, 2));
-    // The shipped count, where every current block is still in row 0.
-    for index in 0..NUM_BLOCKS {
+    // The shipped count, which since slice 038 spans two rows. Row 0 holds the
+    // first COLUMNS blocks at their own index; row 1 holds the rest, restarting
+    // the column at zero.
+    for index in 0..COLUMNS {
         assert_eq!(grid_position(index, COLUMNS), (index, 0));
+    }
+    for index in COLUMNS..NUM_BLOCKS {
+        assert_eq!(grid_position(index, COLUMNS), (index - COLUMNS, 1));
     }
     // A single column degenerates to one block per row.
     for index in 0..5 {
@@ -1318,9 +1367,10 @@ fn the_column_count_satisfies_both_bounds_that_governed_its_choice() {
     // the column count or widen the largest supported block.
     const {
         assert!(
-            COLUMNS >= NUM_BLOCKS,
-            "the column count must be at least the block count, or the wrap would \
-             move an existing block and forfeit the no-change property"
+            COLUMNS >= BLOCKS_AT_WRAP,
+            "the column count must be at least the block count at the wrap, or the \
+             wrap would move a block that predates it and forfeit the no-change \
+             property"
         );
     }
     const {
@@ -1336,9 +1386,13 @@ fn the_column_count_satisfies_both_bounds_that_governed_its_choice() {
 // cannot drift together into agreeing on something wrong.
 
 #[test]
-fn every_current_block_sits_exactly_where_the_strip_put_it() {
+fn every_row_zero_block_sits_exactly_where_the_strip_put_it() {
+    // The no-change obligation, now stated on the blocks it can apply to. Row 0
+    // is every block the strip ever held, and each is still at the strip's
+    // arithmetic. The blocks past it never had a strip position to keep, so the
+    // second loop asserts the wrapped arithmetic instead of nothing.
     for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 30, MAX_BLOCK_PX] {
-        for index in 0..NUM_BLOCKS {
+        for index in 0..COLUMNS {
             let strip = (block_px * index + block_px / 2, block_px / 2);
             assert_eq!(
                 block_center(block_px, index),
@@ -1346,17 +1400,31 @@ fn every_current_block_sits_exactly_where_the_strip_put_it() {
                 "block_px {block_px} index {index} moved"
             );
         }
+        for index in COLUMNS..NUM_BLOCKS {
+            let wrapped = (
+                block_px * (index - COLUMNS) + block_px / 2,
+                block_px + block_px / 2,
+            );
+            assert_eq!(
+                block_center(block_px, index),
+                wrapped,
+                "block_px {block_px} index {index} is not on row 1 where it belongs"
+            );
+        }
     }
 }
 
 #[test]
-fn the_captured_region_is_exactly_what_the_strip_captured() {
+fn the_captured_region_is_one_full_row_wide_and_two_rows_tall() {
+    // Slice 038 crossed the boundary, so the region is no longer the strip's.
+    // Spelled out as arithmetic rather than as a call to capture_dims's own
+    // helper, so the test and the code cannot drift together.
     for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 30, MAX_BLOCK_PX] {
-        let strip = (block_px * NUM_BLOCKS, block_px);
+        let two_rows = (block_px * COLUMNS, block_px * 2);
         assert_eq!(
             capture_dims(block_px),
-            strip,
-            "capture region changed at block_px {block_px}"
+            two_rows,
+            "capture region wrong at block_px {block_px}"
         );
     }
 }
@@ -1416,17 +1484,33 @@ fn block_center_wraps_past_the_first_row() {
 // in the encoding and never emitted, because the game exposes no sprint
 // observable (see specs/036-movement-state-block/spec.md).
 
-// The premise the single-row capture extent depends on, enforced at compile time
-// rather than by a test that has to be run to be believed. The seventeenth block
-// breaks this and should fail here, at the edit that adds it.
-// Slice 037 took the count to exactly COLUMNS, so this now holds with no margin
-// left. It is deliberately NOT relaxed: the next block added anywhere in this
-// family trips it, which is precisely when the warning is worth having. Widening
-// it here to spare a later slice an inconvenience would discard the signal at the
-// moment it starts earning its keep.
+// The grid's shape, enforced at compile time rather than by a test that has to be
+// run to be believed.
+//
+// This replaces the single-row premise `NUM_BLOCKS <= COLUMNS` that slices 035 to
+// 037 carried. That assertion was deliberately left at its limit by slice 037 so
+// that the seventeenth block would fail here, at the edit that adds it, and it
+// did exactly that: slice 038 took the count to twenty and the build stopped.
+//
+// It is replaced rather than relaxed. A looser bound would be a guard that no
+// longer states anything true about what ships, and deleting it would discard the
+// only automatic warning that the grid's shape has changed. What follows is just
+// as specific about two rows as its predecessor was about one, and calls
+// grid_rows rather than open-coding the arithmetic, so the assertion and the
+// function cannot drift into agreeing on something wrong.
+//
+// The slice that adds the twenty-first block will be told by the third one.
 const _: () = assert!(
-    NUM_BLOCKS <= COLUMNS,
-    "the capture region is one row only while the block count fits the columns"
+    grid_rows(NUM_BLOCKS, COLUMNS) == 2,
+    "the capture region is exactly two rows tall at the shipped block count"
+);
+const _: () = assert!(
+    NUM_BLOCKS > COLUMNS,
+    "the grid has crossed onto a second row, so the first row is full"
+);
+const _: () = assert!(
+    NUM_BLOCKS < COLUMNS * 2,
+    "the last row is partially filled; a third row needs these assertions rewritten"
 );
 
 /// The movement block color for a code, mirroring the addon encoder: the code in
@@ -1620,12 +1704,10 @@ fn movement_clears_to_unknown_on_signal_loss() {
 }
 
 #[test]
-fn the_capture_region_is_one_row_while_the_count_fits_the_columns() {
-    // Stated on what the invariant actually depends on. The region is one row
-    // because NUM_BLOCKS is at most COLUMNS, not because of any particular count.
-    // Slice 037 took the count to exactly COLUMNS, so the grid now fills one row
-    // completely and the seventeenth block adds a row. This test said so before
-    // anyone got there, and still does.
+fn the_capture_region_is_two_rows_now_that_the_count_has_crossed() {
+    // The parametric half is unchanged and still true: the region is one row for
+    // any count up to COLUMNS, and the first block past it starts a second row.
+    // That was the general statement before any count reached it.
     let block_px = DEFAULT_BLOCK_PX;
     for count in 1..=COLUMNS {
         assert_eq!(
@@ -1640,16 +1722,16 @@ fn the_capture_region_is_one_row_while_the_count_fits_the_columns() {
         "the first block past the column count must start a second row"
     );
 
-    // And the concrete instance for the constants this slice ships. The premise
-    // itself is enforced at compile time by the const assertion above, so this
-    // asserts the extent rather than restating the premise.
-    assert_eq!(capture_dims(block_px), (block_px * NUM_BLOCKS, block_px));
+    // And the concrete instance for the constants this slice ships. Slice 038 is
+    // the first shipping count to cross, so this is the first time the general
+    // statement above and the shipped grid are describing the same thing. That the
+    // count exceeds the column count is asserted at compile time further up rather
+    // than here, where every operand is a constant.
+    assert_eq!(grid_rows(NUM_BLOCKS, COLUMNS), 2);
+    assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
 
-    // Slice 037 lands the grid exactly on the single-row maximum, which is the
-    // boundary case worth pinning: the region is a full row wide, still one row
-    // tall, and there is no spare column left.
-    assert_eq!(NUM_BLOCKS, COLUMNS, "the grid should fill the row exactly");
-    assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px));
+    // The shape in full: a full first row, four blocks on the second.
+    assert_eq!(NUM_BLOCKS - COLUMNS, 4, "row 1 should hold four blocks");
 }
 
 // Slice 037: the six skill-cooldown blocks (B10 to B15).
@@ -1851,4 +1933,375 @@ fn cooldowns_clear_on_signal_loss() {
     let events = reader.observe(BlockSamples::default(), timeout + 500);
     assert!(events.contains(&PixelBusEvent::SignalLost));
     assert!(events.contains(&PixelBusEvent::Cooldowns(CooldownSet::new_unknown())));
+}
+
+// Slice 038: the four quickslot blocks (B16 to B19), the first blocks on row 1.
+
+/// The four marks, mirroring the addon encoder. Kept as literals rather than
+/// imported, so a change to a companion constant has to be made here too and the
+/// two cannot drift together into agreeing on something wrong.
+const QUICKSLOT_MARK: u8 = 0x38;
+const QUICKSLOT_ID_MARKS: [(&str, u8); 3] =
+    [("id high", 0xB0), ("id middle", 0xDD), ("id low", 0xF3)];
+
+/// The quickslot cooldown block color: the step count in red, the mark in green,
+/// and the complement checksum in blue. Identical in shape to the skill cooldown
+/// blocks, which is the point: the encoding is shared, not parallel.
+fn quickslot(steps: u8) -> Rgb {
+    Rgb::new(steps, QUICKSLOT_MARK, 255 - steps)
+}
+
+/// One identity byte block color.
+fn quickslot_id(byte: u8, mark: u8) -> Rgb {
+    Rgb::new(byte, mark, 255 - byte)
+}
+
+/// The three identity blocks for an identity, most significant byte first.
+fn quickslot_id_blocks(id: u32) -> (Option<Rgb>, Option<Rgb>, Option<Rgb>) {
+    (
+        Some(quickslot_id((id >> 16) as u8, QUICKSLOT_ID_MARKS[0].1)),
+        Some(quickslot_id((id >> 8) as u8, QUICKSLOT_ID_MARKS[1].1)),
+        Some(quickslot_id(id as u8, QUICKSLOT_ID_MARKS[2].1)),
+    )
+}
+
+/// A fully decoding quickslot at `steps` holding item `id`.
+fn decoded_quickslot(steps: u8, id: u32) -> QuickslotState {
+    let (hi, mid, lo) = quickslot_id_blocks(id);
+    decode_quickslot(
+        Some(quickslot(steps)),
+        hi,
+        mid,
+        lo,
+        ReaderConfig::default().tolerance,
+    )
+}
+
+#[test]
+fn decode_quickslot_reads_ready_durations_and_unavailable() {
+    // The same five cases as the skill cooldown blocks, because it is the same
+    // encoding read through the same decoder.
+    for (steps, expected) in [
+        (0u8, SlotCooldown::Ready),
+        (1, SlotCooldown::RemainingMs(50)),
+        (24, SlotCooldown::RemainingMs(1200)),
+        (254, SlotCooldown::RemainingMs(12700)),
+        (255, SlotCooldown::Unknown),
+    ] {
+        assert_eq!(
+            decoded_quickslot(steps, 0x00_1234).cooldown,
+            expected,
+            "at {steps} steps"
+        );
+    }
+}
+
+#[test]
+fn decode_quickslot_assembles_the_identity_most_significant_byte_first() {
+    // The byte order is the whole risk in a three-block value: reversed, it
+    // decodes cleanly to a different number and nothing complains.
+    for id in [0x00_0000u32, 0x00_0001, 0x01_0000, 0x12_3456, 0xFF_FFFF] {
+        assert_eq!(
+            decoded_quickslot(10, id).item_id,
+            Some(id),
+            "identity {id:#08X} did not round trip"
+        );
+    }
+
+    // Explicitly: the high byte is the first block, not the last.
+    let state = decoded_quickslot(10, 0xAB_CDEF);
+    assert_eq!(state.item_id, Some(0xAB_CDEF));
+    assert_ne!(
+        state.item_id,
+        Some(0xEF_CDAB),
+        "the identity was assembled least significant byte first"
+    );
+}
+
+#[test]
+fn decode_quickslot_reports_no_identity_without_a_potion() {
+    // FR-008: the cooldown saying unknown settles it, whatever the identity
+    // blocks carry. This is what stops a consumer acting on an identity that
+    // describes a slot with nothing usable in it.
+    let t = ReaderConfig::default().tolerance;
+    let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
+    let state = decode_quickslot(Some(quickslot(255)), hi, mid, lo, t);
+    assert_eq!(state.cooldown, SlotCooldown::Unknown);
+    assert_eq!(state.item_id, None);
+    assert!(!state.has_potion());
+}
+
+#[test]
+fn a_quickslot_identity_never_exists_without_a_potion() {
+    // The invariant from the data model, over every combination of the four
+    // blocks decoding or not: item_id being present implies has_potion, always.
+    let t = ReaderConfig::default().tolerance;
+    let junk = Rgb::new(0x11, 0x22, 0x33);
+    let (good_hi, good_mid, good_lo) = quickslot_id_blocks(0x12_3456);
+    let mut checked = 0;
+    for status in [None, Some(junk), Some(quickslot(255)), Some(quickslot(12))] {
+        for hi in [None, Some(junk), good_hi] {
+            for mid in [None, Some(junk), good_mid] {
+                for lo in [None, Some(junk), good_lo] {
+                    let state = decode_quickslot(status, hi, mid, lo, t);
+                    if state.item_id.is_some() {
+                        assert!(
+                            state.has_potion(),
+                            "an identity was reported with no potion: {state:?}"
+                        );
+                    }
+                    checked += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(checked, 4 * 3 * 3 * 3);
+}
+
+#[test]
+fn decode_quickslot_rejects_every_other_blocks_marker() {
+    // Four adjacent blocks, three of which carry an unconstrained byte, are
+    // exactly where an off-by-one geometry error would decode a neighbour's
+    // payload as this one. Each must reject every other mark on the grid.
+    let t = ReaderConfig::default().tolerance;
+    for (other_name, other) in BLOCK_CENTER_GREENS {
+        if other.abs_diff(QUICKSLOT_MARK) > t {
+            let wrong = Rgb::new(24, other, 255 - 24);
+            assert_eq!(
+                decode_quickslot(Some(wrong), None, None, None, t).cooldown,
+                SlotCooldown::Unknown,
+                "{other_name} decoded as the quickslot cooldown"
+            );
+        }
+    }
+
+    // And each identity block rejects every other mark, which is what an
+    // off-by-one across these four adjacent blocks would actually produce.
+    for (position, (name, mark)) in QUICKSLOT_ID_MARKS.iter().enumerate() {
+        for (other_name, other) in BLOCK_CENTER_GREENS {
+            if other.abs_diff(*mark) <= t {
+                continue;
+            }
+            let (mut hi, mut mid, mut lo) = quickslot_id_blocks(0x12_3456);
+            let wrong = Some(quickslot_id(0x42, other));
+            match position {
+                0 => hi = wrong,
+                1 => mid = wrong,
+                _ => lo = wrong,
+            }
+            let state = decode_quickslot(Some(quickslot(10)), hi, mid, lo, t);
+            assert_eq!(
+                state.item_id, None,
+                "{other_name} decoded as the quickslot {name} byte"
+            );
+            assert_eq!(
+                state.cooldown,
+                SlotCooldown::RemainingMs(500),
+                "a bad identity block must not disturb the cooldown"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_partial_identity_is_never_assembled() {
+    // FR-008 and SC-008. One unreadable byte means no identity, not an identity
+    // built from the two that read. The cooldown is untouched: the two halves
+    // degrade independently, which is what FR-012 shows the operator.
+    let t = ReaderConfig::default().tolerance;
+    for (position, (_, mark)) in QUICKSLOT_ID_MARKS.iter().enumerate() {
+        let (mut hi, mut mid, mut lo) = quickslot_id_blocks(0x12_3456);
+        // A broken complement, which is the failure a stray pixel produces.
+        let bad = Some(Rgb::new(0x42, *mark, 0x00));
+        match position {
+            0 => hi = bad,
+            1 => mid = bad,
+            _ => lo = bad,
+        }
+        let state = decode_quickslot(Some(quickslot(10)), hi, mid, lo, t);
+        assert_eq!(state.item_id, None, "byte {position} broken");
+        assert_eq!(state.cooldown, SlotCooldown::RemainingMs(500));
+        assert!(state.has_potion());
+    }
+
+    // An absent block is the same as an unreadable one.
+    let (_, mid, lo) = quickslot_id_blocks(0x12_3456);
+    let state = decode_quickslot(Some(quickslot(10)), None, mid, lo, t);
+    assert_eq!(state.item_id, None);
+    assert_eq!(state.cooldown, SlotCooldown::RemainingMs(500));
+}
+
+#[test]
+fn decode_quickslot_rejects_a_failed_checksum() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_quickslot(Some(Rgb::new(24, QUICKSLOT_MARK, 0)), None, None, None, t).cooldown,
+        SlotCooldown::Unknown
+    );
+}
+
+#[test]
+fn no_arbitrary_color_decodes_as_a_quickslot_cooldown() {
+    // The US2 case at full strength: with the addon too old to draw these
+    // blocks, whatever the game happens to be painting a row below the beacon is
+    // sampled. None of it may become a cooldown.
+    let t = ReaderConfig::default().tolerance;
+    let mut checked = 0u32;
+    for r in (0..=255u16).step_by(3) {
+        for g in (0..=255u16).step_by(3) {
+            for b in (0..=255u16).step_by(3) {
+                let sample = Rgb::new(r as u8, g as u8, b as u8);
+                let decoded = decode_quickslot(Some(sample), None, None, None, t).cooldown;
+                if decoded != SlotCooldown::Unknown {
+                    // The only colors that may decode are the encoding itself.
+                    assert!(
+                        sample.g.abs_diff(QUICKSLOT_MARK) <= t
+                            && (u16::from(sample.r) + u16::from(sample.b)).abs_diff(255)
+                                <= u16::from(t),
+                        "{sample:?} decoded as {decoded:?} without being the encoding"
+                    );
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 600_000, "sweep covered only {checked} colors");
+}
+
+#[test]
+fn quickslot_points_are_the_first_four_blocks_of_row_one() {
+    // FR-021: derived from the shared rule with no special case for the second
+    // row. These are the first sample points in the project whose y is not
+    // block_px / 2.
+    for block_px in [MIN_BLOCK_PX, DEFAULT_BLOCK_PX, 24, MAX_BLOCK_PX] {
+        let config = ReaderConfig {
+            block_px,
+            ..Default::default()
+        };
+        let points = [
+            config.quickslot_status_point(),
+            config.quickslot_id_hi_point(),
+            config.quickslot_id_mid_point(),
+            config.quickslot_id_lo_point(),
+        ];
+        for (offset, point) in points.iter().enumerate() {
+            let offset = offset as u32;
+            let index = COLUMNS + offset;
+            assert_eq!(*point, block_center(block_px, index));
+            assert_eq!(grid_position(index, COLUMNS), (offset, 1));
+            assert_eq!(
+                *point,
+                (block_px * offset + block_px / 2, block_px + block_px / 2),
+                "block {index} at block_px {block_px} is not on row 1"
+            );
+        }
+    }
+}
+
+#[test]
+fn quickslot_change_emits_exactly_one_event_carrying_the_whole_state() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let mut samples = alive();
+    let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
+    samples.quickslot_status = Some(quickslot(0));
+    samples.quickslot_id_hi = hi;
+    samples.quickslot_id_mid = mid;
+    samples.quickslot_id_lo = lo;
+
+    let events = reader.observe(samples, 0);
+    let quickslots: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, PixelBusEvent::Quickslot(_)))
+        .collect();
+    assert_eq!(quickslots.len(), 1, "one event, not four");
+    assert_eq!(
+        quickslots[0],
+        &PixelBusEvent::Quickslot(QuickslotState {
+            cooldown: SlotCooldown::Ready,
+            item_id: Some(0x12_3456),
+        })
+    );
+
+    // The same state again announces nothing.
+    let events = reader.observe(samples, 100);
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::Quickslot(_))));
+
+    // A swap moves the identity and the cooldown together, as one event.
+    let (hi2, mid2, lo2) = quickslot_id_blocks(0x00_00AA);
+    samples.quickslot_status = Some(quickslot(40));
+    samples.quickslot_id_hi = hi2;
+    samples.quickslot_id_mid = mid2;
+    samples.quickslot_id_lo = lo2;
+    let events = reader.observe(samples, 200);
+    let quickslots: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, PixelBusEvent::Quickslot(_)))
+        .collect();
+    assert_eq!(quickslots.len(), 1, "a swap is one change, not two");
+    assert_eq!(
+        quickslots[0],
+        &PixelBusEvent::Quickslot(QuickslotState {
+            cooldown: SlotCooldown::RemainingMs(2000),
+            item_id: Some(0x00_00AA),
+        })
+    );
+}
+
+#[test]
+fn an_addon_without_the_quickslot_blocks_reports_unknown_and_announces_nothing() {
+    // FR-020: the blocks are optional, and their absence is the shipping state
+    // for every operator who has not updated the addon yet.
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let events = reader.observe(alive(), 0);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, PixelBusEvent::Quickslot(_))),
+        "absent blocks must not announce a change from the initial unknown"
+    );
+}
+
+#[test]
+fn quickslot_clears_to_unknown_when_a_block_stops_decoding() {
+    // Follows the combat block: a stale "there is a ready potion" surviving an
+    // addon downgrade is exactly the false reading the consumer one slice away
+    // would act on.
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let mut samples = alive();
+    let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
+    samples.quickslot_status = Some(quickslot(0));
+    samples.quickslot_id_hi = hi;
+    samples.quickslot_id_mid = mid;
+    samples.quickslot_id_lo = lo;
+    reader.observe(samples, 0);
+
+    samples.quickslot_status = Some(Rgb::new(0x11, 0x22, 0x33));
+    let events = reader.observe(samples, 100);
+    assert!(events.contains(&PixelBusEvent::Quickslot(QuickslotState::new_unknown())));
+
+    // And it does not announce again once already unknown.
+    let events = reader.observe(samples, 200);
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::Quickslot(_))));
+}
+
+#[test]
+fn quickslot_clears_to_unknown_on_signal_loss() {
+    let config = ReaderConfig::default();
+    let timeout = config.heartbeat_timeout_ms;
+    let mut reader = PixelBusReader::new(config);
+    let mut samples = alive();
+    let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
+    samples.quickslot_status = Some(quickslot(20));
+    samples.quickslot_id_hi = hi;
+    samples.quickslot_id_mid = mid;
+    samples.quickslot_id_lo = lo;
+    reader.observe(samples, 0);
+
+    let events = reader.observe(BlockSamples::default(), timeout + 500);
+    assert!(events.contains(&PixelBusEvent::SignalLost));
+    assert!(events.contains(&PixelBusEvent::Quickslot(QuickslotState::new_unknown())));
 }

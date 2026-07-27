@@ -166,6 +166,22 @@ fn main() {
             let mut grid_fit = pixelbus::GridFitWatch::new();
             let (grid_w, grid_h) = pixelbus::capture_dims(reader_config.block_px);
             let grid_extent = pixelbus::Size::new(grid_w, grid_h);
+            // The overlay's footprint, recorded once. The block size is fixed for
+            // this thread's lifetime, so this can only change across a restart,
+            // which is exactly when a line is worth writing. It exists because
+            // slice 038 took the grid onto a second row and doubled the overlay's
+            // height: the operator-facing answer is the caption beside the block
+            // size setting, and this is the record that explains a field report
+            // after the fact.
+            tracing::debug!(
+                target: "eso_weave::pixelbus",
+                blocks = pixelbus::NUM_BLOCKS,
+                columns = pixelbus::COLUMNS,
+                rows = pixelbus::grid_rows(pixelbus::NUM_BLOCKS, pixelbus::COLUMNS),
+                block_px = reader_config.block_px,
+                extent = format!("{grid_w}x{grid_h}"),
+                "beacon grid footprint"
+            );
             let origin = clock_origin;
             loop {
                 // Poll fast while a fishing session is active so transient cast

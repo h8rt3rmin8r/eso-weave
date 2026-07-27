@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{
     app_state_label, beacon_light, combat_view, default_delay_for, fishing_label, menu_view,
-    modal_extent, override_edit_for, resource_view, route_reader_event, skill_rows,
+    modal_extent, override_edit_for, quickslot_view, resource_view, route_reader_event, skill_rows,
     status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view,
     AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
 };
@@ -19,8 +19,8 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, ResourceLevel, ResourceSet,
-    WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, QuickslotState, ResourceLevel,
+    ResourceSet, SlotCooldown, WeaponBarSignal, WeaponClass,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -704,5 +704,86 @@ fn routing_a_resource_event_stores_it_without_touching_fishing() {
     assert!(
         !input.is_menu_gated(),
         "resources do not touch the input gate"
+    );
+}
+
+// Slice 038: the quickslot readout.
+
+#[test]
+fn quickslot_view_shows_the_cooldown_and_the_identity_as_a_number() {
+    let view = quickslot_view(QuickslotState {
+        cooldown: SlotCooldown::Ready,
+        item_id: Some(64_500),
+    });
+    assert_eq!(view.cooldown.text, "Ready");
+    assert_eq!(view.cooldown.role, StatusRole::Active);
+    // The number itself, not a name: the application has no way to resolve one.
+    assert_eq!(view.identity.text, "64500");
+    assert_eq!(view.identity.role, StatusRole::Active);
+
+    let counting = quickslot_view(QuickslotState {
+        cooldown: SlotCooldown::RemainingMs(4500),
+        item_id: Some(1),
+    });
+    assert_eq!(counting.cooldown.text, "4.5s");
+    assert_eq!(counting.cooldown.role, StatusRole::Warning);
+}
+
+#[test]
+fn quickslot_view_is_muted_when_there_is_nothing_to_show() {
+    let view = quickslot_view(QuickslotState::new_unknown());
+    assert_eq!(view.cooldown.text, "-");
+    assert_eq!(view.cooldown.role, StatusRole::Muted);
+    assert_eq!(view.identity.text, "-");
+    assert_eq!(view.identity.role, StatusRole::Muted);
+}
+
+#[test]
+fn quickslot_view_halves_degrade_independently() {
+    // FR-012: the state where the cooldown read and the identity did not is
+    // reachable whenever one identity block is disturbed. Collapsing the whole
+    // readout there would throw away a value that was read correctly and make a
+    // one-block disturbance look identical to a missing addon.
+    let view = quickslot_view(QuickslotState {
+        cooldown: SlotCooldown::RemainingMs(2000),
+        item_id: None,
+    });
+    assert_eq!(view.cooldown.text, "2.0s");
+    assert_eq!(view.cooldown.role, StatusRole::Warning);
+    assert_eq!(view.identity.text, "-");
+    assert_eq!(view.identity.role, StatusRole::Muted);
+}
+
+#[test]
+fn quickslot_events_reach_the_engine_and_nothing_else() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    fishing.set_enabled(true, 0, &mut sink);
+    assert_eq!(fishing.state(), FishingState::Armed);
+
+    let state = QuickslotState {
+        cooldown: SlotCooldown::Ready,
+        item_id: Some(0x12_3456),
+    };
+    route_reader_event(
+        PixelBusEvent::Quickslot(state),
+        &mut weave,
+        &mut fishing,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert_eq!(weave.quickslot(), state);
+    assert_eq!(
+        fishing.state(),
+        FishingState::Armed,
+        "the quickslot does not touch fishing"
+    );
+    assert!(
+        !input.is_menu_gated(),
+        "the quickslot does not touch the input gate"
     );
 }

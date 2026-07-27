@@ -6,7 +6,8 @@ use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, ResourceLevel, ResourceSet, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
+    WeaponBarSignal, WeaponClass,
 };
 use eso_weave::weave::types::{TimingConfig, WeaveType};
 use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
@@ -412,4 +413,72 @@ fn resource_levels_change_no_engine_behavior() {
         magicka: ResourceLevel::Percent(100),
     };
     assert_eq!(run(full), unknown);
+}
+
+// Slice 038 (FR-024): the quickslot observable is stored on the engine and read by
+// nothing.
+//
+// This boundary matters more than the ones above it. The feature that consumes
+// this observable acts by synthesizing a keypress, which puts it on a constitution
+// NON-NEGOTIABLE surface. Wiring it up must break a test rather than slip through,
+// so the cases below deliberately include the exact state a consumer would act on:
+// a potion, off cooldown, ready to drink.
+
+#[test]
+fn quickslot_state_changes_no_engine_behavior() {
+    fn run(quickslot: QuickslotState) -> Vec<String> {
+        let mut engine = WeaveEngine::new(WeaveConfig::default());
+        let mut sink = MockSink::new();
+        engine.set_quickslot(quickslot);
+
+        sink.set_now(0);
+        engine.handle(Action::Skill1, &mut sink);
+        sink.set_now(600);
+        engine.handle(Action::Skill2, &mut sink);
+
+        sink.log.iter().map(|op| format!("{op:?}")).collect()
+    }
+
+    let unknown = run(QuickslotState::new_unknown());
+    assert!(!unknown.is_empty(), "the sequence must actually emit input");
+
+    // The case a future consumer exists to act on: a potion, ready now.
+    assert_eq!(
+        run(QuickslotState {
+            cooldown: SlotCooldown::Ready,
+            item_id: Some(0x12_3456),
+        }),
+        unknown
+    );
+    // And one still cooling down, which is the case it must NOT act on.
+    assert_eq!(
+        run(QuickslotState {
+            cooldown: SlotCooldown::RemainingMs(4000),
+            item_id: Some(0x12_3456),
+        }),
+        unknown
+    );
+    // A potion whose identity could not be read in full.
+    assert_eq!(
+        run(QuickslotState {
+            cooldown: SlotCooldown::Ready,
+            item_id: None,
+        }),
+        unknown
+    );
+}
+
+#[test]
+fn quickslot_state_round_trips_through_the_engine() {
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    assert_eq!(engine.quickslot(), QuickslotState::new_unknown());
+    let ready = QuickslotState {
+        cooldown: SlotCooldown::Ready,
+        item_id: Some(42),
+    };
+    engine.set_quickslot(ready);
+    assert_eq!(engine.quickslot(), ready);
+    assert!(engine.quickslot().has_potion());
+    engine.set_quickslot(QuickslotState::new_unknown());
+    assert!(!engine.quickslot().has_potion());
 }

@@ -412,6 +412,61 @@ const COOLDOWN_MAX_STEPS: u8 = 254;
 /// checks and fails the range check, so it needs no special case in the decoder.
 const COOLDOWN_UNAVAILABLE: u8 = 255;
 
+/// The active quickslot, decoded from its four blocks.
+///
+/// Whether a potion is present is deliberately **not** a field. It is exactly
+/// [`Self::has_potion`], the cooldown not being [`SlotCooldown::Unknown`].
+/// Storing it separately would make two states representable that cannot exist,
+/// a potion carrying no cooldown and a cooldown carrying no potion, and would
+/// make the decoder responsible for keeping two fields consistent forever. The
+/// tracker issue proposed the three-field shape; see
+/// `specs/038-quickslot-blocks/plan.md` D3 for why this one shipped instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuickslotState {
+    /// How long the quickslot has left before it can be used.
+    ///
+    /// [`SlotCooldown::Unknown`] is one outcome covering an empty quickslot, a
+    /// non-potion item, a potion the game reports no cooldown for, and a block
+    /// that could not be read. These are indistinguishable by construction (the
+    /// reserved payload and an absent block produce the same value) and are
+    /// deliberately not reported apart.
+    pub cooldown: SlotCooldown,
+    /// The slotted item's identity, when every identity block decoded and there
+    /// is a potion to identify. Never assembled from a partial read.
+    pub item_id: Option<u32>,
+}
+
+impl QuickslotState {
+    /// The initial state and the cleared state: nothing known.
+    pub fn new_unknown() -> Self {
+        Self {
+            cooldown: SlotCooldown::Unknown,
+            item_id: None,
+        }
+    }
+
+    /// Whether the active quickslot holds a usable potion.
+    pub fn has_potion(&self) -> bool {
+        self.cooldown != SlotCooldown::Unknown
+    }
+}
+
+/// The green marker identifying the quickslot cooldown sample (B16).
+///
+/// Chosen, like every mark since slice 031, as the midpoint of one of the widest
+/// gaps left in [`BLOCK_CENTER_GREENS`]. See
+/// `specs/038-quickslot-blocks/research.md` R5: the four marks this slice adds
+/// take the four widest remaining gaps and leave the minimum adjacent separation
+/// across the whole registry unchanged at 11, which is more than five times the
+/// default tolerance.
+const QUICKSLOT_MARKER: u8 = 0x38;
+/// The green marker identifying the quickslot item identity's high byte (B17).
+const QUICKSLOT_ID_HI_MARKER: u8 = 0xB0;
+/// The green marker identifying the quickslot item identity's middle byte (B18).
+const QUICKSLOT_ID_MID_MARKER: u8 = 0xDD;
+/// The green marker identifying the quickslot item identity's low byte (B19).
+const QUICKSLOT_ID_LO_MARKER: u8 = 0xF3;
+
 /// Every green-channel value that appears at the center of a beacon block, with
 /// the block it belongs to.
 ///
@@ -420,7 +475,7 @@ const COOLDOWN_UNAVAILABLE: u8 = 255;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 17] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 21] = [
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
@@ -438,6 +493,10 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 17] = [
     ("B13 cooldown skill 4 marker", COOLDOWN_SKILL4_MARKER),
     ("B14 cooldown skill 5 marker", COOLDOWN_SKILL5_MARKER),
     ("B15 cooldown ultimate marker", COOLDOWN_ULTIMATE_MARKER),
+    ("B16 quickslot marker", QUICKSLOT_MARKER),
+    ("B17 quickslot id high marker", QUICKSLOT_ID_HI_MARKER),
+    ("B18 quickslot id middle marker", QUICKSLOT_ID_MID_MARKER),
+    ("B19 quickslot id low marker", QUICKSLOT_ID_LO_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -476,6 +535,10 @@ pub enum PixelBusEvent {
     /// that moves several slots is one event rather than six, following the
     /// resource blocks.
     Cooldowns(CooldownSet),
+    /// A change in the decoded quickslot. Carries the whole state, because a
+    /// swap moves the identity and the cooldown in the same sample and four
+    /// events for one swap would be four log entries for one thing happening.
+    Quickslot(QuickslotState),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -521,6 +584,14 @@ pub struct BlockSamples {
     pub cooldown_skill_5: Option<Rgb>,
     /// B15, the ultimate cooldown block.
     pub cooldown_ultimate: Option<Rgb>,
+    /// B16, the quickslot cooldown block. The first block on row 1.
+    pub quickslot_status: Option<Rgb>,
+    /// B17, the quickslot item identity's high byte.
+    pub quickslot_id_hi: Option<Rgb>,
+    /// B18, the quickslot item identity's middle byte.
+    pub quickslot_id_mid: Option<Rgb>,
+    /// B19, the quickslot item identity's low byte.
+    pub quickslot_id_lo: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -615,15 +686,22 @@ impl SurfaceSampler for MockSampler {
 
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
 /// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka,
-/// B9 movement, B10 to B15 skill cooldowns.
+/// B9 movement, B10 to B15 skill cooldowns, B16 quickslot cooldown, B17 to B19
+/// the quickslot item identity.
 ///
-/// This is the companion's single statement of the strip length; the drawn width
+/// This is the companion's single statement of the grid length; the drawn extent
 /// and the capture region both derive from it. The addon states the same number
 /// once, as `local NUM_BLOCKS` in `PixelBeacon.lua`, and `tests/beacon.rs`
 /// asserts the two agree by parsing the embedded addon source. Adding a block is
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
-pub const NUM_BLOCKS: u32 = 16;
+///
+/// **Twenty blocks occupy two rows.** Slice 038 is the first shipping count to
+/// cross [`COLUMNS`]: row 0 is full at sixteen and the four quickslot blocks are
+/// the first four positions of row 1. Everything that depends on the shape
+/// derives it from this value and [`COLUMNS`] rather than restating it, and
+/// `tests/pixelbus.rs` asserts the two-row shape at compile time.
+pub const NUM_BLOCKS: u32 = 20;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -664,13 +742,20 @@ pub const COLUMNS: u32 = 16;
 /// Takes the column count as a parameter rather than reading [`COLUMNS`] so the
 /// wrap's properties can be exercised at other widths without changing what
 /// ships.
-pub fn grid_position(index: u32, columns: u32) -> (u32, u32) {
+///
+/// `const` so the grid's shape can be asserted at compile time (see the
+/// assertions in `tests/pixelbus.rs`) by calling this function rather than by
+/// open-coding its arithmetic, which would let the assertion and the function
+/// drift into disagreeing.
+pub const fn grid_position(index: u32, columns: u32) -> (u32, u32) {
     (index % columns, index / columns)
 }
 
 /// The number of rows `count` blocks occupy in a grid `columns` wide. An exact
 /// multiple does not gain an empty trailing row.
-pub fn grid_rows(count: u32, columns: u32) -> u32 {
+///
+/// `const` for the same reason as [`grid_position`].
+pub const fn grid_rows(count: u32, columns: u32) -> u32 {
     count.div_ceil(columns)
 }
 
@@ -812,6 +897,27 @@ impl ReaderConfig {
     /// The ultimate cooldown block (B15) sample point, derived from `block_px`.
     pub fn cooldown_ultimate_point(&self) -> (u32, u32) {
         block_center(self.block_px, 15)
+    }
+    /// The quickslot cooldown block (B16) sample point, derived from `block_px`.
+    ///
+    /// The first sample point in the project whose `y` is not `block_px / 2`:
+    /// index 16 wraps to row 1. Nothing here says so, which is the point. The
+    /// row is [`block_center`]'s business and this is the same one-line
+    /// derivation every other point uses.
+    pub fn quickslot_status_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 16)
+    }
+    /// The quickslot identity high byte block (B17) sample point.
+    pub fn quickslot_id_hi_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 17)
+    }
+    /// The quickslot identity middle byte block (B18) sample point.
+    pub fn quickslot_id_mid_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 18)
+    }
+    /// The quickslot identity low byte block (B19) sample point.
+    pub fn quickslot_id_lo_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 19)
     }
 }
 
@@ -1197,6 +1303,68 @@ pub fn decode_cooldowns(
     }
 }
 
+/// Decodes one identity byte block: the byte in red, its mark in green, the
+/// complement in blue.
+///
+/// Unlike every other numeric payload on the bus this one has no reserved value,
+/// because all 256 byte values are legal identity bytes. Validity therefore rests
+/// entirely on the mark and the complement, which is why each of the three blocks
+/// carries its own distinct mark rather than sharing one: without that, an
+/// off-by-one in the geometry would read the middle byte as the high byte and
+/// every check would pass.
+fn decode_id_byte(sample: Rgb, marker: u8, tolerance: u8) -> Option<u8> {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, marker, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        return None;
+    }
+    Some(sample.r)
+}
+
+/// Decodes the four quickslot blocks into one state.
+///
+/// The cooldown reuses [`decode_cooldown`] against the quickslot mark, so the
+/// quantization, the saturation rule, and the ready case are shared with the
+/// skill cooldown blocks by construction rather than reimplemented beside them.
+///
+/// The identity is reported only when there is a potion to identify **and** all
+/// three of its blocks decoded. A partial read yields no identity rather than a
+/// number assembled from the bytes that happened to survive: two thirds of an
+/// identity is a different item, not an approximate one. The two halves otherwise
+/// degrade independently, so one disturbed identity block costs the identity and
+/// not the cooldown.
+pub fn decode_quickslot(
+    status: Option<Rgb>,
+    id_hi: Option<Rgb>,
+    id_mid: Option<Rgb>,
+    id_lo: Option<Rgb>,
+    tolerance: u8,
+) -> QuickslotState {
+    let cooldown = status.map_or(SlotCooldown::Unknown, |c| {
+        decode_cooldown(c, QUICKSLOT_MARKER, tolerance)
+    });
+    if cooldown == SlotCooldown::Unknown {
+        // The cooldown has already said there is nothing here, so whatever the
+        // identity blocks carry describes nothing worth naming.
+        return QuickslotState {
+            cooldown,
+            item_id: None,
+        };
+    }
+    let byte =
+        |sample: Option<Rgb>, marker: u8| sample.and_then(|c| decode_id_byte(c, marker, tolerance));
+    let item_id = match (
+        byte(id_hi, QUICKSLOT_ID_HI_MARKER),
+        byte(id_mid, QUICKSLOT_ID_MID_MARKER),
+        byte(id_lo, QUICKSLOT_ID_LO_MARKER),
+    ) {
+        (Some(hi), Some(mid), Some(lo)) => {
+            Some((u32::from(hi) << 16) | (u32::from(mid) << 8) | u32::from(lo))
+        }
+        _ => None,
+    };
+    QuickslotState { cooldown, item_id }
+}
+
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
@@ -1209,6 +1377,7 @@ pub struct PixelBusReader {
     resources: ResourceSet,
     movement: MovementSignal,
     cooldowns: CooldownSet,
+    quickslot: QuickslotState,
     had_heartbeat: bool,
 }
 
@@ -1226,6 +1395,7 @@ impl PixelBusReader {
             resources: ResourceSet::new_unknown(),
             movement: MovementSignal::Unknown,
             cooldowns: CooldownSet::new_unknown(),
+            quickslot: QuickslotState::new_unknown(),
             had_heartbeat: false,
         }
     }
@@ -1255,6 +1425,10 @@ impl PixelBusReader {
             cooldown_skill_4: b13,
             cooldown_skill_5: b14,
             cooldown_ultimate: b15,
+            quickslot_status: b16,
+            quickslot_id_hi: b17,
+            quickslot_id_mid: b18,
+            quickslot_id_lo: b19,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -1386,6 +1560,25 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Cooldowns(cooldowns));
             }
 
+            // The four quickslot blocks travel as one state, following the
+            // resource and cooldown blocks. Clearing on a non-decoding sample
+            // rather than holding follows the combat block, and matters more
+            // here than anywhere before it: the consumer this observable exists
+            // for synthesizes a keypress, so a stale "there is a ready potion"
+            // surviving an addon downgrade would become a stale action.
+            let quickslot = decode_quickslot(b16, b17, b18, b19, tolerance);
+            if quickslot != self.quickslot {
+                self.quickslot = quickslot;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    cooldown = ?quickslot.cooldown,
+                    item_id = ?quickslot.item_id,
+                    has_potion = quickslot.has_potion(),
+                    "quickslot state detected"
+                );
+                events.push(PixelBusEvent::Quickslot(quickslot));
+            }
+
             // The menu block gates input, so a sample that does not decode must
             // clear it rather than hold it: holding a stale gate would leave the
             // application silently not intercepting long after the menu closed,
@@ -1451,6 +1644,11 @@ impl PixelBusReader {
                     self.cooldowns = cleared_cooldowns;
                     events.push(PixelBusEvent::Cooldowns(cleared_cooldowns));
                 }
+                let cleared_quickslot = QuickslotState::new_unknown();
+                if self.quickslot != cleared_quickslot {
+                    self.quickslot = cleared_quickslot;
+                    events.push(PixelBusEvent::Quickslot(cleared_quickslot));
+                }
             }
         }
 
@@ -1481,6 +1679,10 @@ impl PixelBusReader {
         let (c4x, c4y) = self.config.cooldown_skill_4_point();
         let (c5x, c5y) = self.config.cooldown_skill_5_point();
         let (cux, cuy) = self.config.cooldown_ultimate_point();
+        let (qsx, qsy) = self.config.quickslot_status_point();
+        let (qhx, qhy) = self.config.quickslot_id_hi_point();
+        let (qmx, qmy) = self.config.quickslot_id_mid_point();
+        let (qlx, qly) = self.config.quickslot_id_lo_point();
         let samples = BlockSamples {
             status: sampler.sample(sx, sy),
             fishing: sampler.sample(fx, fy),
@@ -1498,6 +1700,10 @@ impl PixelBusReader {
             cooldown_skill_4: sampler.sample(c4x, c4y),
             cooldown_skill_5: sampler.sample(c5x, c5y),
             cooldown_ultimate: sampler.sample(cux, cuy),
+            quickslot_status: sampler.sample(qsx, qsy),
+            quickslot_id_hi: sampler.sample(qhx, qhy),
+            quickslot_id_mid: sampler.sample(qmx, qmy),
+            quickslot_id_lo: sampler.sample(qlx, qly),
         };
         self.observe(samples, now_ms)
     }

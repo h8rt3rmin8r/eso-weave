@@ -60,13 +60,13 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_eleven() {
-    // Slice 037 adds the six cooldown blocks (B10 to B15), so an operator running
-    // version 10 draws none of them and the companion must report every slot as
-    // unavailable rather than guess. The bump is what makes the beacon manager
-    // offer them the update.
-    assert_eq!(embedded_version(), 11);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(11));
+fn embedded_manifest_version_is_twelve() {
+    // Slice 038 adds the four quickslot blocks (B16 to B19), so an operator
+    // running version 11 draws none of them and the companion must report the
+    // quickslot as unknown rather than guess. The bump is what makes the beacon
+    // manager offer them the update.
+    assert_eq!(embedded_version(), 12);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(12));
 }
 
 #[test]
@@ -685,6 +685,49 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(
         beacon::parse_lua_constant(lua, "COOLDOWN_UNAVAILABLE"),
         Some(255)
+    );
+    // Slice 038: the four quickslot marks. The expected values are the contract
+    // in specs/038-quickslot-blocks/contracts/quickslot-blocks.md.
+    //
+    // The quantization constants are deliberately absent from this block: B16
+    // reuses COOLDOWN_STEP_MS, COOLDOWN_MAX_STEPS, and COOLDOWN_UNAVAILABLE under
+    // their existing names on both sides, already pinned above. A second name for
+    // the same number is how two numbers eventually become different.
+    for (name, expected) in [
+        ("QUICKSLOT_MARKER", 0x38),
+        ("QUICKSLOT_ID_HI_MARKER", 0xB0),
+        ("QUICKSLOT_ID_MID_MARKER", 0xDD),
+        ("QUICKSLOT_ID_LO_MARKER", 0xF3),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            Some(expected),
+            "the addon and the companion disagree on {name}"
+        );
+    }
+}
+
+/// Slice 038: the manifest advances so the beacon manager offers the update, and
+/// says what the new blocks carry.
+///
+/// The version bump is the entire mechanism by which an operator is offered the
+/// new addon. Without it the companion samples four blocks the installed addon
+/// does not draw, which is exactly the User Story 2 case: correct, but permanently
+/// unknown, with nothing telling the operator why.
+#[test]
+fn the_manifest_advances_for_the_quickslot_blocks() {
+    let manifest = beacon::MANIFEST;
+    assert!(
+        manifest.contains("## Version: 12"),
+        "the manifest version should have advanced to 12"
+    );
+    assert!(
+        manifest.contains("## AddOnVersion: 12"),
+        "the addon version should have advanced to 12"
+    );
+    assert!(
+        manifest.contains("quickslot"),
+        "the manifest description should name the new signal"
     );
 }
 

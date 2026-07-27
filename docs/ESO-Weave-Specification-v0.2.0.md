@@ -490,7 +490,7 @@ state every frame):
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders up to nine beacon blocks anchored to the top-left corner of the
+PixelBeacon renders twenty beacon blocks anchored to the top-left corner of the
 game window's client area. Blocks are 16 by 16 physical pixels by default; the
 addon compensates for the user's UI scale so block geometry is constant in physical
 pixels. Blocks are hidden during loading screens by the game's UI lifecycle.
@@ -526,10 +526,24 @@ counts so a grid occupying part of one row does not claim a full row's width. Wh
 the block count is not a multiple of the column count the final row is partial;
 the cells beside the last block are neither drawn nor read.
 
-At the current nine blocks, every block is in row 0 and the grid is identical to
-the single row that preceded it, block for block and pixel for pixel. The
-positions in the table below are grid coordinates that currently coincide with the
-old strip offsets.
+**The grid occupies two rows.** At twenty blocks against a column count of
+sixteen, row 0 is full (B0 to B15) and row 1 holds the four quickslot blocks (B16
+to B19). The occupied extent is therefore `BLOCK_PX * 16` wide by `BLOCK_PX * 2`
+tall, which is 256 by 32 physical pixels at the default block size.
+
+This crossing landed with the quickslot blocks and is the first shipping block
+count to wrap. It moved no existing block: every index below the column count
+resolves to row 0 at the same coordinates it had when the layout was a single
+strip, which is why the value 16 was chosen for the column count in the first
+place. The positions in the table below are grid coordinates; those in row 0
+coincide with the old strip offsets.
+
+The overlay is not movable. Its anchor is part of the geometry contract both
+sides share, so relocating it would need the addon's anchor and the companion's
+capture origin to agree on a new origin, with the same failure mode as a
+column-count disagreement. The block size setting is the supported way to reduce
+the overlay's footprint, and the application reports the current footprint beside
+that setting and in its log.
 
 | Block | Position (px) | Sample (px) | Meaning |
 | --- | --- | --- | --- |
@@ -545,6 +559,8 @@ old strip offsets.
 | B8 Magicka | (128, 0) | (136, 8) | As B6 with `G = 0xBB`. |
 | B9 Movement | (144, 0) | (152, 8) | `G = 0x43` marker, `R` is a two-bit state code (bit 0 mounted, bit 1 sprint) scaled to `0x20` on foot, `0x60` mounted, `B = 255 - R` checksum. Driven by `EVENT_MOUNTED_STATE_CHANGED` and re-baselined from `IsMounted()` on `EVENT_PLAYER_ACTIVATED`, with a 1 Hz re-sync backstop. Never hidden to express a state. The two sprint codes (`0xA0` and `0xE0`) are reserved and never emitted: the game exposes no sprint state to an addon, so the reader decodes them as unavailable. |
 | B10 to B15 Cooldowns | (160, 0) to (240, 0) | (168, 8) to (248, 8) | One block per action slot the game exposes a cooldown for, in order: skills 1 to 5 then the ultimate. `G` is a per-slot marker (`0x0B`, `0x21`, `0x4E`, `0x92`, `0xC6`, `0xE8`), `R` is the remaining time in 50 ms steps (`0` ready, `1` to `254` a duration saturating at 12700 ms, `0xFF` unavailable), `B = 255 - R` checksum. Polled on the 1 Hz tick with change detection and re-baselined on `EVENT_PLAYER_ACTIVATED`; the game fires no per-slot cooldown event. Never hidden to express a state. Synergy has no block: it is a contextual prompt rather than an action slot, so the game exposes no cooldown for it. Six distinct markers rather than one shared marker so a geometry error off by one block fails validation instead of reporting a neighbouring slot's value. |
+| B16 Quickslot | (0, 16) | (8, 24) | **The first block on row 1.** `G = 0x38` marker, `R` is the active quickslot's remaining cooldown in the same 50 ms steps as B10 to B15 (`0` ready, `1` to `254` a duration saturating at 12700 ms, `0xFF` unavailable), `B = 255 - R` checksum. Read with `GetSlotCooldownInfo(GetCurrentQuickslot(), HOTBAR_CATEGORY_QUICKSLOT_WHEEL)`, the same call the skill cooldowns use, because the slot rather than the item link is authoritative on whether the thing can be used now (potions share a cooldown). `0xFF` covers an empty quickslot, a non-potion item, a potion with no on-use ability, and a slot the game reports no cooldown for; these are one outcome and are deliberately not told apart. Driven by `EVENT_ACTIVE_QUICKSLOT_CHANGED` and `EVENT_ACTION_SLOT_UPDATED`, re-baselined on `EVENT_PLAYER_ACTIVATED`, with the 1 Hz tick as the backstop that makes the countdown correct. Never hidden to express a state. |
+| B17 to B19 Quickslot item | (16, 16) to (48, 16) | (24, 24) to (56, 24) | The slotted item's 24-bit `GetItemLinkItemId`, one byte per block, most significant byte first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, `B = 255 - R` checksum. Every byte value is legal, so these blocks carry no reserved payload and their validity rests entirely on the marker and the checksum, which is why each byte has its own marker rather than sharing one. The id is reduced modulo 2^24 by the addon so no block can carry an unencodable value. When B16 is unavailable these carry zero and are still drawn. The companion reports no identity unless all three decode **and** B16 reports a potion: a partial identity is a different item, not an approximate one. The identity is published rather than the potion's restore types, which exist only inside a localized human-readable ability description the game itself consumes as tooltip text. |
 
 Weapon-class codes are shared byte-for-byte between the addon and the reader: 0
 none, 1 dual wield, 2 two handed, 3 sword and shield, 4 bow, 5 destruction staff, 6

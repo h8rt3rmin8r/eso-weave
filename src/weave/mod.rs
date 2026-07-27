@@ -17,7 +17,7 @@ use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, ResourceSet,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState, ResourceSet,
     WeaponBarSignal, WeaponClass,
 };
 
@@ -221,6 +221,7 @@ pub struct WeaveEngine {
     combat: CombatSignal,
     movement: MovementSignal,
     cooldowns: CooldownSet,
+    quickslot: QuickslotState,
     menu: MenuSurface,
     resources: ResourceSet,
 }
@@ -240,6 +241,7 @@ impl WeaveEngine {
             combat: CombatSignal::Unknown,
             movement: MovementSignal::Unknown,
             cooldowns: CooldownSet::new_unknown(),
+            quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
         }
@@ -293,6 +295,23 @@ impl WeaveEngine {
     /// The last decoded slot cooldowns.
     pub fn cooldowns(&self) -> CooldownSet {
         self.cooldowns
+    }
+
+    /// Records the decoded quickslot state, for display only.
+    ///
+    /// Inert for the same reasons as [`Self::set_cooldowns`], and more pointedly:
+    /// the feature that consumes this one acts by synthesizing a keypress, which
+    /// puts it on a constitution NON-NEGOTIABLE surface. Storing the observable
+    /// first, with a test asserting the engine behaves identically for every
+    /// value of it, means the wiring can only ever be a deliberate change that
+    /// breaks that test.
+    pub fn set_quickslot(&mut self, quickslot: QuickslotState) {
+        self.quickslot = quickslot;
+    }
+
+    /// The last decoded quickslot state.
+    pub fn quickslot(&self) -> QuickslotState {
+        self.quickslot
     }
 
     /// Records the decoded game UI surface, for display only.
