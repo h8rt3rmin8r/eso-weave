@@ -185,6 +185,28 @@ ESO Weave can detect the active weapon bar and adjust timing per bar, but the
 multi-bar (dual-bar) weaving behavior is not yet finalized and is out of scope for
 this documentation. This section covers single-bar weaving only.
 
+## References
+
+External sources of truth for the ESO integration this project builds on:
+
+- [esoui/esoui](https://github.com/esoui/esoui): the published source of the ESO
+  user interface and the canonical definition of the game's Lua API that the
+  PixelBeacon companion addon targets. ESO Weave tracks the head of this
+  repository's `live` branch to keep the on-disk addon manifest's API version
+  current.
+- [ESOUI](https://www.esoui.com/): the ESO add-on community and index.
+- [ESOUI Wiki](https://wiki.esoui.com/): human-readable documentation for the ESO
+  add-on Lua API (functions, events, and constants).
+- [The Elder Scrolls Online](https://www.elderscrollsonline.com/): the official
+  game site.
+
+Project sources of truth:
+
+- [Master specification](docs/ESO-Weave-Specification-v0.2.0.md): the architecture
+  of record; every feature traces to it.
+- [Changelog](CHANGELOG.md): the dated record of releases and pinned-artifact
+  decisions.
+
 ## Disclaimer
 
 This project is published for educational purposes only. It exists as a study
