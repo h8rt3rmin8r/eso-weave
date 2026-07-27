@@ -633,3 +633,45 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(100)
     );
 }
+
+/// Slice 034: the settings file the display detector reads sits beside the
+/// AddOns directory, so its path is derived from the resolution that already
+/// exists rather than from a second copy of the same path logic.
+#[test]
+fn user_settings_path_is_the_addons_directory_sibling() {
+    let documents = Path::new("C:/Users/someone/Documents");
+    let addons = addons_dir_under_documents(documents, Environment::Live);
+    let settings = beacon::user_settings_path(&addons).expect("a path with a parent");
+    assert_eq!(
+        settings,
+        documents
+            .join("Elder Scrolls Online")
+            .join("live")
+            .join("UserSettings.txt")
+    );
+}
+
+#[test]
+fn user_settings_path_has_no_answer_for_a_parentless_root() {
+    assert_eq!(beacon::user_settings_path(Path::new("/")), None);
+}
+
+/// The constitution treats this tree as safety-critical, and detection has no
+/// business writing in it. Resolving the path must not create the file, its
+/// parent, or anything else.
+#[test]
+fn user_settings_path_creates_nothing() {
+    let dir = tmp();
+    let addons = dir
+        .path()
+        .join("Elder Scrolls Online")
+        .join("live")
+        .join("AddOns");
+    let before = fs::read_dir(dir.path()).unwrap().count();
+    let settings = beacon::user_settings_path(&addons).expect("a path with a parent");
+    assert!(!settings.exists());
+    assert!(!addons.exists());
+    assert!(!addons.parent().unwrap().exists());
+    let after = fs::read_dir(dir.path()).unwrap().count();
+    assert_eq!(before, after);
+}

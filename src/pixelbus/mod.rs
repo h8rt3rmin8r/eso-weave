@@ -5,11 +5,16 @@
 //! tested with crafted samples and an injected clock. Surface sampling sits
 //! behind the [`SurfaceSampler`] seam with a mock plus thin OS backends.
 
+pub mod display;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(windows)]
 mod windows;
 
+pub use display::{
+    parse_user_settings, reconcile, DisplayDescriptor, DisplayDetector, DisplaySource,
+    DisplayUpdate, MeasuredDisplay, Point, Reconciliation, Size, StoredPair, StoredVideoSettings,
+};
 #[cfg(target_os = "linux")]
 pub use linux::X11Sampler;
 #[cfg(windows)]
@@ -373,6 +378,25 @@ pub trait SurfaceSampler {
     /// The color at a client-area point, or `None` when the surface cannot be
     /// sampled.
     fn sample(&self, x: u32, y: u32) -> Option<Rgb>;
+
+    /// The measured display for this sampler's window, or `None` when it cannot
+    /// be resolved.
+    ///
+    /// This is the out-of-band half of the pixel bus: it answers how big the
+    /// render surface is without reading a single pixel of it, which is what a
+    /// future grid layout needs before it can know where any block is. It shares
+    /// this seam rather than getting its own because the boundary is the same
+    /// one (here is where the operating system starts) and both backends already
+    /// hold exactly the handle it needs.
+    ///
+    /// The default returns no measurement, so an implementation opts in rather
+    /// than being broken by the addition. An implementation that supplies it
+    /// MUST return `None` rather than a zero or partial surface, MUST report
+    /// physical pixels, and MUST NOT block: it is called once per sampling
+    /// iteration on the pixel bus worker thread.
+    fn display(&self) -> Option<display::MeasuredDisplay> {
+        None
+    }
 }
 
 /// Extracts one pixel from a captured 32-bit BGRA strip (the byte layout
@@ -396,6 +420,7 @@ pub fn strip_pixel(buffer: &[u8], width: u32, height: u32, x: u32, y: u32) -> Op
 #[derive(Debug, Default)]
 pub struct MockSampler {
     points: HashMap<(u32, u32), Rgb>,
+    display: Option<display::MeasuredDisplay>,
 }
 
 impl MockSampler {
@@ -413,11 +438,21 @@ impl MockSampler {
     pub fn clear(&mut self, x: u32, y: u32) {
         self.points.remove(&(x, y));
     }
+
+    /// Sets the measurement [`SurfaceSampler::display`] returns, so the display
+    /// detection can be exercised with no window and no display hardware.
+    pub fn set_display(&mut self, measured: Option<display::MeasuredDisplay>) {
+        self.display = measured;
+    }
 }
 
 impl SurfaceSampler for MockSampler {
     fn sample(&self, x: u32, y: u32) -> Option<Rgb> {
         self.points.get(&(x, y)).copied()
+    }
+
+    fn display(&self) -> Option<display::MeasuredDisplay> {
+        self.display
     }
 }
 

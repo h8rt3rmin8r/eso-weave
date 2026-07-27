@@ -90,6 +90,19 @@ fn main() {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
 
+    // The game's stored video settings, used by the out-of-band display
+    // detection as a cross-check against what the operating system reports and
+    // as a pre-launch fallback. Resolved once here rather than per sampling
+    // iteration; changing the AddOns override mid-session is therefore picked up
+    // on the next launch, which is acceptable because this path is never the
+    // authority for a live window. Resolution creates nothing and the file is
+    // only ever read.
+    let user_settings_path = eso_weave::beacon::resolve_addons_dir(
+        &eso_weave::beacon::prefs_from_value(&settings.beacon),
+    )
+    .ok()
+    .and_then(|addons| eso_weave::beacon::user_settings_path(&addons));
+
     // Interception thread: the backend runs its own event loop (S002 contract).
     {
         let backend = backend.clone();
@@ -141,6 +154,10 @@ fn main() {
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink = RealFishingSink::new(SharedBackend(backend));
             let mut sampler = resolve_sampler(reader_config.block_px);
+            // Display detection rides this loop: no new thread and no new timer.
+            // It is change-detected, so a stationary window costs nothing beyond
+            // the operating system queries the capture already performs.
+            let mut display = pixelbus::DisplayDetector::new();
             let origin = clock_origin;
             loop {
                 // Poll fast while a fishing session is active so transient cast
@@ -157,6 +174,17 @@ fn main() {
                 )));
                 if sampler.is_none() {
                     sampler = resolve_sampler(reader_config.block_px);
+                }
+                // Resolved before the sampler check, because the absence of a
+                // window is exactly when the stored-settings fallback matters.
+                let measured = sampler.as_ref().and_then(|active| active.display());
+                if let Some(update) = display.update(measured, || {
+                    let path = user_settings_path.as_ref()?;
+                    std::fs::read_to_string(path)
+                        .ok()
+                        .map(|text| pixelbus::parse_user_settings(&text))
+                }) {
+                    log_display_update(&update);
                 }
                 let Some(active) = sampler.as_ref() else {
                     continue;
@@ -352,6 +380,41 @@ fn make_backend() -> eso_weave::input::WindowsBackend {
 #[cfg(target_os = "linux")]
 fn make_backend() -> eso_weave::input::LinuxBackend {
     eso_weave::input::LinuxBackend::new(WINDOW_TITLE)
+}
+
+/// Records a display change at debug level.
+///
+/// Only reached when something actually changed, so this can log
+/// unconditionally without flooding: a stationary window produces no lines at
+/// all. The reconciliation line is the interesting one. When it reports which
+/// stored resolution pair the measured surface matched, alongside the raw
+/// window-mode value, that pairing is evidence about what the game's unmapped
+/// mode enum means on this install, accumulated from ordinary use. Nothing acts
+/// on it.
+fn log_display_update(update: &eso_weave::pixelbus::DisplayUpdate) {
+    match &update.descriptor {
+        Some(descriptor) => tracing::debug!(
+            target: "eso_weave::pixelbus",
+            surface = format!("{}x{}", descriptor.surface.width, descriptor.surface.height),
+            origin = ?descriptor.surface_origin,
+            display_origin = ?descriptor.display_origin,
+            display_size = ?descriptor.display_size,
+            dpi = ?descriptor.dpi,
+            source = ?descriptor.source,
+            "display resolved"
+        ),
+        None => tracing::debug!(
+            target: "eso_weave::pixelbus",
+            "display no longer resolvable"
+        ),
+    }
+    if let Some(reconciliation) = &update.reconciliation {
+        tracing::debug!(
+            target: "eso_weave::pixelbus",
+            outcome = ?reconciliation,
+            "display reconciled against stored video settings"
+        );
+    }
 }
 
 #[cfg(windows)]

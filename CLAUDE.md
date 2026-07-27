@@ -70,5 +70,5 @@ authorization requirement is unchanged: never push to `main` without it.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/033-resource-blocks/plan.md
+at specs/034-display-detection/plan.md
 <!-- SPECKIT END -->

@@ -6,6 +6,7 @@
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, ImageFormat};
 
+use crate::pixelbus::display::{MeasuredDisplay, Point, Size};
 use crate::pixelbus::{Rgb, SurfaceSampler};
 
 /// Samples pixels from the game window's client area via X11.
@@ -86,5 +87,55 @@ impl SurfaceSampler for X11Sampler {
         } else {
             None
         }
+    }
+
+    /// Measures the game window and the screen it is on, using only the core X
+    /// protocol.
+    ///
+    /// Two limits are inherent to that choice and are stated rather than worked
+    /// around. The reported display size is the X screen, which on a multi-head
+    /// session is the union of every head rather than the head the window is on;
+    /// per-monitor rectangles need the RandR extension. And the scale is always
+    /// absent, because the core protocol has no scale factor at all. Deriving one
+    /// from the screen's millimetre dimensions was considered and rejected: those
+    /// values are routinely fabricated by drivers, and a plausible wrong scale is
+    /// worse than an honest unknown.
+    fn display(&self) -> Option<MeasuredDisplay> {
+        let (conn, screen_num) = x11rb::connect(None).ok()?;
+        let screen = &conn.setup().roots[screen_num];
+        let root = screen.root;
+        let window = active_window(&conn, root)?;
+        if !window_title(&conn, window)?.contains(&self.title) {
+            return None;
+        }
+
+        let geometry = conn.get_geometry(window).ok()?.reply().ok()?;
+        if geometry.width == 0 || geometry.height == 0 {
+            return None;
+        }
+        // The window's own origin is relative to its parent, so the absolute
+        // position comes from translating its top-left into root coordinates.
+        let origin = conn
+            .translate_coordinates(window, root, 0, 0)
+            .ok()?
+            .reply()
+            .ok()?;
+
+        let display_size = if screen.width_in_pixels > 0 && screen.height_in_pixels > 0 {
+            Some(Size::new(
+                u32::from(screen.width_in_pixels),
+                u32::from(screen.height_in_pixels),
+            ))
+        } else {
+            None
+        };
+
+        Some(MeasuredDisplay {
+            surface: Size::new(u32::from(geometry.width), u32::from(geometry.height)),
+            surface_origin: Point::new(i32::from(origin.dst_x), i32::from(origin.dst_y)),
+            display_origin: display_size.map(|_| Point::new(0, 0)),
+            display_size,
+            dpi: None,
+        })
     }
 }

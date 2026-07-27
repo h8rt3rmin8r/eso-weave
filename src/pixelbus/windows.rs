@@ -14,11 +14,14 @@ use std::mem::size_of;
 use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     BitBlt, ClientToScreen, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
-    GetDC, GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT,
-    DIB_RGB_COLORS, SRCCOPY,
+    GetDC, GetDIBits, GetMonitorInfoW, MonitorFromWindow, ReleaseDC, SelectObject, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, MONITORINFO, MONITOR_DEFAULTTONULL,
+    SRCCOPY,
 };
+use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, GetClientRect};
 
+use crate::pixelbus::display::{MeasuredDisplay, Point, Size};
 use crate::pixelbus::{capture_dims, strip_pixel, Rgb, SurfaceSampler};
 
 /// The captured beacon strip: a small top-left region of the client area, as
@@ -149,6 +152,74 @@ impl GdiSampler {
             result
         }
     }
+
+    /// Measures the client area and the monitor it sits on.
+    ///
+    /// `GetDpiForMonitor` with `MDT_EFFECTIVE_DPI` is used rather than
+    /// `GetDpiForWindow`, because the window belongs to the game and the latter
+    /// answers "what DPI should this window be drawn at given its own awareness
+    /// context", which is 96 for a process that declared none. We want to know
+    /// about the monitor, and that question has the same answer whoever asks it.
+    ///
+    /// The monitor and DPI fields degrade independently: a failure to resolve
+    /// either leaves it absent rather than discarding the surface, and the DPI is
+    /// never substituted with an unscaled default, because a fabricated 96 is
+    /// indistinguishable from a genuinely unscaled display.
+    fn measure(&self) -> Option<MeasuredDisplay> {
+        // SAFETY: each call takes a pointer to a local, correctly sized value,
+        // and the monitor handle is not owned so it is never released.
+        unsafe {
+            let mut origin = POINT { x: 0, y: 0 };
+            if ClientToScreen(self.hwnd, &mut origin) == 0 {
+                return None;
+            }
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            // A zero or negative client rect means the window is not currently
+            // drawable (minimized, for example), which is an absent measurement
+            // rather than a zero-sized one.
+            if GetClientRect(self.hwnd, &mut rect) == 0 || rect.right <= 0 || rect.bottom <= 0 {
+                return None;
+            }
+
+            let mut display_origin = None;
+            let mut display_size = None;
+            let mut dpi = None;
+
+            let monitor = MonitorFromWindow(self.hwnd, MONITOR_DEFAULTTONULL);
+            if !monitor.is_null() {
+                let mut info: MONITORINFO = std::mem::zeroed();
+                info.cbSize = size_of::<MONITORINFO>() as u32;
+                if GetMonitorInfoW(monitor, &mut info) != 0 {
+                    let width = info.rcMonitor.right - info.rcMonitor.left;
+                    let height = info.rcMonitor.bottom - info.rcMonitor.top;
+                    if width > 0 && height > 0 {
+                        display_origin = Some(Point::new(info.rcMonitor.left, info.rcMonitor.top));
+                        display_size = Some(Size::new(width as u32, height as u32));
+                    }
+                }
+                let mut dpi_x = 0u32;
+                let mut dpi_y = 0u32;
+                if GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) == 0
+                    && dpi_x > 0
+                {
+                    dpi = Some(dpi_x);
+                }
+            }
+
+            Some(MeasuredDisplay {
+                surface: Size::new(rect.right as u32, rect.bottom as u32),
+                surface_origin: Point::new(origin.x, origin.y),
+                display_origin,
+                display_size,
+                dpi,
+            })
+        }
+    }
 }
 
 impl SurfaceSampler for GdiSampler {
@@ -160,5 +231,9 @@ impl SurfaceSampler for GdiSampler {
         let frame = self.frame.borrow();
         let strip = frame.as_ref()?;
         strip_pixel(&strip.pixels, strip.width, strip.height, x, y)
+    }
+
+    fn display(&self) -> Option<MeasuredDisplay> {
+        self.measure()
     }
 }

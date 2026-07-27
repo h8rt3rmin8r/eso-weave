@@ -24,6 +24,9 @@ pub const SUBFOLDER: &str = "PixelBeacon";
 pub const MANIFEST_FILE: &str = "PixelBeacon.txt";
 /// The addon Lua file name.
 pub const LUA_FILE: &str = "PixelBeacon.lua";
+/// The game's stored settings file, which sits beside the AddOns directory and
+/// is read (never written) by the out-of-band display detection.
+pub const USER_SETTINGS_FILE: &str = "UserSettings.txt";
 /// The exact managed-marker line that gates uninstall.
 pub const MANAGED_MARKER: &str = "## X-ESO-Weave-Managed: true";
 /// The Steam app id for The Elder Scrolls Online.
@@ -310,6 +313,21 @@ pub fn eso_addons_subpath(env: Environment) -> PathBuf {
 /// Composes the AddOns directory under a resolved Documents directory.
 pub fn addons_dir_under_documents(documents: &Path, env: Environment) -> PathBuf {
     documents.join(eso_addons_subpath(env))
+}
+
+/// The game's stored settings file, derived from a resolved AddOns directory:
+/// it is that directory's sibling. Returns `None` for a path with no parent.
+///
+/// Deriving it this way rather than composing a second path from the Documents
+/// directory means it inherits the manual override, the Linux Proton prefix
+/// handling, and every future fix to either, and it keeps the
+/// `Elder Scrolls Online/<environment>` segment stated exactly once.
+///
+/// Pure path composition. It does not touch the filesystem, does not check
+/// existence, and above all does not create anything: the display detection
+/// that reads this file only ever reads.
+pub fn user_settings_path(addons_root: &Path) -> Option<PathBuf> {
+    addons_root.parent().map(|dir| dir.join(USER_SETTINGS_FILE))
 }
 
 /// Classifies the installed beacon status under `addons_root`. Reads only.

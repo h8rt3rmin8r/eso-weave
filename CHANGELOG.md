@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The application now knows how big the game's render surface is, which physical
+  display it is on, how that display is scaled, and where the surface sits on it,
+  resolved from the operating system without reading a single pixel of the beacon
+  and kept current as the window is moved, resized, or switched between windowed
+  and fullscreen. The game's stored video settings are parsed as a cross-check and
+  as a pre-launch fallback, and can never override a live reading. Nothing acts on
+  the result yet: it is the out-of-band input the future grid-wrap layout needs,
+  because the bus cannot be used to locate the bus. No addon change and no
+  manifest version change (issue #3).
+
 - The application shows the player's Health, Stamina, and Magicka as percentages
   of their current maximums, published by PixelBeacon as three new blocks (B6 to
   B8). Nothing acts on the values; they are an observable, like combat state.
@@ -44,6 +54,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-07-27: The game's stored window-mode value is reported exactly as read and
+  is never mapped to a named window mode. Issue #3 records that the integer's
+  meaning is unconfirmed and asks that it be verified before shipping; instead the
+  design's dependence on it was removed, because the mapping is needed for exactly
+  one decision (which of two stored resolution pairs is live) and the operating
+  system answers that decision authoritatively whenever a window exists. Guessing
+  would produce a confident wrong answer on precisely the installs where the two
+  pairs differ, and on the one install measured they differ by a lot. The
+  consequence is that a configured descriptor is produced only when both stored
+  pairs are identical, which is the sole case where the mapping is irrelevant.
+  When both a measurement and a stored reading are available, the pair the
+  measurement matched is logged alongside the raw mode value, so the evidence the
+  issue asked someone to gather by toggling modes and diffing the file now
+  accumulates from ordinary use. Nothing acts on that inference.
+- 2026-07-27: Display detection extends the existing `SurfaceSampler` seam with a
+  defaulted `display()` method rather than introducing a second trait. The
+  boundary is the same one that trait already draws (here is where the operating
+  system starts), both platform backends already hold the handle it needs, and a
+  parallel trait would have meant a second resolution path, a second boxed object
+  in the worker, and a second mock. Later work adding a platform backend inherits
+  the default, so the addition breaks nothing.
+- 2026-07-27: The Linux probe uses only the core X protocol and reports no scale
+  factor, so the display it names is the X screen rather than the head the window
+  is on. RandR would give per-monitor rectangles and is the better long-term
+  answer, but this repository compiles Linux only in the release pipeline, so an
+  unverifiable dependency change is a poor trade for a value the wrap layout does
+  not need. A scale derived from the screen's millimetre dimensions was rejected:
+  drivers routinely fabricate those, and a plausible wrong scale is worse than an
+  honest unknown.
 - 2026-07-27: The resource blocks encode the percentage numerically in the payload
   channel rather than as an index into a hundred-entry colour table, reversing what
   issue #2 specifies and dissolving the deliverable it names as gating. The issue

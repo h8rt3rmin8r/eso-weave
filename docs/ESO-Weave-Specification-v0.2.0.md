@@ -621,6 +621,32 @@ reads the block points from it, so pixels rendered through a hardware-accelerate
 returns the GDI front buffer, which does not contain the accelerated content. On
 Linux the sampler uses X11 or XWayland capture.
 
+**Out-of-band display detection.** Alongside the strip, and reading none of it,
+the companion resolves a display descriptor: the render surface size in physical
+pixels, its origin in screen coordinates, the position, size, and scale of the
+physical display it sits on, and whether the reading was measured or configured.
+Measurement comes from operating system queries about the game window on the
+sampling cycle above, change-detected so a stationary window costs nothing; a
+parse of the game's stored video settings (the file beside the AddOns directory)
+serves as a cross-check and as a pre-launch fallback, and is never permitted to
+override a live measurement. Every value is in physical pixels, the same unit as
+the block geometry, and the scale is reported rather than applied.
+
+This exists because the strip does not scale, and a grid does. Wrapping the
+blocks into rows requires both sides of the contract to agree on how many columns
+fit inside the client area, which cannot be published on the bus without knowing
+where the bus is. The descriptor is that out-of-band input, and the grid contract
+that consumes it is a separate feature; detection itself adds no block, changes
+no block, and does not advance the addon manifest version.
+
+Two limits are deliberate. The stored window-mode value is reported exactly as
+read and is never mapped to a named mode, because no verified mapping exists; a
+configured descriptor is therefore produced only when both stored resolution
+pairs are identical, which is the sole case where the mapping does not matter.
+And on X11 the reported display is the X screen, which on a multi-head session is
+the union of every head, with no scale factor at all, because the core X protocol
+exposes neither.
+
 ### 10.4 AddOns directory discovery
 
 The Beacon Manager locates the ESO AddOns directory without user input in the common
