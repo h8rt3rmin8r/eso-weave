@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{
     app_state_label, beacon_light, combat_view, default_delay_for, fishing_label, menu_view,
-    modal_extent, override_edit_for, route_reader_event, skill_rows, status_line_app,
-    status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel,
-    BeaconCondition, SkillEdit, StatusRole, UiIntent,
+    modal_extent, override_edit_for, resource_view, route_reader_event, skill_rows,
+    status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view,
+    AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -19,7 +19,8 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, ResourceLevel, ResourceSet,
+    WeaponBarSignal, WeaponClass,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -644,4 +645,61 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
     );
     assert!(!input.is_menu_gated());
     assert_eq!(weave.menu(), MenuSurface::None);
+}
+
+// Slice 033: the resource readouts and routing.
+
+#[test]
+fn resource_view_renders_a_percentage_or_not_detected() {
+    let full = resource_view(ResourceLevel::Percent(100));
+    assert!(full.detected);
+    assert_eq!(full.text, "100%");
+    assert_eq!(full.role, StatusRole::Active);
+
+    // Zero is a real reading, not an absent one. It must render as a number and
+    // stay in the detected role, or an empty pool would look like a missing addon.
+    let empty = resource_view(ResourceLevel::Percent(0));
+    assert!(empty.detected);
+    assert_eq!(empty.text, "0%");
+    assert_eq!(empty.role, StatusRole::Active);
+
+    let unknown = resource_view(ResourceLevel::Unknown);
+    assert!(!unknown.detected);
+    assert_eq!(unknown.text, "Not detected");
+    assert_eq!(unknown.role, StatusRole::Muted);
+}
+
+#[test]
+fn routing_a_resource_event_stores_it_without_touching_fishing() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    fishing.set_enabled(true, 0, &mut sink);
+    assert_eq!(fishing.state(), FishingState::Armed);
+
+    let set = ResourceSet {
+        health: ResourceLevel::Percent(42),
+        stamina: ResourceLevel::Percent(7),
+        magicka: ResourceLevel::Unknown,
+    };
+    route_reader_event(
+        PixelBusEvent::Resources(set),
+        &mut weave,
+        &mut fishing,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert_eq!(weave.resources(), set);
+    assert_eq!(
+        fishing.state(),
+        FishingState::Armed,
+        "resources do not touch fishing"
+    );
+    assert!(
+        !input.is_menu_gated(),
+        "resources do not touch the input gate"
+    );
 }

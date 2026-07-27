@@ -490,7 +490,7 @@ state every frame):
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders up to six beacon blocks anchored to the top-left corner of the
+PixelBeacon renders up to nine beacon blocks anchored to the top-left corner of the
 game window's client area. Blocks are 16 by 16 physical pixels by default; the
 addon compensates for the user's UI scale so block geometry is constant in physical
 pixels. Blocks are hidden during loading screens by the game's UI lifecycle.
@@ -509,6 +509,10 @@ divergence cannot ship as a silently dead signal.
 | B3 Weapon bar | (48, 0) | (56, 8) | `G = 0x5A` marker, `R` packs front and back weapon-class nibbles (`front * 16 + back`), `B` is the active-bar code (0 unknown, 1 front, 2 back). |
 | B4 Combat | (64, 0) | (72, 8) | `G = 0x2D` marker, `R` is the state code (`0xE0` in combat, `0x20` out of combat), `B = 255 - R` checksum. Driven by `EVENT_PLAYER_COMBAT_STATE` and re-baselined from `IsUnitInCombat("player")` on `EVENT_PLAYER_ACTIVATED`. Never hidden to express a state. |
 | B5 Menu | (80, 0) | (88, 8) | `G = 0xD2` marker, `R` is the surface code times 24 (0 gameplay, 1 system menu, 2 map, 3 inventory, 4 mail, 5 character, 6 guild store, 7 crown store, 8 journal, 9 chat entry, 10 other), `B = 255 - R` checksum. Published on the addon's fast tick. Never hidden to express a state. |
+
+| B6 Health | (96, 0) | (104, 8) | `G = 0x16` marker, `R` is the percentage of the current maximum (0 to 100, or `0xFF` for unavailable), `B = 255 - R` checksum. |
+| B7 Stamina | (112, 0) | (120, 8) | As B6 with `G = 0x6D`. |
+| B8 Magicka | (128, 0) | (136, 8) | As B6 with `G = 0xBB`. |
 
 Weapon-class codes are shared byte-for-byte between the addon and the reader: 0
 none, 1 dual wield, 2 two handed, 3 sword and shield, 4 bow, 5 destruction staff, 6
@@ -558,6 +562,28 @@ without this feature, so an addon too old to draw B5, a sample that fails
 validation, and a lost beacon signal all degrade to the prior behavior rather than
 to a gate stuck on.
 
+The resource blocks (B6 to B8) are the first numeric signal on the strip, and they
+are encoded differently from every block before them for that reason. The payload
+channel carries the percentage itself rather than an index into a colour table.
+The distinction matters because the two encodings fail differently: under a lookup
+table a capture that shifts the payload by one step lands on whichever entry is
+nearest in colour space, which bears no relation to nearness in percentage and can
+be wrong by any amount; under a numeric channel the same shift reads as one percent
+off. For a discrete state either is acceptable, because every wrong answer is
+equally wrong; for an ordered quantity only bounded error is.
+
+The guarantee, stated precisely: for any sample perturbed within the reader's
+tolerance, decoding yields either a percentage within that tolerance or
+unavailable, and never a different percentage. Rejection is a safe outcome. A
+payload slightly above 100 clamps to 100 rather than being rejected, because a full
+pool is the ordinary out-of-combat state and rejecting it on any upward drift would
+make the most common value the least stable reading on the strip.
+
+Resource changes are logged at TRACE, not DEBUG. Unlike every other block, these
+change many times a second in combat, and at DEBUG they would push every other line
+out of the live log. As with combat state, the values are stored and displayed and
+nothing acts on them.
+
 ```mermaid
 flowchart LR
     ADDON[PixelBeacon renders B0..B4] --> SURF[Game window surface]
@@ -570,11 +596,13 @@ flowchart LR
     EVT --> WB[WeaponBar]
     EVT --> CMB[Combat]
     EVT --> MENU[MenuGate]
+    EVT --> RES[Resources]
     FISH --> FC[Fishing Controller]
     LAT --> WE[Weave Engine]
     WB --> WE
     CMB --> STORE[Stored and displayed only]
     MENU --> GATE[Input engine and fishing controller gates]
+    RES --> STORE
 ```
 
 The reader samples the block points at a configurable interval: fast (default 100

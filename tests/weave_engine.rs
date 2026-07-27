@@ -5,7 +5,9 @@ use eso_weave::config::{self, Settings};
 use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
-use eso_weave::pixelbus::{ActiveBar, CombatSignal, WeaponBarSignal, WeaponClass};
+use eso_weave::pixelbus::{
+    ActiveBar, CombatSignal, ResourceLevel, ResourceSet, WeaponBarSignal, WeaponClass,
+};
 use eso_weave::weave::types::{TimingConfig, WeaveType};
 use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
 
@@ -374,4 +376,40 @@ fn combat_state_round_trips_through_the_engine() {
     assert_eq!(engine.combat(), CombatSignal::InCombat);
     engine.set_combat(CombatSignal::Unknown);
     assert_eq!(engine.combat(), CombatSignal::Unknown);
+}
+
+// Slice 033 (FR-015): resources are stored on the engine but read by nothing.
+
+#[test]
+fn resource_levels_change_no_engine_behavior() {
+    fn run(resources: ResourceSet) -> Vec<String> {
+        let mut engine = WeaveEngine::new(WeaveConfig::default());
+        let mut sink = MockSink::new();
+        engine.set_resources(resources);
+
+        sink.set_now(0);
+        engine.handle(Action::Skill1, &mut sink);
+        sink.set_now(600);
+        engine.handle(Action::Skill2, &mut sink);
+
+        sink.log.iter().map(|op| format!("{op:?}")).collect()
+    }
+
+    let unknown = run(ResourceSet::new_unknown());
+    assert!(!unknown.is_empty(), "the sequence must actually emit input");
+
+    // Including the case a future consumer would most want to act on: nearly dead.
+    let critical = ResourceSet {
+        health: ResourceLevel::Percent(3),
+        stamina: ResourceLevel::Percent(0),
+        magicka: ResourceLevel::Percent(0),
+    };
+    assert_eq!(run(critical), unknown);
+
+    let full = ResourceSet {
+        health: ResourceLevel::Percent(100),
+        stamina: ResourceLevel::Percent(100),
+        magicka: ResourceLevel::Percent(100),
+    };
+    assert_eq!(run(full), unknown);
 }

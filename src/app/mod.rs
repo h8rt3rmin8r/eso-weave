@@ -28,7 +28,9 @@ use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
-use crate::pixelbus::{ActiveBar, CombatSignal, MenuSurface, WeaponClass};
+use crate::pixelbus::{
+    ActiveBar, CombatSignal, MenuSurface, ResourceLevel, ResourceSet, WeaponClass,
+};
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
@@ -309,6 +311,53 @@ pub fn menu_view(surface: MenuSurface) -> MenuView {
         } else {
             StatusRole::Muted
         },
+    }
+}
+
+/// A normalized view of one resource pool for the status region.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceView {
+    /// Whether a reading was decoded.
+    pub detected: bool,
+    /// The percentage with a percent sign, or the not-detected text.
+    pub text: String,
+    /// The palette role for the state field.
+    pub role: StatusRole,
+}
+
+/// Derives one resource view from its decoded level.
+pub fn resource_view(level: ResourceLevel) -> ResourceView {
+    match level {
+        ResourceLevel::Percent(percent) => ResourceView {
+            detected: true,
+            text: format!("{percent}%"),
+            role: StatusRole::Active,
+        },
+        ResourceLevel::Unknown => ResourceView {
+            detected: false,
+            text: "Not detected".to_string(),
+            role: StatusRole::Muted,
+        },
+    }
+}
+
+/// The three resource views, derived together.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourcesView {
+    /// Health.
+    pub health: ResourceView,
+    /// Stamina.
+    pub stamina: ResourceView,
+    /// Magicka.
+    pub magicka: ResourceView,
+}
+
+/// Derives the resource views from the decoded set.
+pub fn resources_view(set: ResourceSet) -> ResourcesView {
+    ResourcesView {
+        health: resource_view(set.health),
+        stamina: resource_view(set.stamina),
+        magicka: resource_view(set.magicka),
     }
 }
 
@@ -643,6 +692,8 @@ pub struct AppView {
     pub combat: CombatView,
     /// The detected game UI surface, and whether it is gating input.
     pub menu: MenuView,
+    /// The detected resource levels.
+    pub resources: ResourcesView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -838,7 +889,7 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason())
         };
-        let (skills, active_bar, classes, combat, menu) = {
+        let (skills, active_bar, classes, combat, menu, resources) = {
             let weave = self.weave.lock().unwrap();
             (
                 skill_rows(weave.config()),
@@ -846,6 +897,7 @@ impl AppModel {
                 weave.weapon_classes(),
                 weave.combat(),
                 weave.menu(),
+                weave.resources(),
             )
         };
         let suspended = self.input.is_suspended();
@@ -864,6 +916,7 @@ impl AppModel {
             weapon_bar: weapon_bar_view(active_bar, classes.0, classes.1),
             combat: combat_view(combat),
             menu: menu_view(menu),
+            resources: resources_view(resources),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }

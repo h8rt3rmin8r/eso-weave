@@ -2,11 +2,12 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_weapon_bar,
-    fishing_signal, load_reader_config, poll_interval, sanitize_block_px, status_present,
-    store_reader_config, strip_pixel, ActiveBar, BlockSamples, CombatSignal, FishingSignal,
-    MenuSurface, MockSampler, PixelBusEvent, PixelBusReader, ReaderConfig, Rgb, WeaponBarSignal,
-    WeaponClass, BLOCK_CENTER_GREENS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    block_center, capture_dims, decode_combat, decode_latency, decode_menu, decode_resource,
+    decode_resources, decode_weapon_bar, fishing_signal, load_reader_config, poll_interval,
+    sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
+    CombatSignal, FishingSignal, MenuSurface, MockSampler, PixelBusEvent, PixelBusReader,
+    ReaderConfig, ResourceLevel, ResourceSet, Rgb, WeaponBarSignal, WeaponClass,
+    BLOCK_CENTER_GREENS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -378,30 +379,69 @@ fn weapon_bar_event_only_on_change() {
 
 #[test]
 fn block_center_and_capture_dims_match_contract_table() {
-    // (block_px, [B0..B5 centers], (capture_w, capture_h)) per
-    // specs/028-pixelbus-block-size/contracts/geometry.md, extended by
-    // specs/031-combat-state-block/contracts/pixel-bus-b4.md and
-    // specs/032-menu-state-gate/contracts/pixel-bus-b5.md.
+    // (block_px, [B0..B8 centers], (capture_w, capture_h)) per
+    // specs/028-pixelbus-block-size/contracts/geometry.md, extended by the B4, B5,
+    // and B6-to-B8 contracts in slices 031, 032, and 033.
     let cases = [
         (
             2u32,
-            [(1u32, 1u32), (3, 1), (5, 1), (7, 1), (9, 1), (11, 1)],
-            (12u32, 2u32),
+            [
+                (1u32, 1u32),
+                (3, 1),
+                (5, 1),
+                (7, 1),
+                (9, 1),
+                (11, 1),
+                (13, 1),
+                (15, 1),
+                (17, 1),
+            ],
+            (18u32, 2u32),
         ),
         (
             4,
-            [(2, 2), (6, 2), (10, 2), (14, 2), (18, 2), (22, 2)],
-            (24, 4),
+            [
+                (2, 2),
+                (6, 2),
+                (10, 2),
+                (14, 2),
+                (18, 2),
+                (22, 2),
+                (26, 2),
+                (30, 2),
+                (34, 2),
+            ],
+            (36, 4),
         ),
         (
             8,
-            [(4, 4), (12, 4), (20, 4), (28, 4), (36, 4), (44, 4)],
-            (48, 8),
+            [
+                (4, 4),
+                (12, 4),
+                (20, 4),
+                (28, 4),
+                (36, 4),
+                (44, 4),
+                (52, 4),
+                (60, 4),
+                (68, 4),
+            ],
+            (72, 8),
         ),
         (
             16,
-            [(8, 8), (24, 8), (40, 8), (56, 8), (72, 8), (88, 8)],
-            (96, 16),
+            [
+                (8, 8),
+                (24, 8),
+                (40, 8),
+                (56, 8),
+                (72, 8),
+                (88, 8),
+                (104, 8),
+                (120, 8),
+                (136, 8),
+            ],
+            (144, 16),
         ),
         (
             32,
@@ -412,8 +452,11 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (112, 16),
                 (144, 16),
                 (176, 16),
+                (208, 16),
+                (240, 16),
+                (272, 16),
             ],
-            (192, 32),
+            (288, 32),
         ),
     ];
     for (block_px, centers, cap) in cases {
@@ -430,7 +473,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 6);
+    assert_eq!(NUM_BLOCKS, 9);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -874,4 +917,233 @@ fn menu_event_only_on_change_and_clears_on_loss() {
     let lost = r.observe(BlockSamples::default(), 3000);
     assert!(lost.contains(&PixelBusEvent::SignalLost));
     assert!(lost.contains(&PixelBusEvent::MenuGate(MenuSurface::None)));
+}
+
+// Slice 033: the resource blocks (B6 to B8).
+//
+// These are the first NUMERIC signal on the strip. Correctness here is not "each
+// value is unmistakable for every other" but bounded error plus monotonicity,
+// which is exactly why the payload is the percentage itself rather than an index
+// into a colour table.
+
+const HEALTH_MARKER: u8 = 0x16;
+const STAMINA_MARKER: u8 = 0x6D;
+const MAGICKA_MARKER: u8 = 0xBB;
+
+/// A resource block colour, mirroring the addon encoder.
+fn resource(marker: u8, payload: u8) -> Rgb {
+    Rgb::new(payload, marker, 255u8.wrapping_sub(payload))
+}
+
+#[test]
+fn every_publishable_percentage_decodes_to_itself() {
+    let t = ReaderConfig::default().tolerance;
+    for percent in 0..=100u8 {
+        assert_eq!(
+            decode_resource(resource(HEALTH_MARKER, percent), HEALTH_MARKER, t),
+            ResourceLevel::Percent(percent),
+            "health {percent}"
+        );
+    }
+}
+
+#[test]
+fn resource_error_is_bounded_and_never_a_different_percentage() {
+    // THE property that justifies this encoding over the colour table issue #2
+    // specified. Exhaustive over the full publishable range crossed with every
+    // in-tolerance perturbation of all three channels: decoding yields either a
+    // value within tolerance, or unavailable. Never a different percentage.
+    //
+    // Under a lookup table this test could not be written, because a one-step
+    // channel error there lands on whichever entry is nearest in colour space and
+    // bears no relation to nearness in percentage.
+    let t = ReaderConfig::default().tolerance;
+    let drift = i32::from(t);
+    let mut checked = 0u32;
+
+    for percent in 0..=100u8 {
+        let base = resource(HEALTH_MARKER, percent);
+        for dr in -drift..=drift {
+            for db in -drift..=drift {
+                for dg in -drift..=drift {
+                    let r = i32::from(base.r) + dr;
+                    let g = i32::from(base.g) + dg;
+                    let b = i32::from(base.b) + db;
+                    if !(0..=255).contains(&r) || !(0..=255).contains(&g) || !(0..=255).contains(&b)
+                    {
+                        continue;
+                    }
+                    let sample = Rgb::new(r as u8, g as u8, b as u8);
+                    checked += 1;
+                    match decode_resource(sample, HEALTH_MARKER, t) {
+                        ResourceLevel::Unknown => {}
+                        ResourceLevel::Percent(got) => assert!(
+                            got.abs_diff(percent) <= t,
+                            "published {percent} decoded {got} from {sample:?}, outside tolerance"
+                        ),
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 2_000, "sweep covered only {checked} samples");
+}
+
+#[test]
+fn resource_decoding_is_monotonic() {
+    let t = ReaderConfig::default().tolerance;
+    let mut previous = 0u8;
+    for percent in 0..=100u8 {
+        let ResourceLevel::Percent(got) =
+            decode_resource(resource(HEALTH_MARKER, percent), HEALTH_MARKER, t)
+        else {
+            panic!("percent {percent} must decode");
+        };
+        assert!(got >= previous, "decoding went backwards at {percent}");
+        previous = got;
+    }
+    assert_eq!(previous, 100);
+}
+
+#[test]
+fn a_full_resource_survives_upward_drift() {
+    // The analyze gate caught this: rejecting any payload above 100 would make a
+    // full pool, the ordinary out-of-combat state, the least stable reading on the
+    // strip. It clamps instead.
+    let t = ReaderConfig::default().tolerance;
+    for over in 0..=t {
+        let sample = Rgb::new(100 + over, HEALTH_MARKER, 255 - 100);
+        assert_eq!(
+            decode_resource(sample, HEALTH_MARKER, t),
+            ResourceLevel::Percent(100),
+            "a full pool drifted up by {over} must still read 100"
+        );
+    }
+}
+
+#[test]
+fn resource_rejects_invalid_samples() {
+    let t = ReaderConfig::default().tolerance;
+    // Another block marker.
+    assert_eq!(
+        decode_resource(resource(STAMINA_MARKER, 50), HEALTH_MARKER, t),
+        ResourceLevel::Unknown
+    );
+    // Broken checksum.
+    assert_eq!(
+        decode_resource(Rgb::new(50, HEALTH_MARKER, 0), HEALTH_MARKER, t),
+        ResourceLevel::Unknown
+    );
+    // The explicit unavailable payload, and any other out-of-range value.
+    assert_eq!(
+        decode_resource(resource(HEALTH_MARKER, 0xFF), HEALTH_MARKER, t),
+        ResourceLevel::Unknown
+    );
+    assert_eq!(
+        decode_resource(resource(HEALTH_MARKER, 200), HEALTH_MARKER, t),
+        ResourceLevel::Unknown
+    );
+}
+
+#[test]
+fn no_arbitrary_colour_decodes_as_a_resource() {
+    let t = ReaderConfig::default().tolerance;
+    for marker in [HEALTH_MARKER, STAMINA_MARKER, MAGICKA_MARKER] {
+        for r in (0u32..=255).step_by(3) {
+            for g in (0u32..=255).step_by(3) {
+                for b in (0u32..=255).step_by(3) {
+                    let sample = Rgb::new(r as u8, g as u8, b as u8);
+                    let plausible = sample.g.abs_diff(marker) <= t
+                        && (i32::from(sample.r) + i32::from(sample.b) - 255).unsigned_abs()
+                            <= u32::from(t)
+                        && sample.r <= 100 + t;
+                    if plausible {
+                        continue;
+                    }
+                    assert_eq!(
+                        decode_resource(sample, marker, t),
+                        ResourceLevel::Unknown,
+                        "colour {sample:?} decoded as a resource"
+                    );
+                }
+            }
+        }
+    }
+    // No other block rendered colour decodes as a resource either.
+    for other in [
+        MAGENTA,
+        WAITING,
+        BITE,
+        Rgb::new(100, 0xA5, 155),
+        weapon(1, 2, 1),
+        COMBAT_IN,
+    ] {
+        for marker in [HEALTH_MARKER, STAMINA_MARKER, MAGICKA_MARKER] {
+            assert_eq!(decode_resource(other, marker, t), ResourceLevel::Unknown);
+        }
+    }
+}
+
+#[test]
+fn the_three_resources_decode_independently() {
+    let t = ReaderConfig::default().tolerance;
+    let set = decode_resources(
+        Some(resource(HEALTH_MARKER, 73)),
+        None,                                  // stamina block absent
+        Some(Rgb::new(40, MAGICKA_MARKER, 0)), // magicka checksum broken
+        t,
+    );
+    assert_eq!(set.health, ResourceLevel::Percent(73));
+    assert_eq!(set.stamina, ResourceLevel::Unknown);
+    assert_eq!(set.magicka, ResourceLevel::Unknown);
+}
+
+#[test]
+fn resource_event_only_on_change_and_clears_on_loss() {
+    let mut r = reader();
+
+    let first = r.observe(
+        BlockSamples {
+            health: Some(resource(HEALTH_MARKER, 80)),
+            stamina: Some(resource(STAMINA_MARKER, 60)),
+            magicka: Some(resource(MAGICKA_MARKER, 40)),
+            ..alive()
+        },
+        0,
+    );
+    assert!(first
+        .iter()
+        .any(|e| matches!(e, PixelBusEvent::Resources(_))));
+
+    let repeat = r.observe(
+        BlockSamples {
+            health: Some(resource(HEALTH_MARKER, 80)),
+            stamina: Some(resource(STAMINA_MARKER, 60)),
+            magicka: Some(resource(MAGICKA_MARKER, 40)),
+            ..alive()
+        },
+        100,
+    );
+    assert!(
+        !repeat
+            .iter()
+            .any(|e| matches!(e, PixelBusEvent::Resources(_))),
+        "a steady set must not churn"
+    );
+
+    // Blocks stop decoding: clears rather than holding.
+    let gone = r.observe(alive(), 200);
+    assert!(gone.contains(&PixelBusEvent::Resources(ResourceSet::new_unknown())));
+
+    // And signal loss clears too.
+    r.observe(
+        BlockSamples {
+            health: Some(resource(HEALTH_MARKER, 55)),
+            ..alive()
+        },
+        300,
+    );
+    let lost = r.observe(BlockSamples::default(), 3000);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::Resources(ResourceSet::new_unknown())));
 }

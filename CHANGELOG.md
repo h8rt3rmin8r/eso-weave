@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The application shows the player's Health, Stamina, and Magicka as percentages
+  of their current maximums, published by PixelBeacon as three new blocks (B6 to
+  B8). Nothing acts on the values; they are an observable, like combat state.
+  Addon version advances to 8 (issue #2).
+
 - The application stops interfering while a native game menu or text field is
   open. PixelBeacon publishes which UI surface is active as a sixth block (B5),
   and while any is up the application suspends key interception and starts no new
@@ -39,6 +44,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-07-27: The resource blocks encode the percentage numerically in the payload
+  channel rather than as an index into a hundred-entry colour table, reversing what
+  issue #2 specifies and dissolving the deliverable it names as gating. The issue
+  rejected a numeric channel as "more fragile at 1-step resolution", but the
+  latency block has encoded a number in a channel since the first slice and decodes
+  correctly in the field, and more importantly the two encodings fail differently:
+  a lookup table maps a one-step channel error onto whichever entry is nearest in
+  colour space, which can be any percentage at all, while a numeric channel maps it
+  onto one percent. Unbounded error is acceptable for a discrete state and not for
+  an ordered quantity. The guarantee is now provable by enumeration over the full
+  publishable range rather than by inspecting a hundred colours by eye, and the 5
+  percent fallback the issue allows is unnecessary.
+- 2026-07-27: A resource payload slightly above 100 clamps to 100 rather than being
+  rejected. Full is the ordinary out-of-combat state, so rejecting it on any upward
+  capture drift would have made the most common value the least stable reading on
+  the strip.
+- 2026-07-27: Resource changes log at TRACE, breaking the DEBUG pattern the combat
+  and menu blocks set. Those change a few times a minute; three resources at 1
+  percent granularity change many times a second, and at DEBUG they would bury the
+  live log, which is the tool that diagnosed every field defect this project has
+  had.
+- 2026-07-27: Marker selection has stopped being free. Ten greens now occupy the
+  channel and the nibble-swap mnemonic that produced `0xA5`/`0x5A` and
+  `0x2D`/`0xD2` is abandoned, because the remaining swap partners land badly
+  (`0xD6` is four away from the menu marker). The three resource markers `0x16`,
+  `0x6D`, and `0xBB` sit in the widest remaining gaps, giving a minimum separation
+  of 19. A future block has roughly that much headroom, and the registry test is
+  what will say so.
 - 2026-07-27: The menu gate reads the game's UI-mode state, not the addon's
   existing HUD scene test, reversing what issue #10 proposed. Opening chat does not
   hide the gameplay scenes, so the scene test reads "no menu" while the player is

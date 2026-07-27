@@ -847,6 +847,21 @@ impl EsoWeaveApp {
                 ui.label(egui::RichText::new(mv.state).color(menu_color))
                     .on_hover_text(strings::MENU_TOOLTIP);
                 ui.end_row();
+
+                // Resource pools, one grid row each so they align with the rows
+                // above. Display only; nothing in the application reads them.
+                for (title, view) in [
+                    (strings::HEALTH_TITLE, &view.resources.health),
+                    (strings::STAMINA_TITLE, &view.resources.stamina),
+                    (strings::MAGICKA_TITLE, &view.resources.magicka),
+                ] {
+                    widgets::label_strong(ui, &palette, title)
+                        .on_hover_text(strings::RESOURCE_TOOLTIP);
+                    let color = crate::app::theme::status_color(&palette, view.role);
+                    ui.label(egui::RichText::new(view.text.clone()).color(color))
+                        .on_hover_text(strings::RESOURCE_TOOLTIP);
+                    ui.end_row();
+                }
             });
 
         self.note_content_width(status.response.rect.width());

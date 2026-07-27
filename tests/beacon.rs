@@ -60,13 +60,13 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_seven() {
-    // Bumped so the app classifies an existing on-disk version-6 install as
-    // outdated and refreshes it, delivering the menu-state gate. The beacon
+fn embedded_manifest_version_is_eight() {
+    // Bumped so the app classifies an existing on-disk version-7 install as
+    // outdated and refreshes it, delivering the resource blocks. The beacon
     // manager offers the update off this number, so it advances with every
     // change to the addon's published contract.
-    assert_eq!(embedded_version(), 7);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(7));
+    assert_eq!(embedded_version(), 8);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(8));
 }
 
 #[test]
@@ -614,4 +614,22 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(beacon::parse_lua_constant(lua, "MENU_MARKER"), Some(0xD2));
     assert_eq!(beacon::parse_lua_constant(lua, "MENU_CODE_STEP"), Some(24));
     assert_eq!(beacon::parse_lua_constant(lua, "MENU_CODE_MAX"), Some(10));
+    // Slice 033: the three resource markers and the unavailable payload.
+    assert_eq!(beacon::parse_lua_constant(lua, "HEALTH_MARKER"), Some(0x16));
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "STAMINA_MARKER"),
+        Some(0x6D)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "MAGICKA_MARKER"),
+        Some(0xBB)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "RESOURCE_UNAVAILABLE"),
+        Some(u32::from(eso_weave::pixelbus::RESOURCE_UNAVAILABLE))
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "RESOURCE_MAX_PERCENT"),
+        Some(100)
+    );
 }

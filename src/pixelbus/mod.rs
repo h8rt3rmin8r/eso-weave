@@ -230,6 +230,54 @@ const MENU_CODE_STEP: u8 = 24;
 /// The highest surface code (the generic "other" value).
 const MENU_CODE_MAX: u8 = 10;
 
+/// A decoded resource reading: a whole percentage, or unreadable.
+///
+/// [`ResourceLevel::Unknown`] is deliberately distinct from `Percent(0)`. Zero
+/// means the pool is genuinely empty, which is a real and important state; unknown
+/// means there is no reading at all (an addon older than version 8 draws no
+/// resource blocks, the sample failed validation, or the beacon signal is lost).
+/// Collapsing them would make a missing addon look like a dead character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResourceLevel {
+    /// The resource could not be read.
+    #[default]
+    Unknown,
+    /// A whole percentage of the resource current maximum, 0 to 100.
+    Percent(u8),
+}
+
+/// The three resource pools as one value, so they travel and are stored together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ResourceSet {
+    /// Health, as a percentage of its current maximum.
+    pub health: ResourceLevel,
+    /// Stamina, as a percentage of its current maximum.
+    pub stamina: ResourceLevel,
+    /// Magicka, as a percentage of its current maximum.
+    pub magicka: ResourceLevel,
+}
+
+impl ResourceSet {
+    /// A set with every resource unreadable. This is both the starting value and
+    /// the value every failure mode produces.
+    pub fn new_unknown() -> Self {
+        Self::default()
+    }
+}
+
+/// The green marker identifying a health sample.
+const HEALTH_MARKER: u8 = 0x16;
+/// The green marker identifying a stamina sample.
+const STAMINA_MARKER: u8 = 0x6D;
+/// The green marker identifying a magicka sample.
+const MAGICKA_MARKER: u8 = 0xBB;
+/// The payload the addon publishes when a resource maximum is zero or unreadable.
+/// It passes the marker and checksum checks and fails the range check, so it needs
+/// no special case in the decoder and can never be confused with a real value.
+pub const RESOURCE_UNAVAILABLE: u8 = 0xFF;
+/// The highest publishable percentage.
+const RESOURCE_MAX_PERCENT: u8 = 100;
+
 /// Every green-channel value that appears at the center of a beacon block, with
 /// the block it belongs to.
 ///
@@ -238,7 +286,7 @@ const MENU_CODE_MAX: u8 = 10;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 7] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 10] = [
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
@@ -246,6 +294,9 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 7] = [
     ("B3 weapon marker", WEAPON_MARKER),
     ("B4 combat marker", COMBAT_MARKER),
     ("B5 menu marker", MENU_MARKER),
+    ("B6 health marker", HEALTH_MARKER),
+    ("B7 stamina marker", STAMINA_MARKER),
+    ("B8 magicka marker", MAGICKA_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -273,6 +324,10 @@ pub enum PixelBusEvent {
     /// surface gates, the application starts no new weave and no new fishing
     /// interaction.
     MenuGate(MenuSurface),
+    /// A change in any decoded resource level. Carries all three, so a sample in
+    /// which several move at once (the common case in combat) is one event rather
+    /// than three.
+    Resources(ResourceSet),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -298,6 +353,12 @@ pub struct BlockSamples {
     pub combat: Option<Rgb>,
     /// B5, the menu-state block.
     pub menu: Option<Rgb>,
+    /// B6, the health block.
+    pub health: Option<Rgb>,
+    /// B7, the stamina block.
+    pub stamina: Option<Rgb>,
+    /// B8, the magicka block.
+    pub magicka: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -361,7 +422,7 @@ impl SurfaceSampler for MockSampler {
 }
 
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
-/// B3 weapon, B4 combat, B5 menu.
+/// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka.
 ///
 /// This is the companion's single statement of the strip length; the drawn width
 /// and the capture region both derive from it. The addon states the same number
@@ -369,7 +430,7 @@ impl SurfaceSampler for MockSampler {
 /// asserts the two agree by parsing the embedded addon source. Adding a block is
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
-pub const NUM_BLOCKS: u32 = 6;
+pub const NUM_BLOCKS: u32 = 9;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -454,6 +515,18 @@ impl ReaderConfig {
     /// The menu block (B5) sample point, derived from `block_px`.
     pub fn menu_point(&self) -> (u32, u32) {
         block_center(self.block_px, 5)
+    }
+    /// The health block (B6) sample point, derived from `block_px`.
+    pub fn health_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 6)
+    }
+    /// The stamina block (B7) sample point, derived from `block_px`.
+    pub fn stamina_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 7)
+    }
+    /// The magicka block (B8) sample point, derived from `block_px`.
+    pub fn magicka_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 8)
     }
 }
 
@@ -681,6 +754,51 @@ pub fn decode_menu(sample: Rgb, tolerance: u8) -> MenuSurface {
     MenuSurface::from_code(code).unwrap_or(MenuSurface::None)
 }
 
+/// Decodes one resource block against its marker.
+///
+/// Validation follows the latency and combat blocks: the marker and the
+/// `red + blue` complement checksum are both checked within tolerance, then the
+/// red channel carries the percentage directly rather than indexing a colour
+/// table. That choice is what bounds the error: a capture that shifts the payload
+/// by one reads as one percent off, where a lookup table would land on whichever
+/// entry happened to be nearest in colour space and could be wrong by any amount.
+///
+/// Payloads slightly above [`RESOURCE_MAX_PERCENT`], within tolerance, clamp to it
+/// rather than being rejected. A full resource is the ordinary out-of-combat
+/// state, so rejecting it on any upward drift would make the most common value the
+/// least stable reading on the strip.
+pub fn decode_resource(sample: Rgb, marker: u8, tolerance: u8) -> ResourceLevel {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, marker, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        return ResourceLevel::Unknown;
+    }
+    if sample.r > RESOURCE_MAX_PERCENT.saturating_add(tolerance) {
+        return ResourceLevel::Unknown;
+    }
+    ResourceLevel::Percent(sample.r.min(RESOURCE_MAX_PERCENT))
+}
+
+/// Decodes all three resource blocks. Each is independent: a sample that fails
+/// validation yields [`ResourceLevel::Unknown`] for that resource only.
+pub fn decode_resources(
+    health: Option<Rgb>,
+    stamina: Option<Rgb>,
+    magicka: Option<Rgb>,
+    tolerance: u8,
+) -> ResourceSet {
+    ResourceSet {
+        health: health.map_or(ResourceLevel::Unknown, |c| {
+            decode_resource(c, HEALTH_MARKER, tolerance)
+        }),
+        stamina: stamina.map_or(ResourceLevel::Unknown, |c| {
+            decode_resource(c, STAMINA_MARKER, tolerance)
+        }),
+        magicka: magicka.map_or(ResourceLevel::Unknown, |c| {
+            decode_resource(c, MAGICKA_MARKER, tolerance)
+        }),
+    }
+}
+
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
@@ -690,6 +808,7 @@ pub struct PixelBusReader {
     weapon: Option<WeaponBarSignal>,
     combat: CombatSignal,
     menu: MenuSurface,
+    resources: ResourceSet,
     had_heartbeat: bool,
 }
 
@@ -704,6 +823,7 @@ impl PixelBusReader {
             weapon: None,
             combat: CombatSignal::Unknown,
             menu: MenuSurface::None,
+            resources: ResourceSet::new_unknown(),
             had_heartbeat: false,
         }
     }
@@ -723,6 +843,9 @@ impl PixelBusReader {
             weapon: b3,
             combat: b4,
             menu: b5,
+            health: b6,
+            stamina: b7,
+            magicka: b8,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -839,6 +962,21 @@ impl PixelBusReader {
                 );
                 events.push(PixelBusEvent::MenuGate(menu));
             }
+
+            // Resources clear on a non-decoding sample like the two blocks above.
+            // Logged at TRACE, not DEBUG: these change many times a second in
+            // combat, and at DEBUG they would push every other line out of the
+            // live log, which is the tool used to diagnose everything else.
+            let resources = decode_resources(b6, b7, b8, tolerance);
+            if resources != self.resources {
+                self.resources = resources;
+                tracing::trace!(
+                    target: "eso_weave::pixelbus",
+                    ?resources,
+                    "resources changed"
+                );
+                events.push(PixelBusEvent::Resources(resources));
+            }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
                 self.signal_lost = true;
@@ -860,6 +998,11 @@ impl PixelBusReader {
                     self.menu = MenuSurface::None;
                     events.push(PixelBusEvent::MenuGate(MenuSurface::None));
                 }
+                let cleared = ResourceSet::new_unknown();
+                if self.resources != cleared {
+                    self.resources = cleared;
+                    events.push(PixelBusEvent::Resources(cleared));
+                }
             }
         }
 
@@ -880,6 +1023,9 @@ impl PixelBusReader {
         let (wx, wy) = self.config.weapon_point();
         let (cx, cy) = self.config.combat_point();
         let (mx, my) = self.config.menu_point();
+        let (hx, hy) = self.config.health_point();
+        let (tx, ty) = self.config.stamina_point();
+        let (gx, gy) = self.config.magicka_point();
         let samples = BlockSamples {
             status: sampler.sample(sx, sy),
             fishing: sampler.sample(fx, fy),
@@ -887,6 +1033,9 @@ impl PixelBusReader {
             weapon: sampler.sample(wx, wy),
             combat: sampler.sample(cx, cy),
             menu: sampler.sample(mx, my),
+            health: sampler.sample(hx, hy),
+            stamina: sampler.sample(tx, ty),
+            magicka: sampler.sample(gx, gy),
         };
         self.observe(samples, now_ms)
     }

@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders up to six square blocks (BLOCK_PX physical pixels on a side,
+-- It renders up to nine square blocks (BLOCK_PX physical pixels on a side,
 -- default 16; the companion sets this value on deploy) anchored to the top-left
 -- of the client area, encoding load status (B0), fishing state (B1), server
 -- latency (B2), the active weapon bar with each bar's weapon class (B3), and the
@@ -8,7 +8,8 @@
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
 -- section 10.3, the slice 014 weapon-bar block, the slice 031 combat block, and
--- the slice 032 menu block.
+-- the slice 032 menu block, and the slice 033 resource blocks (B6 health,
+-- B7 stamina, B8 magicka).
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -20,7 +21,7 @@ local BLOCK_PX = 16
 -- The strip length, stated once. The root width and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 6
+local NUM_BLOCKS = 9
 local LATENCY_UPDATE_MS = 1000
 local FAST_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
@@ -93,6 +94,25 @@ local SCENE_CODES = {
 -- The last rendered surface code, held so the block is redrawn only on a real
 -- transition. nil until the first render.
 local menuCode = nil
+
+-- Resource block markers (green channel), shared byte for byte with the companion
+-- decoder. Red carries the percentage 0 to 100 directly, NOT an index into a color
+-- table: a capture that shifts red by one then reads one percent off, where a
+-- table would land on whichever entry is nearest in color space and could be wrong
+-- by any amount. Blue carries the 255 minus red complement checksum.
+local HEALTH_MARKER = 0x16
+local STAMINA_MARKER = 0x6D
+local MAGICKA_MARKER = 0xBB
+
+-- Published when a resource maximum is zero or unreadable. It passes the marker
+-- and checksum checks and fails the range check, so the companion needs no special
+-- case for it and it can never be read as a percentage.
+local RESOURCE_UNAVAILABLE = 0xFF
+local RESOURCE_MAX_PERCENT = 100
+
+-- The last rendered percentages, held so each block is redrawn only on a real
+-- change. nil until the first render.
+local resourcePercents = { health = nil, stamina = nil, magicka = nil }
 
 -- The decoded weapon-bar state: active bar code (0 unknown, 1 front, 2 back) and
 -- each bar's class code. Held across indeterminate reads (locked or none pair).
@@ -342,6 +362,63 @@ local function updateMenu()
     return true
 end
 
+-- B6 to B8 Resources ----------------------------------------------------------
+
+-- The percentage of a pool against its CURRENT maximum, or the unavailable value
+-- when the maximum cannot be read or is zero. A percentage of a stale maximum is
+-- meaningless, so the maximum is re-read every time rather than cached.
+local function resourcePercent(mechanic)
+    local current, maximum = GetUnitPower("player", mechanic)
+    if current == nil or maximum == nil or maximum <= 0 then
+        return RESOURCE_UNAVAILABLE
+    end
+    local percent = zo_floor((current / maximum) * RESOURCE_MAX_PERCENT + 0.5)
+    if percent < 0 then
+        percent = 0
+    elseif percent > RESOURCE_MAX_PERCENT then
+        percent = RESOURCE_MAX_PERCENT
+    end
+    return percent
+end
+
+local function renderResource(block, marker, percent)
+    if blocks.status:IsHidden() then
+        block:SetHidden(true)
+        return
+    end
+    block:SetCenterColor(channel(percent), channel(marker), channel(255 - percent), 1)
+    block:SetHidden(false)
+end
+
+-- Recomputes all three, returning true when any changed.
+local function updateResources()
+    local health = resourcePercent(COMBAT_MECHANIC_FLAGS_HEALTH)
+    local stamina = resourcePercent(COMBAT_MECHANIC_FLAGS_STAMINA)
+    local magicka = resourcePercent(COMBAT_MECHANIC_FLAGS_MAGICKA)
+    if health == resourcePercents.health
+        and stamina == resourcePercents.stamina
+        and magicka == resourcePercents.magicka then
+        return false
+    end
+    resourcePercents.health = health
+    resourcePercents.stamina = stamina
+    resourcePercents.magicka = magicka
+    return true
+end
+
+local function renderResources()
+    renderResource(blocks.health, HEALTH_MARKER, resourcePercents.health or RESOURCE_UNAVAILABLE)
+    renderResource(blocks.stamina, STAMINA_MARKER, resourcePercents.stamina or RESOURCE_UNAVAILABLE)
+    renderResource(blocks.magicka, MAGICKA_MARKER, resourcePercents.magicka or RESOURCE_UNAVAILABLE)
+end
+
+-- Reacts to a power update: re-render only on a real change.
+local function onPowerUpdate()
+    if updateResources() then
+        renderResources()
+    end
+end
+
 -- Reacts to a weapon-pair-changed event, which fires on nearly every attack:
 -- re-render only when the decoded state actually changes.
 local function onWeaponPairChanged()
@@ -410,6 +487,11 @@ local function onFastTick()
     if updateMenu() then
         renderMenu()
     end
+    -- A backstop for the power events, so a missed update cannot strand a block
+    -- on a stale percentage. Renders only on a real change, like every other block.
+    if updateResources() then
+        renderResources()
+    end
     onFishingTick()
 end
 
@@ -454,6 +536,9 @@ local function buildBlocks()
     blocks.weapon = createBlock("Weapon")
     blocks.combat = createBlock("Combat")
     blocks.menu = createBlock("Menu")
+    blocks.health = createBlock("Health")
+    blocks.stamina = createBlock("Stamina")
+    blocks.magicka = createBlock("Magicka")
 
     positionBlock(blocks.status, 0)
     positionBlock(blocks.fishing, BLOCK_PX)
@@ -461,6 +546,9 @@ local function buildBlocks()
     positionBlock(blocks.weapon, BLOCK_PX * 3)
     positionBlock(blocks.combat, BLOCK_PX * 4)
     positionBlock(blocks.menu, BLOCK_PX * 5)
+    positionBlock(blocks.health, BLOCK_PX * 6)
+    positionBlock(blocks.stamina, BLOCK_PX * 7)
+    positionBlock(blocks.magicka, BLOCK_PX * 8)
 
     renderStatus()
     renderFishing()
@@ -471,6 +559,8 @@ local function buildBlocks()
     renderCombat()
     updateMenu()
     renderMenu()
+    updateResources()
+    renderResources()
 end
 
 local function onLatencyTick()
@@ -509,11 +599,18 @@ local function onAddOnLoaded(_, name)
     -- state that is already true when the world finishes loading.
     em:RegisterForEvent(ADDON_NAME .. "Combat", EVENT_PLAYER_COMBAT_STATE, onCombatStateChanged)
 
+    -- Resource tracking: react to the game's own power updates, filtered to the
+    -- player so other units' pools never drive our blocks.
+    em:RegisterForEvent(ADDON_NAME .. "Power", EVENT_POWER_UPDATE, onPowerUpdate)
+    em:AddFilterForEvent(ADDON_NAME .. "Power", EVENT_POWER_UPDATE, REGISTER_FILTER_UNIT_TAG, "player")
+
     em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
         computeWeaponBar()
         renderWeapon()
         computeCombat()
         renderCombat()
+        updateResources()
+        renderResources()
     end)
 end
 

@@ -56,6 +56,13 @@ pub const MENU_TITLE: &str = "Game Menu";
 pub const MENU_TOOLTIP: &str =
     "Whether a native game menu or text field is open, read from the Pixel Beacon addon. While one is, the application stops intercepting keys and stops sending its own, so typing in game is not disturbed. Requires addon version 7 or later.";
 
+// Resource section.
+pub const HEALTH_TITLE: &str = "Health";
+pub const STAMINA_TITLE: &str = "Stamina";
+pub const MAGICKA_TITLE: &str = "Magicka";
+pub const RESOURCE_TOOLTIP: &str =
+    "The pool as a percentage of its current maximum, read from the Pixel Beacon addon. Requires addon version 8 or later; shows Not detected without a signal. Nothing in the application acts on these yet.";
+
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
 pub const SKILLS_TOOLTIP: &str =
@@ -235,6 +242,9 @@ pub fn all_labels() -> Vec<&'static str> {
         WEAPON_BAR_TITLE,
         COMBAT_TITLE,
         MENU_TITLE,
+        HEALTH_TITLE,
+        STAMINA_TITLE,
+        MAGICKA_TITLE,
         SKILLS_TITLE,
         LOG_TITLE,
         MENU_FILE,
@@ -273,6 +283,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         WEAPON_BAR_TOOLTIP,
         COMBAT_TOOLTIP,
         MENU_TOOLTIP,
+        RESOURCE_TOOLTIP,
         SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,

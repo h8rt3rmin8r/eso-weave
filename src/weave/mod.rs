@@ -16,7 +16,9 @@ use serde::{Deserialize, Serialize};
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
-use crate::pixelbus::{ActiveBar, CombatSignal, MenuSurface, WeaponBarSignal, WeaponClass};
+use crate::pixelbus::{
+    ActiveBar, CombatSignal, MenuSurface, ResourceSet, WeaponBarSignal, WeaponClass,
+};
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
 pub use types::{
@@ -217,6 +219,7 @@ pub struct WeaveEngine {
     back_class: WeaponClass,
     combat: CombatSignal,
     menu: MenuSurface,
+    resources: ResourceSet,
 }
 
 impl WeaveEngine {
@@ -233,6 +236,7 @@ impl WeaveEngine {
             back_class: WeaponClass::Unknown,
             combat: CombatSignal::Unknown,
             menu: MenuSurface::None,
+            resources: ResourceSet::new_unknown(),
         }
     }
 
@@ -267,6 +271,21 @@ impl WeaveEngine {
     /// The last decoded game UI surface.
     pub fn menu(&self) -> MenuSurface {
         self.menu
+    }
+
+    /// Records the decoded resource levels, for display only.
+    ///
+    /// Deliberately inert, exactly like the combat state above: nothing in this
+    /// engine reads it, and no timing or input behavior depends on it.
+    /// `tests/weave_engine.rs` asserts the engine behaves identically across
+    /// resource values, so wiring them into a decision has to break that test.
+    pub fn set_resources(&mut self, resources: ResourceSet) {
+        self.resources = resources;
+    }
+
+    /// The last decoded resource levels.
+    pub fn resources(&self) -> ResourceSet {
+        self.resources
     }
 
     /// Records the decoded weapon-bar state (active bar and each bar's weapon
