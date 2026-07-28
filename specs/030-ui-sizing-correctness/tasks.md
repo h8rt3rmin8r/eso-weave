@@ -274,7 +274,7 @@ edge, on any frame.
       no longer true. State what is now covered by rendered-frame tests and what
       remains manual.
 - [x] T029 [P] Correct the master specification
-      `docs/ESO-Weave-Specification-v0.2.0.md`: section 11.1 states a fixed
+      `docs/ESO-Weave-Specification.md`: section 11.1 states a fixed
       minimum of 480 by 420, which is the boot floor and not the enforced
       minimum, so add the sizing model (boot floor, then intrinsic content
       minimum); add the log pane's never-overlap boundary to 11.2; add the

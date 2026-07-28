@@ -112,7 +112,7 @@ src/
 `-- fishing/
     `-- mod.rs           # DEBUG transition logging (target eso_weave::fishing)
 docs/
-`-- ESO-Weave-Specification-v0.2.0.md   # fishing-detection contract language
+`-- ESO-Weave-Specification.md   # fishing-detection contract language
 CHANGELOG.md             # dated decision + Fixed entry
 ```
 

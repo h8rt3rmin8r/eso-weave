@@ -5,7 +5,7 @@ Windows 10/11 x64 and Linux x64. It runs entirely outside the game: an input
 engine intercepts and synthesizes keys while the game window is focused, a weave
 engine executes combat action sequences, and an optional fishing module reads a
 pixel-bus signal rendered by the embedded PixelBeacon companion addon. The master
-specification is `docs/ESO-Weave-Specification-v0.2.0.md`; it is the architecture
+specification is `docs/ESO-Weave-Specification.md`; it is the architecture
 of record, and every feature traces to it. Build plans under `docs/plans/`
 (index `docs/plans/README.md`) decompose the specification into the ordered work
 slices that become spec-kit features and define what to build next; they are

@@ -54,7 +54,7 @@ captured headlessly).
 
 ## Phase 5: Spec and changelog
 
-- [x] T007 In `docs/ESO-Weave-Specification-v0.2.0.md` section 10.3 update the
+- [x] T007 In `docs/ESO-Weave-Specification.md` section 10.3 update the
   sentence naming GDI window-surface capture to describe screen-composited capture
   (reads the desktop framebuffer, so DirectX content is captured).
 - [x] T008 Update `CHANGELOG.md` `[Unreleased]` with a `Fixed` entry (fishing

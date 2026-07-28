@@ -106,7 +106,7 @@ tests/
 └── weave_engine.rs      # FR-016 boundary: combat state changes no engine behavior
 
 docs/
-└── ESO-Weave-Specification-v0.2.0.md  # Section 10.3 gains B4
+└── ESO-Weave-Specification.md  # Section 10.3 gains B4
 ```
 
 **Structure Decision**: The existing single-crate layout is unchanged. This

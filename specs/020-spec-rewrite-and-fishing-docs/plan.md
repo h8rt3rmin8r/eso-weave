@@ -30,7 +30,7 @@ a repository grep for the old path, and a text-hygiene check.
 
 ## Approach
 
-1. Author `docs/ESO-Weave-Specification-v0.2.0.md`: RFC-style structure and section
+1. Author `docs/ESO-Weave-Specification.md`: RFC-style structure and section
    numbering, declarative voice, current defaults, and the built subsystems
    including the slice-018 API-version automation. Add and validate the mermaid
    diagram set.
@@ -45,7 +45,7 @@ a repository grep for the old path, and a text-hygiene check.
 ## Project Structure
 
 ```text
-docs/ESO-Weave-Specification-v0.2.0.md   # new; v0.1.0 removed
+docs/ESO-Weave-Specification.md   # new; v0.1.0 removed
 README.md                                 # bait prerequisite, step, troubleshooting
 CHANGELOG.md                              # Documentation + Decisions entries
 CLAUDE.md, .specify/memory/constitution.md, docs/build-autopilot.md,

@@ -271,7 +271,7 @@ External sources of truth for the ESO integration this project builds on:
 
 Project sources of truth:
 
-- [Master specification](docs/ESO-Weave-Specification-v0.2.0.md): the architecture
+- [Master specification](docs/ESO-Weave-Specification.md): the architecture
   of record; every feature traces to it.
 - [Changelog](CHANGELOG.md): the dated record of releases and pinned-artifact
   decisions.

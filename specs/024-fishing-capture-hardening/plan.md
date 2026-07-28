@@ -102,7 +102,7 @@ src/
 |   |                    #   the seam; sample reads from the captured strip
 |   `-- linux.rs         # unchanged (default prepare is a no-op)
 docs/
-`-- ESO-Weave-Specification-v0.2.0.md   # section 10.3 capture language
+`-- ESO-Weave-Specification.md   # section 10.3 capture language
 CHANGELOG.md             # dated decision + Fixed entry
 ```
 

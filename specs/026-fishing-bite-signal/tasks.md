@@ -36,7 +36,7 @@ quickstart.md.
 
 ## Phase 2: Documentation
 
-- [x] T004 In `docs/ESO-Weave-Specification-v0.2.0.md` section 10.2 correct
+- [x] T004 In `docs/ESO-Weave-Specification.md` section 10.2 correct
   the fishing detection contract: delete the reel-in-prompt primary-bite
   bullet, make the lure-scoped bait-consumption event the sole bite signal,
   and add the explicit statement that the reel-in prompt is the standing

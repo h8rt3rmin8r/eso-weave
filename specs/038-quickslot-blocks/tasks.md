@@ -172,7 +172,7 @@ the block count, and follows a change to the square size.
 
 ## Phase 7: Polish and cross-cutting
 
-- [ ] T048 [P] Update section 10.3 of `docs/ESO-Weave-Specification-v0.2.0.md` to document B16 to B19, the twenty-block count, and the two-row grid
+- [ ] T048 [P] Update section 10.3 of `docs/ESO-Weave-Specification.md` to document B16 to B19, the twenty-block count, and the two-row grid
 - [ ] T049 [P] Add the overlay footprint note to `README.md`, stating the size at the default block size and naming the block-size setting as the remedy
 - [ ] T050 [P] Add the `[Unreleased]` changelog entry in `CHANGELOG.md`: an Added line for the feature, plus dated Decisions entries for the slot-cooldown source over the item link (D1), the derived `has_potion` shape (D3), the replaced geometry assertion (D4), and the report-do-not-manage stance on the overlay footprint (D5)
 - [ ] T051 Update the header comments in `addon/PixelBeacon/PixelBeacon.lua` that state the block count and the single-row grid

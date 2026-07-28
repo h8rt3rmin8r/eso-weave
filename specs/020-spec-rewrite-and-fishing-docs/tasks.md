@@ -12,7 +12,7 @@ stale-reference grep, and a text-hygiene check.
 
 ## Phase 1: User Story 1 - Accurate architecture of record (Priority: P1)
 
-- [ ] T001 [US1] Author `docs/ESO-Weave-Specification-v0.2.0.md`: declarative RFC
+- [ ] T001 [US1] Author `docs/ESO-Weave-Specification.md`: declarative RFC
   style, built subsystems with current defaults, including the API-version
   automation, and the expanded mermaid diagram set.
 - [ ] T002 [US1] Validate every mermaid diagram in the new spec.

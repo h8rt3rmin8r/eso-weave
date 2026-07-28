@@ -59,7 +59,7 @@ quickstart.md, consistent with slices 004/014/016/024.
 
 ## Phase 3: Documentation
 
-- [x] T006 In `docs/ESO-Weave-Specification-v0.2.0.md` update the fishing
+- [x] T006 In `docs/ESO-Weave-Specification.md` update the fishing
   detection language (sections 9/10.3 wording that describes the addon's
   cast and bite detection) to the polling contract: interaction-type poll for
   waiting, reel-in prompt comparison as primary bite, lure-scoped bait

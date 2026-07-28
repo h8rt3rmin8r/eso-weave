@@ -59,7 +59,7 @@ the decoder being written to a weaker standard.
 ## Phase 6: Polish
 
 - [x] T021 [P] Extend the cross-language agreement test in `tests/beacon.rs` to `NUM_BLOCKS` and the three markers. [FR-017]
-- [x] T022 [P] Update section 10.3 of `docs/ESO-Weave-Specification-v0.2.0.md` with B6 to B8, the numeric encoding, the bounded-error guarantee, and the trace-level note. [FR-019]
+- [x] T022 [P] Update section 10.3 of `docs/ESO-Weave-Specification.md` with B6 to B8, the numeric encoding, the bounded-error guarantee, and the trace-level note. [FR-019]
 - [x] T023 [P] Update `CHANGELOG.md`: an `Added` entry plus a dated decision for the encoding reversal and one for the marker exhaustion note. [FR-019]
 - [x] T024 Run the full merge gate in the foreground. [Constitution IV, SC-007]
 - [x] T025 Verify against the diff that no safety surface or existing test assertion changed, and that no resource value is read in any decision path. [FR-015, FR-016]

@@ -60,7 +60,7 @@ failing test before the code that satisfies it.
 ## Phase 6: Polish and cross-cutting concerns
 
 - [X] T029 Advance the manifest in `addon/PixelBeacon/PixelBeacon.txt` from 10 to 11 on both version lines, extend the description to name the new signal, and rename and retarget `embedded_manifest_version_is_ten` in `tests/beacon.rs`
-- [X] T030 Update section 10.3 of `docs/ESO-Weave-Specification-v0.2.0.md` with B10 to B15, and add the `[Unreleased]` entry to `CHANGELOG.md` with an `Added` line plus dated decisions for the six-block scope, the marker set and its 11-unit minimum separation, and leaving the boundary assertion in force
+- [X] T030 Update section 10.3 of `docs/ESO-Weave-Specification.md` with B10 to B15, and add the `[Unreleased]` entry to `CHANGELOG.md` with an `Added` line plus dated decisions for the six-block scope, the marker set and its 11-unit minimum separation, and leaving the boundary assertion in force
 
 - [X] T031 Author `docs/plans/plan-012.md` sequencing slices 037, 038, and 039 against issues #18, #19, and #20, add its row to the index in `docs/plans/README.md`, and point the managed plan reference in `CLAUDE.md` at this feature. Ships in the same commit, matching how build plan 011 shipped with slice 035 (FR-022).
 

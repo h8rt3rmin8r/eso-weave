@@ -31,7 +31,7 @@ repository reference points at the old file.
 1. **Given** the rewritten spec, **When** a reader looks for any built subsystem,
    **Then** it is documented declaratively with current defaults and behavior.
 2. **Given** the repository, **When** any file references the master spec, **Then**
-   it points at `docs/ESO-Weave-Specification-v0.2.0.md` and the old file is gone.
+   it points at `docs/ESO-Weave-Specification.md` and the old file is gone.
 3. **Given** each mermaid diagram, **When** it is rendered, **Then** it is valid.
 
 ### User Story 2 - Fishing docs do not set users up to fail (Priority: P1)
@@ -66,7 +66,7 @@ bait.
 ### Functional Requirements
 
 - **FR-001**: The master specification MUST be rewritten as
-  `docs/ESO-Weave-Specification-v0.2.0.md`, documenting the built subsystems
+  `docs/ESO-Weave-Specification.md`, documenting the built subsystems
   declaratively with current defaults.
 - **FR-002**: The spec MUST include expanded mermaid diagrams, each of which MUST
   be valid and render.

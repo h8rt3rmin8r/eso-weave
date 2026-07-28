@@ -99,7 +99,7 @@ with a virtual clock and no game.
 
 ## Phase 6: Polish and cross-cutting
 
-- [ ] T031 [P] Document the feature and its safety conditions in `docs/ESO-Weave-Specification-v0.2.0.md`
+- [ ] T031 [P] Document the feature and its safety conditions in `docs/ESO-Weave-Specification.md`
 - [ ] T032 [P] Add an Auto-potion section to `README.md`: what it does, that it defaults off, the OR rule, and that it never fires on an unreadable resource
 - [ ] T033 [P] Add the `[Unreleased]` changelog entry in `CHANGELOG.md`, plus dated Decisions entries for unknown-is-not-low (D1), the retry interval versus the cooldown (D2), the typed block reason (D3), and not restoring the enable (D5)
 - [ ] T034 Run the full merge gate in the foreground and watch it to completion: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all --locked`

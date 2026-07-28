@@ -100,7 +100,7 @@ addon/
 tests/
 `-- beacon.rs            # Version pin 4 -> 5
 docs/
-`-- ESO-Weave-Specification-v0.2.0.md   # section 10.2 corrected
+`-- ESO-Weave-Specification.md   # section 10.2 corrected
 CHANGELOG.md             # Fixed entry + dated decision correcting slice 025
 ```
 

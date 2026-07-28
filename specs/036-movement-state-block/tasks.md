@@ -87,7 +87,7 @@ the table documents why they are unused.
 
 - [X] T029 Advance the manifest in `addon/PixelBeacon/PixelBeacon.txt` from version 9 to 10 on both `## Version` and `## AddOnVersion`, extend the `## Description` to name the mounted signal, and rename and retarget `embedded_manifest_version_is_nine` in `tests/beacon.rs`
 - [X] T030 Add the capture-extent invariant test in `tests/pixelbus.rs`, asserting `grid_extent` yields one row for any block count at or below `COLUMNS` and that the shipping constants produce an unchanged region, expressed on the dependency rather than on the literal ten per plan decision D5
-- [X] T031 Update the pixel-bus block table in `docs/ESO-Weave-Specification-v0.2.0.md` section 10.3 with B9, and add the `[Unreleased]` entry to `CHANGELOG.md` with an `Added` line plus dated decisions for the reduced mounted-only scope, the `0x43` marker, and the reserved sprint codes
+- [X] T031 Update the pixel-bus block table in `docs/ESO-Weave-Specification.md` section 10.3 with B9, and add the `[Unreleased]` entry to `CHANGELOG.md` with an `Added` line plus dated decisions for the reduced mounted-only scope, the `0x43` marker, and the reserved sprint codes
 
 **Final gate**: run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --all --locked` in the foreground, watched to completion, per constitution Principle IV.
 

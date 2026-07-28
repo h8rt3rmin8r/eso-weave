@@ -64,7 +64,7 @@ age.
 
 ## Spec and changelog
 
-- `docs/ESO-Weave-Specification-v0.2.0.md` section 10.3: the sentence naming GDI
+- `docs/ESO-Weave-Specification.md` section 10.3: the sentence naming GDI
   window-surface capture is updated to describe screen-composited capture.
 - `CHANGELOG.md`: a `Fixed` entry and a dated `Decisions` entry for the capture
   mechanism change.

@@ -2,7 +2,7 @@
 
 Plan: 005
 Status: active
-Master specification: `docs/ESO-Weave-Specification-v0.2.0.md`
+Master specification: `docs/ESO-Weave-Specification.md`
 Constitution: `.specify/memory/constitution.md`
 
 ## Purpose
@@ -70,7 +70,7 @@ expanded mermaid diagrams (system architecture, thread and ownership model, inpu
 interception flow, weave sequence, fishing state machine, pixel-bus block
 protocol, beacon install and verify and uninstall lifecycle, API version check
 flow, GUI layout, and the config and state persistence model). The rewrite lands
-as `docs/ESO-Weave-Specification-v0.2.0.md`; every repository reference is
+as `docs/ESO-Weave-Specification.md`; every repository reference is
 repointed from v0.1.0 to v0.2.0, the superseded file is removed, and the standing
 autopilot authorization is re-affirmed against the new document, recorded as a
 dated decision. Separately, correct the fishing README: add fishing bait as a

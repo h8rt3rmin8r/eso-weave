@@ -70,7 +70,7 @@ what makes the guard's correctness a test result rather than a claim.
 ## Phase 7: Polish and Cross-Cutting
 
 - [x] T026 [P] Extend the cross-language agreement test in `tests/beacon.rs` to the menu constants (`NUM_BLOCKS`, `MENU_MARKER`, the code step and maximum). [FR-020]
-- [x] T027 [P] Update section 10.3 of `docs/ESO-Weave-Specification-v0.2.0.md` with B5, the code table, the gate semantics, the two-path coverage, and the cadence change. [FR-023]
+- [x] T027 [P] Update section 10.3 of `docs/ESO-Weave-Specification.md` with B5, the code table, the gate semantics, the two-path coverage, and the cadence change. [FR-023]
 - [x] T028 [P] Update `CHANGELOG.md`: an `Added` entry, plus dated decisions for the two-path gating, the cadence condition, and the default-inactive design. [FR-023]
 - [x] T029 Run the full merge gate in the foreground. [Constitution IV, SC-008]
 - [x] T030 Verify the safety boundary against the diff: no existing safety test's assertions or scenarios changed, focus scoping untouched, the decision still synchronous and non-blocking with no added timed work, the fishing signal-loss degrade path unchanged, and no user-facing setting introduced for the gate. [FR-014, FR-017, FR-018, SC-008]

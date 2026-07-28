@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The master specification is refreshed to describe the shipping system and
+  rewritten for how it reads (issue #15). Nine slices of behavior are now in the
+  architecture of record: the menu gate, the combat, movement, resource, cooldown,
+  and quickslot block families, the two-row grid, out-of-band display detection,
+  and auto-potion. The document is renamed to `docs/ESO-Weave-Specification.md`
+  and every reference in the repository is updated. No application behavior
+  changes; `src/`, `addon/`, and `tests/` are untouched.
+
+### Decisions
+
+- 2026-07-28: The specification's filename no longer carries its version. A
+  version in a filename forces every revision to choose between churning every
+  reference and letting the name lie, and this document chose the latter for nine
+  slices while 47 references pointed at `v0.2.0`. The version lives in the header
+  block, so a future revision edits one line.
+- 2026-07-28: The document version is independent of the application version, and
+  the header says so. Tying them is what made the drift look worse than it was: a
+  0.2.0 document beside a 0.8.1 application read as seven versions behind when the
+  document had simply never been renumbered. The document is 1.0.0 because it now
+  describes the whole shipping system.
+- 2026-07-28: The diagram count drops from ten to four, and no two are adjacent.
+  The previous document put three in close succession across the architecture,
+  concurrency, and interception sections, which made all three hard to read as a
+  group. A diagram survives only where the subject is genuinely a graph: the
+  component architecture, the interception decision, the fishing state machine,
+  and the pixel-bus data flow. The six that were cut were linear sequences drawn
+  as pictures, and each is now the table or ordered list it always was.
+- 2026-07-28: The open-items section and the owed-validation appendix are removed.
+  Both enumerated what is absent or owed, which is the opposite of a declarative
+  statement of what the system is; outstanding work lives on the issue tracker.
+  For the same reason, the prose no longer narrates which slice changed what. The
+  reasoning behind a design is architecture and stays; the account of when it
+  arrived is what version control and this changelog are for.
+
 ## [0.11.0] - 2026-07-28
 
 ### Added
@@ -781,7 +817,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- The master specification is rewritten as `docs/ESO-Weave-Specification-v0.2.0.md`,
+- The master specification is rewritten as `docs/ESO-Weave-Specification.md`,
   documenting the system as built in a declarative voice with expanded mermaid
   diagrams (system architecture, concurrency and ownership, input interception,
   weave sequence, fishing state machine, pixel-bus pipeline, beacon lifecycle, API
@@ -794,7 +830,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Decisions
 
 - 2026-07-12: The master specification is superseded by
-  `docs/ESO-Weave-Specification-v0.2.0.md`. Per the constitution, a new master-spec
+  `docs/ESO-Weave-Specification.md`. Per the constitution, a new master-spec
   version lapses the standing Build-Phase Autopilot authorization; this rewrite was
   produced under an explicit operator kickoff, and the standing autopilot
   authorization is re-affirmed against v0.2.0. The version is bumped (not a v0.1.0
@@ -948,7 +984,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through staves and bow slowest). The main window shows the detected bar and
   weapon classes, and the settings expose the auto-timing toggle and a back-bar
   timing group. Closes research item R1 with a new timing appendix
-  (`docs/ESO-Weave-Specification-v0.2.0.md` Appendix A). The exact preset values
+  (`docs/ESO-Weave-Specification.md` Appendix A). The exact preset values
   and the pixel signal require in-game validation (an explicit follow-up).
 - GUI Ergonomics, Information Design, and Auto-Save (S013): a substantial rework
   of the main window. Two-state controls (suspend and resume, fishing, per-skill
