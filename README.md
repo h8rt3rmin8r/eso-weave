@@ -155,6 +155,55 @@ An Idle (no cast detected) or Idle (signal lost) status points to the same
 checks. Automating gameplay input may violate the ESO Terms of Service; see the
 Disclaimer below and use fishing at your own risk.
 
+## Auto-potion
+
+Auto-potion drinks the potion in your active quickslot when a resource you have
+asked it to watch runs low. It is the only part of ESO Weave that acts on what
+the addon reports, rather than just showing it to you.
+
+**It ships off, and it is off again after every restart.** Turning it on takes
+two things, both deliberate: enable at least one resource in Settings under
+Auto-potion, then press **F3** (or use the Auto-potion switch in the Status
+region). With no resource enabled it never fires, whatever else is true.
+
+Each resource has its own tick box and its own threshold, and the rule is an
+**OR**: it fires when *any* enabled resource is at or below *its own* threshold.
+That is on purpose. Waiting for health, magicka, and stamina to all be low at
+once would mean firing only when the potion no longer helps.
+
+It presses the key only when all of these are true:
+
+- Auto-potion is on and at least one enabled resource is at or below its
+  threshold
+- The active quickslot holds a potion, and its cooldown has finished
+- The minimum retry interval since the last attempt has passed
+- ESO Weave is not suspended, and no game menu or text field is open
+
+### What it will not do
+
+- **It never fires on a reading it cannot make.** If the beacon signal drops, an
+  addon is reloading, or a loading screen clears the blocks, an unreadable
+  resource counts as *not* low. The feature does nothing rather than something.
+- **It stops when the signal is lost.** It switches itself off rather than acting
+  on stale values, the same as fishing.
+- **It does not know what your potion restores.** The game does not expose that
+  as data, only as tooltip text, so you choose which stats to watch instead. If
+  you slot a tri-restoration potion, enable all three.
+- **It does not pick between potions or change your quickslot.**
+
+### Settings
+
+- Watch health / magicka / stamina: a tick box and a threshold percentage each.
+- Quickslot key: defaults to `Q`, the game's default quickslot bind. Change it
+  here if you rebound it in game.
+- Minimum retry interval: the floor between two attempts, default 1500 ms. It
+  covers the gap between pressing the key and the game reporting the resulting
+  cooldown, which is at least one sampling interval. Raise it if potions are
+  going faster than you expect.
+
+Automating gameplay input may violate the ESO Terms of Service; see the
+Disclaimer below and use this at your own risk.
+
 ## Weaving
 
 Weaving runs your combat rotation with tighter timing than manual play. While the

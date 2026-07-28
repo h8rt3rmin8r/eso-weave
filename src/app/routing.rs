@@ -4,6 +4,7 @@ use crate::app::UiIntent;
 use crate::fishing::{map_event, FishingController, FishingSink};
 use crate::input::{Action, InputEngine};
 use crate::pixelbus::PixelBusEvent;
+use crate::potion::AutoPotionController;
 use crate::weave::WeaveEngine;
 
 /// Maps an application-level toggle action (delivered by a hotkey) to the same
@@ -14,11 +15,17 @@ use crate::weave::WeaveEngine;
 ///   flips the live suspend state itself).
 /// - `ToggleFishing` maps to [`UiIntent::SetFishing`] with the negation of the
 ///   current on/off state, matching the Fishing button.
+/// - `ToggleAutoPotion` maps to [`UiIntent::SetAutoPotion`] the same way.
 /// - Any non-toggle action maps to `None`; weave actions never travel this path.
-pub fn app_toggle_intent(action: Action, fishing_on: bool) -> Option<UiIntent> {
+pub fn app_toggle_intent(
+    action: Action,
+    fishing_on: bool,
+    auto_potion_on: bool,
+) -> Option<UiIntent> {
     match action {
         Action::ToggleSuspend => Some(UiIntent::ToggleSuspend),
         Action::ToggleFishing => Some(UiIntent::SetFishing(!fishing_on)),
+        Action::ToggleAutoPotion => Some(UiIntent::SetAutoPotion(!auto_potion_on)),
         _ => None,
     }
 }
@@ -28,13 +35,15 @@ pub fn app_toggle_intent(action: Action, fishing_on: bool) -> Option<UiIntent> {
 /// - `Latency(ms)` sets the weave engine's current latency (nothing to fishing).
 /// - `WeaponBar(signal)` sets the weave engine's active bar and weapon classes.
 /// - `Combat(signal)` stores the decoded combat state (nothing acts on it).
-/// - `MenuGate(surface)` sets the menu gate on the input engine and the fishing
-///   controller, so neither starts new work while a game UI surface is up.
+/// - `MenuGate(surface)` sets the menu gate on the input engine, the fishing
+///   controller, and the auto-potion controller, so none starts new work while a
+///   game UI surface is up.
 /// - `Resources(set)` stores the decoded resource levels (nothing acts on them).
 /// - `Movement(signal)` stores the decoded movement state (nothing acts on it).
 /// - `Cooldowns(set)` stores the decoded slot cooldowns (nothing acts on them).
 /// - `Quickslot(state)` stores the decoded quickslot state (nothing acts on it).
-/// - `SignalLost` clears the weave latency and disables fishing.
+/// - `SignalLost` clears the weave latency, disables fishing, and switches
+///   auto-potion off rather than letting it act on stale readings.
 /// - `FishingStarted`, `BiteDetected`, `FishingStopped` reach the controller.
 /// - `Heartbeat` is forwarded to the controller (a no-op there).
 ///
@@ -45,6 +54,7 @@ pub fn route_reader_event(
     event: PixelBusEvent,
     weave: &mut WeaveEngine,
     fishing: &mut FishingController,
+    potion: &mut AutoPotionController,
     input: &InputEngine,
     now_ms: u64,
     sink: &mut dyn FishingSink,
@@ -82,11 +92,20 @@ pub fn route_reader_event(
             let gates = surface.gates();
             input.set_menu_gated(gates);
             fishing.set_gated(gates);
+            // The auto-potion controller is gated directly, for the same reason
+            // the fishing controller is: it synthesizes on its own timers and
+            // never passes through interception, so gating interception alone
+            // would leave it firing into a chat message being composed.
+            potion.set_gated(gates);
             weave.set_menu(surface);
             return;
         }
         PixelBusEvent::SignalLost => {
             weave.set_latency(None);
+            // Without readings the trigger rule has nothing trustworthy to act
+            // on, so auto-potion switches off rather than evaluating against
+            // stale values. Matches fishing, which disables on the same event.
+            potion.on_signal_lost();
         }
         _ => {}
     }
@@ -102,24 +121,55 @@ mod tests {
     use crate::input::Action;
 
     #[test]
-    fn suspend_toggle_maps_to_toggle_suspend_regardless_of_fishing() {
+    fn suspend_toggle_maps_to_toggle_suspend_regardless_of_the_others() {
         for fishing_on in [false, true] {
-            match app_toggle_intent(Action::ToggleSuspend, fishing_on) {
-                Some(UiIntent::ToggleSuspend) => {}
-                other => panic!("expected ToggleSuspend, got a different intent (fishing_on={fishing_on}, some={})", other.is_some()),
+            for potion_on in [false, true] {
+                match app_toggle_intent(Action::ToggleSuspend, fishing_on, potion_on) {
+                    Some(UiIntent::ToggleSuspend) => {}
+                    other => panic!(
+                        "expected ToggleSuspend (fishing_on={fishing_on}, potion_on={potion_on}, some={})",
+                        other.is_some()
+                    ),
+                }
             }
         }
     }
 
     #[test]
     fn fishing_toggle_negates_the_current_state() {
-        match app_toggle_intent(Action::ToggleFishing, false) {
+        match app_toggle_intent(Action::ToggleFishing, false, false) {
             Some(UiIntent::SetFishing(true)) => {}
             _ => panic!("fishing off must map to SetFishing(true)"),
         }
-        match app_toggle_intent(Action::ToggleFishing, true) {
+        match app_toggle_intent(Action::ToggleFishing, true, false) {
             Some(UiIntent::SetFishing(false)) => {}
             _ => panic!("fishing on must map to SetFishing(false)"),
+        }
+    }
+
+    #[test]
+    fn auto_potion_toggle_negates_the_current_state() {
+        match app_toggle_intent(Action::ToggleAutoPotion, false, false) {
+            Some(UiIntent::SetAutoPotion(true)) => {}
+            _ => panic!("auto-potion off must map to SetAutoPotion(true)"),
+        }
+        match app_toggle_intent(Action::ToggleAutoPotion, false, true) {
+            Some(UiIntent::SetAutoPotion(false)) => {}
+            _ => panic!("auto-potion on must map to SetAutoPotion(false)"),
+        }
+    }
+
+    #[test]
+    fn each_toggle_reads_only_its_own_state() {
+        // Fishing's intent must not depend on the auto-potion state, and vice
+        // versa. Two booleans in one signature is exactly where they get crossed.
+        match app_toggle_intent(Action::ToggleFishing, false, true) {
+            Some(UiIntent::SetFishing(true)) => {}
+            _ => panic!("fishing must read the fishing state, not the potion state"),
+        }
+        match app_toggle_intent(Action::ToggleAutoPotion, true, false) {
+            Some(UiIntent::SetAutoPotion(true)) => {}
+            _ => panic!("auto-potion must read the potion state, not the fishing state"),
         }
     }
 
@@ -135,7 +185,7 @@ mod tests {
             Action::Synergy,
         ] {
             assert!(
-                app_toggle_intent(action, false).is_none(),
+                app_toggle_intent(action, false, false).is_none(),
                 "{action:?} must not map to an app-toggle intent"
             );
         }

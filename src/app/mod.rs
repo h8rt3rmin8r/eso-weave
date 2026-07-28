@@ -32,6 +32,7 @@ use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState,
     ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
 };
+use crate::potion::AutoPotionController;
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
@@ -626,6 +627,13 @@ pub enum UiIntent {
     ToggleSuspend,
     /// Enable or disable the fishing controller.
     SetFishing(bool),
+    /// Enable or disable auto-potion.
+    ///
+    /// Deliberately not persisted to the session, unlike suspend and fishing. A
+    /// restored fishing session does nothing until the operator stands at a
+    /// fishing hole; a restored auto-potion waits silently to press a key days
+    /// later. See `specs/039-auto-potion/research.md` R7.
+    SetAutoPotion(bool),
     /// Install or update the beacon addon.
     InstallBeacon,
     /// Uninstall the beacon addon (the UI has already confirmed).
@@ -860,6 +868,8 @@ pub struct AppView {
     pub resources: ResourcesView,
     /// The detected quickslot state.
     pub quickslot: QuickslotView,
+    /// Whether auto-potion is switched on.
+    pub auto_potion_active: bool,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -988,6 +998,7 @@ pub struct AppModel {
     weave: Arc<Mutex<WeaveEngine>>,
     fishing: Arc<Mutex<FishingController>>,
     fishing_sink: Box<dyn FishingSink + Send>,
+    potion: Arc<Mutex<AutoPotionController>>,
     clock: Instant,
     log: LogHandle,
     settings: Settings,
@@ -1008,6 +1019,7 @@ impl AppModel {
         weave: Arc<Mutex<WeaveEngine>>,
         fishing: Arc<Mutex<FishingController>>,
         fishing_sink: Box<dyn FishingSink + Send>,
+        potion: Arc<Mutex<AutoPotionController>>,
         log: LogHandle,
         settings: Settings,
         config_dir: Option<PathBuf>,
@@ -1020,6 +1032,7 @@ impl AppModel {
             weave,
             fishing,
             fishing_sink,
+            potion,
             clock,
             log,
             settings,
@@ -1088,6 +1101,7 @@ impl AppModel {
             menu: menu_view(menu),
             resources: resources_view(resources),
             quickslot: quickslot_view(quickslot),
+            auto_potion_active: self.auto_potion_on(),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }
@@ -1117,6 +1131,11 @@ impl AppModel {
                     .unwrap()
                     .set_enabled(enabled, now, self.fishing_sink.as_mut());
                 self.scheduler.mark_session(Instant::now());
+                Vec::new()
+            }
+            UiIntent::SetAutoPotion(enabled) => {
+                self.potion.lock().unwrap().set_enabled(enabled);
+                // No `mark_session`: the enable is deliberately not persisted.
                 Vec::new()
             }
             UiIntent::InstallBeacon => {
@@ -1380,6 +1399,11 @@ impl AppModel {
     /// state. Mirrors the check in [`current_session_state`](Self::current_session_state).
     pub fn fishing_on(&self) -> bool {
         self.fishing.lock().unwrap().state() != FishingState::Disabled
+    }
+
+    /// Whether auto-potion is currently switched on.
+    pub fn auto_potion_on(&self) -> bool {
+        self.potion.lock().unwrap().enabled()
     }
 
     /// The current session state to persist (suspend flag and fishing on/off

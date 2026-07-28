@@ -242,6 +242,9 @@ fn routing_directs_events_to_the_right_subsystems() {
         k: 0.25,
     });
     let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
@@ -252,6 +255,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::Latency(120),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         1,
         &mut sink,
@@ -267,6 +271,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::FishingStarted,
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         2,
         &mut sink,
@@ -277,6 +282,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::BiteDetected,
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         3,
         &mut sink,
@@ -287,6 +293,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::SignalLost,
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         4,
         &mut sink,
@@ -306,6 +313,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         PixelBusEvent::Heartbeat,
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         5,
         &mut sink,
@@ -343,6 +351,9 @@ fn weapon_bar_view_shows_detected_and_unknown() {
 fn routing_a_weapon_bar_event_updates_the_engine() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
@@ -354,6 +365,7 @@ fn routing_a_weapon_bar_event_updates_the_engine() {
         }),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         1,
         &mut sink,
@@ -392,6 +404,9 @@ fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
         weave,
         fishing,
         Box::new(MockFishingSink::new()),
+        Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+            eso_weave::potion::AutoPotionConfig::default(),
+        ))),
         log,
         settings,
         None,
@@ -569,6 +584,9 @@ fn combat_view_shows_both_states_and_unknown() {
 fn routing_a_combat_event_stores_it_without_touching_fishing() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
@@ -579,6 +597,7 @@ fn routing_a_combat_event_stores_it_without_touching_fishing() {
         PixelBusEvent::Combat(CombatSignal::InCombat),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         1,
         &mut sink,
@@ -621,6 +640,9 @@ fn menu_view_names_each_surface_and_marks_gating() {
 fn routing_a_menu_event_gates_both_synthesis_paths() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
@@ -630,6 +652,7 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
         PixelBusEvent::MenuGate(MenuSurface::Mail),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         1,
         &mut sink,
@@ -642,6 +665,7 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
         PixelBusEvent::MenuGate(MenuSurface::None),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         2,
         &mut sink,
@@ -676,6 +700,9 @@ fn resource_view_renders_a_percentage_or_not_detected() {
 fn routing_a_resource_event_stores_it_without_touching_fishing() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
@@ -691,6 +718,7 @@ fn routing_a_resource_event_stores_it_without_touching_fishing() {
         PixelBusEvent::Resources(set),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         1,
         &mut sink,
@@ -704,6 +732,85 @@ fn routing_a_resource_event_stores_it_without_touching_fishing() {
     assert!(
         !input.is_menu_gated(),
         "resources do not touch the input gate"
+    );
+}
+
+// Slice 039: the auto-potion gates reach the controller by the routing path.
+
+#[test]
+fn a_menu_gate_event_gates_the_potion_controller_directly() {
+    // FR-009 and the slice 032 lesson. The controller synthesizes on its own
+    // timers and never passes through interception, so gating the input engine
+    // alone would leave it firing into a chat message being composed.
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    route_reader_event(
+        PixelBusEvent::MenuGate(MenuSurface::Inventory),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert!(input.is_menu_gated(), "the input engine should be gated");
+
+    // The controller's own gate is what matters here, and it is only observable
+    // through the rule: with the gate set, an otherwise eligible tick is blocked
+    // as Gated rather than firing.
+    potion.set_enabled(true);
+    let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
+    let readings = eso_weave::potion::PotionReadings {
+        resources: ResourceSet {
+            health: ResourceLevel::Percent(0),
+            stamina: ResourceLevel::Percent(0),
+            magicka: ResourceLevel::Percent(0),
+        },
+        quickslot: QuickslotState {
+            cooldown: SlotCooldown::Ready,
+            item_id: Some(1),
+        },
+    };
+    assert_eq!(
+        potion.tick(readings, 1000, &mut potion_sink),
+        Err(eso_weave::potion::Block::Gated)
+    );
+    assert!(potion_sink.ops.is_empty());
+}
+
+#[test]
+fn a_signal_lost_event_switches_auto_potion_off() {
+    // FR-011: without readings there is nothing trustworthy to act on, so it
+    // switches off rather than evaluating against stale values.
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    potion.set_enabled(true);
+    assert!(potion.enabled());
+
+    route_reader_event(
+        PixelBusEvent::SignalLost,
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert!(
+        !potion.enabled(),
+        "auto-potion must switch off when the beacon signal is lost"
     );
 }
 
@@ -758,6 +865,9 @@ fn quickslot_view_halves_degrade_independently() {
 fn quickslot_events_reach_the_engine_and_nothing_else() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = FishingController::new(FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
@@ -772,6 +882,7 @@ fn quickslot_events_reach_the_engine_and_nothing_else() {
         PixelBusEvent::Quickslot(state),
         &mut weave,
         &mut fishing,
+        &mut potion,
         &input,
         1,
         &mut sink,

@@ -34,6 +34,9 @@ fn test_app() -> EsoWeaveApp {
         weave,
         fishing,
         Box::new(MockFishingSink::new()),
+        Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+            eso_weave::potion::AutoPotionConfig::default(),
+        ))),
         log,
         Settings::default(),
         None,
@@ -469,8 +472,11 @@ fn modal_grows_with_the_window_then_stops_at_its_maximum() {
         mid.x > small.x,
         "modal did not grow in width: {small:?} -> {mid:?}"
     );
+    // Raised from 880 in slice 039: the settings body grew by the auto-potion
+    // group and a keybinding row, past the FR-017 half-visible bound, and raising
+    // the maximum is the resolution slice 030 recorded for exactly that.
     assert!(
-        huge.y <= 880.0 + 1.0,
+        huge.y <= 1120.0 + 1.0,
         "modal height {} exceeded its maximum",
         huge.y
     );

@@ -14,6 +14,7 @@ pub mod input;
 pub mod logging;
 pub mod pixelbus;
 pub mod platform;
+pub mod potion;
 pub mod weave;
 
 /// Returns the crate version, single-sourced from `Cargo.toml`.

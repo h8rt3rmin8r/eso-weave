@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Auto-potion: the application drinks the quickslotted potion when a watched
+  resource runs low. Off by default, off after every restart, and off for every
+  resource until the operator enables it. Toggled with `F3` or the Auto-potion
+  switch in the Status region, and configured with a per-resource enable and
+  threshold, the quickslot key, and a minimum retry interval (issue #20).
+
+  **This is the first feature in the project that acts on a beacon-derived
+  value**, and it acts by synthesizing a keypress, which puts it on a
+  constitution NON-NEGOTIABLE surface. Every prior signal was deliberately inert,
+  with a test asserting the engine behaved identically for every value it could
+  take. The design response is to add no new input path: synthesis goes through
+  the existing input engine so focus scoping and recursion flagging are
+  inherited, the controller is modelled on the fishing controller, and it ticks
+  on the existing worker loop with no new thread and no new timer.
+
+  It fires only when all of these hold: auto-potion is on, at least one enabled
+  resource is readable and at or below its own threshold, the active quickslot
+  holds a usable potion, the quickslot cooldown is zero, the retry interval has
+  elapsed, the application is not suspended, and no game menu or text field is
+  open. The resource condition is an OR and is not configurable: waiting for all
+  three to be low would fire only when a potion no longer helps.
+
+### Decisions
+
+- 2026-07-27: An unreadable value is never a permissive one. An unknown resource
+  is not low, an unknown quickslot is not a potion, and an unknown cooldown is
+  not zero. The failure directions are not symmetric, and that is what settles
+  it: treating unknown as permissive fires a potion on every beacon hiccup, addon
+  reload, and loading screen, each a wasted potion and an unexplained keypress,
+  while treating it as blocking means the feature quietly does nothing during an
+  outage and the operator drinks a potion themselves as they did before. The rule
+  is stated three times (a clarification, FR-004, SC-003) because it is the
+  decision most likely to be reversed later as a tidy-up.
+- 2026-07-27: The minimum retry interval is kept alongside the quickslot
+  cooldown rather than folded into it. They cover different windows: the cooldown
+  is read from the screen and does not update until at least one sampling
+  interval after the key is pressed, and in that window the rule still evaluates
+  to "low, potion present, cooldown zero" on every sample. Without the interval
+  the controller empties a stack of potions in about a second.
+- 2026-07-27: The trigger rule is a pure function returning a typed reason for
+  declining, not a boolean on a stateful object. SC-002 requires each of the
+  blocking conditions to be tested in isolation with every other condition
+  satisfied, and only a typed reason lets a test assert *which* condition
+  blocked. This earned itself immediately: the first draft kept the menu gate and
+  the suspend flag both on the controller and in the inputs struct, and the
+  controller read the caller's copy, so a gated controller would still fire. Both
+  gate tests failed and named the condition that had not blocked. The fix was to
+  split the input types so the controller owns the gates and the broken state
+  cannot be constructed, rather than to make the read pick the right copy.
+- 2026-07-27: Auto-potion does not survive a restart, deliberately inconsistent
+  with suspend and fishing, which are both restored. A restored fishing session
+  does nothing until the operator stands at a fishing hole; a restored
+  auto-potion waits silently to press a key days later, in a fight the operator
+  does not associate with this application. "Defaults to off" is read as "starts
+  off", which costs one keypress per session to undo.
+- 2026-07-27: The settings modal's maximum height rose from 880 to 1120 points.
+  The auto-potion group added five settings and the new toggle added a keybinding
+  row, taking the settings body past the FR-017 bound that at least half of it is
+  visible at the modal maximum. Slice 030 recorded that margin as thin and that
+  any added settings row would require raising the maximum; this is that. The
+  modal is still capped at 92 percent of the window, so a small display is
+  unaffected.
+
 ## [0.10.0] - 2026-07-27
 
 ### Added

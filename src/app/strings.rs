@@ -76,6 +76,37 @@ pub const QUICKSLOT_TOOLTIP: &str =
 pub const QUICKSLOT_ITEM_TOOLTIP: &str =
     "The game's own numeric id for the item in the active quickslot, read from the Pixel Beacon addon. Shown as a number rather than a name because the game does not expose the name to the application. It is here so a swap is visible and the signal can be confirmed in the field. Shows a dash when there is nothing to identify or the id could not be read in full.";
 
+// Auto-potion section.
+pub const AUTO_POTION_TITLE: &str = "Auto-potion";
+pub const AUTO_POTION_ON: &str = "On";
+pub const AUTO_POTION_OFF: &str = "Off";
+pub const AUTO_POTION_TOGGLE_LABEL: &str = "Auto-potion";
+pub const AUTO_POTION_TOOLTIP: &str =
+    "Drinks the quickslotted potion when a watched resource runs low. Off by default, and off after every restart. Press F3 to toggle. It never fires while suspended, while a game menu or text field is open, when the quickslot holds no usable potion, or when a resource cannot be read.";
+pub const AUTO_POTION_TOGGLE_TOOLTIP: &str =
+    "Turn auto-potion on or off (F3). It also needs at least one resource enabled in Settings; with none enabled it never fires.";
+pub const CLUSTER_AUTO_POTION: &str = "Auto-potion";
+pub const SET_POTION_HEALTH: Setting = Setting {
+    label: "Watch health (threshold %)",
+    help: "Fire when health is at or below this percentage. The rule is an OR across the enabled resources, so any one of them being low is enough.",
+};
+pub const SET_POTION_MAGICKA: Setting = Setting {
+    label: "Watch magicka (threshold %)",
+    help: "Fire when magicka is at or below this percentage.",
+};
+pub const SET_POTION_STAMINA: Setting = Setting {
+    label: "Watch stamina (threshold %)",
+    help: "Fire when stamina is at or below this percentage.",
+};
+pub const SET_POTION_KEY: Setting = Setting {
+    label: "Quickslot key",
+    help: "The key pressed to drink. Defaults to Q, the game's default quickslot bind; change it here if you rebound it in game.",
+};
+pub const SET_POTION_RETRY: Setting = Setting {
+    label: "Minimum retry interval (ms)",
+    help: "The floor between two attempts. It covers the gap between pressing the key and the game reporting the resulting cooldown, which is at least one sampling interval. Raise it if potions are being spent too quickly.",
+};
+
 // Skills section.
 pub const SKILLS_TITLE: &str = "Skills";
 pub const SKILLS_TOOLTIP: &str =
@@ -219,7 +250,7 @@ pub const SET_FILE_LOGGING: Setting = Setting {
 };
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 19] = [
+pub const ALL_SETTINGS: [&Setting; 24] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
     &SET_GLOBAL_COOLDOWN,
@@ -237,6 +268,11 @@ pub const ALL_SETTINGS: [&Setting; 19] = [
     &SET_TOLERANCE,
     &SET_INTERVAL_FISHING,
     &SET_INTERVAL_IDLE,
+    &SET_POTION_HEALTH,
+    &SET_POTION_MAGICKA,
+    &SET_POTION_STAMINA,
+    &SET_POTION_KEY,
+    &SET_POTION_RETRY,
     &SET_LOG_LEVEL,
     &SET_FILE_LOGGING,
 ];
@@ -263,6 +299,8 @@ pub fn all_labels() -> Vec<&'static str> {
         HEALTH_TITLE,
         STAMINA_TITLE,
         MAGICKA_TITLE,
+        AUTO_POTION_TITLE,
+        AUTO_POTION_TOGGLE_LABEL,
         QUICKSLOT_TITLE,
         QUICKSLOT_ITEM_TITLE,
         SKILLS_TITLE,
@@ -277,6 +315,7 @@ pub fn all_labels() -> Vec<&'static str> {
         CLUSTER_COMBAT_TIMING,
         CLUSTER_FISHING,
         CLUSTER_BEACON,
+        CLUSTER_AUTO_POTION,
         CLUSTER_LOGGING,
         CLUSTER_KEYBINDINGS,
     ];
@@ -307,6 +346,8 @@ pub fn all_tooltips() -> Vec<&'static str> {
         RESOURCE_TOOLTIP,
         QUICKSLOT_TOOLTIP,
         QUICKSLOT_ITEM_TOOLTIP,
+        AUTO_POTION_TOOLTIP,
+        AUTO_POTION_TOGGLE_TOOLTIP,
         SKILLS_TOOLTIP,
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,

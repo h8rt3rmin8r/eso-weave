@@ -24,11 +24,18 @@ pub enum Action {
     ToggleSuspend,
     /// Toggle fishing (suspend-exempt).
     ToggleFishing,
+    /// Toggle auto-potion (suspend-exempt).
+    ///
+    /// Suspend-exempt like the two toggles above it, so the operator can reach it
+    /// while suspended. That is separate from, and must not be confused with,
+    /// whether the feature *acts* while suspended: it does not. See
+    /// `specs/039-auto-potion/spec.md` FR-010 and FR-015.
+    ToggleAutoPotion,
 }
 
 impl Action {
     /// Every action, in a stable order.
-    pub const ALL: [Action; 9] = [
+    pub const ALL: [Action; 10] = [
         Action::Skill1,
         Action::Skill2,
         Action::Skill3,
@@ -38,6 +45,7 @@ impl Action {
         Action::Synergy,
         Action::ToggleSuspend,
         Action::ToggleFishing,
+        Action::ToggleAutoPotion,
     ];
 
     /// The canonical string used as the settings key for this action.
@@ -52,6 +60,7 @@ impl Action {
             Action::Synergy => "synergy",
             Action::ToggleSuspend => "toggle_suspend",
             Action::ToggleFishing => "toggle_fishing",
+            Action::ToggleAutoPotion => "toggle_auto_potion",
         }
     }
 
@@ -61,16 +70,28 @@ impl Action {
     }
 
     /// Whether this action remains active while the engine is suspended.
+    ///
+    /// A toggle the operator cannot reach while suspended is not a toggle, so all
+    /// three application toggles are exempt. Note what this does NOT mean: the
+    /// auto-potion feature itself does nothing while suspended, which is a
+    /// separate condition checked in its controller.
     pub fn suspend_exempt(self) -> bool {
-        matches!(self, Action::ToggleSuspend | Action::ToggleFishing)
+        matches!(
+            self,
+            Action::ToggleSuspend | Action::ToggleFishing | Action::ToggleAutoPotion
+        )
     }
 
-    /// Whether this action is an application-level toggle (suspend or fishing)
-    /// rather than a weave action. Toggle actions are routed to the GUI intent
-    /// path instead of the weave worker, so a hotkey and its button reach one
-    /// shared state.
+    /// Whether this action is an application-level toggle (suspend, fishing, or
+    /// auto-potion) rather than a weave action. Toggle actions are routed to the
+    /// GUI intent path instead of the weave worker, so a hotkey and its button
+    /// reach one shared state. An action missing from here would be handed to the
+    /// weave worker, which would try to run a weave sequence for it.
     pub fn is_app_toggle(self) -> bool {
-        matches!(self, Action::ToggleSuspend | Action::ToggleFishing)
+        matches!(
+            self,
+            Action::ToggleSuspend | Action::ToggleFishing | Action::ToggleAutoPotion
+        )
     }
 
     /// The default physical key for this action (master specification section 6.4).
@@ -85,6 +106,7 @@ impl Action {
             Action::Synergy => Key::X,
             Action::ToggleSuspend => Key::F1,
             Action::ToggleFishing => Key::F2,
+            Action::ToggleAutoPotion => Key::F3,
         }
     }
 }
@@ -94,15 +116,48 @@ mod tests {
     use super::Action;
 
     #[test]
-    fn is_app_toggle_is_true_only_for_the_two_toggles() {
+    fn is_app_toggle_is_true_only_for_the_three_toggles() {
         for action in Action::ALL {
-            let expected = matches!(action, Action::ToggleSuspend | Action::ToggleFishing);
+            let expected = matches!(
+                action,
+                Action::ToggleSuspend | Action::ToggleFishing | Action::ToggleAutoPotion
+            );
             assert_eq!(
                 action.is_app_toggle(),
                 expected,
                 "{action:?} toggle classification"
             );
         }
+    }
+
+    /// The two predicates must agree on exactly the same set. They are separate
+    /// functions for separate reasons (one governs suspend, one governs routing),
+    /// and a variant added to one and missed in the other is the specific mistake
+    /// this asserts against: auto-potion missing from `suspend_exempt` would kill
+    /// the hotkey exactly when the operator reaches for it, and missing from
+    /// `is_app_toggle` would route it to the weave worker.
+    #[test]
+    fn the_toggle_predicates_agree_on_the_same_set() {
+        for action in Action::ALL {
+            assert_eq!(
+                action.suspend_exempt(),
+                action.is_app_toggle(),
+                "{action:?} is classified inconsistently by the two toggle predicates"
+            );
+        }
+    }
+
+    #[test]
+    fn every_toggle_has_a_distinct_default_function_key() {
+        let toggles: Vec<_> = Action::ALL
+            .into_iter()
+            .filter(|a| a.is_app_toggle())
+            .collect();
+        assert_eq!(toggles.len(), 3);
+        let mut keys: Vec<_> = toggles.iter().map(|a| a.default_key()).collect();
+        keys.sort_by_key(|k| k.as_str());
+        keys.dedup();
+        assert_eq!(keys.len(), 3, "the toggles must not share a default key");
     }
 
     #[test]

@@ -35,6 +35,8 @@ pub enum Key {
     F1,
     /// The `F2` key.
     F2,
+    /// The `F3` key.
+    F3,
 }
 
 impl Key {
@@ -53,6 +55,7 @@ impl Key {
             Key::Space => "space",
             Key::F1 => "f1",
             Key::F2 => "f2",
+            Key::F3 => "f3",
         }
     }
 
@@ -73,6 +76,7 @@ impl Key {
             Key::Space => "Space",
             Key::F1 => "F1",
             Key::F2 => "F2",
+            Key::F3 => "F3",
         }
     }
 
@@ -91,6 +95,7 @@ impl Key {
             "space" => Some(Key::Space),
             "f1" => Some(Key::F1),
             "f2" => Some(Key::F2),
+            "f3" => Some(Key::F3),
             _ => None,
         }
     }
@@ -106,7 +111,7 @@ impl fmt::Display for Key {
 mod tests {
     use super::*;
 
-    const ALL: [Key; 12] = [
+    const ALL: [Key; 13] = [
         Key::Digit1,
         Key::Digit2,
         Key::Digit3,
@@ -119,6 +124,7 @@ mod tests {
         Key::Space,
         Key::F1,
         Key::F2,
+        Key::F3,
     ];
 
     #[test]

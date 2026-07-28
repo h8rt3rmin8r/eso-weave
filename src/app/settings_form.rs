@@ -6,6 +6,7 @@ use crate::config::{LoggingPrefs, Notice, NoticeKind, Settings, Theme};
 use crate::fishing::FishingConfig;
 use crate::input::bindings::BindingTable;
 use crate::pixelbus::{self, ReaderConfig};
+use crate::potion::AutoPotionConfig;
 use crate::weave::{LatencyConfig, WeaveConfig, WeaveEngine};
 
 /// The default live-log panel height in points.
@@ -95,6 +96,8 @@ pub struct SettingsForm {
     pub latency: LatencyConfig,
     /// Fishing timings and interact key.
     pub fishing: FishingConfig,
+    /// Auto-potion watches, quickslot key, and retry interval.
+    pub potion: AutoPotionConfig,
     /// Pixel bus sampling tolerance and intervals.
     pub reader: ReaderConfig,
     /// AddOns path override and environment.
@@ -119,6 +122,7 @@ impl SettingsForm {
         let latency = *engine.latency_config();
 
         let fishing = FishingConfig::load(&settings.fishing, &mut notices);
+        let potion = AutoPotionConfig::load(&settings.potion, &mut notices);
         let reader = pixelbus::load_reader_config(&settings.pixelbus, &mut notices);
         let beacon = beacon::prefs_from_value(&settings.beacon);
         let logging = settings.logging.clone();
@@ -131,6 +135,7 @@ impl SettingsForm {
                 weave,
                 latency,
                 fishing,
+                potion,
                 reader,
                 beacon,
                 logging,
@@ -150,6 +155,7 @@ impl SettingsForm {
         engine.store(settings);
 
         settings.fishing = self.fishing.store();
+        settings.potion = self.potion.store();
         settings.pixelbus = pixelbus::store_reader_config(&self.reader);
         settings.beacon = beacon::prefs_to_value(&self.beacon);
         settings.logging = self.logging.clone();

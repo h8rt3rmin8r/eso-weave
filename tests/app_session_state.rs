@@ -107,6 +107,9 @@ fn model_with_dir(dir: Option<PathBuf>, root: &Path) -> AppModel {
         weave,
         fishing,
         Box::new(MockFishingSink::new()),
+        Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+            eso_weave::potion::AutoPotionConfig::default(),
+        ))),
         log,
         settings,
         dir,
@@ -209,7 +212,7 @@ fn flush_session_now_writes_immediately_without_settle() {
 /// Applies a hotkey action exactly as the GUI drain loop does: map it to an
 /// intent against the live fishing state, then apply it through the model.
 fn press(model: &mut AppModel, action: Action) {
-    if let Some(intent) = app_toggle_intent(action, model.fishing_on()) {
+    if let Some(intent) = app_toggle_intent(action, model.fishing_on(), model.auto_potion_on()) {
         model.apply_intent(intent);
     }
 }

@@ -795,6 +795,63 @@ flowchart TD
   panics on network or parse failure. The last known API version and last seen game
   version persist in the session state store.
 
+## 10.6 Auto-potion
+
+Auto-potion synthesizes the quickslot key when a watched resource runs low. It is
+**the first and, at this version, the only consumer that acts on a beacon-derived
+value**; every other decoded signal is stored, displayed, and acted on by nothing.
+
+It therefore sits on the NON-NEGOTIABLE input surface, and the following are
+requirements rather than implementation details.
+
+**The trigger rule.** The key is pressed when, and only when, all of these hold:
+
+1. Auto-potion is enabled.
+2. The application is not suspended.
+3. No native game UI surface or text field is gating input.
+4. The minimum retry interval since the last attempt has elapsed.
+5. The active quickslot holds a usable potion (B16 not reporting unavailable).
+6. The quickslot cooldown is zero (B16 reporting ready).
+7. At least one enabled resource is readable and at or below its own threshold.
+
+Condition 7 is a disjunction across the three resources and is not configurable.
+Requiring all three to be low would fire only in situations where the potion no
+longer helps. Each resource has an independent enable and threshold, because the
+right number differs between health and magicka.
+
+**An unreadable value is never a permissive one.** A resource reported as
+unavailable never satisfies its threshold, at any threshold including 100; an
+unreadable quickslot is not a potion; an unreadable cooldown is not zero. The
+failure directions are asymmetric: treating unknown as permissive fires a potion
+on every beacon outage, addon reload, and loading screen, while treating it as
+blocking means the feature does nothing until readings return.
+
+**The retry interval is not the quickslot cooldown.** The cooldown is a screen
+signal and does not update until at least one sampling interval after the key is
+pressed. In that window the rule still evaluates as eligible on every sample. The
+retry interval is the floor that covers that lag; the cooldown is the authority
+once it updates.
+
+**Safety requirements, all test-covered.** Synthesis goes through the existing
+input engine, so it is scoped to the focused game window and flagged against
+recursion; no new input path is introduced. The menu gate is applied to the
+controller directly rather than only to the interception path, because the
+controller acts on its own timers and never passes through interception. The
+suspended state is a checked condition rather than an emergent property of the
+worker loop. Signal loss switches the feature off rather than leaving it
+evaluating stale readings. The controller ticks on the existing pixel-bus worker
+loop, adding no thread and no timer, and nothing reaches the input hook thread.
+
+**Defaults.** The feature is off, every per-resource watch is off, and the enable
+is not restored across sessions. The last is a deliberate inconsistency with
+suspend and fishing, both of which are restored: a restored fishing session does
+nothing until the operator stands at a fishing hole, while a restored auto-potion
+would wait silently to press a key in a later session.
+
+The toggle is `Action::ToggleAutoPotion`, default `F3`, suspend-exempt like the
+suspend and fishing toggles. Being reachable while suspended is separate from
+acting while suspended, which it does not.
+
 ## 11. Graphical User Interface
 
 ### 11.1 Main window

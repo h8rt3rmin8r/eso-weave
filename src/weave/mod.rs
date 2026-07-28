@@ -529,7 +529,7 @@ fn index_for_action(action: Action) -> Option<u8> {
         Action::Skill5 => Some(5),
         Action::Ultimate => Some(6),
         Action::Synergy => Some(7),
-        Action::ToggleSuspend | Action::ToggleFishing => None,
+        Action::ToggleSuspend | Action::ToggleFishing | Action::ToggleAutoPotion => None,
     }
 }
 

@@ -203,6 +203,7 @@ fn vk_to_key(vk: u32) -> Option<Key> {
         0x20 => Some(Key::Space),
         0x70 => Some(Key::F1),
         0x71 => Some(Key::F2),
+        0x72 => Some(Key::F3),
         _ => None,
     }
 }
@@ -221,5 +222,6 @@ fn key_to_vk(key: Key) -> u16 {
         Key::Space => 0x20,
         Key::F1 => 0x70,
         Key::F2 => 0x71,
+        Key::F3 => 0x72,
     }
 }

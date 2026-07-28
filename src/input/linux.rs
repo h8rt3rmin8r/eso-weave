@@ -201,6 +201,7 @@ fn to_ev_key(key: Key) -> EvKey {
         Key::Space => EvKey::KEY_SPACE,
         Key::F1 => EvKey::KEY_F1,
         Key::F2 => EvKey::KEY_F2,
+        Key::F3 => EvKey::KEY_F3,
     }
 }
 
@@ -217,6 +218,7 @@ fn from_ev_code(code: u16) -> Option<Key> {
         EvKey::KEY_SPACE => Some(Key::Space),
         EvKey::KEY_F1 => Some(Key::F1),
         EvKey::KEY_F2 => Some(Key::F2),
+        EvKey::KEY_F3 => Some(Key::F3),
         _ => None,
     }
 }

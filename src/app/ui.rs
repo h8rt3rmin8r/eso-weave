@@ -67,7 +67,7 @@ const WEAVE_TYPES: [WeaveType; 4] = [
     WeaveType::BlockCasting,
 ];
 
-const KEYS: [Key; 12] = [
+const KEYS: [Key; 13] = [
     Key::Digit1,
     Key::Digit2,
     Key::Digit3,
@@ -80,6 +80,7 @@ const KEYS: [Key; 12] = [
     Key::Space,
     Key::F1,
     Key::F2,
+    Key::F3,
 ];
 
 const LEVELS: [LevelName; 6] = [
@@ -350,7 +351,9 @@ impl EsoWeaveApp {
     /// single frame compose correctly.
     fn drain_hotkey_toggles(&mut self) {
         while let Ok(action) = self.toggle_rx.try_recv() {
-            if let Some(intent) = app_toggle_intent(action, self.model.fishing_on()) {
+            if let Some(intent) =
+                app_toggle_intent(action, self.model.fishing_on(), self.model.auto_potion_on())
+            {
                 self.model.apply_intent(intent);
             }
         }
@@ -907,6 +910,32 @@ impl EsoWeaveApp {
                     ui.end_row();
                 }
 
+                // Auto-potion: the one row in this region that describes
+                // something the application *does* rather than something it
+                // reads, which is why it is worth showing at all.
+                widgets::label_strong(ui, &palette, strings::AUTO_POTION_TITLE)
+                    .on_hover_text(strings::AUTO_POTION_TOOLTIP);
+                let (potion_text, potion_role) = if view.auto_potion_active {
+                    (strings::AUTO_POTION_ON, crate::app::StatusRole::Active)
+                } else {
+                    (strings::AUTO_POTION_OFF, crate::app::StatusRole::Muted)
+                };
+                let potion_color = crate::app::theme::status_color(&palette, potion_role);
+                ui.label(egui::RichText::new(potion_text).color(potion_color))
+                    .on_hover_text(strings::AUTO_POTION_TOOLTIP);
+                // The control sits in the third column, like suspend and fishing,
+                // so the hotkey and the switch reach the same state by the same
+                // intent path.
+                let mut potion_on = view.auto_potion_active;
+                if widgets::toggle_switch(ui, &mut potion_on, &palette)
+                    .on_hover_text(strings::AUTO_POTION_TOGGLE_TOOLTIP)
+                    .clickable()
+                    .changed()
+                {
+                    intents.push(UiIntent::SetAutoPotion(potion_on));
+                }
+                ui.end_row();
+
                 // The quickslot, as two rows rather than one. The cooldown and
                 // the identity are read from separate blocks and degrade
                 // separately, so one disturbed identity block costs the identity
@@ -1108,7 +1137,14 @@ impl EsoWeaveApp {
         // maximum (so it looks right from the minimum window up to a QHD ultrawide
         // display) and never exceeding the window.
         let modal_w = modal_extent(screen.width(), 460.0, 1040.0, 0.92);
-        let modal_h = modal_extent(screen.height(), 400.0, 880.0, 0.92);
+        // The maximum height rose from 880 to 1120 in slice 039. The settings body
+        // grew by an auto-potion group of five settings plus a keybinding row for
+        // the new toggle, taking it past the FR-017 bound that at least half the
+        // body is visible at the modal maximum. Slice 030 recorded that margin as
+        // thin and that any added settings row would need the maximum raised; this
+        // is that. It is still capped at 92 percent of the window, so a small
+        // display is unaffected.
+        let modal_h = modal_extent(screen.height(), 400.0, 1120.0, 0.92);
         // The room above the body (heading, separator, close row) is measured from
         // the laid-out chrome rather than reserved as a constant: the old fixed 52
         // points understated the real chrome by about half, so the modal overshot
@@ -1339,6 +1375,41 @@ fn settings_body(
     });
     ui.add_space(6.0);
 
+    widgets::heading(ui, strings::CLUSTER_AUTO_POTION);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        // Each resource is an independent enable plus threshold, which is what
+        // makes the OR rule visible in the interface rather than implied: a
+        // shared number would suggest the three are compared together.
+        for (s, watch) in [
+            (&strings::SET_POTION_HEALTH, &mut draft.potion.health),
+            (&strings::SET_POTION_MAGICKA, &mut draft.potion.magicka),
+            (&strings::SET_POTION_STAMINA, &mut draft.potion.stamina),
+        ] {
+            setting(ui, palette, s, |ui| {
+                ui.checkbox(&mut watch.enabled, "").clickable();
+                ui.add(egui::DragValue::new(&mut watch.threshold).range(0..=100));
+            });
+        }
+        setting(ui, palette, &strings::SET_POTION_KEY, |ui| {
+            combo("set_potion_key", draft.potion.quickslot_key.display_name())
+                .show_ui(ui, |ui| {
+                    for key in KEYS {
+                        ui.selectable_value(
+                            &mut draft.potion.quickslot_key,
+                            key,
+                            key.display_name(),
+                        );
+                    }
+                })
+                .response
+                .clickable();
+        });
+        setting(ui, palette, &strings::SET_POTION_RETRY, |ui| {
+            ui.add(egui::DragValue::new(&mut draft.potion.retry_interval_ms));
+        });
+    });
+    ui.add_space(6.0);
+
     widgets::heading(ui, strings::CLUSTER_LOGGING);
     egui::Frame::group(ui.style()).show(ui, |ui| {
         setting(ui, palette, &strings::SET_LOG_LEVEL, |ui| {
@@ -1407,6 +1478,7 @@ fn action_label(action: Action) -> &'static str {
         Action::Synergy => "Synergy",
         Action::ToggleSuspend => "Toggle suspend",
         Action::ToggleFishing => "Toggle fishing",
+        Action::ToggleAutoPotion => "Toggle auto-potion",
     }
 }
 

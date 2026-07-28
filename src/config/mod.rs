@@ -119,6 +119,15 @@ pub struct Settings {
     /// the fishing defaults are used. Additive and backward compatible.
     #[serde(default)]
     pub fishing: serde_json::Value,
+    /// Auto-potion configuration (per-resource enables and thresholds, the
+    /// quickslot key, and the retry interval), as an opaque JSON section owned by
+    /// the potion module. Null or absent means the defaults are used, which
+    /// includes every resource watch being off. Additive and backward compatible.
+    ///
+    /// Note what is deliberately absent: whether auto-potion is switched on. That
+    /// is runtime state and always starts off, so it is never written here.
+    #[serde(default)]
+    pub potion: serde_json::Value,
     /// Latency-adaptive weave delay configuration (enabled flag and scale factor
     /// k), as an opaque JSON section owned by the weave module. Null or absent
     /// means the defaults are used. Additive and backward compatible.
@@ -146,6 +155,7 @@ impl Default for Settings {
             skills: serde_json::Value::Null,
             beacon: serde_json::Value::Null,
             fishing: serde_json::Value::Null,
+            potion: serde_json::Value::Null,
             latency: serde_json::Value::Null,
             pixelbus: serde_json::Value::Null,
             ui: serde_json::Value::Null,
@@ -214,6 +224,8 @@ struct RawSettings {
     #[serde(default)]
     fishing: serde_json::Value,
     #[serde(default)]
+    potion: serde_json::Value,
+    #[serde(default)]
     latency: serde_json::Value,
     #[serde(default)]
     pixelbus: serde_json::Value,
@@ -271,6 +283,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         "skills",
         "beacon",
         "fishing",
+        "potion",
         "latency",
         "pixelbus",
         "ui",
@@ -313,6 +326,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         skills: raw.skills,
         beacon: raw.beacon,
         fishing: raw.fishing,
+        potion: raw.potion,
         latency: raw.latency,
         pixelbus: raw.pixelbus,
         ui: raw.ui,

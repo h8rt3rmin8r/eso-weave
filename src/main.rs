@@ -24,6 +24,7 @@ use eso_weave::input::{
     Action, InputBackend, InputEngine, InputError, Key, MouseButton, Transition,
 };
 use eso_weave::pixelbus::{self, poll_interval, PixelBusReader, SurfaceSampler};
+use eso_weave::potion::{AutoPotionConfig, AutoPotionController, RealAutoPotionSink};
 use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
 
@@ -82,6 +83,17 @@ fn main() {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
     let fishing = Arc::new(Mutex::new(FishingController::new(fishing_config)));
+
+    // Auto-potion controller. Always starts switched off, deliberately, even
+    // though suspend and fishing are both restored from the previous session: a
+    // restored auto-potion would wait silently to press a key days later, in a
+    // fight the operator does not associate with this application.
+    let mut potion_notices = Vec::new();
+    let potion_config = AutoPotionConfig::load(&settings.potion, &mut potion_notices);
+    for notice in &potion_notices {
+        tracing::warn!(target: "eso_weave::config", "{}", notice.message);
+    }
+    let potion = Arc::new(Mutex::new(AutoPotionController::new(potion_config)));
 
     // Pixel bus reader configuration.
     let mut reader_notices = Vec::new();
@@ -149,10 +161,15 @@ fn main() {
         let backend = backend.clone();
         let weave = weave.clone();
         let fishing = fishing.clone();
+        let potion = potion.clone();
         let input = input.clone();
         thread::spawn(move || {
             let mut reader = PixelBusReader::new(reader_config);
-            let mut sink = RealFishingSink::new(SharedBackend(backend));
+            let mut sink = RealFishingSink::new(SharedBackend(backend.clone()));
+            // Auto-potion synthesizes through its own sink over the same backend,
+            // so it inherits the input engine's focus scoping and recursion
+            // flagging rather than re-implementing either.
+            let mut potion_sink = RealAutoPotionSink::new(SharedBackend(backend));
             let mut sampler = resolve_sampler(reader_config.block_px);
             // Display detection rides this loop: no new thread and no new timer.
             // It is change-detected, so a stationary window costs nothing beyond
@@ -224,10 +241,32 @@ fn main() {
                 let events = reader.sample_and_observe(active.as_ref(), now);
                 let mut weave = weave.lock().unwrap();
                 let mut fishing = fishing.lock().unwrap();
+                let mut potion = potion.lock().unwrap();
                 for event in events {
-                    route_reader_event(event, &mut weave, &mut fishing, &input, now, &mut sink);
+                    route_reader_event(
+                        event,
+                        &mut weave,
+                        &mut fishing,
+                        &mut potion,
+                        &input,
+                        now,
+                        &mut sink,
+                    );
                 }
                 fishing.tick(now, &mut sink);
+                // Auto-potion rides this same loop: no new thread, no new timer,
+                // and nothing on the input hook thread. The suspend state is
+                // pushed in rather than read inside the rule, so the rule stays a
+                // pure function of its inputs.
+                potion.set_suspended(input.is_suspended());
+                let _ = potion.tick(
+                    eso_weave::potion::PotionReadings {
+                        resources: weave.resources(),
+                        quickslot: weave.quickslot(),
+                    },
+                    now,
+                    &mut potion_sink,
+                );
             }
         });
     }
@@ -264,6 +303,7 @@ fn main() {
         weave.clone(),
         fishing.clone(),
         gui_sink,
+        potion.clone(),
         log.clone(),
         settings,
         config_dir,
