@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and every reference in the repository is updated. No application behavior
   changes; `src/`, `addon/`, and `tests/` are untouched.
 
+- The README is restructured for a reader rather than for the order the features
+  were built. It opens with what the application is, the three capabilities, and
+  a hotkey table; weaving moves ahead of fishing, being the headline capability
+  and previously the shortest section behind the longest; and the PixelBeacon
+  overlay becomes its own section, because fishing, auto-potion, weapon-bar
+  detection, and latency adaptation all depend on it and it was documented only
+  under fishing. Corrects a stale claim that multi-bar weaving was unfinished and
+  undocumented: per-bar timing profiles ship and apply on bar swap.
+
 ### Decisions
 
 - 2026-07-28: The specification's filename no longer carries its version. A

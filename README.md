@@ -7,272 +7,281 @@
 </p>
 <p align="center">Cross-platform desktop companion for The Elder Scrolls Online.</p>
 
+ESO Weave runs beside the game, never inside it. It watches for your keypresses
+while the ESO window is focused and supplies three things:
+
+- **Weaving.** Your skill press becomes a basic attack woven with that skill,
+  timed so the light attack lands just before the ability.
+- **Fishing.** Casts, waits for the bite, reels in, and recasts, over and over,
+  while you stand at a fishing hole.
+- **Auto-potion.** Drinks your quickslotted potion when a resource you are
+  watching runs low.
+
+Weaving works on its own. Fishing and auto-potion read a small on-screen signal
+drawn by **PixelBeacon**, a companion addon that ships inside the application and
+installs from its interface with one click.
+
+The app never reads or writes game memory and never touches network traffic.
+
+| Hotkey | Does |
+| --- | --- |
+| `F1` | Suspend and resume everything |
+| `F2` | Start and stop fishing |
+| `F3` | Turn auto-potion on and off |
+
+All three work from inside the game, and all three are rebindable. Input is only
+ever sent while the ESO window is the active window.
+
+## Contents
+
+- [Installation](#installation)
+- [Weaving](#weaving)
+- [Fishing](#fishing)
+- [Auto-potion](#auto-potion)
+- [The PixelBeacon overlay](#the-pixelbeacon-overlay)
+- [References](#references)
+- [Disclaimer](#disclaimer)
+
 ## Installation
 
-Prebuilt installers are published on the [Releases](https://github.com/h8rt3rmin8r/eso-weave/releases)
-page: a Windows x64 MSI, and for Linux x86_64 a `.deb` package, an AppImage, and a
-tarball.
+Prebuilt installers are published on the
+[Releases](https://github.com/h8rt3rmin8r/eso-weave/releases) page: a Windows x64
+MSI, and for Linux x86_64 a `.deb` package, an AppImage, and a tarball.
 
-### Windows (MSI)
+### Windows
 
 Download the `.msi`, right click it, choose Properties, and tick Unblock if the
 file was marked as coming from the internet, then run it. The installer walks
-through a short wizard (welcome, license, install location, progress, finish). On
-the final page you can leave "Launch ESO Weave" ticked to start the app right
-away.
+through a short wizard. On the final page you can leave "Launch ESO Weave" ticked
+to start straight away.
 
-After installing you can start ESO Weave from either shortcut:
+You will find shortcuts on your desktop and in the Start Menu under "ESO Weave".
+The application installs to `C:\Program Files\ESO Weave\`. With file logging
+enabled, logs are written to `%APPDATA%\eso-weave\logs\YYYY-MM.log`, which is the
+first place to look if something misbehaves.
 
-- Desktop: an "ESO Weave" shortcut on your desktop.
-- Start Menu: All apps, under the "ESO Weave" folder.
+### Linux
 
-The application is installed to `C:\Program Files\ESO Weave\`. Logs, when the file
-log is enabled, are written to `%APPDATA%\eso-weave\logs\YYYY-MM.log`; check there
-first if the app does not behave as expected.
+Input interception reads keyboard devices and synthesizes input through
+`/dev/uinput`, which needs device access. Grant it either way:
 
-### Linux input permission (evdev)
+- Add yourself to the `input` group and log in again:
+  `sudo usermod -aG input "$USER"`
+- Or install the udev rule that grants the `input` group access to `/dev/uinput`.
+  The `.deb` places it at `/usr/lib/udev/rules.d/70-eso-weave-uinput.rules` for
+  you. For the AppImage or the tarball, copy
+  `packaging/linux/70-eso-weave-uinput.rules` there yourself and reload with
+  `sudo udevadm control --reload && sudo udevadm trigger`.
 
-Input interception on Linux reads keyboard devices and synthesizes input through
-`/dev/uinput`, which requires device access. Satisfy this in one of two ways:
+**Without this permission, key interception silently does nothing.**
 
-- Add your user to the `input` group and log in again:
-  `sudo usermod -aG input "$USER"`.
-- Or install the provided udev rule that grants the `input` group access to
-  `/dev/uinput`. The `.deb` installs it to
-  `/usr/lib/udev/rules.d/70-eso-weave-uinput.rules` automatically; for the AppImage
-  or tarball, copy `packaging/linux/70-eso-weave-uinput.rules` there yourself and
-  reload with `sudo udevadm control --reload && sudo udevadm trigger`.
+## Weaving
 
-Without this permission, key interception silently does nothing.
+Weaving runs your rotation with tighter timing than hand-play. While the ESO
+window is focused, ESO Weave intercepts your skill keypress and, in its place,
+performs a short sequence: a basic attack woven with that skill. You play as
+normal and the app supplies the weave.
+
+Press `F1` to suspend and resume at any time. While suspended, nothing is sent.
+
+Weaving needs no addon and no setup. It works the moment you launch the app.
+
+### Skill slots
+
+Seven action slots, configured in the Skills area:
+
+| Slots | Bound to | Active by default |
+| --- | --- | --- |
+| 1 to 5 | `1` `2` `3` `4` `5` | Yes |
+| Ultimate | `R` | No |
+| Synergy | `X` | No |
+
+Enable the Ultimate and Synergy slots if you want them woven. An inactive slot
+passes its key straight through to the game.
+
+### Weave types
+
+Every slot uses Light Attack by default. Change the type per slot in the Skills
+area.
+
+| Type | What it does |
+| --- | --- |
+| Light Attack | A light attack woven with the skill |
+| Heavy Attack | A heavy attack held, then the skill |
+| Bash Attack | A light attack, the skill, then a bash |
+| Block Casting | The skill cast while blocking |
+
+### Timing
+
+The defaults, all editable in Settings, with per-slot overrides available for
+skills that need them:
+
+| Timing | Default | Controls |
+| --- | --- | --- |
+| Global cooldown | 500 ms | Minimum interval between weaves |
+| Light attack delay | 50 ms | Gap between the basic attack and the skill key |
+| Heavy attack delay | 1000 ms | How long a heavy attack is held before the skill |
+| Bash delay | 125 ms | Gap before the bash in a bash attack |
+
+**Weapon bars.** ESO Weave keeps a separate timing profile for your front and
+back bars and applies whichever is active. Turn on weapon-aware timing and the
+heavy-attack delay follows the weapon class on the active bar instead, since a
+dual wield heavy attack and a bow heavy attack are nowhere near the same length.
+Detecting the bar needs PixelBeacon; without it, your front-bar profile applies.
+
+**Latency adaptation.** Off by default. When enabled, delays grow with measured
+server latency so a weave that lands cleanly at 30 ms still lands at 120 ms. This
+also needs PixelBeacon.
 
 ## Fishing
 
-The fishing routine casts, waits for a bite, reels in the catch, and recasts for
-you, over and over, while you stand at a fishing hole. It works by reading a small
-on-screen signal rendered by the bundled PixelBeacon companion addon, so it needs
-that addon installed and loaded to see when a cast has started and when a fish
-bites.
+The fishing routine casts, waits for a bite, reels in the catch, and recasts, over
+and over, while you stand at a fishing hole.
 
-### How it works (read this first)
-
-The fishing hotkey casts the line for you. You do not cast first. Stand aimed at
-the fishing hole with the in-game interact prompt showing (the "Fish" prompt),
-then press F2. ESO Weave sends the interact key to cast, watches the beacon for
-the bite, sends the interact key again to reel in, waits, and recasts. Press F2
-again to stop.
+**The hotkey casts for you. Do not cast first.** Stand aimed at the fishing hole
+with the interact prompt showing, then press `F2`. ESO Weave sends the interact
+key to cast, watches for the bite, reels in, waits, and recasts. Press `F2` again
+to stop.
 
 ### Before you start
 
-For fishing to work, all of the following must be true:
-
-- You have fishing bait selected in game. ESO will not cast the line without
-  bait, so if no bait is selected the F2 automation cannot start a cast and
-  fishing will not run. Select a bait before you begin.
-- The PixelBeacon addon is installed. Use the app's Pixel Beacon (Addon) control
-  to install it, and confirm the app shows it as installed and current.
-- The addon is enabled in the in-game AddOns menu and is not flagged "Out of
-  Date". If ESO shows it as out of date, either update ESO Weave (which refreshes
-  the addon) or tick "Allow out of date AddOns" in the AddOns menu. After the app
-  refreshes the addon, reload the UI in game (type `/reloadui`) or log out and
-  back in so ESO picks up the new files.
-- The beacon grid the addon draws is on screen and not covered by other UI.
-- The ESO window is focused. ESO Weave only sends input while the game window is
-  the active window.
-
-### The on-screen overlay
-
-PixelBeacon draws a small grid of colored squares in the **top-left corner of the
-game client**. That grid is the entire channel between the addon and the app, so
-it has to be visible: anything drawn over it reads as a missing signal.
-
-As of addon version 12 the grid is **twenty squares in two rows**, which at the
-default square size covers **256 by 32 physical pixels**. It was one row until
-that version; the second row arrived with the quickslot signals.
-
-If the footprint is in your way, lower **Block size (px)** in Settings, under the
-beacon group. The app shows the resulting footprint next to that setting as you
-change it, and records it in the log at startup. At the smallest supported size
-the overlay is 32 by 4 pixels. Changing the size re-deploys the addon so both
-sides stay in agreement; it takes effect after a `/reloadui` and an app restart.
-
-The overlay cannot be moved. Its position is part of the contract the addon and
-the app share, so relocating it would have to change both sides at once, and a
-disagreement about where the grid starts is not something either side can detect.
+- **Select fishing bait in game.** ESO will not cast without it, so with no bait
+  the automation never starts a cast.
+- **Install PixelBeacon** from the app's Pixel Beacon (Addon) control, and confirm
+  the app shows it as installed and current.
+- **Enable the addon in game** and make sure ESO has not flagged it "Out of Date".
+  If it has, either update ESO Weave, which refreshes the addon, or tick "Allow out
+  of date AddOns". After a refresh, `/reloadui` or relog so ESO picks up the new
+  files.
+- **Keep the beacon overlay visible.** See
+  [The PixelBeacon overlay](#the-pixelbeacon-overlay).
+- **Keep the ESO window focused.**
 
 ### Using it
 
-1. Confirm the Pixel Beacon (Addon) status in the app looks healthy.
-2. Select fishing bait in game. Without bait selected the cast fails and fishing
-   will not start.
-3. In game, walk up to a fishing hole and face the water so the interact prompt
-   appears.
-4. Press F2 (or use the Fishing toggle in the app). Do not cast the line
-   yourself first.
-5. Watch the Fishing status in the app move through the routine and leave it
-   running. Press F2 again to stop.
+1. Confirm the Pixel Beacon status in the app looks healthy.
+2. Select bait in game.
+3. Walk up to a fishing hole and face the water so the interact prompt appears.
+4. Press `F2`, or use the Fishing toggle in the app.
+5. Leave it running. Press `F2` again to stop.
 
 ### What the status means
 
-While fishing is running, the Fishing status shows, in order:
-
-- Casting: the cast was sent and the app is waiting for the beacon to confirm a
-  cast is active.
-- Fishing (waiting for a bite): the cast is active and the app is waiting for a
-  fish.
-- Reeling in: a bite was seen and the app is reeling.
-- Recasting: the catch was collected and the app is casting again.
-
-When fishing is off, the status shows Idle. If it stopped on its own it also tells
-you why: Idle (no cast detected) if a cast was never confirmed, or Idle (signal
-lost) if the beacon signal went away.
+| Status | Meaning |
+| --- | --- |
+| Casting | The cast was sent; waiting for the beacon to confirm it |
+| Fishing (waiting for a bite) | The cast is active |
+| Reeling in | A bite was seen |
+| Recasting | The catch was collected; casting again |
+| Idle | Fishing is off |
+| Idle (no cast detected) | A cast was never confirmed |
+| Idle (signal lost) | The beacon signal went away |
 
 ### Settings
 
-- Interact key: the key ESO Weave presses to cast, reel, and recast. It defaults
-  to E, which is the default ESO interact bind. If you rebound interact in game,
-  set the same key here.
-- Arm timeout: how long to wait for a cast to be confirmed before giving up
-  (default 8000 ms).
-- Reel delay: how long after a bite before reeling (default 100 ms).
-- Recast delay: how long after a catch before casting again (default 3000 ms).
+- **Interact key:** the key pressed to cast, reel, and recast. Defaults to `E`. If
+  you rebound interact in game, set the same key here.
+- **Arm timeout:** how long to wait for a cast to be confirmed before giving up.
+  Default 8000 ms.
+- **Reel delay:** how long after a bite before reeling. Default 100 ms.
+- **Recast delay:** how long after a catch before casting again. Default 3000 ms.
 
-### Troubleshooting
+### If it goes Idle within a few seconds
 
-If the Fishing status turns to Idle within a few seconds of starting, the app is
-not seeing the beacon signal, or the cast never started. In order, check that:
+Either the app is not seeing the beacon, or the cast never started. In order:
 
-- You have fishing bait selected. With no bait the cast fails, so the app never
-  sees a cast start and stops with Idle (no cast detected).
-- The PixelBeacon addon is enabled and not flagged "Out of Date" in the in-game
-  AddOns menu. A stale addon that ESO refuses to load produces exactly this
-  symptom. If the app just refreshed the addon, remember to `/reloadui` or relog.
-- The beacon strip is visible on screen and not covered.
-- The ESO window is focused.
-- You pressed F2 while aimed at the hole with the interact prompt up, and did not
-  cast the line yourself first.
-
-An Idle (no cast detected) or Idle (signal lost) status points to the same
-checks. Automating gameplay input may violate the ESO Terms of Service; see the
-Disclaimer below and use fishing at your own risk.
+1. Is bait selected? With none, the cast fails and you get Idle (no cast
+   detected).
+2. Is the addon enabled and not "Out of Date"? A stale addon ESO refuses to load
+   produces exactly this. If the app just refreshed it, `/reloadui` or relog.
+3. Is the beacon overlay visible and uncovered?
+4. Is the ESO window focused?
+5. Did you press `F2` while aimed at the hole with the prompt up, without casting
+   yourself first?
 
 ## Auto-potion
 
-Auto-potion drinks the potion in your active quickslot when a resource you have
-asked it to watch runs low. It is the only part of ESO Weave that acts on what
-the addon reports, rather than just showing it to you.
+Auto-potion drinks the potion in your active quickslot when a resource you are
+watching runs low. It is the one part of ESO Weave that acts on what the addon
+reports rather than just showing it to you, so it is deliberately cautious.
 
-**It ships off, and it is off again after every restart.** Turning it on takes
-two things, both deliberate: enable at least one resource in Settings under
-Auto-potion, then press **F3** (or use the Auto-potion switch in the Status
-region). With no resource enabled it never fires, whatever else is true.
+**It ships off, and it is off again after every restart.** Turning it on takes two
+steps: enable at least one resource in Settings, then press `F3`. With no resource
+enabled it never fires, whatever else is true.
 
 Each resource has its own tick box and its own threshold, and the rule is an
 **OR**: it fires when *any* enabled resource is at or below *its own* threshold.
-That is on purpose. Waiting for health, magicka, and stamina to all be low at
-once would mean firing only when the potion no longer helps.
+Waiting for health, magicka, and stamina to all be low would mean firing only once
+the potion no longer helps.
 
-It presses the key only when all of these are true:
+It presses the key only when all of these hold:
 
-- Auto-potion is on and at least one enabled resource is at or below its
-  threshold
+- Auto-potion is on, and an enabled resource is at or below its threshold
 - The active quickslot holds a potion, and its cooldown has finished
 - The minimum retry interval since the last attempt has passed
 - ESO Weave is not suspended, and no game menu or text field is open
 
 ### What it will not do
 
-- **It never fires on a reading it cannot make.** If the beacon signal drops, an
-  addon is reloading, or a loading screen clears the blocks, an unreadable
-  resource counts as *not* low. The feature does nothing rather than something.
-- **It stops when the signal is lost.** It switches itself off rather than acting
-  on stale values, the same as fishing.
-- **It does not know what your potion restores.** The game does not expose that
-  as data, only as tooltip text, so you choose which stats to watch instead. If
-  you slot a tri-restoration potion, enable all three.
-- **It does not pick between potions or change your quickslot.**
+- **It never fires on a reading it cannot make.** If the beacon signal drops, the
+  addon reloads, or a loading screen clears the overlay, an unreadable resource
+  counts as *not* low. It does nothing rather than something.
+- **It stops when the signal is lost**, switching itself off rather than acting on
+  stale values.
+- **It does not know what your potion restores.** The game exposes that only as
+  tooltip text, so you pick the stats to watch instead. Slotting a
+  tri-restoration potion? Enable all three.
+- **It does not choose between potions or change your quickslot.**
 
 ### Settings
 
-- Watch health / magicka / stamina: a tick box and a threshold percentage each.
-- Quickslot key: defaults to `Q`, the game's default quickslot bind. Change it
-  here if you rebound it in game.
-- Minimum retry interval: the floor between two attempts, default 1500 ms. It
+- **Watch health / magicka / stamina:** a tick box and a threshold percentage
+  each.
+- **Quickslot key:** defaults to `Q`, the game's default quickslot bind.
+- **Minimum retry interval:** the floor between two attempts, default 1500 ms. It
   covers the gap between pressing the key and the game reporting the resulting
-  cooldown, which is at least one sampling interval. Raise it if potions are
-  going faster than you expect.
+  cooldown. Raise it if potions go faster than you expect.
 
-Automating gameplay input may violate the ESO Terms of Service; see the
-Disclaimer below and use this at your own risk.
+## The PixelBeacon overlay
 
-## Weaving
+Fishing, auto-potion, weapon-bar detection, and latency adaptation all read the
+same thing: a small grid of colored squares that PixelBeacon draws in the
+**top-left corner of the game client**.
 
-Weaving runs your combat rotation with tighter timing than manual play. While the
-ESO window is focused, ESO Weave watches for your skill keypress and, in its
-place, performs a short sequence: a basic attack woven together with that skill,
-timed so the light attack lands just before the ability. You play as normal; the
-app supplies the weave.
+That grid is the entire channel between the addon and the app. It has to be
+visible, because anything drawn over it reads as a missing signal.
 
-Press F1 to suspend and resume the weave engine at any time. While suspended, no
-input is sent.
+At the default square size it covers **256 by 32 physical pixels**: twenty squares
+in two rows.
 
-### Skill slots
+**To make it smaller**, lower **Block size (px)** in Settings, under the beacon
+group. The app shows the resulting footprint beside that setting as you change it,
+and records it in the log at startup. At the smallest supported size the overlay is
+32 by 4 pixels. Changing the size redeploys the addon so both sides stay in
+agreement, and takes effect after a `/reloadui` and an app restart.
 
-ESO Weave maps seven action slots:
-
-- Slots 1 to 5 are your skill bar abilities, bound to the 1 through 5 keys. They
-  are active by default.
-- Slot 6 is the Ultimate (bound to R) and slot 7 is a Synergy (bound to X). Both
-  are inactive by default; enable them if you want them woven.
-
-Every slot uses a Light Attack weave by default. Each slot's weave type and, if
-you want, a custom delay can be changed in the Skills area.
-
-### Weave types
-
-- Light Attack (the default): a light attack woven with the skill.
-- Heavy Attack: a heavy attack held, then the skill.
-- Bash Attack: a light attack, the skill, then a bash.
-- Block Casting: the skill cast while blocking.
-
-### Default timings
-
-The engine ships with these default delays, all editable in Settings:
-
-| Timing | Default | What it controls |
-| --- | --- | --- |
-| Global cooldown | 500 ms | Minimum interval between weave executions. |
-| Light attack delay | 50 ms | Gap between the basic attack and the skill key. |
-| Heavy attack delay | 1000 ms | How long a heavy attack is held before the skill. |
-| Bash delay | 125 ms | Gap before the bash in a bash attack. |
-
-Latency adaptation, which shortens delays as measured latency rises, is off by
-default and can be enabled in Settings.
-
-### A note on weapon bars
-
-ESO Weave can detect the active weapon bar and adjust timing per bar, but the
-multi-bar (dual-bar) weaving behavior is not yet finalized and is out of scope for
-this documentation. This section covers single-bar weaving only.
+**The overlay cannot be moved.** Its position is part of the contract the addon and
+the app share. Relocating it would mean changing both sides at once, and a
+disagreement about where the grid starts is not something either side can detect.
 
 ## References
 
-External sources of truth for the ESO integration this project builds on:
+External sources of truth for the ESO integration:
 
 - [esoui/esoui](https://github.com/esoui/esoui): the published source of the ESO
-  user interface and the canonical definition of the game's Lua API that the
-  PixelBeacon companion addon targets. ESO Weave tracks the head of this
-  repository's `live` branch to keep the on-disk addon manifest's API version
-  current.
+  user interface and the canonical definition of the game's Lua API that
+  PixelBeacon targets. ESO Weave tracks the head of the `live` branch to keep the
+  addon manifest's API version current.
 - [ESOUI](https://www.esoui.com/): the ESO add-on community and index.
 - [ESOUI Wiki](https://wiki.esoui.com/): human-readable documentation for the ESO
-  add-on Lua API (functions, events, and constants).
+  add-on Lua API.
 - [The Elder Scrolls Online](https://www.elderscrollsonline.com/): the official
   game site.
 
 Project sources of truth:
 
-- [Master specification](docs/ESO-Weave-Specification.md): the architecture
-  of record; every feature traces to it.
+- [Master specification](docs/ESO-Weave-Specification.md): the architecture of
+  record; every feature traces to it.
 - [Changelog](CHANGELOG.md): the dated record of releases and pinned-artifact
   decisions.
 
