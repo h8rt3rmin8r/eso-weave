@@ -1,18 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: unversioned template -> 1.0.0
-- Ratification: initial adoption (first authored constitution)
-- Modified principles: none (initial authoring; all placeholder tokens replaced)
-- Added principles:
-  I. Spec-Driven Development (NON-NEGOTIABLE)
-  II. Safety-Critical Surfaces Are Sacrosanct (NON-NEGOTIABLE)
-  III. Test-First With Explicit Seams
-  IV. CI Parity Before Every Commit (NON-NEGOTIABLE)
-  V. Bounded Scope: Outside The Game
-- Added sections:
-  Platform, Configuration, and Text Hygiene Constraints
-  Development Workflow and Quality Gates
-  Governance
+- Version change: 1.0.0 -> 1.1.0
+- Ratification: pull-request integration and remote review amendment
+- Modified principles: IV clarified as both the local and hosted merge gate
+- Added principles: none
+- Added sections: none
 - Removed sections: none
 - Templates:
   .specify/templates/plan-template.md ......... aligned (generic Constitution
@@ -21,8 +13,8 @@ Sync Impact Report
     references; no edit needed)
   .specify/templates/tasks-template.md ........ aligned (no constitution
     references; no edit needed)
-  CLAUDE.md, docs/build-autopilot.md .......... consistent with these
-    principles (runtime guidance; no edit needed)
+  CLAUDE.md, docs/build-autopilot.md .......... updated to the pull-request
+    workflow and post-merge housekeeping sequence
 - Follow-up TODOs: none
 -->
 
@@ -126,16 +118,22 @@ Crossing it changes what the software is.
 - Features run under the Build-Phase Autopilot Protocol
   (`docs/build-autopilot.md`): one kickoff runs the spec-kit sequence end to
   end, the agent decides routine questions itself and records the rationale, and
-  halts once before pushing.
-- Integration is direct to `main` on `origin`; the project uses no pull requests
-  or long-lived feature branches. The authorization halt is the review gate.
+  halts once before the first remote push unless publication was explicitly
+  authorized at kickoff.
+- Feature integration uses a short-lived branch and an official pull request to
+  `main`. Hosted CI and review threads are merge gates, the operator performs the
+  final review and merge, and the agent completes post-merge branch and tracker
+  housekeeping.
+- Direct pushes to `main` are limited to explicitly authorized repository
+  administration or release work.
 - Pinned artifacts (`.github/workflows/**`, `rust-toolchain.toml`,
   `release.toml`, `scripts/**`, `packaging/**`, `docs/releasing.md`, plus
   `.gitattributes`, `.gitignore`, `LICENSE`) change only with a dated decision
   recorded in `CHANGELOG.md`.
 - Releases follow `docs/releasing.md` exactly. Cutting a `vX.Y.Z` tag and
   running `cargo release` always require explicit human authorization, as does
-  every push to `main`.
+  every remote push unless that authorization was supplied at kickoff for the
+  named work.
 
 ## Governance
 
@@ -153,4 +151,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-07-11
+**Version**: 1.1.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-03

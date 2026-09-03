@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Pull-request CI now runs the pinned local merge gate on Windows and Linux,
+  with dependency-diff review on proposed changes. CodeQL analyzes Rust changes
+  and runs weekly, while Dependabot groups routine Cargo and GitHub Actions
+  updates into low-noise maintenance proposals.
+
+- Contributor and pull-request guidance now records the spec-kit, validation,
+  safety, review, and post-merge housekeeping expectations. Public issue forms
+  direct security reports to GitHub's private advisory flow. Bug and feature
+  forms use current durable prompts and area choices, and dedicated task and epic
+  forms preserve the project's label, dependency, milestone, and completion-gate
+  conventions.
+
 - Game installation and runtime observations now distinguish ESO Store, Steam,
   Epic Games, and Steam Proton evidence from the independent Inactive, Launcher
   open, Active, and Unknown process lifecycle. Active game detection outranks the
@@ -43,6 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-03: Adopt the sibling-project pull-request baseline without copying
+  their product-specific matrices. ESO Weave runs only its canonical Rust gate
+  on its supported Windows and Linux hosts, adds one dependency-review job and
+  one Rust CodeQL job, and leaves release publication tag-only. The release
+  workflow now grants write access only to its publication job, serializes runs,
+  and uses the current official artifact and checkout action majors. This keeps
+  the administration proportional while making CI a real merge gate.
+- 2026-09-03: Amend the project constitution and autopilot protocol to match the
+  established short-lived branch, pull-request, automated review, human merge,
+  and post-merge housekeeping flow. Direct main pushes remain exceptional and
+  require explicit administration or release authorization.
 
 - 2026-09-03: Installation provider comes from platform-owned evidence plus
   validated game artifacts, never from an assumed default path. A strong Steam

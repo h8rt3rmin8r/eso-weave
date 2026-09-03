@@ -30,9 +30,11 @@ rationale. Halt to the user only when no option is clearly best on an
 irreversible or architecture-defining choice, the feature intent is genuinely
 ambiguous, or a constitution CRITICAL conflict needs a human call.
 
-Halt exactly once per feature: right before `git push` to `main`, with a
-breakdown of notable decisions and what was built. Never push, tag, run
-`cargo release`, or modify pinned artifacts without explicit authorization.
+Halt exactly once per feature before the first remote push, with a breakdown of
+notable decisions and what was built, unless the operator explicitly authorized
+automatic push and pull-request publication at kickoff. Never push, tag, run
+`cargo release`, or modify pinned artifacts without explicit authorization;
+authorization given at kickoff satisfies the push requirement for that run.
 
 The full procedure is `docs/build-autopilot.md`. This applies to features
 traceable to the master specification and to any feature or task the operator
@@ -41,12 +43,13 @@ normal interactive mode.
 
 ## Integration workflow
 
-Work integrates directly to `main`. Once a push is authorized, changes are
-committed and pushed straight to the `main` branch on `origin`; this project
-does not use pull requests or long-lived feature branches. The review gate is
-the authorization halt itself (the once-per-feature pre-push halt for autopilot
-work, or an explicit go-ahead for other work), not a post-push review. The
-authorization requirement is unchanged: never push to `main` without it.
+Work integrates through short-lived branches and official pull requests. Once a
+push is authorized, publish the branch and pull request, wait for CI and external
+reviews, answer and resolve every review thread, then ask the operator to perform
+the final review and merge ritual. Never merge on the operator's behalf. Direct
+pushes to `main` are reserved for explicitly authorized repository administration
+or release work. Additional automated review rounds require explicit operator
+authorization.
 
 ## Non-negotiables
 

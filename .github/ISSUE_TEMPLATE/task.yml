@@ -1,0 +1,55 @@
+name: Maintenance or project task
+description: Propose bounded maintenance, documentation, release, or governance work.
+title: "[Task]: "
+labels: ["task"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What durable result should this task produce?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - Addon
+        - Application UI
+        - Automation
+        - Configuration
+        - Documentation
+        - Game state
+        - Governance and project workflow
+        - Input
+        - Logging
+        - Packaging and release
+        - Pixel bus
+        - Other or cross-cutting
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and evidence
+      description: Describe the current state, relevant files or links, and boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Completion criteria
+      description: List the observable checks that prove the task is complete.
+      placeholder: |
+        - [ ] First verifiable result
+        - [ ] Second verifiable result
+    validations:
+      required: true
+  - type: input
+    id: related
+    attributes:
+      label: Related issues or milestone
+      description: Add dependencies, parent issues, or the intended milestone when known.
+    validations:
+      required: false

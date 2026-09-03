@@ -1,7 +1,8 @@
 # Build-Phase Autopilot Protocol
 
-Version: 1.0.0
+Version: 1.1.0
 Adopted: 2026-07-10
+Last amended: 2026-09-03
 Status: operating procedure for the coding agent
 Project: eso-weave (`github.com/h8rt3rmin8r/eso-weave`)
 
@@ -22,7 +23,10 @@ authorization between each step and raises routine decisions to the user that,
 in practice, are approved as recommended.
 Autopilot removes that friction: one verbal kickoff runs a full feature end to
 end, the agent makes the routine decisions itself and records them, and the agent
-halts once, right before the push to `main`, with a breakdown for review.
+halts once before the first remote push with a breakdown for review. When the
+operator explicitly authorizes automatic push and pull-request publication at
+kickoff, that halt is already satisfied and the run proceeds through remote
+review without another authorization pause.
 
 ## Trigger
 
@@ -73,8 +77,22 @@ The agent runs these steps in order, with no halt between them:
    with the agent's `Co-Authored-By:` attribution trailer, and update the
    `CHANGELOG.md` `[Unreleased]` section (an Added line, plus a dated Decisions
    entry for any architecture-affecting choice).
-10. Halt before `git push`. Present the breakdown below and wait for explicit
-    authorization.
+10. If remote publication was not authorized at kickoff, halt before `git push`.
+    Present the breakdown below and wait for explicit authorization.
+11. Push a short-lived feature branch and publish an official pull request to
+    `main`. Feature work never pushes directly to `main`.
+12. Wait for CI and external reviews. Respond to every review comment, make and
+    verify necessary corrections, push them to the same branch, and resolve each
+    completed thread.
+13. Trigger an additional automated review round only when the operator has
+    explicitly authorized one. Never infer authorization from the existence of
+    the first review.
+14. Once checks are green and all review threads are resolved, ask the operator
+    for the final review and merge ritual. The agent does not merge the pull
+    request.
+15. After the operator confirms the merge, synchronize local `main`, verify the
+    feature head is contained in it, delete the merged local and remote branch,
+    prune stale refs, and update parent issue checklists.
 
 ## Decision policy
 
@@ -106,14 +124,17 @@ At the single halt, the agent presents:
 - The verification results for fmt, clippy, and tests, with evidence of pass or
   fail.
 - Any deviations or open risks against the feature's acceptance criteria.
-- The exact `git push` command awaiting authorization.
+- The exact feature-branch `git push` command awaiting authorization.
 
 ## Always-halt guardrails
 
 These hold regardless of the decision policy:
 
 - Never `git push`, tag a release, or run `cargo release` without explicit
-  authorization.
+  authorization. Authorization may be supplied at kickoff for the named run.
+- Never merge a pull request for the operator or push feature work directly to
+  `main`. Direct `main` pushes require separate, explicit administration or
+  release authorization.
 - Never weaken or skip the `/speckit.analyze` gate.
 - Never weaken or skip the safety-critical test surfaces of this project:
   - Input-engine safety: injected-input recursion breaking, suppression scoped

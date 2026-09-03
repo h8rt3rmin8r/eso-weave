@@ -1,0 +1,46 @@
+name: Coordinator or epic
+description: Coordinate a multi-issue outcome with explicit dependencies and gates.
+title: "[Epic]: "
+labels: ["enhancement", "epic"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What coherent product or project result does this epic coordinate?
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Verified baseline
+      description: Record current behavior and stable supporting evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: children
+    attributes:
+      label: Ordered child issues
+      description: List child issues in dependency order, using placeholders if not yet filed.
+      placeholder: |
+        1. [ ] #123 - Foundation
+        2. [ ] #124 - Consumer
+    validations:
+      required: true
+  - type: textarea
+    id: completion
+    attributes:
+      label: Epic completion gate
+      description: List the evidence required before the coordinator can close.
+      placeholder: |
+        - [ ] Cross-platform behavior is verified
+        - [ ] User documentation matches the shipped states
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Boundaries and non-goals
+      description: State what this epic must not absorb or silently redefine.
+    validations:
+      required: true

@@ -40,9 +40,14 @@ body:
         - Input engine
         - Weave engine
         - Fishing module
+        - Auto-potion
         - PixelBeacon addon
+        - Pixel-bus reader or geometry
+        - Game installation, runtime, or context
         - User interface
+        - Configuration or logging
         - Packaging or installation
+        - Documentation or project workflow
         - Other or not sure
     validations:
       required: true
