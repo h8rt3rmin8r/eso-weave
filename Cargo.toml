@@ -25,7 +25,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Blocking HTTPS client (rustls TLS, no async runtime) for the startup ESO API
 # version check. Not a pinned artifact; the added networked dependency is recorded
 # as a dated decision in CHANGELOG.md.
-ureq = "2"
+ureq = "3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
