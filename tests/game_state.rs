@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use eso_weave::game::{
-    epic_candidate, reconcile, steam, BeaconFreshness, CandidateSource, FocusObservation,
-    GameContext, GameObservations, GameRuntime, GameState, InstallationCandidate,
-    InstallationProvider, InstallationState, Presence, ProcessObservation, SurfaceObservation,
+    epic_candidate, reconcile, runtime_probe_delay_ms, steam, steam_candidates_from_roots,
+    BeaconFreshness, CandidateSource, FocusObservation, GameContext, GameObservations, GameRuntime,
+    GameState, InstallationCandidate, InstallationProvider, InstallationState, Presence,
+    ProcessObservation, SurfaceObservation,
 };
 use eso_weave::pixelbus::MenuSurface;
 
@@ -238,6 +239,49 @@ fn create_game_root(root: &Path) {
     std::fs::create_dir_all(&launcher).unwrap();
     std::fs::write(client.join("eso64.exe"), []).unwrap();
     std::fs::write(launcher.join("Bethesda.net_Launcher.exe"), []).unwrap();
+}
+
+fn create_steam_catalog(steam_root: &Path, library: &Path, install_dir: &str) {
+    std::fs::create_dir_all(steam_root.join("steamapps")).unwrap();
+    let vdf_path = library.to_string_lossy().replace('\\', "\\\\");
+    let vdf = format!(
+        r#""libraryfolders" {{ "0" {{ "path" "{vdf_path}" "apps" {{ "306130" "1" }} }} }}"#
+    );
+    std::fs::write(steam_root.join("steamapps/libraryfolders.vdf"), vdf).unwrap();
+    std::fs::create_dir_all(library.join("steamapps")).unwrap();
+    std::fs::write(
+        library.join("steamapps/appmanifest_306130.acf"),
+        format!(r#""AppState" {{ "appid" "306130" "installdir" "{install_dir}" }}"#),
+    )
+    .unwrap();
+    create_game_root(&library.join("steamapps/common").join(install_dir));
+}
+
+#[test]
+fn steam_discovery_inspects_every_root_and_retains_ambiguity() {
+    let temp = tempfile::tempdir().unwrap();
+    let first_root = temp.path().join("native-steam");
+    let second_root = temp.path().join("flatpak-steam");
+    let first_library = temp.path().join("library-a");
+    let second_library = temp.path().join("library-b");
+    create_steam_catalog(&first_root, &first_library, "ESO A");
+    create_steam_catalog(&second_root, &second_library, "ESO B");
+
+    let (candidates, failed) = steam_candidates_from_roots(
+        vec![first_root, second_root],
+        InstallationProvider::SteamProton,
+    );
+    assert!(!failed);
+    assert_eq!(candidates.len(), 2, "both Steam roots must be inspected");
+    assert_eq!(reconcile(candidates, false), InstallationState::Ambiguous);
+}
+
+#[test]
+fn runtime_probe_caps_long_reader_intervals_and_is_immediately_due() {
+    assert_eq!(runtime_probe_delay_ms(60_000, 10_000, 11_000), 1000);
+    assert_eq!(runtime_probe_delay_ms(100, 10_000, 11_000), 100);
+    assert_eq!(runtime_probe_delay_ms(60_000, 11_000, 11_000), 0);
+    assert_eq!(runtime_probe_delay_ms(60_000, 12_000, 11_000), 0);
 }
 
 #[test]

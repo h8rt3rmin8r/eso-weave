@@ -170,10 +170,10 @@ fn main() {
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink = RealFishingSink::new(SharedBackend(backend.clone()));
             // Auto-potion synthesizes through its own sink over the same backend,
-            // so it inherits the input engine's focus scoping and recursion
-            // flagging rather than re-implementing either.
+            // preserving recursion flagging. Focus is pushed into the controller
+            // explicitly because autonomous synthesis bypasses interception.
             let mut potion_sink = RealAutoPotionSink::new(SharedBackend(backend));
-            let mut sampler = resolve_sampler(reader_config.block_px);
+            let mut sampler = None;
             // Display detection rides this loop: no new thread and no new timer.
             // It is change-detected, so a stationary window costs nothing beyond
             // the operating system queries the capture already performs.
@@ -212,11 +212,17 @@ fn main() {
                 // A suspended application intercepts and synthesizes nothing, so
                 // it has no menu gate to keep current and can sample slowly.
                 let can_intercept = !input.is_suspended() && input.is_game_active();
-                thread::sleep(Duration::from_millis(poll_interval(
-                    fishing_active,
-                    can_intercept,
-                    &reader_config,
-                )));
+                let reader_interval_ms =
+                    poll_interval(fishing_active, can_intercept, &reader_config);
+                let before_sleep = origin.elapsed().as_millis() as u64;
+                let sleep_ms = eso_weave::game::runtime_probe_delay_ms(
+                    reader_interval_ms,
+                    before_sleep,
+                    next_game_probe_ms,
+                );
+                if sleep_ms > 0 {
+                    thread::sleep(Duration::from_millis(sleep_ms));
+                }
                 let now = origin.elapsed().as_millis() as u64;
                 if now >= next_game_probe_ms {
                     next_game_probe_ms = now.saturating_add(1000);
@@ -265,9 +271,11 @@ fn main() {
                         );
                     }
                     if before == GameRuntime::Active && !active {
+                        sampler = None;
                         reader.reset();
                         weave.lock().unwrap().clear_game_observations();
                     } else if before != GameRuntime::Active && active {
+                        sampler = None;
                         reader.reset();
                     }
                 }

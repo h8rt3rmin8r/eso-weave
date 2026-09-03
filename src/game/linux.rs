@@ -3,12 +3,14 @@
 use std::path::PathBuf;
 
 use super::{
-    steam, valid_game_root, CandidateSource, FocusObservation, InstallationCandidate,
-    InstallationProvider, Presence, ProcessObservation, ESO_APP_ID,
+    steam_candidates_from_roots, FocusObservation, InstallationCandidate, InstallationProvider,
+    Presence, ProcessObservation,
 };
 
-fn steam_root() -> Option<PathBuf> {
-    let home = dirs::home_dir()?;
+fn steam_roots() -> Vec<PathBuf> {
+    let Some(home) = dirs::home_dir() else {
+        return Vec::new();
+    };
     [
         home.join(".steam/steam"),
         home.join(".local/share/Steam"),
@@ -16,39 +18,16 @@ fn steam_root() -> Option<PathBuf> {
         home.join(".var/app/com.valvesoftware.Steam/data/Steam"),
     ]
     .into_iter()
-    .find(|root| root.join("steamapps/libraryfolders.vdf").is_file())
+    .filter(|root| root.join("steamapps/libraryfolders.vdf").is_file())
+    .collect()
 }
 
 pub fn discover_installations() -> (Vec<InstallationCandidate>, bool) {
-    let Some(root) = steam_root() else {
+    let roots = steam_roots();
+    if roots.is_empty() {
         return (Vec::new(), false);
-    };
-    let vdf = match std::fs::read_to_string(root.join("steamapps/libraryfolders.vdf")) {
-        Ok(vdf) => vdf,
-        Err(_) => return (Vec::new(), true),
-    };
-    let mut candidates = Vec::new();
-    let mut failed = false;
-    for library in steam::library_paths_for_app(&vdf, ESO_APP_ID) {
-        let manifest = library.join("steamapps/appmanifest_306130.acf");
-        match std::fs::read_to_string(manifest)
-            .ok()
-            .and_then(|text| steam::install_dir_from_manifest(&text))
-        {
-            Some(directory) => {
-                let game_root = library.join("steamapps/common").join(directory);
-                if valid_game_root(&game_root) {
-                    candidates.push(InstallationCandidate {
-                        provider: InstallationProvider::SteamProton,
-                        root: game_root,
-                        source: CandidateSource::SteamManifest,
-                    });
-                }
-            }
-            None => failed = true,
-        }
     }
-    (candidates, failed)
+    steam_candidates_from_roots(roots, InstallationProvider::SteamProton)
 }
 
 pub fn observe_processes() -> ProcessObservation {

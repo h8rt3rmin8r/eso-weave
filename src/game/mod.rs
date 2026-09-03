@@ -263,6 +263,52 @@ pub fn valid_game_root(root: &Path) -> bool {
             .is_file()
 }
 
+/// Discovers validated Steam installations from every supplied Steam root.
+/// Source failures are accumulated rather than stopping later roots from being
+/// inspected, so native and sandboxed Steam installations can coexist.
+pub fn steam_candidates_from_roots(
+    roots: impl IntoIterator<Item = PathBuf>,
+    provider: InstallationProvider,
+) -> (Vec<InstallationCandidate>, bool) {
+    let mut candidates = Vec::new();
+    let mut failed = false;
+    for root in roots {
+        let vdf = match std::fs::read_to_string(root.join("steamapps/libraryfolders.vdf")) {
+            Ok(vdf) => vdf,
+            Err(_) => {
+                failed = true;
+                continue;
+            }
+        };
+        for library in steam::library_paths_for_app(&vdf, ESO_APP_ID) {
+            let manifest = library.join("steamapps/appmanifest_306130.acf");
+            match std::fs::read_to_string(manifest)
+                .ok()
+                .and_then(|text| steam::install_dir_from_manifest(&text))
+            {
+                Some(directory) => {
+                    let game_root = library.join("steamapps/common").join(directory);
+                    if valid_game_root(&game_root) {
+                        candidates.push(InstallationCandidate {
+                            provider,
+                            root: game_root,
+                            source: CandidateSource::SteamManifest,
+                        });
+                    }
+                }
+                None => failed = true,
+            }
+        }
+    }
+    (candidates, failed)
+}
+
+/// Caps a reader sleep so the next runtime probe is never delayed by a larger
+/// configurable sampling interval.
+pub fn runtime_probe_delay_ms(reader_interval_ms: u64, now_ms: u64, next_probe_ms: u64) -> u64 {
+    reader_interval_ms.min(next_probe_ms.saturating_sub(now_ms))
+}
+
 /// Reads an Epic `.item` manifest into a candidate only when it identifies ESO
 /// and its recorded root contains the required artifacts.
 pub fn epic_candidate(value: &serde_json::Value) -> Option<InstallationCandidate> {

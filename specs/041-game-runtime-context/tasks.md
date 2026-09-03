@@ -27,7 +27,7 @@ red-green-refactor discipline.
 - [x] T009 [P] Write failing Epic manifest parsing and artifact-validation tests in `tests/game_state.rs`
 - [x] T010 Implement Steam, Epic, and root-validation helpers in `src/game/steam.rs` and `src/game/mod.rs`
 - [x] T011 Implement Windows registry, manifest, process, and focus observations in `src/game/windows.rs`
-- [x] T012 Implement Linux Steam Proton, `/proc`, and X11 focus observations in `src/game/linux.rs` and `src/platform/linux.rs`
+- [x] T012 Implement multi-root Linux Steam Proton, `/proc`, and X11 focus observations in `src/game/linux.rs` and `src/platform/linux.rs`
 - [x] T013 Delegate the legacy addon lifecycle running probe to `src/game/` from `src/beacon/mod.rs`, `src/beacon/windows.rs`, and `src/beacon/linux.rs`
 
 **Checkpoint**: Pure reducers and both platform adapters compile, and provider
@@ -44,8 +44,8 @@ game precedence.
 and runtime state, including launcher exit during active play.
 
 - [x] T014 [US1] Write failing monitor change-detection and lifecycle transition tests in `tests/game_state.rs`
-- [x] T015 [US1] Implement the one-second monitor and platform probe entry point in `src/game/mod.rs`
-- [x] T016 [US1] Wire the monitor into the existing sampling worker before sampler availability checks in `src/main.rs`
+- [x] T015 [US1] Implement the one-second monitor, reader-interval cap, and platform probe entry point in `src/game/mod.rs`
+- [x] T016 [US1] Wire the monitor into the existing sampling worker before sampler availability checks and recreate the sampler across game restarts in `src/main.rs`
 - [x] T017 [US1] Add installation and runtime projections to `src/app/mod.rs` and their copy to `src/app/strings.rs`
 - [x] T018 [US1] Render the separate Game installation/provider and runtime rows in `src/app/ui.rs`
 - [x] T019 [US1] Add lifecycle view-model and rendered-frame coverage in `tests/app_view_model.rs` and `tests/app_ui_sizing.rs`

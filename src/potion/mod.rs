@@ -8,10 +8,11 @@
 //! Three structural choices follow from that, and each is load-bearing rather than
 //! stylistic:
 //!
-//! 1. **No new input path.** Synthesis goes through [`AutoPotionSink`], whose real
-//!    implementation calls the same [`InputBackend::synthesize`] the fishing
-//!    controller uses, so focus scoping and recursion flagging are inherited from
-//!    the input engine rather than re-implemented here.
+//! 1. **One established backend path.** Synthesis goes through [`AutoPotionSink`],
+//!    whose real implementation calls the same [`InputBackend::synthesize`] the
+//!    fishing controller uses. This preserves recursion flagging; focus is an
+//!    explicit fail-closed controller input because autonomous synthesis does not
+//!    pass through [`crate::input::InputEngine::classify`].
 //! 2. **The rule is a pure function.** [`evaluate`] takes everything it reads as
 //!    arguments and returns a typed reason for declining, so every blocking
 //!    condition can be tested in isolation with all the others satisfied. A bare
