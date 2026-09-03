@@ -26,7 +26,8 @@ use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
 fn active_fishing_controller() -> FishingController {
     let mut controller = FishingController::new(FishingConfig::default());
-    controller.set_game_active(true);
+    let mut sink = MockFishingSink::new();
+    controller.set_game_environment(true, true, 0, &mut sink);
     controller
 }
 
@@ -395,7 +396,8 @@ fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
     engine.set_game_active(true);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
     let mut fishing_controller = FishingController::new(FishingConfig::default());
-    fishing_controller.set_game_active(true);
+    let mut init_sink = MockFishingSink::new();
+    fishing_controller.set_game_environment(true, true, 0, &mut init_sink);
     let fishing = Arc::new(Mutex::new(fishing_controller));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
 
@@ -808,6 +810,7 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
     // through the rule: with the gate set, an otherwise eligible tick is blocked
     // as Gated rather than firing.
     potion.set_game_active(true);
+    potion.set_focused(true);
     potion.set_enabled(true);
     let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
     let readings = eso_weave::potion::PotionReadings {

@@ -93,8 +93,9 @@ shown as **Signal unavailable**, never as Gameplay.
 
 When ESO is not active, live metrics show **Game not active** and no weave,
 fishing, or auto-potion input is sent. ESO Weave resumes observation automatically
-when the client starts again. A requested auto-potion toggle is preserved across
-game inactivity, while the existing signal-loss rule still switches it off.
+when the client starts again and regains focus. Requested fishing and auto-potion
+toggles are preserved across game inactivity and focus loss, while their existing
+signal-loss rules still switch them off.
 
 ## Weaving
 

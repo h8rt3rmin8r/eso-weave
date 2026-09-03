@@ -35,6 +35,7 @@ pub const FISHING_IDLE: &str = "Idle";
 pub const FISHING_IDLE_NO_CAST: &str = "Idle (no cast detected)";
 pub const FISHING_IDLE_SIGNAL_LOST: &str = "Idle (signal lost)";
 pub const FISHING_IDLE_GAME_INACTIVE: &str = "Idle (game not active)";
+pub const FISHING_IDLE_UNFOCUSED: &str = "Idle (game not focused)";
 
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";
@@ -300,6 +301,7 @@ pub fn all_labels() -> Vec<&'static str> {
         FISHING_IDLE_NO_CAST,
         FISHING_IDLE_SIGNAL_LOST,
         FISHING_IDLE_GAME_INACTIVE,
+        FISHING_IDLE_UNFOCUSED,
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,

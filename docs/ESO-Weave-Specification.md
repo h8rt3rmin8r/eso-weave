@@ -264,8 +264,10 @@ Game Context is derived from runtime, focus, beacon freshness, and the menu
 surface. **Gameplay** requires Active, Focused, Fresh, and a valid observed
 no-menu surface. Invalid or absent menu evidence is unavailable rather than a
 no-menu observation. Runtime exit clears reader history and every game-derived
-metric, blocks input, stops active fishing, and blocks auto-potion without
-clearing its requested enable toggle. Restart republishes even unchanged values.
+metric, blocks input, and pauses fishing and auto-potion without clearing their
+requested enable toggles. Losing focus applies the same input block. Runtime exit
+also clears held-key and menu-gate state, and restart republishes even unchanged
+values.
 
 ## 7. Input Engine
 

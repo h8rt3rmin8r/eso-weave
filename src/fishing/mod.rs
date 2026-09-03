@@ -63,8 +63,10 @@ pub enum StopReason {
     NoCastDetected,
     /// The beacon signal was lost while a session was active.
     SignalLost,
-    /// The ESO client exited while a session was active.
+    /// The ESO client exited while fishing was requested.
     GameInactive,
+    /// The ESO client lost keyboard focus while a session was active.
+    Unfocused,
 }
 
 /// The kind of the controller's single pending deadline.
@@ -247,11 +249,13 @@ impl<B: InputBackend> FishingSink for RealFishingSink<B> {
 /// The fishing controller state machine.
 pub struct FishingController {
     config: FishingConfig,
+    requested_enabled: bool,
     state: FishingState,
     deadline: Option<(u64, TimerKind)>,
     stop_reason: Option<StopReason>,
     gated: bool,
     game_active: bool,
+    focused: bool,
 }
 
 /// How long an interact deferred by the menu gate waits before trying again.
@@ -264,12 +268,20 @@ impl FishingController {
     pub fn new(config: FishingConfig) -> Self {
         Self {
             config,
+            requested_enabled: false,
             state: FishingState::Disabled,
             deadline: None,
             stop_reason: None,
             gated: false,
             game_active: false,
+            focused: false,
         }
+    }
+
+    /// Whether the operator has requested fishing. Runtime and focus can pause
+    /// the effective session without silently changing this choice.
+    pub fn enabled(&self) -> bool {
+        self.requested_enabled
     }
 
     /// The current observable state.
@@ -294,17 +306,26 @@ impl FishingController {
     /// no-op. Disabling from any active state returns to Disabled and cancels any
     /// pending interact, emitting nothing.
     pub fn set_enabled(&mut self, enabled: bool, now_ms: u64, sink: &mut dyn FishingSink) {
+        self.requested_enabled = enabled;
         if enabled {
             if self.state == FishingState::Disabled {
                 if !self.game_active {
                     self.stop_reason = Some(StopReason::GameInactive);
                     return;
                 }
+                if !self.focused {
+                    self.stop_reason = Some(StopReason::Unfocused);
+                    return;
+                }
                 tracing::debug!(target: "eso_weave::fishing", "fishing enabled");
                 self.cast(now_ms, sink);
             }
-        } else if self.state != FishingState::Disabled {
-            self.disable(StopReason::UserStop);
+        } else {
+            if self.state != FishingState::Disabled {
+                self.disable(StopReason::UserStop);
+            } else {
+                self.stop_reason = Some(StopReason::UserStop);
+            }
         }
     }
 
@@ -312,8 +333,13 @@ impl FishingController {
     pub fn on_event(&mut self, event: DetectorEvent, now_ms: u64, sink: &mut dyn FishingSink) {
         match event {
             DetectorEvent::SignalLost => {
-                if self.state != FishingState::Disabled {
-                    self.disable(StopReason::SignalLost);
+                if self.requested_enabled || self.state != FishingState::Disabled {
+                    self.requested_enabled = false;
+                    if self.state != FishingState::Disabled {
+                        self.disable(StopReason::SignalLost);
+                    } else {
+                        self.stop_reason = Some(StopReason::SignalLost);
+                    }
                 }
             }
             DetectorEvent::Heartbeat => {}
@@ -378,7 +404,10 @@ impl FishingController {
             return;
         }
         match kind {
-            TimerKind::ArmTimeout => self.disable(StopReason::NoCastDetected),
+            TimerKind::ArmTimeout => {
+                self.requested_enabled = false;
+                self.disable(StopReason::NoCastDetected);
+            }
             TimerKind::ReelDue => {
                 tracing::debug!(
                     target: "eso_weave::fishing",
@@ -429,12 +458,36 @@ impl FishingController {
         self.gated = gated;
     }
 
-    /// Sets the process-derived game-active gate. Losing the game cancels any
-    /// active session before another autonomous interact can run.
-    pub fn set_game_active(&mut self, active: bool) {
+    /// Updates the process and focus gates together. Losing either gate pauses an
+    /// active session without changing the requested toggle; restoring both
+    /// gates re-arms that request as a fresh cast.
+    pub fn set_game_environment(
+        &mut self,
+        active: bool,
+        focused: bool,
+        now_ms: u64,
+        sink: &mut dyn FishingSink,
+    ) {
         self.game_active = active;
+        self.focused = focused;
         if !active {
+            self.gated = false;
             self.on_game_inactive();
+        } else if !focused {
+            if self.state != FishingState::Disabled {
+                self.disable(StopReason::Unfocused);
+            } else if self.requested_enabled {
+                self.stop_reason = Some(StopReason::Unfocused);
+            }
+        } else if self.requested_enabled
+            && self.state == FishingState::Disabled
+            && matches!(
+                self.stop_reason,
+                Some(StopReason::GameInactive | StopReason::Unfocused)
+            )
+        {
+            tracing::debug!(target: "eso_weave::fishing", "fishing resumed after game context returned");
+            self.cast(now_ms, sink);
         }
     }
 
@@ -442,6 +495,8 @@ impl FishingController {
     pub fn on_game_inactive(&mut self) {
         if self.state != FishingState::Disabled {
             self.disable(StopReason::GameInactive);
+        } else if self.requested_enabled {
+            self.stop_reason = Some(StopReason::GameInactive);
         }
     }
 

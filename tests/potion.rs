@@ -63,6 +63,7 @@ fn eligible_readings() -> PotionReadings {
 fn eligible_inputs() -> PotionInputs {
     PotionInputs {
         game_active: true,
+        focused: true,
         readings: eligible_readings(),
         suspended: false,
         gated: false,
@@ -99,7 +100,7 @@ fn it_fires_when_every_condition_is_satisfied() {
 }
 
 // ---------------------------------------------------------------------------
-// Each of the seven conditions, failing in isolation, with all others satisfied.
+// Each blocking condition, failing in isolation, with all others satisfied.
 // Each asserts WHICH condition blocked (contract, and safety checklist CHK012).
 // ---------------------------------------------------------------------------
 
@@ -112,21 +113,35 @@ fn condition_1_disabled_blocks_and_says_so() {
 }
 
 #[test]
-fn condition_2_suspended_blocks_and_says_so() {
+fn condition_2_inactive_game_blocks_and_says_so() {
+    let mut inputs = eligible_inputs();
+    inputs.game_active = false;
+    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::GameInactive));
+}
+
+#[test]
+fn condition_3_unfocused_game_blocks_and_says_so() {
+    let mut inputs = eligible_inputs();
+    inputs.focused = false;
+    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::Unfocused));
+}
+
+#[test]
+fn condition_4_suspended_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.suspended = true;
     assert_eq!(eval(inputs, true, None, 10_000), Err(Block::Suspended));
 }
 
 #[test]
-fn condition_3_gated_blocks_and_says_so() {
+fn condition_5_gated_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.gated = true;
     assert_eq!(eval(inputs, true, None, 10_000), Err(Block::Gated));
 }
 
 #[test]
-fn condition_4_retry_too_soon_blocks_and_says_so() {
+fn condition_6_retry_too_soon_blocks_and_says_so() {
     let interval = u64::from(config_all_watched().retry_interval_ms);
     assert_eq!(
         eval(eligible_inputs(), true, Some(10_000), 10_000 + interval - 1),
@@ -135,14 +150,14 @@ fn condition_4_retry_too_soon_blocks_and_says_so() {
 }
 
 #[test]
-fn condition_5_no_potion_blocks_and_says_so() {
+fn condition_7_no_potion_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.readings.quickslot = QuickslotState::new_unknown();
     assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoPotion));
 }
 
 #[test]
-fn condition_6_on_cooldown_blocks_and_says_so() {
+fn condition_8_on_cooldown_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.readings.quickslot = QuickslotState {
         cooldown: SlotCooldown::RemainingMs(4000),
@@ -152,7 +167,7 @@ fn condition_6_on_cooldown_blocks_and_says_so() {
 }
 
 #[test]
-fn condition_7_no_resource_low_blocks_and_says_so() {
+fn condition_9_no_resource_low_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.readings.resources = levels(90, 90, 90);
     assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoResourceLow));
@@ -342,6 +357,7 @@ fn the_retry_interval_bounds_the_rate_independently_of_the_cooldown() {
 fn armed_controller() -> AutoPotionController {
     let mut controller = AutoPotionController::new(config_all_watched());
     controller.set_game_active(true);
+    controller.set_focused(true);
     controller.set_enabled(true);
     controller
 }
@@ -354,6 +370,34 @@ fn inactive_game_blocks_without_clearing_the_requested_toggle() {
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
         Err(Block::GameInactive)
+    );
+    assert!(controller.enabled());
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn game_exit_clears_a_stale_menu_gate_before_restart() {
+    let mut controller = armed_controller();
+    controller.set_gated(true);
+    controller.set_game_active(false);
+    controller.set_game_active(true);
+
+    let mut sink = MockAutoPotionSink::new();
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        Ok(())
+    );
+    assert_eq!(sink.ops.len(), 2);
+}
+
+#[test]
+fn unfocused_game_blocks_without_clearing_the_requested_toggle() {
+    let mut controller = armed_controller();
+    controller.set_focused(false);
+    let mut sink = MockAutoPotionSink::new();
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        Err(Block::Unfocused)
     );
     assert!(controller.enabled());
     assert!(sink.ops.is_empty());

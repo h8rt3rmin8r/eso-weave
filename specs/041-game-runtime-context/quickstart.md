@@ -17,6 +17,8 @@ The focused tests cover:
 - Game Context precedence
 - menu decode validity and signal recovery
 - game-inactive input classification
+- inactive and unfocused controller pauses that preserve requested toggles
+- held-key and stale menu-gate cleanup across game exit and focus loss
 - downstream dormancy and reader reset
 - rendered Game Context values and help affordance
 
@@ -52,9 +54,9 @@ absence of repeated normal logs. Do not capture personal paths.
 ### S041 Windows receipt (2026-09-03)
 
 - One validated Steam candidate was present.
-- One generic ESO uninstall entry was present but did not claim the validated
-  Steam root and did not survive artifact validation as a second candidate.
-- Provider reconciliation selected Steam without exposing an installation path.
+- One generic ESO uninstall entry produced a second validated candidate at a
+  distinct root.
+- Provider reconciliation reported Ambiguous and exposed no installation path.
 - The live process observation was Inactive with both game and launcher absent.
 - Automated lifecycle matrices cover launcher-only, Active with launcher,
   Active after launcher exit, game exit to launcher-only, full exit, unknown

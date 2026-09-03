@@ -18,8 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Game Context replaces Game Menu and combines runtime, operating-system focus,
   PixelBeacon freshness, and a valid observed surface. Gameplay is shown only
   when all required evidence is authoritative. Game exit clears live metrics,
-  stops active fishing, and blocks interception and auto-potion until the client
-  returns.
+  pauses requested fishing, and blocks every input path until the client returns
+  focused. Requested fishing and auto-potion choices resume without retaining a
+  stale menu gate.
 
 ### Changed
 
@@ -53,9 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   label.
 - 2026-09-03: Runtime and focus are safety gates independent of PixelBeacon.
   Basic weaving remains usable without the optional addon, while an inactive or
-  unknown game process cannot receive synthesized input. Runtime inactivity
-  preserves the requested auto-potion toggle; the older signal-loss behavior
-  still switches that feature off.
+  unknown or unfocused game process cannot receive synthesized input. Runtime
+  inactivity and focus loss preserve requested fishing and auto-potion toggles;
+  the older signal-loss behavior still switches those features off.
 
 - 2026-07-28: The specification's filename no longer carries its version. A
   version in a filename forces every revision to choose between churning every

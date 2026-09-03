@@ -152,6 +152,7 @@ game-active state, focus, and menu gate. A real key is eligible for interception
 only when the application is not suspended, the game is active, the game is
 focused, and no authoritative menu gate is set.
 
-Auto-potion carries the same game-active gate in addition to its existing
-suspend, menu, signal, quickslot, cooldown, resource, and retry conditions.
-Runtime inactivity does not clear requested auto-potion enablement.
+Fishing and auto-potion carry game-active and focused-window gates in addition to
+their existing feature-specific conditions. Runtime inactivity and focus loss
+pause effective action without clearing either requested toggle. Runtime exit
+also clears transient menu-gate and held-key state before a later session.

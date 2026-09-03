@@ -91,7 +91,7 @@ and permits fresh values after restart.
 - [x] T029 [US3] Add the game-active auto-potion gate in `src/potion/mod.rs` without changing signal-loss reset policy
 - [x] T030 [US3] Write failing reader-reset, weave-clear, and dormant projection tests in `tests/pixelbus.rs`, `tests/weave_engine.rs`, and `tests/app_view_model.rs`
 - [x] T031 [US3] Implement reader reset and aggregate observation clearing in `src/pixelbus/mod.rs` and `src/weave/mod.rs`
-- [x] T032 [US3] Route Active exit and restart through one lock order, disable an active fishing session with an explicit game-inactive reason, and preserve auto-potion request state in `src/main.rs`, `src/fishing/mod.rs`, and `src/game/mod.rs`
+- [x] T032 [US3] Route Active exit, focus loss, and restart through one lock order, pause active fishing with an explicit reason, preserve fishing and auto-potion request state, and clear transient input gates in `src/main.rs`, `src/fishing/mod.rs`, `src/potion/mod.rs`, and `src/input/mod.rs`
 - [x] T033 [US3] Apply the shared dormant presentation to every pre-Skills live metric in `src/app/mod.rs` and `src/app/ui.rs`
 - [x] T034 [US3] Complete restart recovery, game-inactive fishing shutdown, and safety regression coverage in `tests/app_view_model.rs`, `tests/input_engine.rs`, `tests/potion.rs`, and `tests/fishing.rs`
 

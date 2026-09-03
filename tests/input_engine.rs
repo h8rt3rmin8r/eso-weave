@@ -71,6 +71,51 @@ fn inactive_game_never_intercepts_even_when_focused() {
 }
 
 #[test]
+fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.set_menu_gated(false);
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+
+    engine.set_menu_gated(true);
+    engine.set_game_active(false);
+    assert!(!engine.is_menu_gated());
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real)),
+        Decision::Pass
+    );
+
+    engine.set_game_active(true);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+}
+
+#[test]
+fn pass_through_release_while_unfocused_retires_held_key() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+
+    engine.set_focused(false);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real)),
+        Decision::Pass
+    );
+    engine.set_focused(true);
+    engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+}
+
+#[test]
 fn bound_key_up_is_suppressed_and_hands_off_nothing() {
     let (engine, rx) = engine();
     engine.set_focused(true);

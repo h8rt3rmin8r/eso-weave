@@ -244,10 +244,18 @@ fn main() {
                     let process_changed = game.update_processes(processes);
                     let after = processes.runtime();
                     let active = after == GameRuntime::Active;
+                    let focused = matches!(processes.focus, FocusObservation::Focused);
                     input.set_game_active(active);
-                    input.set_focused(matches!(processes.focus, FocusObservation::Focused));
-                    fishing.lock().unwrap().set_game_active(active);
-                    potion.lock().unwrap().set_game_active(active);
+                    input.set_focused(focused);
+                    fishing
+                        .lock()
+                        .unwrap()
+                        .set_game_environment(active, focused, now, &mut sink);
+                    {
+                        let mut potion = potion.lock().unwrap();
+                        potion.set_game_active(active);
+                        potion.set_focused(focused);
+                    }
                     if process_changed {
                         tracing::info!(
                             target: "eso_weave::game",

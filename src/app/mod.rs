@@ -86,6 +86,7 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
             Some(StopReason::NoCastDetected) => strings::FISHING_IDLE_NO_CAST,
             Some(StopReason::SignalLost) => strings::FISHING_IDLE_SIGNAL_LOST,
             Some(StopReason::GameInactive) => strings::FISHING_IDLE_GAME_INACTIVE,
+            Some(StopReason::Unfocused) => strings::FISHING_IDLE_UNFOCUSED,
             None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
     }
@@ -159,7 +160,8 @@ pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> S
         FishingState::Disabled => match reason {
             Some(StopReason::NoCastDetected)
             | Some(StopReason::SignalLost)
-            | Some(StopReason::GameInactive) => StatusRole::Warning,
+            | Some(StopReason::GameInactive)
+            | Some(StopReason::Unfocused) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
         },
         _ => StatusRole::Active,
@@ -1171,9 +1173,9 @@ impl AppModel {
     /// The current derived display state.
     pub fn view(&self) -> AppView {
         let condition = self.beacon_condition();
-        let (fishing_state, fishing_reason) = {
+        let (fishing_state, fishing_reason, fishing_requested) = {
             let fishing = self.fishing.lock().unwrap();
-            (fishing.state(), fishing.stop_reason())
+            (fishing.state(), fishing.stop_reason(), fishing.enabled())
         };
         let (mut skills, active_bar, classes, combat, movement, resources, quickslot) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
@@ -1232,16 +1234,20 @@ impl AppModel {
                 skill.cooldown.role = StatusRole::Muted;
             }
         }
+        let mut fishing_label = fishing_label(fishing_state, fishing_reason);
+        if fishing_requested {
+            fishing_label.button = "Stop Fishing";
+        }
         AppView {
             app_state: app_state_label(suspended),
-            fishing: fishing_label(fishing_state, fishing_reason),
+            fishing: fishing_label,
             status_line: status_line_app(suspended),
             fishing_line: status_line_fishing(fishing_state, fishing_reason),
             beacon_line: status_line_beacon(condition),
             installation_line: installation_line(&game.installation),
             runtime_line: runtime_line(game.runtime),
             suspended,
-            fishing_active: fishing_state != FishingState::Disabled,
+            fishing_active: fishing_requested,
             beacon: beacon_light(condition),
             beacon_condition: condition,
             uninstall_enabled: uninstall_enabled(condition),
@@ -1550,7 +1556,7 @@ impl AppModel {
     /// negate a hotkey fishing toggle so a hotkey and the Fishing button share one
     /// state. Mirrors the check in [`current_session_state`](Self::current_session_state).
     pub fn fishing_on(&self) -> bool {
-        self.fishing.lock().unwrap().state() != FishingState::Disabled
+        self.fishing.lock().unwrap().enabled()
     }
 
     /// Whether auto-potion is currently switched on.
@@ -1561,7 +1567,7 @@ impl AppModel {
     /// The current session state to persist (suspend flag and fishing on/off
     /// intent, never a transient fishing sub-state).
     pub fn current_session_state(&self) -> SessionState {
-        let fishing_on = self.fishing.lock().unwrap().state() != FishingState::Disabled;
+        let fishing_on = self.fishing.lock().unwrap().enabled();
         SessionState {
             schema_version: CURRENT_STATE_VERSION,
             suspended: self.input.is_suspended(),

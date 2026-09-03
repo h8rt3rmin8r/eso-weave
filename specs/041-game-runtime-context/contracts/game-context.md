@@ -24,8 +24,8 @@ Signal unavailable never present as Gameplay.
 
 ## Input behavior
 
-- Runtime not Active: input engine, fishing, and auto-potion are safety-blocked.
-- Focus not Focused: interception and synthesis are safety-blocked.
+- Runtime not Active or focus not Focused: input engine, fishing, and
+  auto-potion are safety-blocked without clearing requested toggles.
 - Fresh observed named surface: existing menu gates apply to all relevant
   consumers.
 - Signal unavailable: Game Context is unavailable. Existing PixelBeacon-optional
