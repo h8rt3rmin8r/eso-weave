@@ -6,8 +6,8 @@ use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
-    WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState,
+    ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal, WeaponClass,
 };
 use eso_weave::weave::types::{TimingConfig, WeaveType};
 use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
@@ -18,6 +18,40 @@ fn down(key: Key) -> KeyEvent {
         transition: Transition::Down,
         origin: Origin::Real,
     }
+}
+
+#[test]
+fn clearing_game_observations_restores_every_dormant_value() {
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.set_weapon_bar(WeaponBarSignal {
+        bar: ActiveBar::Front,
+        front: WeaponClass::Bow,
+        back: WeaponClass::DualWield,
+    });
+    engine.set_combat(CombatSignal::InCombat);
+    engine.set_movement(MovementSignal::Mounted);
+    engine.set_menu(MenuSurface::Inventory);
+    engine.set_resources(ResourceSet {
+        health: ResourceLevel::Percent(50),
+        stamina: ResourceLevel::Percent(40),
+        magicka: ResourceLevel::Percent(30),
+    });
+    engine.set_quickslot(QuickslotState {
+        cooldown: SlotCooldown::Ready,
+        item_id: Some(42),
+    });
+    engine.clear_game_observations();
+    assert_eq!(engine.active_bar(), ActiveBar::Unknown);
+    assert_eq!(
+        engine.weapon_classes(),
+        (WeaponClass::Unknown, WeaponClass::Unknown)
+    );
+    assert_eq!(engine.combat(), CombatSignal::Unknown);
+    assert_eq!(engine.movement(), MovementSignal::Unknown);
+    assert_eq!(engine.menu(), MenuSurface::None);
+    assert_eq!(engine.resources(), ResourceSet::new_unknown());
+    assert_eq!(engine.cooldowns(), CooldownSet::new_unknown());
+    assert_eq!(engine.quickslot(), QuickslotState::new_unknown());
 }
 
 // US2: cooldown gating and action mapping.
@@ -80,6 +114,7 @@ fn each_skill_action_maps_to_a_slot() {
 #[test]
 fn inactive_slot_key_passes_through() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 16);
+    input.set_game_active(true);
     input.set_focused(true);
 
     // Default config: Ultimate (slot 6, key R) is inactive; Skill1 is active.
@@ -93,6 +128,7 @@ fn inactive_slot_key_passes_through() {
 #[test]
 fn activating_slot_restores_interception() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 16);
+    input.set_game_active(true);
     input.set_focused(true);
 
     let mut config = WeaveConfig::default();

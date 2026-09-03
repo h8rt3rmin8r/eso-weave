@@ -62,6 +62,7 @@ fn eligible_readings() -> PotionReadings {
 /// gate set. Each test below breaks exactly one thing.
 fn eligible_inputs() -> PotionInputs {
     PotionInputs {
+        game_active: true,
         readings: eligible_readings(),
         suspended: false,
         gated: false,
@@ -72,6 +73,7 @@ fn eligible_inputs() -> PotionInputs {
 /// satisfied, so a test that varies only the levels reads as exactly that.
 fn inputs_at(resources: ResourceSet) -> PotionInputs {
     PotionInputs {
+        game_active: true,
         readings: PotionReadings {
             resources,
             quickslot: ready_potion(),
@@ -339,8 +341,22 @@ fn the_retry_interval_bounds_the_rate_independently_of_the_cooldown() {
 /// A controller with all three resources watched at 50, switched on.
 fn armed_controller() -> AutoPotionController {
     let mut controller = AutoPotionController::new(config_all_watched());
+    controller.set_game_active(true);
     controller.set_enabled(true);
     controller
+}
+
+#[test]
+fn inactive_game_blocks_without_clearing_the_requested_toggle() {
+    let mut controller = armed_controller();
+    controller.set_game_active(false);
+    let mut sink = MockAutoPotionSink::new();
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        Err(Block::GameInactive)
+    );
+    assert!(controller.enabled());
+    assert!(sink.ops.is_empty());
 }
 
 #[test]

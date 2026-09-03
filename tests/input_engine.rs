@@ -11,7 +11,9 @@ use eso_weave::input::{
 };
 
 fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
-    InputEngine::new(BindingTable::default(), 64)
+    let pair = InputEngine::new(BindingTable::default(), 64);
+    pair.0.set_game_active(true);
+    pair
 }
 
 fn ev(key: Key, transition: Transition, origin: Origin) -> KeyEvent {
@@ -57,6 +59,18 @@ fn unfocused_never_intercepts() {
 }
 
 #[test]
+fn inactive_game_never_intercepts_even_when_focused() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.set_game_active(false);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
 fn bound_key_up_is_suppressed_and_hands_off_nothing() {
     let (engine, rx) = engine();
     engine.set_focused(true);
@@ -94,6 +108,7 @@ fn auto_repeat_down_hands_off_only_once() {
 #[test]
 fn full_channel_drops_without_blocking() {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 1);
+    engine.set_game_active(true);
     engine.set_focused(true);
 
     // First press fills the capacity-1 channel; further distinct presses must not

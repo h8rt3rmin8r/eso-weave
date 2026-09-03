@@ -15,7 +15,9 @@ use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{MockSampler, PixelBusReader, ReaderConfig, Rgb};
 
 fn controller() -> FishingController {
-    FishingController::new(FishingConfig::default())
+    let mut controller = FishingController::new(FishingConfig::default());
+    controller.set_game_active(true);
+    controller
 }
 
 fn press_release(key: Key) -> Vec<(Key, Transition)> {
@@ -486,5 +488,27 @@ fn the_arm_timeout_still_fires_while_gated() {
     c.set_gated(true);
     c.tick(u64::from(cfg.arm_timeout_ms), &mut sink);
     assert_eq!(c.state(), FishingState::Disabled);
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn game_exit_disables_an_active_session_without_emitting() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    sink.clear();
+    c.on_game_inactive();
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::GameInactive));
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn inactive_game_refuses_the_initial_cast() {
+    let mut c = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::GameInactive));
     assert!(sink.ops.is_empty());
 }

@@ -162,11 +162,9 @@ const COMBAT_OUT_RED: u8 = 0x20;
 
 /// Which native game UI surface is active, decoded from the menu block.
 ///
-/// [`MenuSurface::None`] means gameplay: no surface is active. It is also the
-/// value produced by every failure mode (an addon older than version 7 draws no
-/// menu block, a sample fails validation, or the beacon signal is lost), which is
-/// what makes every failure degrade to the application's behavior without the
-/// menu gate rather than to a gate stuck on.
+/// [`MenuSurface::None`] means gameplay: a valid block authoritatively reports
+/// that no surface is active. Missing or invalid evidence is represented by an
+/// outer `Option` at the decoder and event boundaries.
 ///
 /// [`MenuSurface::Other`] is a surface the addon could not name. It gates exactly
 /// like a named one: the addon decides that a surface is active from the game's
@@ -519,11 +517,9 @@ pub enum PixelBusEvent {
     /// A change in the decoded combat state, including a change to
     /// [`CombatSignal::Unknown`] when the block stops decoding.
     Combat(CombatSignal),
-    /// A change in the decoded menu surface, including a change to
-    /// [`MenuSurface::None`] when the block stops decoding. While the carried
-    /// surface gates, the application starts no new weave and no new fishing
-    /// interaction.
-    MenuGate(MenuSurface),
+    /// A change in the decoded menu observation. `Some(MenuSurface::None)` is a
+    /// valid gameplay observation; `None` means the block is unavailable.
+    MenuGate(Option<MenuSurface>),
     /// A change in any decoded resource level. Carries all three, so a sample in
     /// which several move at once (the common case in combat) is one event rather
     /// than three.
@@ -1156,13 +1152,12 @@ pub fn decode_movement(sample: Rgb, tolerance: u8) -> MovementSignal {
 ///
 /// Validation mirrors the combat block: the green marker and the `red + blue`
 /// complement checksum are both checked within tolerance, then the red channel
-/// selects the surface code. Any failure yields [`MenuSurface::None`], which is
-/// the safe value, because it means the application behaves exactly as it does
-/// without the menu gate.
-pub fn decode_menu(sample: Rgb, tolerance: u8) -> MenuSurface {
+/// selects the surface code. Any failure yields `None`; a valid wire code zero
+/// yields `Some(MenuSurface::None)`.
+pub fn decode_menu(sample: Rgb, tolerance: u8) -> Option<MenuSurface> {
     let checksum = u16::from(sample.r) + u16::from(sample.b);
     if !within(sample.g, MENU_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
-        return MenuSurface::None;
+        return None;
     }
     // Codes are spaced MENU_CODE_STEP apart, so the nearest code is found by
     // rounding and then confirming the sample really is within tolerance of it
@@ -1170,16 +1165,16 @@ pub fn decode_menu(sample: Rgb, tolerance: u8) -> MenuSurface {
     let step = u16::from(MENU_CODE_STEP);
     let code = (u16::from(sample.r) + step / 2) / step;
     let Ok(code) = u8::try_from(code) else {
-        return MenuSurface::None;
+        return None;
     };
     if code > MENU_CODE_MAX {
-        return MenuSurface::None;
+        return None;
     }
     let expected = code.saturating_mul(MENU_CODE_STEP);
     if !within(sample.r, expected, tolerance) {
-        return MenuSurface::None;
+        return None;
     }
-    MenuSurface::from_code(code).unwrap_or(MenuSurface::None)
+    MenuSurface::from_code(code)
 }
 
 /// Decodes one resource block against its marker.
@@ -1373,7 +1368,7 @@ pub struct PixelBusReader {
     fishing: FishingSignal,
     weapon: Option<WeaponBarSignal>,
     combat: CombatSignal,
-    menu: MenuSurface,
+    menu: Option<MenuSurface>,
     resources: ResourceSet,
     movement: MovementSignal,
     cooldowns: CooldownSet,
@@ -1391,7 +1386,7 @@ impl PixelBusReader {
             fishing: FishingSignal::None,
             weapon: None,
             combat: CombatSignal::Unknown,
-            menu: MenuSurface::None,
+            menu: None,
             resources: ResourceSet::new_unknown(),
             movement: MovementSignal::Unknown,
             cooldowns: CooldownSet::new_unknown(),
@@ -1403,6 +1398,12 @@ impl PixelBusReader {
     /// Whether the signal is currently lost.
     pub fn signal_lost(&self) -> bool {
         self.signal_lost
+    }
+
+    /// Clears all history so a restarted game republishes even unchanged values.
+    pub fn reset(&mut self) {
+        let config = self.config;
+        *self = Self::new(config);
     }
 
     /// Observes one set of block samples at `now_ms` and returns the resulting
@@ -1583,13 +1584,13 @@ impl PixelBusReader {
             // clear it rather than hold it: holding a stale gate would leave the
             // application silently not intercepting long after the menu closed,
             // which looks exactly like a crash.
-            let menu = b5.map_or(MenuSurface::None, |c| decode_menu(c, tolerance));
+            let menu = b5.and_then(|c| decode_menu(c, tolerance));
             if menu != self.menu {
                 self.menu = menu;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
                     surface = ?menu,
-                    gates = menu.gates(),
+                    gates = menu.is_some_and(MenuSurface::gates),
                     "menu surface changed"
                 );
                 events.push(PixelBusEvent::MenuGate(menu));
@@ -1626,9 +1627,9 @@ impl PixelBusReader {
                     events.push(PixelBusEvent::Combat(CombatSignal::Unknown));
                 }
                 // Losing the signal must open the gate, never close it.
-                if self.menu != MenuSurface::None {
-                    self.menu = MenuSurface::None;
-                    events.push(PixelBusEvent::MenuGate(MenuSurface::None));
+                if self.menu.is_some() {
+                    self.menu = None;
+                    events.push(PixelBusEvent::MenuGate(None));
                 }
                 let cleared = ResourceSet::new_unknown();
                 if self.resources != cleared {

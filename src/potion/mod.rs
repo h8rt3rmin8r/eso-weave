@@ -103,6 +103,8 @@ impl Default for AutoPotionConfig {
 pub enum Block {
     /// Auto-potion is switched off.
     Disabled,
+    /// The ESO client is not active.
+    GameInactive,
     /// The application is suspended.
     Suspended,
     /// A native game UI surface or text field is up.
@@ -138,6 +140,8 @@ pub struct PotionReadings {
 pub struct PotionInputs {
     /// What the bus decoded.
     pub readings: PotionReadings,
+    /// Whether the ESO client is active.
+    pub game_active: bool,
     /// Whether the application is suspended.
     ///
     /// Pushed in rather than read from the input engine, so the rule stays a pure
@@ -182,6 +186,9 @@ pub fn evaluate(
 ) -> Result<(), Block> {
     if !enabled {
         return Err(Block::Disabled);
+    }
+    if !inputs.game_active {
+        return Err(Block::GameInactive);
     }
     if inputs.suspended {
         return Err(Block::Suspended);
@@ -275,6 +282,7 @@ impl<B: InputBackend> AutoPotionSink for RealAutoPotionSink<B> {
 pub struct AutoPotionController {
     config: AutoPotionConfig,
     enabled: bool,
+    game_active: bool,
     gated: bool,
     suspended: bool,
     last_attempt_ms: Option<u64>,
@@ -292,6 +300,7 @@ impl AutoPotionController {
         Self {
             config,
             enabled: false,
+            game_active: false,
             gated: false,
             suspended: false,
             last_attempt_ms: None,
@@ -323,6 +332,12 @@ impl AutoPotionController {
             );
         }
         self.enabled = enabled;
+    }
+
+    /// Sets the process-derived game-active gate without changing the requested
+    /// enable toggle.
+    pub fn set_game_active(&mut self, active: bool) {
+        self.game_active = active;
     }
 
     /// Sets whether a native game UI surface is gating input.
@@ -376,6 +391,7 @@ impl AutoPotionController {
         // enforce.
         let inputs = PotionInputs {
             readings,
+            game_active: self.game_active,
             suspended: self.suspended,
             gated: self.gated,
         };

@@ -63,6 +63,8 @@ pub enum StopReason {
     NoCastDetected,
     /// The beacon signal was lost while a session was active.
     SignalLost,
+    /// The ESO client exited while a session was active.
+    GameInactive,
 }
 
 /// The kind of the controller's single pending deadline.
@@ -249,6 +251,7 @@ pub struct FishingController {
     deadline: Option<(u64, TimerKind)>,
     stop_reason: Option<StopReason>,
     gated: bool,
+    game_active: bool,
 }
 
 /// How long an interact deferred by the menu gate waits before trying again.
@@ -265,6 +268,7 @@ impl FishingController {
             deadline: None,
             stop_reason: None,
             gated: false,
+            game_active: false,
         }
     }
 
@@ -292,6 +296,10 @@ impl FishingController {
     pub fn set_enabled(&mut self, enabled: bool, now_ms: u64, sink: &mut dyn FishingSink) {
         if enabled {
             if self.state == FishingState::Disabled {
+                if !self.game_active {
+                    self.stop_reason = Some(StopReason::GameInactive);
+                    return;
+                }
                 tracing::debug!(target: "eso_weave::fishing", "fishing enabled");
                 self.cast(now_ms, sink);
             }
@@ -419,6 +427,22 @@ impl FishingController {
     /// before this gate existed.
     pub fn set_gated(&mut self, gated: bool) {
         self.gated = gated;
+    }
+
+    /// Sets the process-derived game-active gate. Losing the game cancels any
+    /// active session before another autonomous interact can run.
+    pub fn set_game_active(&mut self, active: bool) {
+        self.game_active = active;
+        if !active {
+            self.on_game_inactive();
+        }
+    }
+
+    /// Cancels an active session when the ESO process leaves the active state.
+    pub fn on_game_inactive(&mut self) {
+        if self.state != FishingState::Disabled {
+            self.disable(StopReason::GameInactive);
+        }
     }
 
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and

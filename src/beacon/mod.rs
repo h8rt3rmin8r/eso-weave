@@ -8,9 +8,9 @@
 //! running-game probe sit behind thin per-platform backends.
 
 pub mod api_check;
+pub use crate::game::steam;
 #[cfg(target_os = "linux")]
 mod linux;
-pub mod steam;
 #[cfg(windows)]
 mod windows;
 
@@ -489,7 +489,13 @@ pub fn resolve_addons_dir(prefs: &BeaconPrefs) -> Result<PathBuf, DiscoveryError
 
 /// Best-effort probe of whether the ESO client is running. Never panics.
 pub fn probe_game_running() -> RunningState {
-    platform_probe_game_running()
+    match crate::game::observe_processes().runtime() {
+        crate::game::GameRuntime::Active => RunningState::Running,
+        crate::game::GameRuntime::Inactive | crate::game::GameRuntime::LauncherOpen => {
+            RunningState::NotRunning
+        }
+        crate::game::GameRuntime::Unknown => RunningState::Unknown,
+    }
 }
 
 #[cfg(windows)]
@@ -503,17 +509,4 @@ fn platform_addons_dir(env: Environment) -> Option<PathBuf> {
 #[cfg(not(any(windows, target_os = "linux")))]
 fn platform_addons_dir(_env: Environment) -> Option<PathBuf> {
     None
-}
-
-#[cfg(windows)]
-fn platform_probe_game_running() -> RunningState {
-    windows::probe_game_running()
-}
-#[cfg(target_os = "linux")]
-fn platform_probe_game_running() -> RunningState {
-    linux::probe_game_running()
-}
-#[cfg(not(any(windows, target_os = "linux")))]
-fn platform_probe_game_running() -> RunningState {
-    RunningState::Unknown
 }

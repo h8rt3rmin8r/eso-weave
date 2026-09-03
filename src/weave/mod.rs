@@ -344,6 +344,20 @@ impl WeaveEngine {
         self.resources
     }
 
+    /// Clears every game-derived observation when the client exits.
+    pub fn clear_game_observations(&mut self) {
+        self.current_latency = None;
+        self.active_bar = ActiveBar::Unknown;
+        self.front_class = WeaponClass::Unknown;
+        self.back_class = WeaponClass::Unknown;
+        self.combat = CombatSignal::Unknown;
+        self.movement = MovementSignal::Unknown;
+        self.cooldowns = CooldownSet::new_unknown();
+        self.quickslot = QuickslotState::new_unknown();
+        self.menu = MenuSurface::None;
+        self.resources = ResourceSet::new_unknown();
+    }
+
     /// Records the decoded weapon-bar state (active bar and each bar's weapon
     /// class), which selects the active timing profile and the auto-timing preset.
     pub fn set_weapon_bar(&mut self, signal: WeaponBarSignal) {

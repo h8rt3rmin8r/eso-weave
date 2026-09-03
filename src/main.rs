@@ -15,10 +15,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use eso_weave::app::{route_reader_event, ui::EsoWeaveApp, AppModel};
+use eso_weave::app::{route_game_observation, route_reader_event, ui::EsoWeaveApp, AppModel};
 use eso_weave::config::state::{sanitize_geometry, RestoreBounds};
 use eso_weave::config::{self, LoadOutcome};
 use eso_weave::fishing::{FishingConfig, FishingController, FishingState, RealFishingSink};
+use eso_weave::game::{FocusObservation, GameRuntime, GameState};
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::{
     Action, InputBackend, InputEngine, InputError, Key, MouseButton, Transition,
@@ -94,6 +95,7 @@ fn main() {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
     let potion = Arc::new(Mutex::new(AutoPotionController::new(potion_config)));
+    let game = GameState::default();
 
     // Pixel bus reader configuration.
     let mut reader_notices = Vec::new();
@@ -163,6 +165,7 @@ fn main() {
         let fishing = fishing.clone();
         let potion = potion.clone();
         let input = input.clone();
+        let game = game.clone();
         thread::spawn(move || {
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink = RealFishingSink::new(SharedBackend(backend.clone()));
@@ -200,6 +203,7 @@ fn main() {
                 "beacon grid footprint"
             );
             let origin = clock_origin;
+            let mut next_game_probe_ms = 0;
             loop {
                 // Poll fast while a fishing session is active so transient cast
                 // and bite signals are sampled and the state machine ticks in
@@ -207,12 +211,61 @@ fn main() {
                 let fishing_active = fishing.lock().unwrap().state() != FishingState::Disabled;
                 // A suspended application intercepts and synthesizes nothing, so
                 // it has no menu gate to keep current and can sample slowly.
-                let can_intercept = !input.is_suspended();
+                let can_intercept = !input.is_suspended() && input.is_game_active();
                 thread::sleep(Duration::from_millis(poll_interval(
                     fishing_active,
                     can_intercept,
                     &reader_config,
                 )));
+                let now = origin.elapsed().as_millis() as u64;
+                if now >= next_game_probe_ms {
+                    next_game_probe_ms = now.saturating_add(1000);
+                    let before = game.snapshot().runtime;
+                    let installation = eso_weave::game::discover_installation();
+                    if game.update_installation(installation.clone()) {
+                        let (state, provider) = match &installation {
+                            eso_weave::game::InstallationState::NotDetected => {
+                                ("not-detected", None)
+                            }
+                            eso_weave::game::InstallationState::Ambiguous => ("ambiguous", None),
+                            eso_weave::game::InstallationState::Unknown => ("unknown", None),
+                            eso_weave::game::InstallationState::Detected(candidate) => {
+                                ("detected", Some(candidate.provider))
+                            }
+                        };
+                        tracing::info!(
+                            target: "eso_weave::game",
+                            state,
+                            provider = ?provider,
+                            "game installation observation changed"
+                        );
+                    }
+                    let processes = eso_weave::game::observe_processes();
+                    let process_changed = game.update_processes(processes);
+                    let after = processes.runtime();
+                    let active = after == GameRuntime::Active;
+                    input.set_game_active(active);
+                    input.set_focused(matches!(processes.focus, FocusObservation::Focused));
+                    fishing.lock().unwrap().set_game_active(active);
+                    potion.lock().unwrap().set_game_active(active);
+                    if process_changed {
+                        tracing::info!(
+                            target: "eso_weave::game",
+                            runtime = ?after,
+                            focus = ?processes.focus,
+                            "game runtime observation changed"
+                        );
+                    }
+                    if before == GameRuntime::Active && !active {
+                        reader.reset();
+                        weave.lock().unwrap().clear_game_observations();
+                    } else if before != GameRuntime::Active && active {
+                        reader.reset();
+                    }
+                }
+                if game.snapshot().runtime != GameRuntime::Active {
+                    continue;
+                }
                 if sampler.is_none() {
                     sampler = resolve_sampler(reader_config.block_px);
                 }
@@ -237,12 +290,12 @@ fn main() {
                 let Some(active) = sampler.as_ref() else {
                     continue;
                 };
-                let now = origin.elapsed().as_millis() as u64;
                 let events = reader.sample_and_observe(active.as_ref(), now);
                 let mut weave = weave.lock().unwrap();
                 let mut fishing = fishing.lock().unwrap();
                 let mut potion = potion.lock().unwrap();
                 for event in events {
+                    route_game_observation(event, &game);
                     route_reader_event(
                         event,
                         &mut weave,
@@ -298,12 +351,13 @@ fn main() {
     // change detection so an unchanged restored window is not re-saved.
     let restored_geometry = session.as_ref().and_then(|(state, _)| state.window);
     let (api_tx, api_rx) = std::sync::mpsc::channel();
-    let mut model = AppModel::new(
+    let mut model = AppModel::new_with_game(
         input.clone(),
         weave.clone(),
         fishing.clone(),
         gui_sink,
         potion.clone(),
+        game,
         log.clone(),
         settings,
         config_dir,

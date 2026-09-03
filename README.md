@@ -35,6 +35,7 @@ ever sent while the ESO window is the active window.
 ## Contents
 
 - [Installation](#installation)
+- [Game state and context](#game-state-and-context)
 - [Weaving](#weaving)
 - [Fishing](#fishing)
 - [Auto-potion](#auto-potion)
@@ -74,6 +75,26 @@ Input interception reads keyboard devices and synthesizes input through
   `sudo udevadm control --reload && sudo udevadm trigger`.
 
 **Without this permission, key interception silently does nothing.**
+
+## Game state and context
+
+The main window reports game installation and game state separately. Installation
+is detected from provider-owned evidence for the ESO Store, Steam, Epic Games, or
+Steam Proton, then checked against the expected launcher and client files. Game
+state reports **Inactive**, **Launcher open**, **Active**, or **Unknown**. The game
+client takes precedence, so closing the launcher after ESO starts does not make an
+active session disappear.
+
+**Game Context** combines four independent observations: whether the game is
+active, whether its window is focused, whether PixelBeacon is fresh, and which
+in-game surface PixelBeacon reports. **Gameplay** appears only when all four are
+authoritative and the addon reports no menu. Missing or invalid addon evidence is
+shown as **Signal unavailable**, never as Gameplay.
+
+When ESO is not active, live metrics show **Game not active** and no weave,
+fishing, or auto-potion input is sent. ESO Weave resumes observation automatically
+when the client starts again. A requested auto-potion toggle is preserved across
+game inactivity, while the existing signal-loss rule still switches it off.
 
 ## Weaving
 
@@ -176,6 +197,7 @@ to stop.
 | Idle | Fishing is off |
 | Idle (no cast detected) | A cast was never confirmed |
 | Idle (signal lost) | The beacon signal went away |
+| Idle (game not active) | The ESO client exited |
 
 ### Settings
 

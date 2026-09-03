@@ -3,8 +3,8 @@
 **Project:** ESO Weave \
 **Repository:** `github.com/h8rt3rmin8r/eso-weave` \
 **Document:** `docs/ESO-Weave-Specification.md` \
-**Version:** 1.0.0 \
-**Date:** 2026-07-28 \
+**Version:** 1.1.0 \
+**Date:** 2026-09-03 \
 **Audience:** Human-facing, and consumed by AI coding agents through spec-kit \
 **Author:** h8rt3rmin8r \
 **License:** Apache-2.0
@@ -200,6 +200,7 @@ flowchart LR
 | Subsystem | Responsibility |
 | --- | --- |
 | **Input Engine** | Platform-abstracted interception and synthesis behind one `InputBackend` trait. Owns focus scoping, suspend state, the menu gate, and injected-input flagging. |
+| **Game Observer** | Detects provider-owned installation evidence, game and launcher processes, and operating-system focus. Reduces independent observations into installation, runtime, and Game Context state. |
 | **Weave Engine** | The skill and weave state machine: cooldown gating, sequence execution, and weapon-aware and latency-adaptive timing. Platform-agnostic, unit-tested against a mock sink. |
 | **Fishing Controller** | The fishing state machine. Consumes detector events and drives interact-key synthesis through a sink seam. |
 | **Auto-Potion Controller** | The potion trigger rule. Consumes decoded resource and quickslot readings and drives quickslot-key synthesis through a sink seam. |
@@ -221,7 +222,7 @@ through channels drained once per frame.
 | Main | The interface, the application model, and the view | Timed input sequences |
 | Interception | The platform hook or evdev event loop | Sleep, block, or synthesize |
 | Weave worker | Draining actions and running weave sequences | Touch the hook thread |
-| Pixel bus worker | Sampling, event routing, display detection, and the fishing and auto-potion ticks | Sample from any other thread |
+| Pixel bus worker | One-second game observation, sampling, event routing, display detection, and the fishing and auto-potion ticks | Sample from any other thread |
 | API version check | One startup pass over the manifest and the live game version | Block the window from appearing |
 
 Five contracts hold across those threads:
@@ -242,19 +243,45 @@ Five contracts hold across those threads:
 5. **Startup never blocks on the network.** The API version check runs on its own
    one-shot thread and hands its result to the interface through a channel.
 
+### 6.1 Game observation
+
+Installation and runtime are independent. On Windows, installation candidates
+come from the exact Steam app uninstall entry, the generic ESO uninstall entry,
+and Epic `.item` manifests. On Linux, Steam libraries and app manifest `306130`
+locate the Proton install. Every candidate must contain the expected ESO client
+and launcher artifacts. Candidates are normalized by root before reconciliation.
+A Steam or Epic candidate wins over the generic ESO entry for the same root;
+distinct roots or conflicting strong providers are ambiguous.
+
+The existing pixel-bus worker observes processes and focus every second, before
+any missing-sampler early return. Runtime reduces in this order: a present game
+client is **Active**; otherwise an unknown game observation is **Unknown**; a
+present launcher is **Launcher open**; an unknown launcher is **Unknown**; and two
+absent observations are **Inactive**. Closing the launcher cannot demote an active
+game.
+
+Game Context is derived from runtime, focus, beacon freshness, and the menu
+surface. **Gameplay** requires Active, Focused, Fresh, and a valid observed
+no-menu surface. Invalid or absent menu evidence is unavailable rather than a
+no-menu observation. Runtime exit clears reader history and every game-derived
+metric, blocks input, stops active fishing, and blocks auto-potion without
+clearing its requested enable toggle. Restart republishes even unchanged values.
+
 ## 7. Input Engine
 
 ### 7.1 Interception model
 
-The engine intercepts configured physical keys only while the ESO window is
-focused, suppresses the original keystroke, and enqueues an action. Every other key
-passes through untouched. Synthesized input is flagged so the engine never
-intercepts its own output.
+The engine intercepts configured physical keys only while the ESO client is active
+and its window is focused, suppresses the original keystroke, and enqueues an
+action. Every other key passes through untouched. Synthesized input is flagged so
+the engine never intercepts its own output.
 
 ```mermaid
 flowchart TD
-    K([Physical key event]) --> F{ESO window<br/>focused?}
-    F -->|No| P([Pass through])
+    K([Physical key event]) --> A{ESO client<br/>active?}
+    A -->|No| P([Pass through])
+    A -->|Yes| F{ESO window<br/>focused?}
+    F -->|No| P
     F -->|Yes| S{Injected<br/>by us?}
     S -->|Yes| P
     S -->|No| B{Bound to<br/>an action?}
@@ -787,7 +814,7 @@ skills region, and an optional live log panel.
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and a Live Log toggle |
-| Status region | Application state and Suspend; fishing state and its toggle; the PixelBeacon status light with Install, Update, and Uninstall; weapon bar; combat; movement; game menu; health, stamina, and magicka; auto-potion and its toggle; quickslot cooldown and quickslot item |
+| Status region | Application state and Suspend; fishing state and its toggle; the PixelBeacon status light with Install, Update, and Uninstall; game installation and runtime; weapon bar; combat; movement; Game Context; health, stamina, and magicka; auto-potion and its toggle; quickslot cooldown and quickslot item |
 | Skills region | One row per slot: label, active toggle, weave type, override toggle, effective delay, and decoded cooldown |
 | Live log panel | Optional, attached at the bottom |
 
@@ -804,6 +831,11 @@ the live log open it adds a width bonus and the open-log reserve.
 
 Hovering an interactive control changes its color, never its size, so the layout
 never reflows on hover.
+
+Game Context help is available from pointer hover and keyboard focus with
+identical text. While runtime is not Active, every live game metric above Skills
+uses the shared **Game not active** presentation rather than retaining stale
+values.
 
 ### 12.2 Live log viewer
 

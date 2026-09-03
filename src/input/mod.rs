@@ -96,6 +96,7 @@ pub type ActionReceiver = Receiver<Action>;
 pub struct InputEngine {
     bindings: Mutex<BindingTable>,
     focused: AtomicBool,
+    game_active: AtomicBool,
     suspended: AtomicBool,
     menu_gated: AtomicBool,
     held: Mutex<HashSet<Key>>,
@@ -111,6 +112,7 @@ impl InputEngine {
         let engine = InputEngine {
             bindings: Mutex::new(bindings),
             focused: AtomicBool::new(false),
+            game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             menu_gated: AtomicBool::new(false),
             held: Mutex::new(HashSet::new()),
@@ -123,6 +125,17 @@ impl InputEngine {
     /// Sets whether the game window holds keyboard focus.
     pub fn set_focused(&self, focused: bool) {
         self.focused.store(focused, Ordering::Relaxed);
+    }
+
+    /// Sets whether the ESO client is currently present. Inactive is the safe
+    /// startup value, so process detection must positively enable interception.
+    pub fn set_game_active(&self, active: bool) {
+        self.game_active.store(active, Ordering::Relaxed);
+    }
+
+    /// Whether the ESO client is currently present.
+    pub fn is_game_active(&self) -> bool {
+        self.game_active.load(Ordering::Relaxed)
     }
 
     /// Sets whether the engine is suspended.
@@ -173,6 +186,9 @@ impl InputEngine {
     /// most one non-blocking hand-off. Never sleeps or does timed work.
     pub fn classify(&self, event: KeyEvent) -> Decision {
         if event.origin == Origin::SelfOriginated {
+            return Decision::Pass;
+        }
+        if !self.game_active.load(Ordering::Relaxed) {
             return Decision::Pass;
         }
         if !self.focused.load(Ordering::Relaxed) {
