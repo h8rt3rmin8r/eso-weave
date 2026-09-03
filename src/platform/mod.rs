@@ -41,3 +41,9 @@ pub fn log_dir() -> Option<PathBuf> {
 pub fn virtual_screen_bounds_points() -> Option<(i32, i32, i32, i32)> {
     backend::virtual_screen_bounds_points()
 }
+
+/// Returns the active X11 or XWayland window title when Linux can query it.
+#[cfg(target_os = "linux")]
+pub fn active_window_title() -> Option<String> {
+    backend::active_window_title()
+}

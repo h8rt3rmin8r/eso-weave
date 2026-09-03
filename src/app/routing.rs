@@ -2,6 +2,7 @@
 
 use crate::app::UiIntent;
 use crate::fishing::{map_event, FishingController, FishingSink};
+use crate::game::{GameState, SurfaceObservation};
 use crate::input::{Action, InputEngine};
 use crate::pixelbus::PixelBusEvent;
 use crate::potion::AutoPotionController;
@@ -89,7 +90,7 @@ pub fn route_reader_event(
             return;
         }
         PixelBusEvent::MenuGate(surface) => {
-            let gates = surface.gates();
+            let gates = surface.is_some_and(crate::pixelbus::MenuSurface::gates);
             input.set_menu_gated(gates);
             fishing.set_gated(gates);
             // The auto-potion controller is gated directly, for the same reason
@@ -97,7 +98,7 @@ pub fn route_reader_event(
             // never passes through interception, so gating interception alone
             // would leave it firing into a chat message being composed.
             potion.set_gated(gates);
-            weave.set_menu(surface);
+            weave.set_menu(surface.unwrap_or(crate::pixelbus::MenuSurface::None));
             return;
         }
         PixelBusEvent::SignalLost => {
@@ -111,6 +112,19 @@ pub fn route_reader_event(
     }
     if let Some(detector_event) = map_event(event) {
         fishing.on_event(detector_event, now_ms, sink);
+    }
+}
+
+/// Routes the observation axes that contribute to the truthful Game Context.
+pub fn route_game_observation(event: PixelBusEvent, game: &GameState) {
+    match event {
+        PixelBusEvent::Heartbeat => game.observe_heartbeat(),
+        PixelBusEvent::SignalLost => game.signal_lost(),
+        PixelBusEvent::MenuGate(surface) => game.observe_surface(match surface {
+            Some(surface) => SurfaceObservation::Observed(surface),
+            None => SurfaceObservation::Unavailable,
+        }),
+        _ => {}
     }
 }
 

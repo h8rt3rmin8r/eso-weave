@@ -6,7 +6,8 @@
 
 use std::path::PathBuf;
 
-use super::{eso_addons_subpath, steam, Environment, RunningState, ESO_APP_ID};
+use super::{eso_addons_subpath, Environment, ESO_APP_ID};
+use crate::game::steam;
 
 /// Resolves the AddOns directory under the ESO Proton prefix.
 pub fn addons_dir(env: Environment) -> Option<PathBuf> {
@@ -33,37 +34,4 @@ fn steam_root() -> Option<PathBuf> {
     candidates
         .into_iter()
         .find(|root| root.join("steamapps/libraryfolders.vdf").is_file())
-}
-
-/// The ESO client executable names to match, lowercased.
-const ESO_EXE_NAMES: [&str; 2] = ["eso64.exe", "eso.exe"];
-
-/// Scans `/proc` for the ESO client process.
-pub fn probe_game_running() -> RunningState {
-    let entries = match std::fs::read_dir("/proc") {
-        Ok(entries) => entries,
-        Err(_) => return RunningState::Unknown,
-    };
-
-    let mut walked_any = false;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.is_empty() || !name.chars().all(|c| c.is_ascii_digit()) {
-            continue;
-        }
-        walked_any = true;
-        if let Ok(comm) = std::fs::read_to_string(entry.path().join("comm")) {
-            let comm = comm.trim().to_ascii_lowercase();
-            if ESO_EXE_NAMES.contains(&comm.as_str()) || comm.starts_with("eso64") {
-                return RunningState::Running;
-            }
-        }
-    }
-
-    if walked_any {
-        RunningState::NotRunning
-    } else {
-        RunningState::Unknown
-    }
 }

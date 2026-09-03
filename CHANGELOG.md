@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Game installation and runtime observations now distinguish ESO Store, Steam,
+  Epic Games, and Steam Proton evidence from the independent Inactive, Launcher
+  open, Active, and Unknown process lifecycle. Active game detection outranks the
+  launcher, so closing the launcher during play does not break tracking (issues
+  #22 and #23). Linux discovery inspects every native and sandboxed Steam root.
+
+- Game Context replaces Game Menu and combines runtime, operating-system focus,
+  PixelBeacon freshness, and a valid observed surface. Gameplay is shown only
+  when all required evidence is authoritative. Game exit clears live metrics,
+  pauses requested fishing, and blocks every input path until the client returns
+  focused. Requested fishing and auto-potion choices resume without retaining a
+  stale menu gate. Runtime probes remain bounded to one second regardless of
+  reader settings, and a restarted game receives a freshly resolved sampler.
+
 ### Changed
 
 - The master specification is refreshed to describe the shipping system and
@@ -27,6 +43,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-03: Installation provider comes from platform-owned evidence plus
+  validated game artifacts, never from an assumed default path. A strong Steam
+  or Epic claim wins over the generic ESO uninstall entry for the same normalized
+  root; different roots and conflicting strong providers are reported as
+  ambiguous rather than selected by enumeration order.
+- 2026-09-03: A valid no-menu surface and an unavailable menu sample are separate
+  states. Conflating them made a missing addon or inactive game appear as
+  Gameplay. Only Active, Focused, Fresh, and observed no-menu can now produce that
+  label.
+- 2026-09-03: Runtime and focus are safety gates independent of PixelBeacon.
+  Basic weaving remains usable without the optional addon, while an inactive or
+  unknown or unfocused game process cannot receive synthesized input. Runtime
+  inactivity and focus loss preserve requested fishing and auto-potion toggles;
+  the older signal-loss behavior still switches those features off.
 
 - 2026-07-28: The specification's filename no longer carries its version. A
   version in a filename forces every revision to choose between churning every
@@ -66,10 +97,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value**, and it acts by synthesizing a keypress, which puts it on a
   constitution NON-NEGOTIABLE surface. Every prior signal was deliberately inert,
   with a test asserting the engine behaved identically for every value it could
-  take. The design response is to add no new input path: synthesis goes through
-  the existing input engine so focus scoping and recursion flagging are
-  inherited, the controller is modelled on the fishing controller, and it ticks
-  on the existing worker loop with no new thread and no new timer.
+  take. The controller uses the established synthesis backend and recursion
+  marking, receives focus as an explicit fail-closed gate because autonomous
+  input bypasses interception, and ticks on the existing worker loop with no new
+  thread and no new timer.
 
   It fires only when all of these hold: auto-potion is on, at least one enabled
   resource is readable and at or below its own threshold, the active quickslot

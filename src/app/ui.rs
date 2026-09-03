@@ -849,6 +849,12 @@ impl EsoWeaveApp {
                 });
                 ui.end_row();
 
+                status_cells(ui, &palette, &view.installation_line);
+                ui.end_row();
+
+                status_cells(ui, &palette, &view.runtime_line);
+                ui.end_row();
+
                 // Weapon bar (from the updated Pixel Beacon addon), rendered as a
                 // grid row so its title and state align with the rows above.
                 widgets::label_strong(ui, &palette, strings::WEAPON_BAR_TITLE)
@@ -858,7 +864,7 @@ impl EsoWeaveApp {
                 let text = if wb.detected {
                     format!("{} (front {}, back {})", wb.active_bar, wb.front, wb.back)
                 } else {
-                    "Not detected".to_string()
+                    wb.active_bar.to_string()
                 };
                 ui.label(egui::RichText::new(text).color(color))
                     .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
@@ -887,12 +893,8 @@ impl EsoWeaveApp {
                 // Game menu gate: when this is active the application is
                 // deliberately not intercepting, so the operator can see why
                 // their weaves are not firing.
-                widgets::label_strong(ui, &palette, strings::MENU_TITLE)
-                    .on_hover_text(strings::MENU_TOOLTIP);
                 let mv = &view.menu;
-                let menu_color = crate::app::theme::status_color(&palette, mv.role);
-                ui.label(egui::RichText::new(mv.state).color(menu_color))
-                    .on_hover_text(strings::MENU_TOOLTIP);
+                game_context_cells(ui, &palette, mv);
                 ui.end_row();
 
                 // Resource pools, one grid row each so they align with the rows
@@ -915,7 +917,9 @@ impl EsoWeaveApp {
                 // reads, which is why it is worth showing at all.
                 widgets::label_strong(ui, &palette, strings::AUTO_POTION_TITLE)
                     .on_hover_text(strings::AUTO_POTION_TOOLTIP);
-                let (potion_text, potion_role) = if view.auto_potion_active {
+                let (potion_text, potion_role) = if view.auto_potion_active && !view.game_active {
+                    ("On (game not active)", crate::app::StatusRole::Warning)
+                } else if view.auto_potion_active {
                     (strings::AUTO_POTION_ON, crate::app::StatusRole::Active)
                 } else {
                     (strings::AUTO_POTION_OFF, crate::app::StatusRole::Muted)
@@ -1497,6 +1501,38 @@ fn status_cells(ui: &mut egui::Ui, palette: &crate::app::theme::Palette, line: &
     let color = crate::app::theme::status_color(palette, line.role);
     ui.label(egui::RichText::new(&line.state_text).color(color))
         .on_hover_text(line.tooltip);
+}
+
+/// Renders focusable Game Context cells. Hover uses the ordinary delayed
+/// tooltip, while keyboard focus shows the identical text immediately.
+fn game_context_cells(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    view: &crate::app::MenuView,
+) {
+    let title = ui
+        .add(
+            egui::Label::new(
+                egui::RichText::new(strings::MENU_TITLE)
+                    .strong()
+                    .color(palette.text),
+            )
+            .sense(egui::Sense::focusable_noninteractive()),
+        )
+        .on_hover_text(strings::MENU_TOOLTIP);
+    if title.has_focus() {
+        title.show_tooltip_text(strings::MENU_TOOLTIP);
+    }
+    let color = crate::app::theme::status_color(palette, view.role);
+    let state = ui
+        .add(
+            egui::Label::new(egui::RichText::new(view.state).color(color))
+                .sense(egui::Sense::focusable_noninteractive()),
+        )
+        .on_hover_text(strings::MENU_TOOLTIP);
+    if state.has_focus() {
+        state.show_tooltip_text(strings::MENU_TOOLTIP);
+    }
 }
 
 fn weave_type_name(weave_type: WeaveType) -> &'static str {

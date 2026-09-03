@@ -15,7 +15,10 @@ use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{MockSampler, PixelBusReader, ReaderConfig, Rgb};
 
 fn controller() -> FishingController {
-    FishingController::new(FishingConfig::default())
+    let mut controller = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    controller.set_game_environment(true, true, 0, &mut sink);
+    controller
 }
 
 fn press_release(key: Key) -> Vec<(Key, Transition)> {
@@ -485,6 +488,80 @@ fn the_arm_timeout_still_fires_while_gated() {
     sink.clear();
     c.set_gated(true);
     c.tick(u64::from(cfg.arm_timeout_ms), &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn game_exit_disables_an_active_session_without_emitting() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    sink.clear();
+    c.set_game_environment(false, false, 1, &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::GameInactive));
+    assert!(c.enabled(), "runtime exit must preserve requested fishing");
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn inactive_game_refuses_the_initial_cast() {
+    let mut c = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::GameInactive));
+    assert!(c.enabled(), "the request is paused rather than destroyed");
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn requested_fishing_resumes_when_game_and_focus_return() {
+    let cfg = FishingConfig::default();
+    let mut c = FishingController::new(cfg);
+    let mut sink = MockFishingSink::new();
+
+    c.set_enabled(true, 0, &mut sink);
+    assert!(sink.ops.is_empty());
+
+    c.set_game_environment(true, true, 1000, &mut sink);
+    assert_eq!(c.state(), FishingState::Armed);
+    assert_eq!(sink.ops, press_release(cfg.interact_key));
+}
+
+#[test]
+fn focus_loss_pauses_and_refocus_rearms_requested_fishing() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    sink.clear();
+
+    c.set_game_environment(true, false, 10, &mut sink);
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::Unfocused));
+    assert!(c.enabled());
+    assert!(sink.ops.is_empty());
+
+    c.set_game_environment(true, true, 20, &mut sink);
+    assert_eq!(c.state(), FishingState::Armed);
+    assert_eq!(sink.ops, press_release(cfg.interact_key));
+}
+
+#[test]
+fn signal_loss_while_focus_paused_applies_the_existing_reset_policy() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.set_game_environment(true, false, 10, &mut sink);
+
+    c.on_event(DetectorEvent::SignalLost, 20, &mut sink);
+    assert!(!c.enabled());
+    assert_eq!(c.stop_reason(), Some(StopReason::SignalLost));
+
+    sink.clear();
+    c.set_game_environment(true, true, 30, &mut sink);
     assert_eq!(c.state(), FishingState::Disabled);
     assert!(sink.ops.is_empty());
 }

@@ -91,8 +91,12 @@ fn scheduler_coalesces_repeated_changes() {
 
 fn model_with_dir(dir: Option<PathBuf>, root: &Path) -> AppModel {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
+    engine.set_game_active(true);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
-    let fishing = Arc::new(Mutex::new(FishingController::new(FishingConfig::default())));
+    let mut fishing_controller = FishingController::new(FishingConfig::default());
+    let mut init_sink = MockFishingSink::new();
+    fishing_controller.set_game_environment(true, true, 0, &mut init_sink);
+    let fishing = Arc::new(Mutex::new(fishing_controller));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
     let prefs = BeaconPrefs {
         path_override: Some(root.to_path_buf()),

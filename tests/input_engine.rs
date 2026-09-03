@@ -11,7 +11,9 @@ use eso_weave::input::{
 };
 
 fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
-    InputEngine::new(BindingTable::default(), 64)
+    let pair = InputEngine::new(BindingTable::default(), 64);
+    pair.0.set_game_active(true);
+    pair
 }
 
 fn ev(key: Key, transition: Transition, origin: Origin) -> KeyEvent {
@@ -57,6 +59,63 @@ fn unfocused_never_intercepts() {
 }
 
 #[test]
+fn inactive_game_never_intercepts_even_when_focused() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.set_game_active(false);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.set_menu_gated(false);
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+
+    engine.set_menu_gated(true);
+    engine.set_game_active(false);
+    assert!(!engine.is_menu_gated());
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real)),
+        Decision::Pass
+    );
+
+    engine.set_game_active(true);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+}
+
+#[test]
+fn pass_through_release_while_unfocused_retires_held_key() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+
+    engine.set_focused(false);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real)),
+        Decision::Pass
+    );
+    engine.set_focused(true);
+    engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+}
+
+#[test]
 fn bound_key_up_is_suppressed_and_hands_off_nothing() {
     let (engine, rx) = engine();
     engine.set_focused(true);
@@ -94,6 +153,7 @@ fn auto_repeat_down_hands_off_only_once() {
 #[test]
 fn full_channel_drops_without_blocking() {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 1);
+    engine.set_game_active(true);
     engine.set_focused(true);
 
     // First press fills the capacity-1 channel; further distinct presses must not

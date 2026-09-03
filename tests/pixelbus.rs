@@ -877,7 +877,7 @@ fn decode_menu_reads_every_surface_code() {
         MenuSurface::Other,
     ];
     for (code, want) in expected.iter().enumerate() {
-        assert_eq!(decode_menu(menu(code as u8), t), *want, "code {code}");
+        assert_eq!(decode_menu(menu(code as u8), t), Some(*want), "code {code}");
     }
 }
 
@@ -886,7 +886,10 @@ fn every_surface_except_gameplay_gates() {
     assert!(!MenuSurface::None.gates());
     for code in 1..=10u8 {
         let surface = decode_menu(menu(code), ReaderConfig::default().tolerance);
-        assert!(surface.gates(), "code {code} must gate");
+        assert!(
+            surface.is_some_and(MenuSurface::gates),
+            "code {code} must gate"
+        );
     }
     // The unenumerated surface gates too. This is what keeps the gate correct for
     // a scene the addon could not name.
@@ -897,13 +900,13 @@ fn every_surface_except_gameplay_gates() {
 fn decode_menu_rejects_invalid_samples() {
     let t = ReaderConfig::default().tolerance;
     // Wrong marker (the combat block's).
-    assert_eq!(decode_menu(Rgb::new(48, 0x2D, 207), t), MenuSurface::None);
+    assert_eq!(decode_menu(Rgb::new(48, 0x2D, 207), t), None);
     // Valid marker, broken checksum.
-    assert_eq!(decode_menu(Rgb::new(48, 0xD2, 0), t), MenuSurface::None);
+    assert_eq!(decode_menu(Rgb::new(48, 0xD2, 0), t), None);
     // Valid marker and checksum, red sitting between two codes.
-    assert_eq!(decode_menu(Rgb::new(36, 0xD2, 219), t), MenuSurface::None);
+    assert_eq!(decode_menu(Rgb::new(36, 0xD2, 219), t), None);
     // Valid marker and checksum, red beyond the highest code.
-    assert_eq!(decode_menu(Rgb::new(252, 0xD2, 3), t), MenuSurface::None);
+    assert_eq!(decode_menu(Rgb::new(252, 0xD2, 3), t), None);
 }
 
 #[test]
@@ -923,7 +926,7 @@ fn no_arbitrary_color_decodes_as_a_gating_surface() {
                 }
                 assert_eq!(
                     decode_menu(sample, t),
-                    MenuSurface::None,
+                    None,
                     "color {sample:?} decoded as a surface"
                 );
             }
@@ -939,7 +942,7 @@ fn no_arbitrary_color_decodes_as_a_gating_surface() {
         COMBAT_IN,
     ] {
         assert!(
-            !decode_menu(other, t).gates(),
+            !decode_menu(other, t).is_some_and(MenuSurface::gates),
             "another block's color {other:?} gated input"
         );
     }
@@ -956,7 +959,7 @@ fn menu_event_only_on_change_and_clears_on_loss() {
         },
         0,
     );
-    assert!(first.contains(&PixelBusEvent::MenuGate(MenuSurface::Map)));
+    assert!(first.contains(&PixelBusEvent::MenuGate(Some(MenuSurface::Map))));
 
     let repeat = r.observe(
         BlockSamples {
@@ -971,7 +974,7 @@ fn menu_event_only_on_change_and_clears_on_loss() {
 
     // A block that stops decoding opens the gate, never closes it.
     let gone = r.observe(alive(), 200);
-    assert!(gone.contains(&PixelBusEvent::MenuGate(MenuSurface::None)));
+    assert!(gone.contains(&PixelBusEvent::MenuGate(None)));
 
     // And so does losing the signal entirely.
     r.observe(
@@ -983,7 +986,23 @@ fn menu_event_only_on_change_and_clears_on_loss() {
     );
     let lost = r.observe(BlockSamples::default(), 3000);
     assert!(lost.contains(&PixelBusEvent::SignalLost));
-    assert!(lost.contains(&PixelBusEvent::MenuGate(MenuSurface::None)));
+    assert!(lost.contains(&PixelBusEvent::MenuGate(None)));
+}
+
+#[test]
+fn reset_republishes_an_unchanged_surface_after_game_restart() {
+    let mut r = reader();
+    let samples = BlockSamples {
+        menu: Some(menu(3)),
+        ..alive()
+    };
+    assert!(r
+        .observe(samples, 0)
+        .contains(&PixelBusEvent::MenuGate(Some(MenuSurface::Inventory))));
+    r.reset();
+    assert!(r
+        .observe(samples, 1)
+        .contains(&PixelBusEvent::MenuGate(Some(MenuSurface::Inventory))));
 }
 
 // Slice 033: the resource blocks (B6 to B8).

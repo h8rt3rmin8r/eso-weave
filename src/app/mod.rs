@@ -26,6 +26,7 @@ use crate::beacon::{self, BeaconPrefs, BeaconStatus};
 use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
+use crate::game::{GameContext, GameRuntime, GameState, InstallationProvider, InstallationState};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
@@ -37,7 +38,7 @@ use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
 pub use log_view::{build_log_view, level_color, LogColor, LogRow};
-pub use routing::{app_toggle_intent, route_reader_event};
+pub use routing::{app_toggle_intent, route_game_observation, route_reader_event};
 pub use settings_form::{SettingsForm, UiPrefs};
 
 /// The application-state indicator and its toggle button label.
@@ -84,6 +85,8 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
         FishingState::Disabled => match reason {
             Some(StopReason::NoCastDetected) => strings::FISHING_IDLE_NO_CAST,
             Some(StopReason::SignalLost) => strings::FISHING_IDLE_SIGNAL_LOST,
+            Some(StopReason::GameInactive) => strings::FISHING_IDLE_GAME_INACTIVE,
+            Some(StopReason::Unfocused) => strings::FISHING_IDLE_UNFOCUSED,
             None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
     }
@@ -155,7 +158,10 @@ pub fn status_line_app(suspended: bool) -> StatusLine {
 pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> StatusLine {
     let role = match state {
         FishingState::Disabled => match reason {
-            Some(StopReason::NoCastDetected) | Some(StopReason::SignalLost) => StatusRole::Warning,
+            Some(StopReason::NoCastDetected)
+            | Some(StopReason::SignalLost)
+            | Some(StopReason::GameInactive)
+            | Some(StopReason::Unfocused) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
         },
         _ => StatusRole::Active,
@@ -233,7 +239,11 @@ pub fn weapon_bar_view(bar: ActiveBar, front: WeaponClass, back: WeaponClass) ->
         bar != ActiveBar::Unknown || front != WeaponClass::Unknown || back != WeaponClass::Unknown;
     WeaponBarView {
         detected,
-        active_bar: active_bar_name(bar),
+        active_bar: if detected {
+            active_bar_name(bar)
+        } else {
+            "Not detected"
+        },
         front: weapon_class_name(front),
         back: weapon_class_name(back),
         role: if detected {
@@ -339,13 +349,71 @@ pub fn menu_view(surface: MenuSurface) -> MenuView {
             MenuSurface::CrownStore => "Crown store",
             MenuSurface::Journal => "Journal",
             MenuSurface::ChatEntry => "Chat entry",
-            MenuSurface::Other => "Menu",
+            MenuSurface::Other => "Other menu",
         },
         role: if surface.gates() {
             StatusRole::Active
         } else {
             StatusRole::Muted
         },
+    }
+}
+
+/// Derives the truthful Game Context projection from all authoritative axes.
+pub fn game_context_view(context: GameContext) -> MenuView {
+    let (gating, state, role) = match context {
+        GameContext::NotDetected => (false, "Not detected", StatusRole::Muted),
+        GameContext::Unfocused => (false, "Unfocused", StatusRole::Warning),
+        GameContext::Gameplay => (false, "Gameplay", StatusRole::Muted),
+        GameContext::SignalUnavailable => (false, "Signal unavailable", StatusRole::Warning),
+        GameContext::Unknown => (false, "Unknown", StatusRole::Warning),
+        GameContext::Surface(surface) => {
+            let view = menu_view(surface);
+            return view;
+        }
+    };
+    MenuView {
+        gating,
+        state,
+        role,
+    }
+}
+
+fn installation_line(state: &InstallationState) -> StatusLine {
+    let (text, role) = match state {
+        InstallationState::NotDetected => ("Not detected", StatusRole::Muted),
+        InstallationState::Ambiguous => ("Multiple installs detected", StatusRole::Warning),
+        InstallationState::Unknown => ("Unknown", StatusRole::Warning),
+        InstallationState::Detected(candidate) => (
+            match candidate.provider {
+                InstallationProvider::EsoStore => "Detected (ESO Store)",
+                InstallationProvider::Steam => "Detected (Steam)",
+                InstallationProvider::Epic => "Detected (Epic Games)",
+                InstallationProvider::SteamProton => "Detected (Steam Proton)",
+            },
+            StatusRole::Healthy,
+        ),
+    };
+    StatusLine {
+        title: strings::GAME_INSTALLATION_TITLE,
+        state_text: text.to_string(),
+        role,
+        tooltip: strings::GAME_INSTALLATION_TOOLTIP,
+    }
+}
+
+fn runtime_line(runtime: GameRuntime) -> StatusLine {
+    let (text, role) = match runtime {
+        GameRuntime::Inactive => ("Inactive", StatusRole::Muted),
+        GameRuntime::LauncherOpen => ("Launcher open", StatusRole::Active),
+        GameRuntime::Active => ("Active", StatusRole::Healthy),
+        GameRuntime::Unknown => ("Unknown", StatusRole::Warning),
+    };
+    StatusLine {
+        title: strings::GAME_RUNTIME_TITLE,
+        state_text: text.to_string(),
+        role,
+        tooltip: strings::GAME_RUNTIME_TOOLTIP,
     }
 }
 
@@ -844,6 +912,10 @@ pub struct AppView {
     pub fishing_line: StatusLine,
     /// The normalized Pixel Beacon line.
     pub beacon_line: StatusLine,
+    /// Distribution-platform installation evidence.
+    pub installation_line: StatusLine,
+    /// Process-derived ESO lifecycle state.
+    pub runtime_line: StatusLine,
     /// Whether the engine is currently suspended (for the Status toggle).
     pub suspended: bool,
     /// Whether fishing is currently active (for the Fishing toggle).
@@ -870,6 +942,8 @@ pub struct AppView {
     pub quickslot: QuickslotView,
     /// Whether auto-potion is switched on.
     pub auto_potion_active: bool,
+    /// Whether process observation currently permits game-directed behavior.
+    pub game_active: bool,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -999,6 +1073,7 @@ pub struct AppModel {
     fishing: Arc<Mutex<FishingController>>,
     fishing_sink: Box<dyn FishingSink + Send>,
     potion: Arc<Mutex<AutoPotionController>>,
+    game: GameState,
     clock: Instant,
     log: LogHandle,
     settings: Settings,
@@ -1025,6 +1100,34 @@ impl AppModel {
         config_dir: Option<PathBuf>,
         clock: Instant,
     ) -> Self {
+        Self::new_with_game(
+            input,
+            weave,
+            fishing,
+            fishing_sink,
+            potion,
+            GameState::default(),
+            log,
+            settings,
+            config_dir,
+            clock,
+        )
+    }
+
+    /// Creates the model over a caller-owned shared game observation handle.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_game(
+        input: Arc<InputEngine>,
+        weave: Arc<Mutex<WeaveEngine>>,
+        fishing: Arc<Mutex<FishingController>>,
+        fishing_sink: Box<dyn FishingSink + Send>,
+        potion: Arc<Mutex<AutoPotionController>>,
+        game: GameState,
+        log: LogHandle,
+        settings: Settings,
+        config_dir: Option<PathBuf>,
+        clock: Instant,
+    ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
         let log_filter = settings.logging.level;
         Self {
@@ -1033,6 +1136,7 @@ impl AppModel {
             fishing,
             fishing_sink,
             potion,
+            game,
             clock,
             log,
             settings,
@@ -1051,6 +1155,11 @@ impl AppModel {
         self.log.clone()
     }
 
+    /// Returns the shared game observation handle.
+    pub fn game_state(&self) -> GameState {
+        self.game.clone()
+    }
+
     /// The current GUI preferences (theme and always-on-top).
     pub fn ui_prefs(&self) -> UiPrefs {
         settings_form::ui_from_value(&self.settings.ui).0
@@ -1064,11 +1173,11 @@ impl AppModel {
     /// The current derived display state.
     pub fn view(&self) -> AppView {
         let condition = self.beacon_condition();
-        let (fishing_state, fishing_reason) = {
+        let (fishing_state, fishing_reason, fishing_requested) = {
             let fishing = self.fishing.lock().unwrap();
-            (fishing.state(), fishing.stop_reason())
+            (fishing.state(), fishing.stop_reason(), fishing.enabled())
         };
-        let (skills, active_bar, classes, combat, movement, menu, resources, quickslot) = {
+        let (mut skills, active_bar, classes, combat, movement, resources, quickslot) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
             let weave = self.weave.lock().unwrap();
             (
@@ -1077,31 +1186,80 @@ impl AppModel {
                 weave.weapon_classes(),
                 weave.combat(),
                 weave.movement(),
-                weave.menu(),
                 weave.resources(),
                 weave.quickslot(),
             )
         };
         let suspended = self.input.is_suspended();
+        let game = self.game.snapshot();
+        let active = game.runtime == GameRuntime::Active;
+        let mut weapon_bar = weapon_bar_view(active_bar, classes.0, classes.1);
+        let mut combat = combat_view(combat);
+        let mut movement = movement_view(movement);
+        let mut resources = resources_view(resources);
+        let mut quickslot = quickslot_view(quickslot);
+        if !active {
+            weapon_bar = WeaponBarView {
+                detected: false,
+                active_bar: "Game not active",
+                front: "Game not active",
+                back: "Game not active",
+                role: StatusRole::Muted,
+            };
+            combat = CombatView {
+                detected: false,
+                state: "Game not active",
+                role: StatusRole::Muted,
+            };
+            movement = MovementView {
+                detected: false,
+                state: "Game not active",
+                role: StatusRole::Muted,
+            };
+            for value in [
+                &mut resources.health,
+                &mut resources.stamina,
+                &mut resources.magicka,
+            ] {
+                value.detected = false;
+                value.text = "Game not active".to_string();
+                value.role = StatusRole::Muted;
+            }
+            quickslot.cooldown.text = "Game not active".to_string();
+            quickslot.identity.text = "Game not active".to_string();
+            quickslot.cooldown.role = StatusRole::Muted;
+            quickslot.identity.role = StatusRole::Muted;
+            for skill in &mut skills {
+                skill.cooldown.text = "Game not active".to_string();
+                skill.cooldown.role = StatusRole::Muted;
+            }
+        }
+        let mut fishing_label = fishing_label(fishing_state, fishing_reason);
+        if fishing_requested {
+            fishing_label.button = "Stop Fishing";
+        }
         AppView {
             app_state: app_state_label(suspended),
-            fishing: fishing_label(fishing_state, fishing_reason),
+            fishing: fishing_label,
             status_line: status_line_app(suspended),
             fishing_line: status_line_fishing(fishing_state, fishing_reason),
             beacon_line: status_line_beacon(condition),
+            installation_line: installation_line(&game.installation),
+            runtime_line: runtime_line(game.runtime),
             suspended,
-            fishing_active: fishing_state != FishingState::Disabled,
+            fishing_active: fishing_requested,
             beacon: beacon_light(condition),
             beacon_condition: condition,
             uninstall_enabled: uninstall_enabled(condition),
             skills,
-            weapon_bar: weapon_bar_view(active_bar, classes.0, classes.1),
-            combat: combat_view(combat),
-            movement: movement_view(movement),
-            menu: menu_view(menu),
-            resources: resources_view(resources),
-            quickslot: quickslot_view(quickslot),
+            weapon_bar,
+            combat,
+            movement,
+            menu: game_context_view(game.context()),
+            resources,
+            quickslot,
             auto_potion_active: self.auto_potion_on(),
+            game_active: active,
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }
@@ -1398,7 +1556,7 @@ impl AppModel {
     /// negate a hotkey fishing toggle so a hotkey and the Fishing button share one
     /// state. Mirrors the check in [`current_session_state`](Self::current_session_state).
     pub fn fishing_on(&self) -> bool {
-        self.fishing.lock().unwrap().state() != FishingState::Disabled
+        self.fishing.lock().unwrap().enabled()
     }
 
     /// Whether auto-potion is currently switched on.
@@ -1409,7 +1567,7 @@ impl AppModel {
     /// The current session state to persist (suspend flag and fishing on/off
     /// intent, never a transient fishing sub-state).
     pub fn current_session_state(&self) -> SessionState {
-        let fishing_on = self.fishing.lock().unwrap().state() != FishingState::Disabled;
+        let fishing_on = self.fishing.lock().unwrap().enabled();
         SessionState {
             schema_version: CURRENT_STATE_VERSION,
             suspended: self.input.is_suspended(),

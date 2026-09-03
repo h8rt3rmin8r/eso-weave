@@ -96,6 +96,7 @@ pub type ActionReceiver = Receiver<Action>;
 pub struct InputEngine {
     bindings: Mutex<BindingTable>,
     focused: AtomicBool,
+    game_active: AtomicBool,
     suspended: AtomicBool,
     menu_gated: AtomicBool,
     held: Mutex<HashSet<Key>>,
@@ -111,6 +112,7 @@ impl InputEngine {
         let engine = InputEngine {
             bindings: Mutex::new(bindings),
             focused: AtomicBool::new(false),
+            game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             menu_gated: AtomicBool::new(false),
             held: Mutex::new(HashSet::new()),
@@ -123,6 +125,24 @@ impl InputEngine {
     /// Sets whether the game window holds keyboard focus.
     pub fn set_focused(&self, focused: bool) {
         self.focused.store(focused, Ordering::Relaxed);
+        if !focused {
+            self.held.lock().unwrap().clear();
+        }
+    }
+
+    /// Sets whether the ESO client is currently present. Inactive is the safe
+    /// startup value, so process detection must positively enable interception.
+    pub fn set_game_active(&self, active: bool) {
+        self.game_active.store(active, Ordering::Relaxed);
+        if !active {
+            self.menu_gated.store(false, Ordering::Relaxed);
+            self.held.lock().unwrap().clear();
+        }
+    }
+
+    /// Whether the ESO client is currently present.
+    pub fn is_game_active(&self) -> bool {
+        self.game_active.load(Ordering::Relaxed)
     }
 
     /// Sets whether the engine is suspended.
@@ -175,6 +195,16 @@ impl InputEngine {
         if event.origin == Origin::SelfOriginated {
             return Decision::Pass;
         }
+        // A release must retire physical held-key state even when a lifecycle or
+        // focus transition makes the event pass through. Otherwise the first
+        // press after ESO returns can be mistaken for auto-repeat and suppressed
+        // without handing off its action.
+        if event.transition == Transition::Up {
+            self.held.lock().unwrap().remove(&event.key);
+        }
+        if !self.game_active.load(Ordering::Relaxed) {
+            return Decision::Pass;
+        }
         if !self.focused.load(Ordering::Relaxed) {
             return Decision::Pass;
         }
@@ -205,7 +235,8 @@ impl InputEngine {
                 }
             }
             Transition::Up => {
-                self.held.lock().unwrap().remove(&event.key);
+                // Already retired before the safety gates so pass-through
+                // releases cannot strand this state.
             }
         }
         Decision::Suppress

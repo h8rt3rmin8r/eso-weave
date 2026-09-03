@@ -10,6 +10,8 @@
 pub const STATUS_TITLE: &str = "Status";
 pub const FISHING_TITLE: &str = "Fishing";
 pub const BEACON_TITLE: &str = "Pixel Beacon (Addon)";
+pub const GAME_INSTALLATION_TITLE: &str = "Game installation";
+pub const GAME_RUNTIME_TITLE: &str = "Game state";
 
 // Status region tooltips.
 pub const STATUS_TOOLTIP: &str =
@@ -18,6 +20,10 @@ pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
     "Install state of the bundled PixelBeacon companion addon that renders the pixel signal.";
+pub const GAME_INSTALLATION_TOOLTIP: &str =
+    "Whether ESO is installed and which distribution platform supplied the authoritative evidence.";
+pub const GAME_RUNTIME_TOOLTIP: &str =
+    "Whether the ESO client is inactive, its launcher is open, or the game client is active.";
 
 // Fishing status indicators: plain language for each fishing routine phase, and
 // for an idle state the reason the routine last stopped.
@@ -28,6 +34,8 @@ pub const FISHING_RECASTING: &str = "Recasting";
 pub const FISHING_IDLE: &str = "Idle";
 pub const FISHING_IDLE_NO_CAST: &str = "Idle (no cast detected)";
 pub const FISHING_IDLE_SIGNAL_LOST: &str = "Idle (signal lost)";
+pub const FISHING_IDLE_GAME_INACTIVE: &str = "Idle (game not active)";
+pub const FISHING_IDLE_UNFOCUSED: &str = "Idle (game not focused)";
 
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";
@@ -57,9 +65,9 @@ pub const MOVEMENT_TOOLTIP: &str =
     "Whether the character is mounted, read from the Pixel Beacon addon. Requires addon version 10 or later; shows Not detected without a signal. Sprinting is not shown because the game exposes no sprint state to an addon. Nothing in the application acts on this yet.";
 
 // Menu-gate section.
-pub const MENU_TITLE: &str = "Game Menu";
+pub const MENU_TITLE: &str = "Game Context";
 pub const MENU_TOOLTIP: &str =
-    "Whether a native game menu or text field is open, read from the Pixel Beacon addon. While one is, the application stops intercepting keys and stops sending its own, so typing in game is not disturbed. Requires addon version 7 or later.";
+    "Combines game activity, focus, Pixel Beacon freshness, and the observed game surface. Gameplay requires a fresh valid no-menu observation. Unavailable means the evidence is not authoritative. Menu and text-entry states gate input.";
 
 // Resource section.
 pub const HEALTH_TITLE: &str = "Health";
@@ -283,6 +291,8 @@ pub fn all_labels() -> Vec<&'static str> {
         STATUS_TITLE,
         FISHING_TITLE,
         BEACON_TITLE,
+        GAME_INSTALLATION_TITLE,
+        GAME_RUNTIME_TITLE,
         FISHING_CASTING,
         FISHING_WAITING,
         FISHING_REELING,
@@ -290,6 +300,8 @@ pub fn all_labels() -> Vec<&'static str> {
         FISHING_IDLE,
         FISHING_IDLE_NO_CAST,
         FISHING_IDLE_SIGNAL_LOST,
+        FISHING_IDLE_GAME_INACTIVE,
+        FISHING_IDLE_UNFOCUSED,
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,
@@ -334,6 +346,8 @@ pub fn all_tooltips() -> Vec<&'static str> {
         STATUS_TOOLTIP,
         FISHING_TOOLTIP,
         BEACON_TOOLTIP,
+        GAME_INSTALLATION_TOOLTIP,
+        GAME_RUNTIME_TOOLTIP,
         SUSPEND_TOOLTIP,
         FISHING_TOGGLE_TOOLTIP,
         BEACON_INSTALL_TOOLTIP,

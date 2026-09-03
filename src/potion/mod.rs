@@ -8,10 +8,11 @@
 //! Three structural choices follow from that, and each is load-bearing rather than
 //! stylistic:
 //!
-//! 1. **No new input path.** Synthesis goes through [`AutoPotionSink`], whose real
-//!    implementation calls the same [`InputBackend::synthesize`] the fishing
-//!    controller uses, so focus scoping and recursion flagging are inherited from
-//!    the input engine rather than re-implemented here.
+//! 1. **One established backend path.** Synthesis goes through [`AutoPotionSink`],
+//!    whose real implementation calls the same [`InputBackend::synthesize`] the
+//!    fishing controller uses. This preserves recursion flagging; focus is an
+//!    explicit fail-closed controller input because autonomous synthesis does not
+//!    pass through [`crate::input::InputEngine::classify`].
 //! 2. **The rule is a pure function.** [`evaluate`] takes everything it reads as
 //!    arguments and returns a typed reason for declining, so every blocking
 //!    condition can be tested in isolation with all the others satisfied. A bare
@@ -103,6 +104,10 @@ impl Default for AutoPotionConfig {
 pub enum Block {
     /// Auto-potion is switched off.
     Disabled,
+    /// The ESO client is not active.
+    GameInactive,
+    /// The ESO client does not hold keyboard focus.
+    Unfocused,
     /// The application is suspended.
     Suspended,
     /// A native game UI surface or text field is up.
@@ -138,6 +143,10 @@ pub struct PotionReadings {
 pub struct PotionInputs {
     /// What the bus decoded.
     pub readings: PotionReadings,
+    /// Whether the ESO client is active.
+    pub game_active: bool,
+    /// Whether the ESO client holds keyboard focus.
+    pub focused: bool,
     /// Whether the application is suspended.
     ///
     /// Pushed in rather than read from the input engine, so the rule stays a pure
@@ -182,6 +191,12 @@ pub fn evaluate(
 ) -> Result<(), Block> {
     if !enabled {
         return Err(Block::Disabled);
+    }
+    if !inputs.game_active {
+        return Err(Block::GameInactive);
+    }
+    if !inputs.focused {
+        return Err(Block::Unfocused);
     }
     if inputs.suspended {
         return Err(Block::Suspended);
@@ -270,11 +285,13 @@ impl<B: InputBackend> AutoPotionSink for RealAutoPotionSink<B> {
 
 /// The auto-potion controller.
 ///
-/// Holds the operator's toggle, the two gates pushed in from outside, and when the
-/// key was last pressed. Everything else is computed per tick.
+/// Holds the operator's toggle, the gates pushed in from outside, and when the key
+/// was last pressed. Everything else is computed per tick.
 pub struct AutoPotionController {
     config: AutoPotionConfig,
     enabled: bool,
+    game_active: bool,
+    focused: bool,
     gated: bool,
     suspended: bool,
     last_attempt_ms: Option<u64>,
@@ -292,6 +309,8 @@ impl AutoPotionController {
         Self {
             config,
             enabled: false,
+            game_active: false,
+            focused: false,
             gated: false,
             suspended: false,
             last_attempt_ms: None,
@@ -323,6 +342,21 @@ impl AutoPotionController {
             );
         }
         self.enabled = enabled;
+    }
+
+    /// Sets the process-derived game-active gate without changing the requested
+    /// enable toggle.
+    pub fn set_game_active(&mut self, active: bool) {
+        self.game_active = active;
+        if !active {
+            self.gated = false;
+        }
+    }
+
+    /// Sets the operating-system focus gate without changing the requested
+    /// enable toggle.
+    pub fn set_focused(&mut self, focused: bool) {
+        self.focused = focused;
     }
 
     /// Sets whether a native game UI surface is gating input.
@@ -376,6 +410,8 @@ impl AutoPotionController {
         // enforce.
         let inputs = PotionInputs {
             readings,
+            game_active: self.game_active,
+            focused: self.focused,
             suspended: self.suspended,
             gated: self.gated,
         };

@@ -24,6 +24,13 @@ use eso_weave::pixelbus::{
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
+fn active_fishing_controller() -> FishingController {
+    let mut controller = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    controller.set_game_environment(true, true, 0, &mut sink);
+    controller
+}
+
 // Derivations.
 
 #[test]
@@ -241,7 +248,7 @@ fn routing_directs_events_to_the_right_subsystems() {
         enabled: true,
         k: 0.25,
     });
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -350,7 +357,7 @@ fn weapon_bar_view_shows_detected_and_unknown() {
 #[test]
 fn routing_a_weapon_bar_event_updates_the_engine() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -386,8 +393,12 @@ fn model_with_beacon_root(root: &std::path::Path) -> AppModel {
 
 fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
+    engine.set_game_active(true);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
-    let fishing = Arc::new(Mutex::new(FishingController::new(FishingConfig::default())));
+    let mut fishing_controller = FishingController::new(FishingConfig::default());
+    let mut init_sink = MockFishingSink::new();
+    fishing_controller.set_game_environment(true, true, 0, &mut init_sink);
+    let fishing = Arc::new(Mutex::new(fishing_controller));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
 
     let prefs = BeaconPrefs {
@@ -428,6 +439,40 @@ fn model_uses_the_injected_clock_not_its_own() {
         "now_ms {} should reflect the injected origin",
         model.now_ms()
     );
+}
+
+#[test]
+fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
+    use eso_weave::game::{
+        FocusObservation, GameRuntime, Presence, ProcessObservation, SurfaceObservation,
+    };
+
+    let root = tempfile::tempdir().unwrap();
+    let model = model_with_beacon_root(root.path());
+    let initial = model.view();
+    assert_eq!(initial.runtime_line.state_text, "Unknown");
+    assert_eq!(initial.menu.state, "Unknown");
+    assert_eq!(initial.combat.state, "Game not active");
+    assert_eq!(initial.resources.health.text, "Game not active");
+    assert_eq!(initial.weapon_bar.active_bar, "Game not active");
+    assert!(initial
+        .skills
+        .iter()
+        .all(|skill| skill.cooldown.text == "Game not active"));
+
+    let game = model.game_state();
+    game.update_processes(ProcessObservation {
+        game: Presence::Present,
+        launcher: Presence::Present,
+        focus: FocusObservation::Focused,
+    });
+    assert_eq!(game.snapshot().runtime, GameRuntime::Active);
+    assert_eq!(model.view().menu.state, "Signal unavailable");
+    game.observe_heartbeat();
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    let active = model.view();
+    assert_eq!(active.runtime_line.state_text, "Active");
+    assert_eq!(active.menu.state, "Gameplay");
 }
 
 #[test]
@@ -583,7 +628,7 @@ fn combat_view_shows_both_states_and_unknown() {
 #[test]
 fn routing_a_combat_event_stores_it_without_touching_fishing() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -632,14 +677,14 @@ fn menu_view_names_each_surface_and_marks_gating() {
     // the application stopped intercepting even when it cannot name the screen.
     let other = menu_view(MenuSurface::Other);
     assert!(other.gating);
-    assert_eq!(other.state, "Menu");
+    assert_eq!(other.state, "Other menu");
     assert_eq!(other.role, StatusRole::Active);
 }
 
 #[test]
 fn routing_a_menu_event_gates_both_synthesis_paths() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -649,7 +694,7 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
     assert!(!input.is_menu_gated(), "the default must be ungated");
 
     route_reader_event(
-        PixelBusEvent::MenuGate(MenuSurface::Mail),
+        PixelBusEvent::MenuGate(Some(MenuSurface::Mail)),
         &mut weave,
         &mut fishing,
         &mut potion,
@@ -662,7 +707,7 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
 
     // Returning to gameplay releases it.
     route_reader_event(
-        PixelBusEvent::MenuGate(MenuSurface::None),
+        PixelBusEvent::MenuGate(Some(MenuSurface::None)),
         &mut weave,
         &mut fishing,
         &mut potion,
@@ -699,7 +744,7 @@ fn resource_view_renders_a_percentage_or_not_detected() {
 #[test]
 fn routing_a_resource_event_stores_it_without_touching_fishing() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -743,7 +788,7 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
     // timers and never passes through interception, so gating the input engine
     // alone would leave it firing into a chat message being composed.
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -751,7 +796,7 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
     route_reader_event(
-        PixelBusEvent::MenuGate(MenuSurface::Inventory),
+        PixelBusEvent::MenuGate(Some(MenuSurface::Inventory)),
         &mut weave,
         &mut fishing,
         &mut potion,
@@ -764,6 +809,8 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
     // The controller's own gate is what matters here, and it is only observable
     // through the rule: with the gate set, an otherwise eligible tick is blocked
     // as Gated rather than firing.
+    potion.set_game_active(true);
+    potion.set_focused(true);
     potion.set_enabled(true);
     let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
     let readings = eso_weave::potion::PotionReadings {
@@ -789,7 +836,7 @@ fn a_signal_lost_event_switches_auto_potion_off() {
     // FR-011: without readings there is nothing trustworthy to act on, so it
     // switches off rather than evaluating against stale values.
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );
@@ -864,7 +911,7 @@ fn quickslot_view_halves_degrade_independently() {
 #[test]
 fn quickslot_events_reach_the_engine_and_nothing_else() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
-    let mut fishing = FishingController::new(FishingConfig::default());
+    let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
     );

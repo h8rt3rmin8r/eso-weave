@@ -1,27 +1,20 @@
-//! Steam `libraryfolders.vdf` extraction.
-//!
-//! Only the slice needed for discovery is parsed: for each library block, its
-//! `path` and whether its `apps` map contains the target app id. The parser is
-//! pure and compiled on all targets so the Linux discovery logic has host test
-//! coverage.
+//! Small Valve Data Format helpers used by Steam installation discovery.
 
 use std::path::PathBuf;
 
-/// A parsed VDF value: either a string or a nested object of key-value pairs.
+#[derive(Debug)]
 enum Value {
     Str(String),
     Obj(Vec<(String, Value)>),
 }
 
-/// A VDF token.
+#[derive(Debug)]
 enum Tok {
     Str(String),
     Open,
     Close,
 }
 
-/// Tokenizes VDF text into quoted strings and braces; all other characters
-/// (whitespace, unquoted tokens) are ignored.
 fn tokenize(input: &str) -> Vec<Tok> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
@@ -54,7 +47,6 @@ fn tokenize(input: &str) -> Vec<Tok> {
     tokens
 }
 
-/// Parses key-value pairs until a closing brace or the end of the token stream.
 fn parse_object(tokens: &[Tok], pos: &mut usize) -> Vec<(String, Value)> {
     let mut pairs = Vec::new();
     while *pos < tokens.len() {
@@ -64,7 +56,6 @@ fn parse_object(tokens: &[Tok], pos: &mut usize) -> Vec<(String, Value)> {
                 break;
             }
             Tok::Open => {
-                // Stray open brace with no key; consume its object and discard.
                 *pos += 1;
                 let _ = parse_object(tokens, pos);
             }
@@ -74,13 +65,11 @@ fn parse_object(tokens: &[Tok], pos: &mut usize) -> Vec<(String, Value)> {
                 match tokens.get(*pos) {
                     Some(Tok::Open) => {
                         *pos += 1;
-                        let obj = parse_object(tokens, pos);
-                        pairs.push((key, Value::Obj(obj)));
+                        pairs.push((key, Value::Obj(parse_object(tokens, pos))));
                     }
-                    Some(Tok::Str(val)) => {
-                        let val = val.clone();
+                    Some(Tok::Str(value)) => {
+                        pairs.push((key, Value::Str(value.clone())));
                         *pos += 1;
-                        pairs.push((key, Value::Str(val)));
                     }
                     Some(Tok::Close) => {
                         *pos += 1;
@@ -94,38 +83,61 @@ fn parse_object(tokens: &[Tok], pos: &mut usize) -> Vec<(String, Value)> {
     pairs
 }
 
-/// Recursively collects, in file order, the `path` of every object that looks
-/// like a library (has a `path` field) whose `apps` map contains `app_id`.
-fn collect(pairs: &[(String, Value)], app_id: &str, out: &mut Vec<PathBuf>) {
-    let path = pairs.iter().find_map(|(k, v)| match (k.as_str(), v) {
-        ("path", Value::Str(s)) => Some(s.clone()),
-        _ => None,
-    });
-    let has_app = pairs.iter().any(|(k, v)| match (k.as_str(), v) {
-        ("apps", Value::Obj(apps)) => apps.iter().any(|(app_key, _)| app_key == app_id),
-        _ => false,
-    });
-    if let Some(path) = path {
-        if has_app {
+fn parse(input: &str) -> Vec<(String, Value)> {
+    let tokens = tokenize(input);
+    let mut pos = 0;
+    parse_object(&tokens, &mut pos)
+}
+
+fn collect_libraries(pairs: &[(String, Value)], app_id: &str, out: &mut Vec<PathBuf>) {
+    let path = pairs
+        .iter()
+        .find_map(|(key, value)| match (key.as_str(), value) {
+            ("path", Value::Str(path)) => Some(path),
+            _ => None,
+        });
+    let has_app = pairs
+        .iter()
+        .any(|(key, value)| match (key.as_str(), value) {
+            ("apps", Value::Obj(apps)) => apps.iter().any(|(id, _)| id == app_id),
+            _ => false,
+        });
+    if has_app {
+        if let Some(path) = path {
             out.push(PathBuf::from(path));
         }
     }
     for (key, value) in pairs {
-        if let Value::Obj(child) = value {
-            if key != "apps" {
-                collect(child, app_id, out);
+        if key != "apps" {
+            if let Value::Obj(child) = value {
+                collect_libraries(child, app_id, out);
             }
         }
     }
 }
 
-/// Returns, in file order, the `path` of each Steam library whose `apps` map
-/// lists `app_id`.
+/// Returns every Steam library whose apps map contains `app_id`.
 pub fn library_paths_for_app(vdf: &str, app_id: &str) -> Vec<PathBuf> {
-    let tokens = tokenize(vdf);
-    let mut pos = 0;
-    let root = parse_object(&tokens, &mut pos);
     let mut out = Vec::new();
-    collect(&root, app_id, &mut out);
+    collect_libraries(&parse(vdf), app_id, &mut out);
     out
+}
+
+/// Returns the `installdir` recorded in a Steam app manifest.
+pub fn install_dir_from_manifest(vdf: &str) -> Option<PathBuf> {
+    fn find(pairs: &[(String, Value)]) -> Option<&str> {
+        for (key, value) in pairs {
+            match value {
+                Value::Str(value) if key.eq_ignore_ascii_case("installdir") => return Some(value),
+                Value::Obj(child) => {
+                    if let Some(value) = find(child) {
+                        return Some(value);
+                    }
+                }
+                Value::Str(_) => {}
+            }
+        }
+        None
+    }
+    find(&parse(vdf)).map(PathBuf::from)
 }
