@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Routine dependency maintenance updates serde, serde_json, time, dirs,
+  windows-sys, ureq, eframe, and the matching egui test harness. The ureq 3
+  migration preserves the five-second whole-request timeout, and the eframe
+  migration keeps production and rendered-frame test types on the same egui
+  release (Dependabot PRs #32 through #36).
+
 - The master specification is refreshed to describe the shipping system and
   rewritten for how it reads (issue #15). Nine slices of behavior are now in the
   architecture of record: the menu gate, the combat, movement, resource, cooldown,

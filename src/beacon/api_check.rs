@@ -108,12 +108,15 @@ impl Default for GithubLiveSource {
 impl GameVersionSource for GithubLiveSource {
     fn fetch(&self) -> Result<GameVersion, ApiCheckError> {
         let body = ureq::get(&self.url)
-            .timeout(self.timeout)
-            .set("User-Agent", &self.user_agent)
-            .set("Accept", "application/vnd.github+json")
+            .config()
+            .timeout_global(Some(self.timeout))
+            .build()
+            .header("User-Agent", &self.user_agent)
+            .header("Accept", "application/vnd.github+json")
             .call()
             .map_err(|err| ApiCheckError::Http(err.to_string()))?
-            .into_string()
+            .body_mut()
+            .read_to_string()
             .map_err(|err| ApiCheckError::Body(err.to_string()))?;
         let json: serde_json::Value =
             serde_json::from_str(&body).map_err(|err| ApiCheckError::Parse(err.to_string()))?;
