@@ -83,6 +83,7 @@ As a maintainer reviewing project history, I want milestones and verification la
 - **FR-007**: Exemptions MUST be limited to Dependabot, the `dependencies` label, or the documented `skip: issue-link` label.
 - **FR-008**: The CI implementation MUST treat pull request bodies, authors, branches, and labels as untrusted input, use read-only permissions, and avoid `pull_request_target`.
 - **FR-008a**: The CI implementation MUST enforce the policy from the trusted base commit after the one-time S044 bootstrap.
+- **FR-008b**: Proposed-policy tests MUST run in a separate job that cannot mutate the trusted enforcement job.
 - **FR-009**: The issue-link policy MUST have dependency-free automated tests covering pass, fail, multi-issue, capitalization, colon, and exemption cases.
 - **FR-010**: The repository MUST document atomic issue scope, implementation-versus-verification lifecycles, pull request linkage, exemptions, and post-merge housekeeping.
 - **FR-011**: A public GitHub Project named `ESO Weave Delivery` MUST be linked to the repository.

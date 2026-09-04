@@ -98,8 +98,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verification, require one complete GitHub closing reference per issue, and
   reserve `skip: issue-link` for visible maintainer-approved exceptions. The new
   workflow remains read-only, dependency-free, and based on `pull_request`, not
-  `pull_request_target`. It tests proposed policy changes separately and enforces
-  the policy copy from the trusted base commit after its one-time bootstrap.
+  `pull_request_target`. It tests proposed policy changes in an isolated job and
+  enforces the policy copy from the trusted base commit in a separate job after
+  its one-time bootstrap.
 
 - 2026-09-03: Keep the GitHub Project minimal. Add only Stage and Slice, reuse
   native issue labels and milestones for all other planning dimensions, and

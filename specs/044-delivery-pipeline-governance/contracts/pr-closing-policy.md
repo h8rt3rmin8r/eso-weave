@@ -46,8 +46,10 @@ The check passes without a closing reference only when one of these conditions i
 - Permissions are read-only.
 - Pull request body, author, labels, branch, and title are untrusted.
 - Untrusted values travel through environment variables, never expression interpolation inside executable source.
-- Proposed policy changes run their own tests, while enforcement uses the policy
-  from the trusted base commit.
+- Proposed policy changes run their own tests in an isolated job, while the
+  enforcement job uses the policy from the trusted base commit.
+- No contributor-controlled repository code executes in the enforcement job
+  before the base policy is invoked.
 - The creating pull request may use its proposed policy only when the base commit
   has no policy file; after bootstrap, the fallback is unreachable on normal
   `main` pull requests.

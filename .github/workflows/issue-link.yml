@@ -21,23 +21,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  closing-issue:
-    name: Check closing issue
+  policy-tests:
+    name: Test proposed policy
     runs-on: ubuntu-latest
     steps:
       - name: Check out proposed policy
         uses: actions/checkout@v7
         with:
-          path: proposed
+          persist-credentials: false
 
       - name: Test proposed issue-link policy
-        run: node --test proposed/.github/scripts/issue-link-policy.test.mjs
+        run: node --test .github/scripts/issue-link-policy.test.mjs
 
+  closing-issue:
+    name: Check closing issue
+    runs-on: ubuntu-latest
+    steps:
       - name: Check out trusted base policy
         uses: actions/checkout@v7
         with:
           path: trusted
+          persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Check out bootstrap policy
+        if: ${{ hashFiles('trusted/.github/scripts/issue-link-policy.mjs') == '' }}
+        uses: actions/checkout@v7
+        with:
+          path: proposed
+          persist-credentials: false
 
       - name: Enforce issue-link policy
         env:
