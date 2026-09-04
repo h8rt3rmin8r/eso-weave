@@ -917,7 +917,14 @@ impl EsoWeaveApp {
                 // reads, which is why it is worth showing at all.
                 widgets::label_strong(ui, &palette, strings::AUTO_POTION_TITLE)
                     .on_hover_text(strings::AUTO_POTION_TOOLTIP);
-                let (potion_text, potion_role) = if view.auto_potion_active && !view.game_active {
+                let (potion_text, potion_role) = if view.auto_potion_active
+                    && !crate::potion::EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED
+                {
+                    (
+                        strings::AUTO_POTION_PENDING,
+                        crate::app::StatusRole::Warning,
+                    )
+                } else if view.auto_potion_active && !view.game_active {
                     ("On (game not active)", crate::app::StatusRole::Warning)
                 } else if view.auto_potion_active {
                     (strings::AUTO_POTION_ON, crate::app::StatusRole::Active)
@@ -940,20 +947,24 @@ impl EsoWeaveApp {
                 }
                 ui.end_row();
 
-                // The quickslot, as two rows rather than one. The cooldown and
-                // the identity are read from separate blocks and degrade
-                // separately, so one disturbed identity block costs the identity
-                // and leaves the cooldown showing what it correctly read.
+                // Classification is independent from availability and cooldown.
+                // That keeps an apparently ready cooldown from claiming that an
+                // empty or unreadable slot contains a potion.
                 for (title, tooltip, field) in [
                     (
                         strings::QUICKSLOT_TITLE,
                         strings::QUICKSLOT_TOOLTIP,
-                        &view.quickslot.cooldown,
+                        &view.quickslot.state,
                     ),
                     (
-                        strings::QUICKSLOT_ITEM_TITLE,
-                        strings::QUICKSLOT_ITEM_TOOLTIP,
-                        &view.quickslot.identity,
+                        strings::QUICKSLOT_AVAILABILITY_TITLE,
+                        strings::QUICKSLOT_AVAILABILITY_TOOLTIP,
+                        &view.quickslot.availability,
+                    ),
+                    (
+                        strings::QUICKSLOT_COOLDOWN_TITLE,
+                        strings::QUICKSLOT_COOLDOWN_TOOLTIP,
+                        &view.quickslot.cooldown,
                     ),
                 ] {
                     widgets::label_strong(ui, &palette, title).on_hover_text(tooltip);

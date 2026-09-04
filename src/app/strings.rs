@@ -78,19 +78,23 @@ pub const RESOURCE_TOOLTIP: &str =
 
 // Quickslot section.
 pub const QUICKSLOT_TITLE: &str = "Quickslot";
-pub const QUICKSLOT_ITEM_TITLE: &str = "Quickslot item";
+pub const QUICKSLOT_AVAILABILITY_TITLE: &str = "Potion availability";
+pub const QUICKSLOT_COOLDOWN_TITLE: &str = "Potion cooldown";
 pub const QUICKSLOT_TOOLTIP: &str =
-    "How long the active quickslot has before it can be used again, read from the Pixel Beacon addon. Requires addon version 12 or later. Shows a dash when the quickslot is empty, holds something that is not a potion, or cannot be read; those cases are deliberately not told apart. Nothing in the application acts on this yet.";
-pub const QUICKSLOT_ITEM_TOOLTIP: &str =
-    "The game's own numeric id for the item in the active quickslot, read from the Pixel Beacon addon. Shown as a number rather than a name because the game does not expose the name to the application. It is here so a swap is visible and the signal can be confirmed in the field. Shows a dash when there is nothing to identify or the id could not be read in full.";
+    "What the selected quickslot contains, read from the Pixel Beacon addon. Requires addon version 13 or later and distinguishes empty, non-potion, unavailable, and potion states.";
+pub const QUICKSLOT_AVAILABILITY_TOOLTIP: &str =
+    "Whether a selected potion has stock and ESO reports its slot usable. Depleted and Blocked are non-actionable.";
+pub const QUICKSLOT_COOLDOWN_TOOLTIP: &str =
+    "The selected potion's independent slot cooldown. Ready or remaining time never decides whether the slot contains a potion.";
 
 // Auto-potion section.
 pub const AUTO_POTION_TITLE: &str = "Auto-potion";
 pub const AUTO_POTION_ON: &str = "On";
 pub const AUTO_POTION_OFF: &str = "Off";
+pub const AUTO_POTION_PENDING: &str = "Configured (verification pending)";
 pub const AUTO_POTION_TOGGLE_LABEL: &str = "Auto-potion";
 pub const AUTO_POTION_TOOLTIP: &str =
-    "Drinks the quickslotted potion when a watched resource runs low. Off by default, and off after every restart. Press F3 to toggle. It never fires while suspended, while a game menu or text field is open, when the quickslot holds no usable potion, or when a resource cannot be read.";
+    "Automatic input remains gated while the explicit quickslot signal completes live-client verification. F3 records the requested setting, but no potion input is emitted until the next work slice adopts the verified signal.";
 pub const AUTO_POTION_TOGGLE_TOOLTIP: &str =
     "Turn auto-potion on or off (F3). It also needs at least one resource enabled in Settings; with none enabled it never fires.";
 pub const CLUSTER_AUTO_POTION: &str = "Auto-potion";
@@ -313,8 +317,10 @@ pub fn all_labels() -> Vec<&'static str> {
         MAGICKA_TITLE,
         AUTO_POTION_TITLE,
         AUTO_POTION_TOGGLE_LABEL,
+        AUTO_POTION_PENDING,
         QUICKSLOT_TITLE,
-        QUICKSLOT_ITEM_TITLE,
+        QUICKSLOT_AVAILABILITY_TITLE,
+        QUICKSLOT_COOLDOWN_TITLE,
         SKILLS_TITLE,
         LOG_TITLE,
         MENU_FILE,
@@ -359,7 +365,8 @@ pub fn all_tooltips() -> Vec<&'static str> {
         MENU_TOOLTIP,
         RESOURCE_TOOLTIP,
         QUICKSLOT_TOOLTIP,
-        QUICKSLOT_ITEM_TOOLTIP,
+        QUICKSLOT_AVAILABILITY_TOOLTIP,
+        QUICKSLOT_COOLDOWN_TOOLTIP,
         AUTO_POTION_TOOLTIP,
         AUTO_POTION_TOGGLE_TOOLTIP,
         SKILLS_TOOLTIP,

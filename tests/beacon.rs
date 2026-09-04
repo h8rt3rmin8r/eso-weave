@@ -60,13 +60,11 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_twelve() {
-    // Slice 038 adds the four quickslot blocks (B16 to B19), so an operator
-    // running version 11 draws none of them and the companion must report the
-    // quickslot as unknown rather than guess. The bump is what makes the beacon
-    // manager offer them the update.
-    assert_eq!(embedded_version(), 12);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(12));
+fn embedded_manifest_version_is_thirteen() {
+    // Slice 042 adds the explicit B20 classification. Version 12 remains a
+    // deliberately non-actionable legacy observation until the addon updates.
+    assert_eq!(embedded_version(), 13);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(13));
 }
 
 #[test]
@@ -698,11 +696,90 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("QUICKSLOT_ID_HI_MARKER", 0xB0),
         ("QUICKSLOT_ID_MID_MARKER", 0xDD),
         ("QUICKSLOT_ID_LO_MARKER", 0xF3),
+        ("QUICKSLOT_STATE_MARKER", 0x76),
+        ("QUICKSLOT_UNAVAILABLE_API", 0x10),
+        ("QUICKSLOT_INVALID_SELECTION", 0x20),
+        ("QUICKSLOT_INCONSISTENT", 0x30),
+        ("QUICKSLOT_EMPTY", 0x40),
+        ("QUICKSLOT_NON_POTION_ITEM", 0x50),
+        ("QUICKSLOT_NON_POTION_COLLECTIBLE", 0x60),
+        ("QUICKSLOT_NON_POTION_QUEST_ITEM", 0x70),
+        ("QUICKSLOT_NON_POTION_EMOTE", 0x80),
+        ("QUICKSLOT_NON_POTION_QUICK_CHAT", 0x90),
+        ("QUICKSLOT_NON_POTION_OTHER", 0xA0),
+        ("QUICKSLOT_POTION_DEPLETED", 0xB0),
+        ("QUICKSLOT_POTION_BLOCKED", 0xC0),
+        ("QUICKSLOT_POTION_USABLE", 0xD0),
     ] {
         assert_eq!(
             beacon::parse_lua_constant(lua, name),
             Some(expected),
             "the addon and the companion disagree on {name}"
+        );
+    }
+}
+
+#[test]
+fn quickslot_diagnostics_are_opt_in_bounded_and_event_complete() {
+    let lua = beacon::LUA;
+    for required in [
+        "SLASH_COMMANDS[\"/pbquickslot\"]",
+        "quickslotWatch",
+        "quickslotDiagnosticKey",
+        "oldFail=",
+        "stable=",
+        "EVENT_ACTIVE_QUICKSLOT_CHANGED",
+        "EVENT_ACTION_SLOT_UPDATED",
+        "EVENT_ACTION_SLOT_STATE_UPDATED",
+        "EVENT_ACTION_UPDATE_COOLDOWNS",
+        "EVENT_INVENTORY_SINGLE_SLOT_UPDATE",
+        "EVENT_PLAYER_ACTIVATED",
+        "GetCurrentQuickslot",
+        "GetSlotType",
+        "GetSlotBoundId",
+        "GetSlotItemLink",
+        "GetSlotItemCount",
+        "IsSlotUsable",
+        "GetSlotCooldownInfo",
+    ] {
+        assert!(
+            lua.contains(required),
+            "quickslot pipeline is missing {required}"
+        );
+    }
+    assert!(
+        !lua.contains("abilityDescription"),
+        "diagnostics must not retain localized item descriptions"
+    );
+}
+
+#[test]
+fn quickslot_classification_requires_a_stable_double_read() {
+    let lua = beacon::LUA;
+    let first_bound = lua
+        .find("facts.boundId = GetSlotBoundId")
+        .expect("quickslot sampling must read the initial bound id");
+    let ending_bound = lua
+        .find("facts.endingBoundId = GetSlotBoundId")
+        .expect("quickslot sampling must re-read the bound id");
+    let stability_gate = lua
+        .find("if not facts.snapshotStable then")
+        .expect("classification must fail closed on a mixed snapshot");
+
+    assert!(first_bound < ending_bound);
+    assert!(ending_bound < stability_gate);
+    for required in [
+        "facts.endingSlot == facts.slot",
+        "facts.endingSlotType == facts.slotType",
+        "facts.endingBoundId == facts.boundId",
+        "facts.endingLink == facts.link",
+        "facts.endingCount == facts.count",
+        "facts.endingUsable == facts.usable",
+        "state = QUICKSLOT_INCONSISTENT",
+    ] {
+        assert!(
+            lua.contains(required),
+            "mixed quickslot snapshots are not guarded by {required}"
         );
     }
 }
@@ -715,15 +792,15 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
 /// does not draw, which is exactly the User Story 2 case: correct, but permanently
 /// unknown, with nothing telling the operator why.
 #[test]
-fn the_manifest_advances_for_the_quickslot_blocks() {
+fn the_manifest_advances_for_the_reconstructed_quickslot_contract() {
     let manifest = beacon::MANIFEST;
     assert!(
-        manifest.contains("## Version: 12"),
-        "the manifest version should have advanced to 12"
+        manifest.contains("## Version: 13"),
+        "the manifest version should have advanced to 13"
     );
     assert!(
-        manifest.contains("## AddOnVersion: 12"),
-        "the addon version should have advanced to 12"
+        manifest.contains("## AddOnVersion: 13"),
+        "the addon version should have advanced to 13"
     );
     assert!(
         manifest.contains("quickslot"),

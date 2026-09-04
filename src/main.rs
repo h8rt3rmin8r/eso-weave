@@ -25,7 +25,10 @@ use eso_weave::input::{
     Action, InputBackend, InputEngine, InputError, Key, MouseButton, Transition,
 };
 use eso_weave::pixelbus::{self, poll_interval, PixelBusReader, SurfaceSampler};
-use eso_weave::potion::{AutoPotionConfig, AutoPotionController, RealAutoPotionSink};
+use eso_weave::potion::{
+    AutoPotionConfig, AutoPotionController, RealAutoPotionSink,
+    EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED,
+};
 use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
 
@@ -328,14 +331,16 @@ fn main() {
                 // pushed in rather than read inside the rule, so the rule stays a
                 // pure function of its inputs.
                 potion.set_suspended(input.is_suspended());
-                let _ = potion.tick(
-                    eso_weave::potion::PotionReadings {
-                        resources: weave.resources(),
-                        quickslot: weave.quickslot(),
-                    },
-                    now,
-                    &mut potion_sink,
-                );
+                if EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED {
+                    let _ = potion.tick(
+                        eso_weave::potion::PotionReadings {
+                            resources: weave.resources(),
+                            quickslot: weave.quickslot(),
+                        },
+                        now,
+                        &mut potion_sink,
+                    );
+                }
             }
         });
     }

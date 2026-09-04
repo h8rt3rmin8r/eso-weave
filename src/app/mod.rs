@@ -30,8 +30,9 @@ use crate::game::{GameContext, GameRuntime, GameState, InstallationProvider, Ins
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState,
-    ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotClassification,
+    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
 };
 use crate::potion::AutoPotionController;
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
@@ -532,42 +533,91 @@ pub fn grid_footprint_caption(block_px: u32) -> String {
 }
 
 /// A normalized view of the decoded quickslot for the status region.
-///
-/// Two independently degrading halves rather than one string. The state where the
-/// cooldown decodes and the identity does not is reachable whenever exactly one
-/// of the three identity blocks is disturbed, and collapsing the whole readout to
-/// unknown there would discard a value that was read correctly and make a
-/// one-block disturbance look identical to a missing addon.
+/// A normalized view of the explicitly classified quickslot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuickslotView {
-    /// The quickslot cooldown field.
+    /// The selected entry's class or unavailable reason.
+    pub state: CooldownView,
+    /// Potion availability, or not applicable for other classes.
+    pub availability: CooldownView,
+    /// The independently decoded cooldown.
     pub cooldown: CooldownView,
-    /// The slotted item's identity field.
-    pub identity: CooldownView,
 }
 
 /// Derives the quickslot view from the decoded state.
 ///
-/// The cooldown half reuses [`cooldown_view`] outright, so the quickslot and the
-/// skill slots read identically for identical values.
-///
-/// The identity is shown as the game's own number, with no name lookup. Showing a
-/// name would need a bundled item table, which would be locale-dependent, would go
-/// stale every patch, and would be a large data dependency added for a readout
-/// with no consumer. The number is enough for what the readout is for: confirming
-/// the signal is live in the field, and seeing that a swap was noticed.
 pub fn quickslot_view(state: QuickslotState) -> QuickslotView {
-    QuickslotView {
-        cooldown: cooldown_view(state.cooldown),
-        identity: match state.item_id {
-            Some(id) => CooldownView {
-                text: id.to_string(),
-                role: StatusRole::Active,
-            },
-            None => CooldownView {
-                text: "-".to_string(),
+    let muted = || CooldownView {
+        text: "Not applicable".to_string(),
+        role: StatusRole::Muted,
+    };
+    let (classification, availability) = match state.classification {
+        QuickslotClassification::Unavailable(reason) => {
+            let text = match reason {
+                QuickslotUnavailableReason::NoSignal => "Not detected",
+                QuickslotUnavailableReason::LegacyProtocol => "Addon update required",
+                QuickslotUnavailableReason::CorruptProtocol => "Unreadable signal",
+                QuickslotUnavailableReason::UnsupportedApi => "Unsupported game API",
+                QuickslotUnavailableReason::InvalidSelection => "Invalid selection",
+                QuickslotUnavailableReason::InconsistentFacts => "Inconsistent game data",
+            };
+            (
+                CooldownView {
+                    text: text.to_string(),
+                    role: StatusRole::Muted,
+                },
+                muted(),
+            )
+        }
+        QuickslotClassification::Empty => (
+            CooldownView {
+                text: "Empty".to_string(),
                 role: StatusRole::Muted,
             },
+            muted(),
+        ),
+        QuickslotClassification::NonPotion(kind) => {
+            let kind = match kind {
+                QuickslotNonPotionKind::Item => "Item",
+                QuickslotNonPotionKind::Collectible => "Collectible",
+                QuickslotNonPotionKind::QuestItem => "Quest item",
+                QuickslotNonPotionKind::Emote => "Emote",
+                QuickslotNonPotionKind::QuickChat => "Quick chat",
+                QuickslotNonPotionKind::Other => "Other",
+            };
+            (
+                CooldownView {
+                    text: format!("Non-potion ({kind})"),
+                    role: StatusRole::Warning,
+                },
+                muted(),
+            )
+        }
+        QuickslotClassification::Potion(availability) => {
+            let (text, role) = match availability {
+                QuickslotPotionAvailability::Depleted => ("Depleted", StatusRole::Warning),
+                QuickslotPotionAvailability::Blocked => ("Blocked", StatusRole::Warning),
+                QuickslotPotionAvailability::Usable => ("Usable", StatusRole::Active),
+            };
+            (
+                CooldownView {
+                    text: "Potion".to_string(),
+                    role,
+                },
+                CooldownView {
+                    text: text.to_string(),
+                    role,
+                },
+            )
+        }
+    };
+    QuickslotView {
+        state: classification,
+        availability,
+        cooldown: if state.is_potion() {
+            cooldown_view(state.cooldown)
+        } else {
+            muted()
         },
     }
 }
@@ -1225,10 +1275,14 @@ impl AppModel {
                 value.text = "Game not active".to_string();
                 value.role = StatusRole::Muted;
             }
-            quickslot.cooldown.text = "Game not active".to_string();
-            quickslot.identity.text = "Game not active".to_string();
-            quickslot.cooldown.role = StatusRole::Muted;
-            quickslot.identity.role = StatusRole::Muted;
+            for value in [
+                &mut quickslot.state,
+                &mut quickslot.availability,
+                &mut quickslot.cooldown,
+            ] {
+                value.text = "Game not active".to_string();
+                value.role = StatusRole::Muted;
+            }
             for skill in &mut skills {
                 skill.cooldown.text = "Game not active".to_string();
                 skill.cooldown.role = StatusRole::Muted;

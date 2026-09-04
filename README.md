@@ -228,6 +228,11 @@ Auto-potion drinks the potion in your active quickslot when a resource you are
 watching runs low. It is the one part of ESO Weave that acts on what the addon
 reports rather than just showing it to you, so it is deliberately cautious.
 
+**Current development status:** automatic input remains gated while the rebuilt
+quickslot signal completes its live-client verification. The status view and the
+`/pbquickslot` receipt are available now; the next work slice adopts the proven
+signal for end-to-end triggering.
+
 **It ships off, and it is off again after every restart.** Turning it on takes two
 steps: enable at least one resource in Settings, then press `F3`. With no resource
 enabled it never fires, whatever else is true.
@@ -274,7 +279,7 @@ same thing: a small grid of colored squares that PixelBeacon draws in the
 That grid is the entire channel between the addon and the app. It has to be
 visible, because anything drawn over it reads as a missing signal.
 
-At the default square size it covers **256 by 32 physical pixels**: twenty squares
+At the default square size it covers **256 by 32 physical pixels**: twenty-one squares
 in two rows.
 
 **To make it smaller**, lower **Block size (px)** in Settings, under the beacon
@@ -282,6 +287,15 @@ group. The app shows the resulting footprint beside that setting as you change i
 and records it in the log at startup. At the smallest supported size the overlay is
 32 by 4 pixels. Changing the size redeploys the addon so both sides stay in
 agreement, and takes effect after a `/reloadui` and an app restart.
+
+### Quickslot diagnostics
+
+PixelBeacon version 13 distinguishes an empty slot, each supported non-potion
+wheel kind, a depleted or blocked potion, a usable potion, and an unavailable
+observation. Run `/pbquickslot` in ESO for one bounded snapshot of the numeric
+slot facts. Run `/pbquickslot watch` to print only changed snapshots while testing,
+then run it again to turn watching off. The receipt intentionally omits localized
+item names and descriptions.
 
 **The overlay cannot be moved.** Its position is part of the contract the addon and
 the app share. Relocating it would mean changing both sides at once, and a

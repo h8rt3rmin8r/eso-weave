@@ -511,7 +511,7 @@ every frame.
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders twenty blocks anchored to the top-left of the game window's
+PixelBeacon renders twenty-one blocks anchored to the top-left of the game window's
 client area. Blocks are 16 by 16 physical pixels by default, and the addon
 compensates for the interface scale so block geometry is constant in physical
 pixels. The game's UI lifecycle hides the blocks during loading screens.
@@ -526,8 +526,8 @@ every block from row 1 onward, so the reader samples real blocks that pass their
 marker and checksum checks while reporting each signal as another signal's value,
 an error sitting underneath the validation built to catch it.
 
-At twenty blocks the grid is two rows: row 0 is full, and the four quickslot blocks
-occupy the first four positions of row 1. The occupied extent is
+At twenty-one blocks the grid is two rows: row 0 is full, and the five quickslot blocks
+occupy the first five positions of row 1. The occupied extent is
 `BLOCK_PX * min(NUM_BLOCKS, COLUMNS)` wide by `BLOCK_PX * ceil(NUM_BLOCKS /
 COLUMNS)` tall, which is 256 by 32 physical pixels at the default block size. Cells
 beside the last block in a partial row are neither drawn nor read.
@@ -560,8 +560,9 @@ signal.
 | B8 Magicka | (128, 0) | (136, 8) | As B6 with `G = 0xBB`. |
 | B9 Movement | (144, 0) | (152, 8) | `G = 0x43`, `R` is a two-bit code (bit 0 mounted, bit 1 sprint) scaled to `0x20` on foot or `0x60` mounted, `B = 255 - R`. Driven by `EVENT_MOUNTED_STATE_CHANGED`, re-baselined from `IsMounted()`, with a 1 Hz backstop. The two sprint codes `0xA0` and `0xE0` are reserved and never emitted, because the game exposes no sprint state to an addon; the reader decodes them as unavailable. |
 | B10 to B15 Cooldowns | (160, 0) to (240, 0) | (168, 8) to (248, 8) | One block per action slot the game exposes a cooldown for: skills 1 to 5, then the ultimate. `G` is a per-slot marker (`0x0B`, `0x21`, `0x4E`, `0x92`, `0xC6`, `0xE8`), `R` is the remaining time in 50 ms steps (`0` ready, `1` to `254` a duration saturating at 12700 ms, `0xFF` unavailable), `B = 255 - R`. Polled on the 1 Hz tick with change detection and re-baselined on `EVENT_PLAYER_ACTIVATED`, because the game fires no per-slot cooldown event. Synergy has no block: it is a contextual prompt rather than an action slot, so the game exposes no cooldown for it. |
-| B16 Quickslot | (0, 16) | (8, 24) | The first block on row 1. `G = 0x38`, `R` is the active quickslot's remaining cooldown in the same 50 ms steps, `B = 255 - R`. Read with `GetSlotCooldownInfo(GetCurrentQuickslot(), HOTBAR_CATEGORY_QUICKSLOT_WHEEL)`, the same call the skill cooldowns use, because the slot rather than the item link is authoritative on whether the thing can be used now: potions share a cooldown. `0xFF` covers an empty quickslot, a non-potion item, a potion with no on-use ability, and a slot the game reports no cooldown for. These are one outcome and are deliberately not told apart. Driven by `EVENT_ACTIVE_QUICKSLOT_CHANGED` and `EVENT_ACTION_SLOT_UPDATED`, re-baselined on `EVENT_PLAYER_ACTIVATED`, with the 1 Hz tick as the backstop that keeps the countdown correct. |
-| B17 to B19 Quickslot item | (16, 16) to (48, 16) | (24, 24) to (56, 24) | The slotted item's 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, `B = 255 - R`. Every byte value is legal, so these blocks carry no reserved payload and their validity rests entirely on the marker and the checksum, which is why each byte carries its own marker. The addon reduces the id modulo 2^24 so no block can carry an unencodable value. When B16 is unavailable these carry zero and are still drawn. The application reports no identity unless all three decode and B16 reports a potion: a partial identity is a different item, not an approximate one. The identity is published rather than the potion's restore types, which exist only inside a localized ability description the game itself consumes as tooltip text. |
+| B16 Quickslot cooldown | (0, 16) | (8, 24) | The first block on row 1. `G = 0x38`, `R` is the active quickslot's remaining cooldown in the same 50 ms steps, and `B = 255 - R`. This is an attached fact and never classifies the selected entry. |
+| B17 to B19 Quickslot item | (16, 16) to (48, 16) | (24, 24) to (56, 24) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
+| B20 Quickslot classification | (64, 16) | (72, 24) | `G = 0x76`, `B = 255 - R`, and spaced `R` codes distinguish unsupported API, invalid selection, inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion. Missing B20 with a valid legacy B16 reports an addon update requirement. Invalid or tolerance-ambiguous B20 reports a corrupt signal. Classification uses `GetCurrentQuickslot`, `GetSlotType`, `GetSlotBoundId`, `GetSlotItemLink`, `GetSlotItemCount`, `IsSlotUsable`, and `GetSlotCooldownInfo`. Events for selection, slot contents, slot state, cooldowns, inventory, and player activation converge through one change-detected path with a 1 Hz recovery backstop. |
 
 No block is ever hidden to express a state. Absence means only that the addon is
 too old to draw it, which is what keeps an old addon from being read as a state.
@@ -583,7 +584,7 @@ nothing reads them. Two act:
 | B2 latency, B3 weapon bar | Weave timing |
 | B1 fishing | The fishing controller |
 | B5 menu | The interception decision, the fishing controller, and the auto-potion controller |
-| B6 to B8 resources, B16 to B19 quickslot | Auto-potion ([section 11](#11-auto-potion)) |
+| B6 to B8 resources, B16 to B20 quickslot | Auto-potion ([section 11](#11-auto-potion)) |
 | B4 combat, B9 movement, B10 to B15 cooldowns | Nothing. Observable only. |
 
 That distinction is deliberate and is enforced by tests asserting the engine
@@ -592,7 +593,7 @@ into a decision breaks a test rather than slipping through.
 
 ```mermaid
 flowchart LR
-    ADDON[PixelBeacon<br/>renders B0 to B19] --> SURF[Game window surface]
+    ADDON[PixelBeacon<br/>renders B0 to B20] --> SURF[Game window surface]
     SURF --> SMP[Sampler<br/>GDI or X11]
     SMP --> RDR[Reader: marker,<br/>checksum, tolerance]
     RDR --> ACT{{Acts on behavior}}
@@ -753,6 +754,11 @@ Auto-potion synthesizes the quickslot key when a watched resource runs low. It i
 the only feature that acts on a beacon-derived value by producing input, which puts
 it on the same safety surface as the input engine itself.
 
+S042 keeps the worker-loop consumer gate disabled while the explicit quickslot
+contract completes its real-client matrix. The pure rule below remains the target
+contract and is covered by tests, but no automatic input is emitted until S043
+adopts the verified signal and exposes its effective blocker state.
+
 **The trigger rule.** The key is pressed when, and only when, all of the following
 hold, evaluated in this order:
 
@@ -816,7 +822,7 @@ skills region, and an optional live log panel.
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and a Live Log toggle |
-| Status region | Application state and Suspend; fishing state and its toggle; the PixelBeacon status light with Install, Update, and Uninstall; game installation and runtime; weapon bar; combat; movement; Game Context; health, stamina, and magicka; auto-potion and its toggle; quickslot cooldown and quickslot item |
+| Status region | Application state and Suspend; fishing state and its toggle; the PixelBeacon status light with Install, Update, and Uninstall; game installation and runtime; weapon bar; combat; movement; Game Context; health, stamina, and magicka; auto-potion and its toggle; quickslot classification, potion availability, and cooldown |
 | Skills region | One row per slot: label, active toggle, weave type, override toggle, effective delay, and decoded cooldown |
 | Live log panel | Optional, attached at the bottom |
 
