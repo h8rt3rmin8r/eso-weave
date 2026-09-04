@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders twenty square blocks (BLOCK_PX physical pixels on a side, default
+-- It renders twenty-one square blocks (BLOCK_PX physical pixels on a side, default
 -- 16; the companion sets this value on deploy) anchored to the top-left of the
 -- client area, encoding load status (B0), fishing state (B1), server latency
 -- (B2), the active weapon bar with each bar's weapon class (B3), the player's
@@ -8,7 +8,7 @@
 -- health, stamina, and magicka (B6 to B8), whether the player is mounted (B9),
 -- the remaining cooldown of each action slot the game exposes one for, the five
 -- skills and the ultimate (B10 to B15), and the active quickslot's remaining
--- cooldown (B16) and item identity (B17 to B19).
+-- cooldown (B16), item identity (B17 to B19), and explicit classification (B20).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -16,8 +16,8 @@
 -- slice 032 menu block, the slice 033 resource blocks, the slice 036 movement
 -- block, the slice 037 cooldown blocks, and the slice 038 quickslot blocks.
 --
--- At twenty blocks the grid occupies two rows: row 0 is full at COLUMNS, and the
--- four quickslot blocks are the first four positions of row 1. Slice 038 is the
+-- At twenty-one blocks the grid occupies two rows: row 0 is full at COLUMNS, and
+-- the five quickslot blocks are the first five positions of row 1. Slice 038 is the
 -- first shipping count to cross that boundary, so the overlay is twice as tall as
 -- it was. Nothing here needed changing for the crossing: the grid arithmetic has
 -- handled multiple rows since it was written, and every block position is a call
@@ -33,7 +33,7 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 20
+local NUM_BLOCKS = 21
 -- The blocks in one row. Blocks wrap to the next row when a row is full, so the
 -- beacon grows downward and its width is bounded forever at BLOCK_PX * COLUMNS.
 -- The companion states the same number once as pixelbus::COLUMNS and its test
@@ -119,15 +119,13 @@ local COOLDOWN_UNAVAILABLE = 255
 -- value actually changes. Empty until the first render.
 local cooldownSteps = {}
 
--- The four quickslot block markers (green channel), shared byte for byte with the
+-- The quickslot block markers (green channel), shared byte for byte with the
 -- companion decoder.
 --
 -- B16 carries the remaining quickslot cooldown using the COOLDOWN_STEP_MS scheme
 -- above, reusing those three constants rather than defining quickslot-named
 -- copies: a second name for the same number is how two numbers eventually become
--- different. COOLDOWN_UNAVAILABLE on this block means "empty, or not a usable
--- potion", folding that flag into the payload the way RESOURCE_UNAVAILABLE
--- already does rather than spending a whole block on one bit.
+-- different. This is an attached fact only; B20 classifies the selected entry.
 --
 -- B17 to B19 carry the 24-bit item id, one byte each, most significant byte
 -- first, so the blocks read left to right in the order the number is written.
@@ -137,18 +135,38 @@ local cooldownSteps = {}
 -- off-by-one in the geometry would read the middle byte as the high byte and
 -- every check would still pass.
 --
--- The marks are the midpoints of the four widest gaps left in the companion's
--- block-centre green registry, leaving the minimum separation across the whole
--- registry unchanged at 11.
+-- The original four marks follow slice 038. B20 takes the midpoint of the widest
+-- remaining gap and stays more than four times the default capture tolerance from
+-- its nearest neighbor.
 local QUICKSLOT_MARKER = 0x38
 local QUICKSLOT_ID_HI_MARKER = 0xB0
 local QUICKSLOT_ID_MID_MARKER = 0xDD
 local QUICKSLOT_ID_LO_MARKER = 0xF3
+local QUICKSLOT_STATE_MARKER = 0x76
+
+-- B20 state codes. Classification is independent from cooldown and identity so
+-- neither attached fact can turn an ambiguous slot into a potion.
+local QUICKSLOT_UNAVAILABLE_API = 0x10
+local QUICKSLOT_INVALID_SELECTION = 0x20
+local QUICKSLOT_INCONSISTENT = 0x30
+local QUICKSLOT_EMPTY = 0x40
+local QUICKSLOT_NON_POTION_ITEM = 0x50
+local QUICKSLOT_NON_POTION_COLLECTIBLE = 0x60
+local QUICKSLOT_NON_POTION_QUEST_ITEM = 0x70
+local QUICKSLOT_NON_POTION_EMOTE = 0x80
+local QUICKSLOT_NON_POTION_QUICK_CHAT = 0x90
+local QUICKSLOT_NON_POTION_OTHER = 0xA0
+local QUICKSLOT_POTION_DEPLETED = 0xB0
+local QUICKSLOT_POTION_BLOCKED = 0xC0
+local QUICKSLOT_POTION_USABLE = 0xD0
 
 -- The last rendered quickslot payloads, held so the blocks are redrawn only when
 -- a value actually changes. nil until the first render.
 local quickslotSteps = nil
 local quickslotId = nil
+local quickslotState = nil
+local quickslotWatch = false
+local quickslotDiagnosticKey = nil
 
 -- The menu block marker (green channel) and its surface code spacing, shared byte
 -- for byte with the companion decoder. Red carries code * MENU_CODE_STEP, blue
@@ -532,7 +550,7 @@ local function renderCooldowns()
     end
 end
 
--- B16 to B19 Quickslot ---------------------------------------------------------
+-- B16 to B20 Quickslot ---------------------------------------------------------
 
 local QUICKSLOT_ID_BLOCK_KEYS = {
     "quickslotIdHi",
@@ -546,83 +564,167 @@ local QUICKSLOT_ID_MARKERS = {
     QUICKSLOT_ID_LO_MARKER,
 }
 
--- The active quickslot as a step count and an item id, or the unavailable payload
--- and a zero id when there is nothing usable in it.
---
--- Every failure here returns unavailable rather than guessing. That includes the
--- two game globals: if HOTBAR_CATEGORY_QUICKSLOT_WHEEL or ITEMTYPE_POTION is ever
--- renamed it arrives as nil rather than as an error, and passing a nil hotbar
--- category would let the game resolve some other hotbar. The companion would then
--- receive a valid, checksum-passing colour describing a slot nobody asked about,
--- which is a false reading with full integrity checks behind it. Publishing
--- unavailable costs the operator a muted readout and costs the consumer nothing,
--- because its precondition is not met either way.
+local function quickslotCooldownSteps(remaining)
+    if remaining == nil then
+        return COOLDOWN_UNAVAILABLE
+    elseif remaining <= 0 then
+        return 0
+    end
+    local steps = zo_floor(remaining / COOLDOWN_STEP_MS + 0.5)
+    if steps < 1 then
+        return 1
+    elseif steps > COOLDOWN_MAX_STEPS then
+        return COOLDOWN_MAX_STEPS
+    end
+    return steps
+end
+
+-- Reads every primitive before classification. Keeping this table intact is what
+-- makes `/pbquickslot` able to name the exact failed assumption without parsing
+-- localized item text or rerunning a subtly different pipeline.
 local function computeQuickslot()
-    local hotbar = HOTBAR_CATEGORY_QUICKSLOT_WHEEL
-    if hotbar == nil or ITEMTYPE_POTION == nil then
-        return COOLDOWN_UNAVAILABLE, 0
-    end
-    local slot = GetCurrentQuickslot()
-    if slot == nil then
-        return COOLDOWN_UNAVAILABLE, 0
-    end
-    local link = GetSlotItemLink(slot, hotbar)
-    if link == nil or link == "" then
-        return COOLDOWN_UNAVAILABLE, 0
-    end
-    if GetItemLinkItemType(link) ~= ITEMTYPE_POTION then
-        return COOLDOWN_UNAVAILABLE, 0
-    end
-    -- A potion with no on-use ability is not something to fire a key at. This is
-    -- the only thing GetItemLinkOnUseAbilityInfo is used for: its remaining
-    -- cooldown describes the item's ability, whereas the slot is the authority on
-    -- whether the thing can be drunk right now (potions share a cooldown). See
-    -- specs/038-quickslot-blocks/research.md R2.
-    local hasAbility = GetItemLinkOnUseAbilityInfo(link)
-    if not hasAbility then
-        return COOLDOWN_UNAVAILABLE, 0
+    local facts = {
+        hotbarAvailable = HOTBAR_CATEGORY_QUICKSLOT_WHEEL ~= nil,
+        apiAvailable = GetCurrentQuickslot ~= nil and GetSlotType ~= nil
+            and GetSlotBoundId ~= nil and GetSlotItemLink ~= nil
+            and GetSlotItemCount ~= nil and IsSlotUsable ~= nil
+            and GetSlotCooldownInfo ~= nil and GetItemLinkItemType ~= nil
+            and GetItemLinkItemId ~= nil and ITEMTYPE_POTION ~= nil
+            and ACTION_TYPE_NOTHING ~= nil and ACTION_TYPE_ITEM ~= nil
+            and ACTION_TYPE_COLLECTIBLE ~= nil and ACTION_TYPE_QUEST_ITEM ~= nil,
+    }
+    if not facts.hotbarAvailable or not facts.apiAvailable then
+        facts.oldFail = "api"
+        facts.state = QUICKSLOT_UNAVAILABLE_API
+        facts.steps = COOLDOWN_UNAVAILABLE
+        facts.id = 0
+        return COOLDOWN_UNAVAILABLE, 0, facts.state, facts
     end
 
-    -- The same call, and therefore the same quantization, as the skill cooldown
-    -- blocks above.
-    local remaining = GetSlotCooldownInfo(slot, hotbar)
-    local steps
-    if remaining == nil then
-        return COOLDOWN_UNAVAILABLE, 0
-    elseif remaining <= 0 then
-        steps = 0
+    local hotbar = HOTBAR_CATEGORY_QUICKSLOT_WHEEL
+    facts.slot = GetCurrentQuickslot()
+    if facts.slot == nil or facts.slot <= 0 then
+        facts.oldFail = "slot"
+        facts.state = QUICKSLOT_INVALID_SELECTION
+        facts.steps = COOLDOWN_UNAVAILABLE
+        facts.id = 0
+        return COOLDOWN_UNAVAILABLE, 0, facts.state, facts
+    end
+
+    facts.slotType = GetSlotType(facts.slot, hotbar)
+    facts.boundId = GetSlotBoundId(facts.slot, hotbar)
+    facts.link = GetSlotItemLink(facts.slot, hotbar)
+    facts.linkPresent = facts.link ~= nil and facts.link ~= ""
+    facts.itemType = facts.linkPresent and GetItemLinkItemType(facts.link) or nil
+    facts.count = facts.slotType == ACTION_TYPE_ITEM
+        and GetSlotItemCount(facts.slot, hotbar) or nil
+    facts.usable = IsSlotUsable(facts.slot, hotbar)
+    facts.remaining, facts.duration, facts.global, facts.globalSlotType =
+        GetSlotCooldownInfo(facts.slot, hotbar)
+    facts.hasAbility = facts.linkPresent and GetItemLinkOnUseAbilityInfo ~= nil
+        and GetItemLinkOnUseAbilityInfo(facts.link) or false
+
+    -- Preserve the old pipeline's first failed predicate in the receipt. This is
+    -- diagnostic evidence only; the reconstructed classifier below does not use
+    -- the extra on-use metadata gate.
+    if not facts.linkPresent then
+        facts.oldFail = "link"
+    elseif facts.itemType ~= ITEMTYPE_POTION then
+        facts.oldFail = "itemType"
+    elseif not facts.hasAbility then
+        facts.oldFail = "onUseAbility"
+    elseif facts.remaining == nil then
+        facts.oldFail = "cooldown"
     else
-        steps = zo_floor(remaining / COOLDOWN_STEP_MS + 0.5)
-        if steps < 1 then
-            steps = 1
-        elseif steps > COOLDOWN_MAX_STEPS then
-            steps = COOLDOWN_MAX_STEPS
+        facts.oldFail = "none"
+    end
+
+    local state
+    if facts.slotType == nil then
+        state = QUICKSLOT_INCONSISTENT
+    elseif facts.slotType == ACTION_TYPE_NOTHING then
+        state = QUICKSLOT_EMPTY
+    elseif facts.slotType == ACTION_TYPE_COLLECTIBLE then
+        state = QUICKSLOT_NON_POTION_COLLECTIBLE
+    elseif facts.slotType == ACTION_TYPE_QUEST_ITEM then
+        state = QUICKSLOT_NON_POTION_QUEST_ITEM
+    elseif facts.slotType == ACTION_TYPE_EMOTE then
+        state = QUICKSLOT_NON_POTION_EMOTE
+    elseif facts.slotType == ACTION_TYPE_QUICK_CHAT then
+        state = QUICKSLOT_NON_POTION_QUICK_CHAT
+    elseif facts.slotType ~= ACTION_TYPE_ITEM then
+        state = QUICKSLOT_NON_POTION_OTHER
+    elseif not facts.linkPresent or facts.itemType == nil or facts.count == nil then
+        state = QUICKSLOT_INCONSISTENT
+    elseif facts.itemType ~= ITEMTYPE_POTION then
+        state = QUICKSLOT_NON_POTION_ITEM
+    elseif facts.count <= 0 then
+        state = QUICKSLOT_POTION_DEPLETED
+    elseif not facts.usable then
+        state = QUICKSLOT_POTION_BLOCKED
+    else
+        state = QUICKSLOT_POTION_USABLE
+    end
+
+    local id = 0
+    if state == QUICKSLOT_POTION_DEPLETED or state == QUICKSLOT_POTION_BLOCKED
+        or state == QUICKSLOT_POTION_USABLE then
+        id = (GetItemLinkItemId(facts.link) or 0) % 0x1000000
+    end
+    facts.state = state
+    facts.id = id
+    facts.steps = quickslotCooldownSteps(facts.remaining)
+    return facts.steps, id, state, facts
+end
+
+local function diagnosticValue(value)
+    if value == nil then
+        return "nil"
+    end
+    return tostring(value)
+end
+
+local function quickslotDiagnostic(facts)
+    return string.format(
+        "PixelBeacon quickslot oldFail=%s slot=%s hotbar=%s api=%s type=%s bound=%s link=%s itemType=%s count=%s ability=%s usable=%s cooldown=%s/%s global=%s globalType=%s state=0x%02X payload=%s/%s",
+        diagnosticValue(facts.oldFail),
+        diagnosticValue(facts.slot), diagnosticValue(facts.hotbarAvailable),
+        diagnosticValue(facts.apiAvailable), diagnosticValue(facts.slotType),
+        diagnosticValue(facts.boundId), diagnosticValue(facts.linkPresent),
+        diagnosticValue(facts.itemType), diagnosticValue(facts.count),
+        diagnosticValue(facts.hasAbility), diagnosticValue(facts.usable),
+        diagnosticValue(facts.remaining), diagnosticValue(facts.duration),
+        diagnosticValue(facts.global), diagnosticValue(facts.globalSlotType),
+        facts.state or QUICKSLOT_INCONSISTENT,
+        diagnosticValue(facts.steps), diagnosticValue(facts.id)
+    )
+end
+
+local function emitQuickslotDiagnostic(facts, force)
+    if not force and not quickslotWatch then
+        return
+    end
+    local line = quickslotDiagnostic(facts)
+    if force or line ~= quickslotDiagnosticKey then
+        quickslotDiagnosticKey = line
+        if d ~= nil then
+            d(line)
         end
     end
-
-    local id = GetItemLinkItemId(link) or 0
-    -- Reduced to 24 bits here, on the publishing side, so every block always
-    -- carries a whole byte. Letting an oversized id produce an out-of-range byte
-    -- would fail that block's checksum, and a failed checksum reports the whole
-    -- quickslot as unknown, which claims there is no potion rather than that its
-    -- identity is not known. Aliasing an id we cannot name is much the lesser
-    -- error, and the consumer uses the id for display and swap detection rather
-    -- than for a safety decision.
-    id = id % 0x1000000
-
-    return steps, id
 end
 
 -- Recomputes the quickslot, returning true when anything changed. Compute then
 -- render-if-changed, following updateCooldowns, so a steady quickslot redraws
 -- nothing and the read-back signal is steady too.
 local function updateQuickslot()
-    local steps, id = computeQuickslot()
-    if steps == quickslotSteps and id == quickslotId then
+    local steps, id, state, facts = computeQuickslot()
+    emitQuickslotDiagnostic(facts, false)
+    if steps == quickslotSteps and id == quickslotId and state == quickslotState then
         return false
     end
     quickslotSteps = steps
     quickslotId = id
+    quickslotState = state
     return true
 end
 
@@ -630,6 +732,7 @@ local function renderQuickslot()
     local hidden = blocks.status:IsHidden()
     local steps = quickslotSteps or COOLDOWN_UNAVAILABLE
     local id = quickslotId or 0
+    local state = quickslotState or QUICKSLOT_UNAVAILABLE_API
 
     if hidden then
         blocks.quickslot:SetHidden(true)
@@ -666,12 +769,42 @@ local function renderQuickslot()
             block:SetHidden(false)
         end
     end
+
+    if hidden then
+        blocks.quickslotState:SetHidden(true)
+    else
+        blocks.quickslotState:SetCenterColor(
+            channel(state),
+            channel(QUICKSLOT_STATE_MARKER),
+            channel(255 - state),
+            1
+        )
+        blocks.quickslotState:SetHidden(false)
+    end
 end
 
 local function onQuickslotChanged()
     if updateQuickslot() then
         renderQuickslot()
     end
+end
+
+local function onQuickslotCommand(argument)
+    local command = zo_strlower and zo_strlower(argument or "") or (argument or "")
+    if command == "watch" then
+        quickslotWatch = not quickslotWatch
+        quickslotDiagnosticKey = nil
+        if d ~= nil then
+            d("PixelBeacon quickslot watch " .. (quickslotWatch and "on" or "off"))
+        end
+    elseif command ~= "" then
+        if d ~= nil then
+            d("PixelBeacon: use /pbquickslot or /pbquickslot watch")
+        end
+        return
+    end
+    local _, _, _, facts = computeQuickslot()
+    emitQuickslotDiagnostic(facts, true)
 end
 
 -- B5 Menu ---------------------------------------------------------------------
@@ -871,6 +1004,7 @@ end
 -- it). The lure sound category scopes the decrease to bait, so unrelated
 -- consumables are never reported as bites.
 local function onInventorySlotUpdate(_, _, _, isNewItem, itemSoundCategory, _, stackCountChange)
+    onQuickslotChanged()
     if isNewItem then
         -- A new item is gained (catch resolved): the bite is over.
         if fishingState == "bite" then
@@ -929,6 +1063,7 @@ local function buildBlocks()
     blocks.quickslotIdHi = createBlock("QuickslotIdHi")
     blocks.quickslotIdMid = createBlock("QuickslotIdMid")
     blocks.quickslotIdLo = createBlock("QuickslotIdLo")
+    blocks.quickslotState = createBlock("QuickslotState")
 
     -- Block indices, not pixel offsets: the grid decides where an index lands.
     positionBlock(blocks.status, 0)
@@ -951,6 +1086,7 @@ local function buildBlocks()
     for i = 1, #QUICKSLOT_ID_BLOCK_KEYS do
         positionBlock(blocks[QUICKSLOT_ID_BLOCK_KEYS[i]], 16 + i)
     end
+    positionBlock(blocks.quickslotState, 20)
 
     renderStatus()
     renderFishing()
@@ -1037,6 +1173,9 @@ local function onAddOnLoaded(_, name)
     -- The tick above is the backstop for the countdown itself.
     em:RegisterForEvent(ADDON_NAME .. "Quickslot", EVENT_ACTIVE_QUICKSLOT_CHANGED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlot", EVENT_ACTION_SLOT_UPDATED, onQuickslotChanged)
+    em:RegisterForEvent(ADDON_NAME .. "ActionSlotState", EVENT_ACTION_SLOT_STATE_UPDATED, onQuickslotChanged)
+    em:RegisterForEvent(ADDON_NAME .. "QuickslotCooldown", EVENT_ACTION_UPDATE_COOLDOWNS, onQuickslotChanged)
+    SLASH_COMMANDS["/pbquickslot"] = onQuickslotCommand
 
     em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
         computeWeaponBar()

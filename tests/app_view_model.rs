@@ -19,8 +19,10 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, QuickslotState, ResourceLevel,
-    ResourceSet, SlotCooldown, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, QuickslotClassification,
+    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal,
+    WeaponClass,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -820,6 +822,7 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
             magicka: ResourceLevel::Percent(0),
         },
         quickslot: QuickslotState {
+            classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
             cooldown: SlotCooldown::Ready,
             item_id: Some(1),
         },
@@ -861,21 +864,23 @@ fn a_signal_lost_event_switches_auto_potion_off() {
     );
 }
 
-// Slice 038: the quickslot readout.
+// Slice 042: the explicitly classified quickslot readout.
 
 #[test]
-fn quickslot_view_shows_the_cooldown_and_the_identity_as_a_number() {
+fn quickslot_view_shows_potion_availability_and_cooldown_independently() {
     let view = quickslot_view(QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::Ready,
         item_id: Some(64_500),
     });
     assert_eq!(view.cooldown.text, "Ready");
     assert_eq!(view.cooldown.role, StatusRole::Active);
-    // The number itself, not a name: the application has no way to resolve one.
-    assert_eq!(view.identity.text, "64500");
-    assert_eq!(view.identity.role, StatusRole::Active);
+    assert_eq!(view.state.text, "Potion");
+    assert_eq!(view.availability.text, "Usable");
+    assert_eq!(view.availability.role, StatusRole::Active);
 
     let counting = quickslot_view(QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::RemainingMs(4500),
         item_id: Some(1),
     });
@@ -884,28 +889,48 @@ fn quickslot_view_shows_the_cooldown_and_the_identity_as_a_number() {
 }
 
 #[test]
-fn quickslot_view_is_muted_when_there_is_nothing_to_show() {
+fn quickslot_view_names_unavailable_empty_and_non_potion_states() {
     let view = quickslot_view(QuickslotState::new_unknown());
-    assert_eq!(view.cooldown.text, "-");
-    assert_eq!(view.cooldown.role, StatusRole::Muted);
-    assert_eq!(view.identity.text, "-");
-    assert_eq!(view.identity.role, StatusRole::Muted);
+    assert_eq!(view.state.text, "Not detected");
+    assert_eq!(view.availability.text, "Not applicable");
+
+    for (classification, expected) in [
+        (QuickslotClassification::Empty, "Empty"),
+        (
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Collectible),
+            "Non-potion (Collectible)",
+        ),
+        (
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::LegacyProtocol),
+            "Addon update required",
+        ),
+        (
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::CorruptProtocol),
+            "Unreadable signal",
+        ),
+    ] {
+        let state = QuickslotState {
+            classification,
+            cooldown: SlotCooldown::Ready,
+            item_id: Some(1),
+        };
+        let view = quickslot_view(state);
+        assert_eq!(view.state.text, expected);
+        assert_eq!(view.cooldown.text, "Not applicable");
+    }
 }
 
 #[test]
-fn quickslot_view_halves_degrade_independently() {
-    // FR-012: the state where the cooldown read and the identity did not is
-    // reachable whenever one identity block is disturbed. Collapsing the whole
-    // readout there would throw away a value that was read correctly and make a
-    // one-block disturbance look identical to a missing addon.
+fn quickslot_view_classification_survives_missing_identity() {
     let view = quickslot_view(QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::RemainingMs(2000),
         item_id: None,
     });
     assert_eq!(view.cooldown.text, "2.0s");
     assert_eq!(view.cooldown.role, StatusRole::Warning);
-    assert_eq!(view.identity.text, "-");
-    assert_eq!(view.identity.role, StatusRole::Muted);
+    assert_eq!(view.state.text, "Potion");
+    assert_eq!(view.availability.text, "Usable");
 }
 
 #[test]
@@ -922,6 +947,7 @@ fn quickslot_events_reach_the_engine_and_nothing_else() {
     assert_eq!(fishing.state(), FishingState::Armed);
 
     let state = QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::Ready,
         item_id: Some(0x12_3456),
     };

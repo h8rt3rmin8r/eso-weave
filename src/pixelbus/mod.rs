@@ -405,32 +405,67 @@ const COOLDOWN_STEP_MS: u16 = 50;
 /// The largest encodable step count. A longer cooldown saturates here rather than
 /// wrapping, so it reads as "at least this long" instead of as a small number.
 const COOLDOWN_MAX_STEPS: u8 = 254;
-/// The payload the addon publishes when a slot is empty or the game reports no
-/// cooldown. Like [`RESOURCE_UNAVAILABLE`] it passes the marker and checksum
-/// checks and fails the range check, so it needs no special case in the decoder.
+/// The payload the addon publishes when the game reports no cooldown. Like
+/// [`RESOURCE_UNAVAILABLE`] it passes the marker and checksum checks and fails
+/// the range check, so it needs no special case in the decoder.
 const COOLDOWN_UNAVAILABLE: u8 = 255;
 
-/// The active quickslot, decoded from its four blocks.
-///
-/// Whether a potion is present is deliberately **not** a field. It is exactly
-/// [`Self::has_potion`], the cooldown not being [`SlotCooldown::Unknown`].
-/// Storing it separately would make two states representable that cannot exist,
-/// a potion carrying no cooldown and a cooldown carrying no potion, and would
-/// make the decoder responsible for keeping two fields consistent forever. The
-/// tracker issue proposed the three-field shape; see
-/// `specs/038-quickslot-blocks/plan.md` D3 for why this one shipped instead.
+/// Why a selected quickslot observation cannot be trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickslotUnavailableReason {
+    /// No fresh beacon signal exists.
+    NoSignal,
+    /// The addon publishes the legacy four-block contract without B20.
+    LegacyProtocol,
+    /// B20 is present but fails its marker, checksum, or code validation.
+    CorruptProtocol,
+    /// A required ESO API primitive or constant is absent.
+    UnsupportedApi,
+    /// ESO did not provide a valid selected slot.
+    InvalidSelection,
+    /// The independently sampled slot facts contradict one another.
+    InconsistentFacts,
+}
+
+/// The bounded kind of a selected quickslot entry that is not a potion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickslotNonPotionKind {
+    Item,
+    Collectible,
+    QuestItem,
+    Emote,
+    QuickChat,
+    Other,
+}
+
+/// Whether a positively classified potion can be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickslotPotionAvailability {
+    /// The selected potion's stack is empty.
+    Depleted,
+    /// The stack is positive but ESO reports that the slot is not usable.
+    Blocked,
+    /// The stack is positive and ESO reports that the slot is usable.
+    Usable,
+}
+
+/// The explicit classification carried by B20.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickslotClassification {
+    Unavailable(QuickslotUnavailableReason),
+    Empty,
+    NonPotion(QuickslotNonPotionKind),
+    Potion(QuickslotPotionAvailability),
+}
+
+/// The active quickslot, decoded from its five blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QuickslotState {
+    /// The sole authority for what the selected slot represents.
+    pub classification: QuickslotClassification,
     /// How long the quickslot has left before it can be used.
-    ///
-    /// [`SlotCooldown::Unknown`] is one outcome covering an empty quickslot, a
-    /// non-potion item, a potion the game reports no cooldown for, and a block
-    /// that could not be read. These are indistinguishable by construction (the
-    /// reserved payload and an absent block produce the same value) and are
-    /// deliberately not reported apart.
     pub cooldown: SlotCooldown,
-    /// The slotted item's identity, when every identity block decoded and there
-    /// is a potion to identify. Never assembled from a partial read.
+    /// The potion identity when all three identity blocks decode.
     pub item_id: Option<u32>,
 }
 
@@ -438,14 +473,32 @@ impl QuickslotState {
     /// The initial state and the cleared state: nothing known.
     pub fn new_unknown() -> Self {
         Self {
+            classification: QuickslotClassification::Unavailable(
+                QuickslotUnavailableReason::NoSignal,
+            ),
             cooldown: SlotCooldown::Unknown,
             item_id: None,
         }
     }
 
-    /// Whether the active quickslot holds a usable potion.
-    pub fn has_potion(&self) -> bool {
-        self.cooldown != SlotCooldown::Unknown
+    /// Whether the active quickslot explicitly holds a potion.
+    pub fn is_potion(&self) -> bool {
+        matches!(self.classification, QuickslotClassification::Potion(_))
+    }
+
+    /// Whether ESO explicitly reports a positive-stack usable potion.
+    pub fn is_usable_potion(&self) -> bool {
+        matches!(
+            self.classification,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Usable)
+        )
+    }
+
+    /// Whether the observation itself satisfies the explicit quickslot half of
+    /// the future automation contract. Runtime activation remains disabled in
+    /// S042; issue #25 adopts this predicate end to end.
+    pub fn authorizes_auto_potion(&self) -> bool {
+        self.is_usable_potion()
     }
 }
 
@@ -464,6 +517,22 @@ const QUICKSLOT_ID_HI_MARKER: u8 = 0xB0;
 const QUICKSLOT_ID_MID_MARKER: u8 = 0xDD;
 /// The green marker identifying the quickslot item identity's low byte (B19).
 const QUICKSLOT_ID_LO_MARKER: u8 = 0xF3;
+/// The green marker identifying the explicit quickslot classification (B20).
+const QUICKSLOT_STATE_MARKER: u8 = 0x76;
+
+const QUICKSLOT_UNAVAILABLE_API: u8 = 0x10;
+const QUICKSLOT_INVALID_SELECTION: u8 = 0x20;
+const QUICKSLOT_INCONSISTENT: u8 = 0x30;
+const QUICKSLOT_EMPTY: u8 = 0x40;
+const QUICKSLOT_NON_POTION_ITEM: u8 = 0x50;
+const QUICKSLOT_NON_POTION_COLLECTIBLE: u8 = 0x60;
+const QUICKSLOT_NON_POTION_QUEST_ITEM: u8 = 0x70;
+const QUICKSLOT_NON_POTION_EMOTE: u8 = 0x80;
+const QUICKSLOT_NON_POTION_QUICK_CHAT: u8 = 0x90;
+const QUICKSLOT_NON_POTION_OTHER: u8 = 0xA0;
+const QUICKSLOT_POTION_DEPLETED: u8 = 0xB0;
+const QUICKSLOT_POTION_BLOCKED: u8 = 0xC0;
+const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 
 /// Every green-channel value that appears at the center of a beacon block, with
 /// the block it belongs to.
@@ -473,7 +542,7 @@ const QUICKSLOT_ID_LO_MARKER: u8 = 0xF3;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 21] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 22] = [
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
@@ -495,6 +564,7 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 21] = [
     ("B17 quickslot id high marker", QUICKSLOT_ID_HI_MARKER),
     ("B18 quickslot id middle marker", QUICKSLOT_ID_MID_MARKER),
     ("B19 quickslot id low marker", QUICKSLOT_ID_LO_MARKER),
+    ("B20 quickslot state marker", QUICKSLOT_STATE_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -588,6 +658,8 @@ pub struct BlockSamples {
     pub quickslot_id_mid: Option<Rgb>,
     /// B19, the quickslot item identity's low byte.
     pub quickslot_id_lo: Option<Rgb>,
+    /// B20, the explicit quickslot classification.
+    pub quickslot_state: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -683,7 +755,7 @@ impl SurfaceSampler for MockSampler {
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
 /// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka,
 /// B9 movement, B10 to B15 skill cooldowns, B16 quickslot cooldown, B17 to B19
-/// the quickslot item identity.
+/// the quickslot item identity, and B20 its explicit classification.
 ///
 /// This is the companion's single statement of the grid length; the drawn extent
 /// and the capture region both derive from it. The addon states the same number
@@ -692,12 +764,13 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// **Twenty blocks occupy two rows.** Slice 038 is the first shipping count to
-/// cross [`COLUMNS`]: row 0 is full at sixteen and the four quickslot blocks are
-/// the first four positions of row 1. Everything that depends on the shape
+/// **Twenty-one blocks occupy two rows.** Slice 038 is the first shipping count to
+/// cross [`COLUMNS`]: row 0 is full at sixteen and the four original quickslot
+/// blocks are the first four positions of row 1; slice 042 adds the fifth.
+/// Everything that depends on the shape
 /// derives it from this value and [`COLUMNS`] rather than restating it, and
 /// `tests/pixelbus.rs` asserts the two-row shape at compile time.
-pub const NUM_BLOCKS: u32 = 20;
+pub const NUM_BLOCKS: u32 = 21;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -914,6 +987,10 @@ impl ReaderConfig {
     /// The quickslot identity low byte block (B19) sample point.
     pub fn quickslot_id_lo_point(&self) -> (u32, u32) {
         block_center(self.block_px, 19)
+    }
+    /// The explicit quickslot classification block (B20) sample point.
+    pub fn quickslot_state_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 20)
     }
 }
 
@@ -1315,7 +1392,45 @@ fn decode_id_byte(sample: Rgb, marker: u8, tolerance: u8) -> Option<u8> {
     Some(sample.r)
 }
 
-/// Decodes the four quickslot blocks into one state.
+fn decode_quickslot_classification(sample: Rgb, tolerance: u8) -> Option<QuickslotClassification> {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, QUICKSLOT_STATE_MARKER, tolerance)
+        || checksum.abs_diff(255) > u16::from(tolerance)
+    {
+        return None;
+    }
+    Some(if within(sample.r, QUICKSLOT_UNAVAILABLE_API, tolerance) {
+        QuickslotClassification::Unavailable(QuickslotUnavailableReason::UnsupportedApi)
+    } else if within(sample.r, QUICKSLOT_INVALID_SELECTION, tolerance) {
+        QuickslotClassification::Unavailable(QuickslotUnavailableReason::InvalidSelection)
+    } else if within(sample.r, QUICKSLOT_INCONSISTENT, tolerance) {
+        QuickslotClassification::Unavailable(QuickslotUnavailableReason::InconsistentFacts)
+    } else if within(sample.r, QUICKSLOT_EMPTY, tolerance) {
+        QuickslotClassification::Empty
+    } else if within(sample.r, QUICKSLOT_NON_POTION_ITEM, tolerance) {
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Item)
+    } else if within(sample.r, QUICKSLOT_NON_POTION_COLLECTIBLE, tolerance) {
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Collectible)
+    } else if within(sample.r, QUICKSLOT_NON_POTION_QUEST_ITEM, tolerance) {
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuestItem)
+    } else if within(sample.r, QUICKSLOT_NON_POTION_EMOTE, tolerance) {
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Emote)
+    } else if within(sample.r, QUICKSLOT_NON_POTION_QUICK_CHAT, tolerance) {
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuickChat)
+    } else if within(sample.r, QUICKSLOT_NON_POTION_OTHER, tolerance) {
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Other)
+    } else if within(sample.r, QUICKSLOT_POTION_DEPLETED, tolerance) {
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Depleted)
+    } else if within(sample.r, QUICKSLOT_POTION_BLOCKED, tolerance) {
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Blocked)
+    } else if within(sample.r, QUICKSLOT_POTION_USABLE, tolerance) {
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Usable)
+    } else {
+        return None;
+    })
+}
+
+/// Decodes the five quickslot blocks into one state.
 ///
 /// The cooldown reuses [`decode_cooldown`] against the quickslot mark, so the
 /// quantization, the saturation rule, and the ready case are shared with the
@@ -1324,23 +1439,34 @@ fn decode_id_byte(sample: Rgb, marker: u8, tolerance: u8) -> Option<u8> {
 /// The identity is reported only when there is a potion to identify **and** all
 /// three of its blocks decoded. A partial read yields no identity rather than a
 /// number assembled from the bytes that happened to survive: two thirds of an
-/// identity is a different item, not an approximate one. The two halves otherwise
-/// degrade independently, so one disturbed identity block costs the identity and
-/// not the cooldown.
+/// identity is a different item, not an approximate one. Classification,
+/// cooldown, and identity otherwise degrade independently.
 pub fn decode_quickslot(
     status: Option<Rgb>,
     id_hi: Option<Rgb>,
     id_mid: Option<Rgb>,
     id_lo: Option<Rgb>,
+    state: Option<Rgb>,
     tolerance: u8,
 ) -> QuickslotState {
     let cooldown = status.map_or(SlotCooldown::Unknown, |c| {
         decode_cooldown(c, QUICKSLOT_MARKER, tolerance)
     });
-    if cooldown == SlotCooldown::Unknown {
-        // The cooldown has already said there is nothing here, so whatever the
-        // identity blocks carry describes nothing worth naming.
+    let classification = match state {
+        Some(sample) => decode_quickslot_classification(sample, tolerance).unwrap_or(
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::CorruptProtocol),
+        ),
+        None if status
+            .and_then(|sample| decode_id_byte(sample, QUICKSLOT_MARKER, tolerance))
+            .is_some() =>
+        {
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::LegacyProtocol)
+        }
+        None => QuickslotClassification::Unavailable(QuickslotUnavailableReason::NoSignal),
+    };
+    if !matches!(classification, QuickslotClassification::Potion(_)) {
         return QuickslotState {
+            classification,
             cooldown,
             item_id: None,
         };
@@ -1357,7 +1483,11 @@ pub fn decode_quickslot(
         }
         _ => None,
     };
-    QuickslotState { cooldown, item_id }
+    QuickslotState {
+        classification,
+        cooldown,
+        item_id,
+    }
 }
 
 /// The pixel bus reader state machine.
@@ -1430,6 +1560,7 @@ impl PixelBusReader {
             quickslot_id_hi: b17,
             quickslot_id_mid: b18,
             quickslot_id_lo: b19,
+            quickslot_state: b20,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -1561,20 +1692,21 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Cooldowns(cooldowns));
             }
 
-            // The four quickslot blocks travel as one state, following the
+            // The five quickslot blocks travel as one state, following the
             // resource and cooldown blocks. Clearing on a non-decoding sample
             // rather than holding follows the combat block, and matters more
             // here than anywhere before it: the consumer this observable exists
             // for synthesizes a keypress, so a stale "there is a ready potion"
             // surviving an addon downgrade would become a stale action.
-            let quickslot = decode_quickslot(b16, b17, b18, b19, tolerance);
+            let quickslot = decode_quickslot(b16, b17, b18, b19, b20, tolerance);
             if quickslot != self.quickslot {
                 self.quickslot = quickslot;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
                     cooldown = ?quickslot.cooldown,
                     item_id = ?quickslot.item_id,
-                    has_potion = quickslot.has_potion(),
+                    classification = ?quickslot.classification,
+                    is_usable_potion = quickslot.is_usable_potion(),
                     "quickslot state detected"
                 );
                 events.push(PixelBusEvent::Quickslot(quickslot));
@@ -1684,6 +1816,7 @@ impl PixelBusReader {
         let (qhx, qhy) = self.config.quickslot_id_hi_point();
         let (qmx, qmy) = self.config.quickslot_id_mid_point();
         let (qlx, qly) = self.config.quickslot_id_lo_point();
+        let (qtx, qty) = self.config.quickslot_state_point();
         let samples = BlockSamples {
             status: sampler.sample(sx, sy),
             fishing: sampler.sample(fx, fy),
@@ -1705,6 +1838,7 @@ impl PixelBusReader {
             quickslot_id_hi: sampler.sample(qhx, qhy),
             quickslot_id_mid: sampler.sample(qmx, qmy),
             quickslot_id_lo: sampler.sample(qlx, qly),
+            quickslot_state: sampler.sample(qtx, qty),
         };
         self.observe(samples, now_ms)
     }

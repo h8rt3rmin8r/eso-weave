@@ -12,11 +12,16 @@
 //! it is checking completely unexercised.
 
 use eso_weave::input::{Key, Transition};
-use eso_weave::pixelbus::{QuickslotState, ResourceLevel, ResourceSet, SlotCooldown};
+use eso_weave::pixelbus::{
+    QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
+    ResourceSet, SlotCooldown,
+};
 use eso_weave::potion::{
     evaluate, AutoPotionConfig, AutoPotionController, Block, MockAutoPotionSink, PotionInputs,
-    PotionReadings, ResourceWatch,
+    PotionReadings, ResourceWatch, EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED,
 };
+
+const _: () = assert!(!EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED);
 
 /// A configuration with all three resources watched at 50 percent.
 fn config_all_watched() -> AutoPotionConfig {
@@ -44,6 +49,7 @@ fn levels(health: u8, magicka: u8, stamina: u8) -> ResourceSet {
 /// A quickslot holding a ready potion.
 fn ready_potion() -> QuickslotState {
     QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::Ready,
         item_id: Some(0x12_3456),
     }
@@ -160,6 +166,7 @@ fn condition_7_no_potion_blocks_and_says_so() {
 fn condition_8_on_cooldown_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.readings.quickslot = QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::RemainingMs(4000),
         item_id: Some(0x12_3456),
     };
@@ -258,18 +265,24 @@ fn an_unreadable_resource_is_never_low_at_any_threshold() {
 
 #[test]
 fn an_unreadable_quickslot_is_not_a_potion_and_an_unknown_cooldown_is_not_zero() {
-    // The quickslot half of the same rule. `has_potion` is `cooldown != Unknown`,
-    // so an unreadable quickslot is categorically not a potion.
+    // The quickslot half of the same rule. An unavailable classification is
+    // categorically not a potion, regardless of attached facts.
     let mut inputs = eligible_inputs();
     inputs.readings.quickslot = QuickslotState {
+        classification: QuickslotClassification::Unavailable(
+            eso_weave::pixelbus::QuickslotUnavailableReason::NoSignal,
+        ),
         cooldown: SlotCooldown::Unknown,
         item_id: None,
     };
     assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoPotion));
 
-    // And an identity present with an unknown cooldown is still not a potion:
-    // the cooldown is what `has_potion` reads, not the identity.
+    // An identity attached to an unavailable classification is still not a
+    // potion. Identity is diagnostic context, never a safety input.
     inputs.readings.quickslot = QuickslotState {
+        classification: QuickslotClassification::Unavailable(
+            eso_weave::pixelbus::QuickslotUnavailableReason::CorruptProtocol,
+        ),
         cooldown: SlotCooldown::Unknown,
         item_id: Some(42),
     };

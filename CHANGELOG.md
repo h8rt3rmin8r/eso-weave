@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S042 reconstructs selected-quickslot observation around an explicit B20
+  classification. Empty, non-potion wheel kinds, depleted or blocked potions,
+  usable potions, legacy addons, corrupt samples, and unavailable game facts are
+  distinct. Cooldown and optional numeric identity are attached facts and can no
+  longer imply potion presence. PixelBeacon 13 adds `/pbquickslot` one-shot and
+  change-only field receipts plus the game's slot-state, cooldown, inventory,
+  selection, and activation convergence events (issue #24).
+
 - Pull-request CI now runs the pinned local merge gate on Windows and Linux,
   with dependency-diff review on proposed changes. CodeQL analyzes Rust changes
   and runs weekly, while Dependabot groups routine Cargo and GitHub Actions
@@ -37,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The main quickslot readout now shows classification, potion availability, and
+  cooldown instead of an ambiguous cooldown plus raw item number. Auto-potion
+  input remains explicitly gated until issue #25 consumes the verified state.
+
 - Routine dependency maintenance updates serde, serde_json, time, dirs,
   windows-sys, ureq, eframe, and the matching egui test harness. The ureq 3
   migration preserves the five-second whole-request timeout, and the eframe
@@ -61,6 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-03: Remove `GetItemLinkOnUseAbilityInfo` as a quickslot acceptance
+  predicate. ESO's action-button source bases slot truth on action type, bound ID,
+  count, usability failures, and cooldown; on-use metadata remains diagnostic
+  context only. One dedicated B20 discriminant is the smallest protocol change
+  that keeps classification independent from cooldown and identity.
 
 - 2026-09-03: Adopt the sibling-project pull-request baseline without copying
   their product-specific matrices. ESO Weave runs only its canonical Rust gate

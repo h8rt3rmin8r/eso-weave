@@ -7,9 +7,10 @@ use eso_weave::pixelbus::{
     fishing_signal, grid_extent, grid_position, grid_rows, load_reader_config, poll_interval,
     sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
     CombatSignal, CooldownSet, FishingSignal, MenuSurface, MockSampler, MovementSignal,
-    PixelBusEvent, PixelBusReader, QuickslotState, ReaderConfig, ResourceLevel, ResourceSet, Rgb,
-    Size, SlotCooldown, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS,
-    DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    PixelBusEvent, PixelBusReader, QuickslotClassification, QuickslotNonPotionKind,
+    QuickslotPotionAvailability, QuickslotState, QuickslotUnavailableReason, ReaderConfig,
+    ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown, WeaponBarSignal, WeaponClass,
+    BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
@@ -414,6 +415,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (3, 3),
                 (5, 3),
                 (7, 3),
+                (9, 3),
             ],
             (32u32, 4u32),
         ),
@@ -441,6 +443,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (6, 6),
                 (10, 6),
                 (14, 6),
+                (18, 6),
             ],
             (64, 8),
         ),
@@ -468,6 +471,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (12, 12),
                 (20, 12),
                 (28, 12),
+                (36, 12),
             ],
             (128, 16),
         ),
@@ -495,6 +499,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (24, 24),
                 (40, 24),
                 (56, 24),
+                (72, 24),
             ],
             (256, 32),
         ),
@@ -522,6 +527,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (48, 48),
                 (80, 48),
                 (112, 48),
+                (144, 48),
             ],
             (512, 64),
         ),
@@ -540,7 +546,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 20);
+    assert_eq!(NUM_BLOCKS, 21);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -1750,7 +1756,7 @@ fn the_capture_region_is_two_rows_now_that_the_count_has_crossed() {
     assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
 
     // The shape in full: a full first row, four blocks on the second.
-    assert_eq!(NUM_BLOCKS - COLUMNS, 4, "row 1 should hold four blocks");
+    assert_eq!(NUM_BLOCKS - COLUMNS, 5, "row 1 should hold five blocks");
 }
 
 // Slice 037: the six skill-cooldown blocks (B10 to B15).
@@ -1954,12 +1960,13 @@ fn cooldowns_clear_on_signal_loss() {
     assert!(events.contains(&PixelBusEvent::Cooldowns(CooldownSet::new_unknown())));
 }
 
-// Slice 038: the four quickslot blocks (B16 to B19), the first blocks on row 1.
+// Slice 042: the five quickslot blocks (B16 to B20), the first blocks on row 1.
 
 /// The four marks, mirroring the addon encoder. Kept as literals rather than
 /// imported, so a change to a companion constant has to be made here too and the
 /// two cannot drift together into agreeing on something wrong.
 const QUICKSLOT_MARK: u8 = 0x38;
+const QUICKSLOT_STATE_MARK: u8 = 0x76;
 const QUICKSLOT_ID_MARKS: [(&str, u8); 3] =
     [("id high", 0xB0), ("id middle", 0xDD), ("id low", 0xF3)];
 
@@ -1973,6 +1980,10 @@ fn quickslot(steps: u8) -> Rgb {
 /// One identity byte block color.
 fn quickslot_id(byte: u8, mark: u8) -> Rgb {
     Rgb::new(byte, mark, 255 - byte)
+}
+
+fn quickslot_state(code: u8) -> Rgb {
+    Rgb::new(code, QUICKSLOT_STATE_MARK, 255 - code)
 }
 
 /// The three identity blocks for an identity, most significant byte first.
@@ -1992,8 +2003,134 @@ fn decoded_quickslot(steps: u8, id: u32) -> QuickslotState {
         hi,
         mid,
         lo,
+        Some(quickslot_state(0xD0)),
         ReaderConfig::default().tolerance,
     )
+}
+
+#[test]
+fn decode_quickslot_maps_every_explicit_discriminant() {
+    let t = ReaderConfig::default().tolerance;
+    let cases = [
+        (
+            0x10,
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::UnsupportedApi),
+        ),
+        (
+            0x20,
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::InvalidSelection),
+        ),
+        (
+            0x30,
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::InconsistentFacts),
+        ),
+        (0x40, QuickslotClassification::Empty),
+        (
+            0x50,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Item),
+        ),
+        (
+            0x60,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Collectible),
+        ),
+        (
+            0x70,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuestItem),
+        ),
+        (
+            0x80,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Emote),
+        ),
+        (
+            0x90,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuickChat),
+        ),
+        (
+            0xA0,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Other),
+        ),
+        (
+            0xB0,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Depleted),
+        ),
+        (
+            0xC0,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Blocked),
+        ),
+        (
+            0xD0,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
+        ),
+    ];
+    let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
+    for (code, expected) in cases {
+        let state = decode_quickslot(
+            Some(quickslot(0)),
+            hi,
+            mid,
+            lo,
+            Some(quickslot_state(code)),
+            t,
+        );
+        assert_eq!(state.classification, expected, "state code {code:#04X}");
+        assert_eq!(state.item_id.is_some(), state.is_potion());
+        assert_eq!(state.is_usable_potion(), code == 0xD0);
+        assert_eq!(state.authorizes_auto_potion(), code == 0xD0);
+    }
+}
+
+#[test]
+fn explicit_classification_is_independent_from_cooldown_and_identity() {
+    let t = ReaderConfig::default().tolerance;
+    for steps in [0, 1, 254, 255] {
+        let state = decode_quickslot(
+            Some(quickslot(steps)),
+            None,
+            None,
+            None,
+            Some(quickslot_state(0xD0)),
+            t,
+        );
+        assert!(state.is_potion(), "cooldown payload {steps} changed class");
+        assert!(state.is_usable_potion());
+        assert_eq!(state.item_id, None);
+    }
+}
+
+#[test]
+fn missing_and_corrupt_state_blocks_fail_closed() {
+    let t = ReaderConfig::default().tolerance;
+    let legacy = decode_quickslot(Some(quickslot(0)), None, None, None, None, t);
+    assert_eq!(
+        legacy.classification,
+        QuickslotClassification::Unavailable(QuickslotUnavailableReason::LegacyProtocol)
+    );
+    let corrupt = decode_quickslot(
+        Some(quickslot(0)),
+        None,
+        None,
+        None,
+        Some(Rgb::new(0xD0, QUICKSLOT_STATE_MARK, 0)),
+        t,
+    );
+    assert_eq!(
+        corrupt.classification,
+        QuickslotClassification::Unavailable(QuickslotUnavailableReason::CorruptProtocol)
+    );
+    assert!(!legacy.is_potion() && !corrupt.is_potion());
+}
+
+#[test]
+fn quickslot_discriminant_survives_capture_drift_within_tolerance() {
+    let t = ReaderConfig::default().tolerance;
+    for delta in 0..=t {
+        let sample = Rgb::new(0xD0 + delta, QUICKSLOT_STATE_MARK + delta, 0x2F - delta);
+        let state = decode_quickslot(Some(quickslot(0)), None, None, None, Some(sample), t);
+        assert_eq!(
+            state.classification,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Usable)
+        );
+    }
 }
 
 #[test]
@@ -2044,16 +2181,23 @@ fn decode_quickslot_reports_no_identity_without_a_potion() {
     // describes a slot with nothing usable in it.
     let t = ReaderConfig::default().tolerance;
     let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
-    let state = decode_quickslot(Some(quickslot(255)), hi, mid, lo, t);
+    let state = decode_quickslot(
+        Some(quickslot(255)),
+        hi,
+        mid,
+        lo,
+        Some(quickslot_state(0x40)),
+        t,
+    );
     assert_eq!(state.cooldown, SlotCooldown::Unknown);
     assert_eq!(state.item_id, None);
-    assert!(!state.has_potion());
+    assert!(!state.is_potion());
 }
 
 #[test]
 fn a_quickslot_identity_never_exists_without_a_potion() {
     // The invariant from the data model, over every combination of the four
-    // blocks decoding or not: item_id being present implies has_potion, always.
+    // blocks decoding or not: item_id being present implies is_potion, always.
     let t = ReaderConfig::default().tolerance;
     let junk = Rgb::new(0x11, 0x22, 0x33);
     let (good_hi, good_mid, good_lo) = quickslot_id_blocks(0x12_3456);
@@ -2062,10 +2206,11 @@ fn a_quickslot_identity_never_exists_without_a_potion() {
         for hi in [None, Some(junk), good_hi] {
             for mid in [None, Some(junk), good_mid] {
                 for lo in [None, Some(junk), good_lo] {
-                    let state = decode_quickslot(status, hi, mid, lo, t);
+                    let state =
+                        decode_quickslot(status, hi, mid, lo, Some(quickslot_state(0xD0)), t);
                     if state.item_id.is_some() {
                         assert!(
-                            state.has_potion(),
+                            state.is_potion(),
                             "an identity was reported with no potion: {state:?}"
                         );
                     }
@@ -2087,7 +2232,15 @@ fn decode_quickslot_rejects_every_other_blocks_marker() {
         if other.abs_diff(QUICKSLOT_MARK) > t {
             let wrong = Rgb::new(24, other, 255 - 24);
             assert_eq!(
-                decode_quickslot(Some(wrong), None, None, None, t).cooldown,
+                decode_quickslot(
+                    Some(wrong),
+                    None,
+                    None,
+                    None,
+                    Some(quickslot_state(0xD0)),
+                    t
+                )
+                .cooldown,
                 SlotCooldown::Unknown,
                 "{other_name} decoded as the quickslot cooldown"
             );
@@ -2108,7 +2261,14 @@ fn decode_quickslot_rejects_every_other_blocks_marker() {
                 1 => mid = wrong,
                 _ => lo = wrong,
             }
-            let state = decode_quickslot(Some(quickslot(10)), hi, mid, lo, t);
+            let state = decode_quickslot(
+                Some(quickslot(10)),
+                hi,
+                mid,
+                lo,
+                Some(quickslot_state(0xD0)),
+                t,
+            );
             assert_eq!(
                 state.item_id, None,
                 "{other_name} decoded as the quickslot {name} byte"
@@ -2125,8 +2285,8 @@ fn decode_quickslot_rejects_every_other_blocks_marker() {
 #[test]
 fn a_partial_identity_is_never_assembled() {
     // FR-008 and SC-008. One unreadable byte means no identity, not an identity
-    // built from the two that read. The cooldown is untouched: the two halves
-    // degrade independently, which is what FR-012 shows the operator.
+    // built from the two that read. Classification and cooldown remain intact
+    // because all three facts degrade independently.
     let t = ReaderConfig::default().tolerance;
     for (position, (_, mark)) in QUICKSLOT_ID_MARKS.iter().enumerate() {
         let (mut hi, mut mid, mut lo) = quickslot_id_blocks(0x12_3456);
@@ -2137,15 +2297,29 @@ fn a_partial_identity_is_never_assembled() {
             1 => mid = bad,
             _ => lo = bad,
         }
-        let state = decode_quickslot(Some(quickslot(10)), hi, mid, lo, t);
+        let state = decode_quickslot(
+            Some(quickslot(10)),
+            hi,
+            mid,
+            lo,
+            Some(quickslot_state(0xD0)),
+            t,
+        );
         assert_eq!(state.item_id, None, "byte {position} broken");
         assert_eq!(state.cooldown, SlotCooldown::RemainingMs(500));
-        assert!(state.has_potion());
+        assert!(state.is_potion());
     }
 
     // An absent block is the same as an unreadable one.
     let (_, mid, lo) = quickslot_id_blocks(0x12_3456);
-    let state = decode_quickslot(Some(quickslot(10)), None, mid, lo, t);
+    let state = decode_quickslot(
+        Some(quickslot(10)),
+        None,
+        mid,
+        lo,
+        Some(quickslot_state(0xD0)),
+        t,
+    );
     assert_eq!(state.item_id, None);
     assert_eq!(state.cooldown, SlotCooldown::RemainingMs(500));
 }
@@ -2154,7 +2328,15 @@ fn a_partial_identity_is_never_assembled() {
 fn decode_quickslot_rejects_a_failed_checksum() {
     let t = ReaderConfig::default().tolerance;
     assert_eq!(
-        decode_quickslot(Some(Rgb::new(24, QUICKSLOT_MARK, 0)), None, None, None, t).cooldown,
+        decode_quickslot(
+            Some(Rgb::new(24, QUICKSLOT_MARK, 0)),
+            None,
+            None,
+            None,
+            Some(quickslot_state(0xD0)),
+            t
+        )
+        .cooldown,
         SlotCooldown::Unknown
     );
 }
@@ -2170,7 +2352,15 @@ fn no_arbitrary_color_decodes_as_a_quickslot_cooldown() {
         for g in (0..=255u16).step_by(3) {
             for b in (0..=255u16).step_by(3) {
                 let sample = Rgb::new(r as u8, g as u8, b as u8);
-                let decoded = decode_quickslot(Some(sample), None, None, None, t).cooldown;
+                let decoded = decode_quickslot(
+                    Some(sample),
+                    None,
+                    None,
+                    None,
+                    Some(quickslot_state(0xD0)),
+                    t,
+                )
+                .cooldown;
                 if decoded != SlotCooldown::Unknown {
                     // The only colors that may decode are the encoding itself.
                     assert!(
@@ -2188,7 +2378,7 @@ fn no_arbitrary_color_decodes_as_a_quickslot_cooldown() {
 }
 
 #[test]
-fn quickslot_points_are_the_first_four_blocks_of_row_one() {
+fn quickslot_points_are_the_first_five_blocks_of_row_one() {
     // FR-021: derived from the shared rule with no special case for the second
     // row. These are the first sample points in the project whose y is not
     // block_px / 2.
@@ -2202,6 +2392,7 @@ fn quickslot_points_are_the_first_four_blocks_of_row_one() {
             config.quickslot_id_hi_point(),
             config.quickslot_id_mid_point(),
             config.quickslot_id_lo_point(),
+            config.quickslot_state_point(),
         ];
         for (offset, point) in points.iter().enumerate() {
             let offset = offset as u32;
@@ -2226,6 +2417,7 @@ fn quickslot_change_emits_exactly_one_event_carrying_the_whole_state() {
     samples.quickslot_id_hi = hi;
     samples.quickslot_id_mid = mid;
     samples.quickslot_id_lo = lo;
+    samples.quickslot_state = Some(quickslot_state(0xD0));
 
     let events = reader.observe(samples, 0);
     let quickslots: Vec<_> = events
@@ -2236,16 +2428,23 @@ fn quickslot_change_emits_exactly_one_event_carrying_the_whole_state() {
     assert_eq!(
         quickslots[0],
         &PixelBusEvent::Quickslot(QuickslotState {
+            classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable,),
             cooldown: SlotCooldown::Ready,
             item_id: Some(0x12_3456),
         })
     );
 
-    // The same state again announces nothing.
-    let events = reader.observe(samples, 100);
-    assert!(!events
-        .iter()
-        .any(|e| matches!(e, PixelBusEvent::Quickslot(_))));
+    // Twenty unchanged samples announce nothing, proving the 1 Hz backstop does
+    // not turn a stable selection into repeated UI or automation events.
+    for tick in 1..=20 {
+        let events = reader.observe(samples, tick * 100);
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, PixelBusEvent::Quickslot(_))),
+            "unchanged tick {tick} emitted a quickslot event"
+        );
+    }
 
     // A swap moves the identity and the cooldown together, as one event.
     let (hi2, mid2, lo2) = quickslot_id_blocks(0x00_00AA);
@@ -2253,7 +2452,8 @@ fn quickslot_change_emits_exactly_one_event_carrying_the_whole_state() {
     samples.quickslot_id_hi = hi2;
     samples.quickslot_id_mid = mid2;
     samples.quickslot_id_lo = lo2;
-    let events = reader.observe(samples, 200);
+    samples.quickslot_state = Some(quickslot_state(0xD0));
+    let events = reader.observe(samples, 2_100);
     let quickslots: Vec<_> = events
         .iter()
         .filter(|e| matches!(e, PixelBusEvent::Quickslot(_)))
@@ -2262,6 +2462,7 @@ fn quickslot_change_emits_exactly_one_event_carrying_the_whole_state() {
     assert_eq!(
         quickslots[0],
         &PixelBusEvent::Quickslot(QuickslotState {
+            classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable,),
             cooldown: SlotCooldown::RemainingMs(2000),
             item_id: Some(0x00_00AA),
         })
@@ -2283,10 +2484,8 @@ fn an_addon_without_the_quickslot_blocks_reports_unknown_and_announces_nothing()
 }
 
 #[test]
-fn quickslot_clears_to_unknown_when_a_block_stops_decoding() {
-    // Follows the combat block: a stale "there is a ready potion" surviving an
-    // addon downgrade is exactly the false reading the consumer one slice away
-    // would act on.
+fn quickslot_clears_to_corrupt_when_the_discriminant_stops_decoding() {
+    // A stale positive classification must not survive damage to its authority.
     let mut reader = PixelBusReader::new(ReaderConfig::default());
     let mut samples = alive();
     let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
@@ -2294,13 +2493,20 @@ fn quickslot_clears_to_unknown_when_a_block_stops_decoding() {
     samples.quickslot_id_hi = hi;
     samples.quickslot_id_mid = mid;
     samples.quickslot_id_lo = lo;
+    samples.quickslot_state = Some(quickslot_state(0xD0));
     reader.observe(samples, 0);
 
-    samples.quickslot_status = Some(Rgb::new(0x11, 0x22, 0x33));
+    samples.quickslot_state = Some(Rgb::new(0x11, 0x22, 0x33));
     let events = reader.observe(samples, 100);
-    assert!(events.contains(&PixelBusEvent::Quickslot(QuickslotState::new_unknown())));
+    assert!(events.contains(&PixelBusEvent::Quickslot(QuickslotState {
+        classification: QuickslotClassification::Unavailable(
+            QuickslotUnavailableReason::CorruptProtocol,
+        ),
+        cooldown: SlotCooldown::Ready,
+        item_id: None,
+    })));
 
-    // And it does not announce again once already unknown.
+    // And it does not announce again once already corrupt.
     let events = reader.observe(samples, 200);
     assert!(!events
         .iter()
@@ -2318,6 +2524,7 @@ fn quickslot_clears_to_unknown_on_signal_loss() {
     samples.quickslot_id_hi = hi;
     samples.quickslot_id_mid = mid;
     samples.quickslot_id_lo = lo;
+    samples.quickslot_state = Some(quickslot_state(0xD0));
     reader.observe(samples, 0);
 
     let events = reader.observe(BlockSamples::default(), timeout + 500);

@@ -6,8 +6,9 @@ use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState,
-    ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotClassification,
+    QuickslotPotionAvailability, QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
+    WeaponBarSignal, WeaponClass,
 };
 use eso_weave::weave::types::{TimingConfig, WeaveType};
 use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
@@ -37,6 +38,7 @@ fn clearing_game_observations_restores_every_dormant_value() {
         magicka: ResourceLevel::Percent(30),
     });
     engine.set_quickslot(QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::Ready,
         item_id: Some(42),
     });
@@ -481,6 +483,7 @@ fn quickslot_state_changes_no_engine_behavior() {
     // The case a future consumer exists to act on: a potion, ready now.
     assert_eq!(
         run(QuickslotState {
+            classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
             cooldown: SlotCooldown::Ready,
             item_id: Some(0x12_3456),
         }),
@@ -489,6 +492,7 @@ fn quickslot_state_changes_no_engine_behavior() {
     // And one still cooling down, which is the case it must NOT act on.
     assert_eq!(
         run(QuickslotState {
+            classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
             cooldown: SlotCooldown::RemainingMs(4000),
             item_id: Some(0x12_3456),
         }),
@@ -497,6 +501,7 @@ fn quickslot_state_changes_no_engine_behavior() {
     // A potion whose identity could not be read in full.
     assert_eq!(
         run(QuickslotState {
+            classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
             cooldown: SlotCooldown::Ready,
             item_id: None,
         }),
@@ -509,12 +514,13 @@ fn quickslot_state_round_trips_through_the_engine() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     assert_eq!(engine.quickslot(), QuickslotState::new_unknown());
     let ready = QuickslotState {
+        classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::Ready,
         item_id: Some(42),
     };
     engine.set_quickslot(ready);
     assert_eq!(engine.quickslot(), ready);
-    assert!(engine.quickslot().has_potion());
+    assert!(engine.quickslot().is_potion());
     engine.set_quickslot(QuickslotState::new_unknown());
-    assert!(!engine.quickslot().has_potion());
+    assert!(!engine.quickslot().is_potion());
 }

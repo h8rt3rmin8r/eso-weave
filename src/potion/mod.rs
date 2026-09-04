@@ -36,6 +36,10 @@ use crate::config::{Notice, NoticeKind};
 use crate::input::{InputBackend, Key, Transition};
 use crate::pixelbus::{QuickslotState, ResourceLevel, ResourceSet, SlotCooldown};
 
+/// S042 observes explicit quickslot truth but does not activate its automation
+/// consumer. Issue #25 removes this gate after the end-to-end matrix is proven.
+pub const EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED: bool = false;
+
 /// The largest accepted retry interval, in milliseconds.
 const MAX_RETRY_MS: u32 = 600_000;
 
@@ -209,10 +213,11 @@ pub fn evaluate(
             return Err(Block::RetryTooSoon);
         }
     }
-    // `has_potion` is `cooldown != Unknown`, so this rejects an unreadable
-    // quickslot as well as an empty or non-potion one. The cooldown check below is
-    // still needed: `RemainingMs` passes here and fails there.
-    if !inputs.readings.quickslot.has_potion() {
+    // Presence and usability come only from B20's explicit classification. The
+    // cooldown check remains independent: a usable potion can still be cooling
+    // down. Runtime activation of this consumer is held by the S042 gate above
+    // until issue #25 completes its end-to-end matrix.
+    if !inputs.readings.quickslot.authorizes_auto_potion() {
         return Err(Block::NoPotion);
     }
     if inputs.readings.quickslot.cooldown != SlotCooldown::Ready {
