@@ -205,8 +205,15 @@ fn s043_signal_loss_preserves_the_request_and_heartbeat_recovers() {
     assert!(sink.ops.is_empty());
 
     controller.on_heartbeat();
-    assert!(matches!(
+    assert_eq!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
+    assert!(sink.ops.is_empty());
+
+    controller.set_gated(false);
+    assert!(matches!(
+        controller.tick(eligible_readings(), 30_000, &mut sink),
         AutoPotionState::Triggered(_)
     ));
     assert_eq!(
@@ -560,8 +567,32 @@ fn armed_controller() -> AutoPotionController {
     controller.set_game_active(true);
     controller.set_focused(true);
     controller.on_heartbeat();
+    // A positive gameplay-surface observation is required before synthesis.
+    controller.set_gated(false);
     controller.set_enabled(true);
     controller
+}
+
+#[test]
+fn startup_stays_gated_until_gameplay_surface_is_observed() {
+    let mut controller = AutoPotionController::new(config_all_watched());
+    controller.set_game_active(true);
+    controller.set_focused(true);
+    controller.on_heartbeat();
+    controller.set_enabled(true);
+
+    let mut sink = MockAutoPotionSink::new();
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
+    assert!(sink.ops.is_empty());
+
+    controller.set_gated(false);
+    assert!(matches!(
+        controller.tick(eligible_readings(), 20_000, &mut sink),
+        AutoPotionState::Triggered(_)
+    ));
 }
 
 #[test]
@@ -578,7 +609,7 @@ fn inactive_game_blocks_without_clearing_the_requested_toggle() {
 }
 
 #[test]
-fn game_exit_clears_a_stale_menu_gate_before_restart() {
+fn game_exit_requires_a_fresh_gameplay_surface_before_restart() {
     let mut controller = armed_controller();
     controller.set_gated(true);
     controller.set_game_active(false);
@@ -587,6 +618,13 @@ fn game_exit_clears_a_stale_menu_gate_before_restart() {
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
+    assert!(sink.ops.is_empty());
+
+    controller.set_gated(false);
+    assert_eq!(
+        controller.tick(eligible_readings(), 20_000, &mut sink),
         AutoPotionState::Triggered(TriggerCause {
             resource: AutoPotionResource::Health,
             observed_percent: 10,

@@ -970,8 +970,30 @@ fn a_signal_lost_event_blocks_auto_potion_without_clearing_the_request() {
             2,
             &mut potion_sink,
         ),
+        AutoPotionState::Blocked(BlockReason::GameContext),
+        "heartbeat must not substitute for a fresh gameplay-surface observation"
+    );
+
+    route_reader_event(
+        PixelBusEvent::MenuGate(Some(MenuSurface::None)),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        3,
+        &mut sink,
+    );
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                quickslot: QuickslotState::new_unknown(),
+            },
+            3,
+            &mut potion_sink,
+        ),
         AutoPotionState::Blocked(BlockReason::NoWatchedResource),
-        "heartbeat must clear the beacon blocker before the remaining rule runs"
+        "only positive gameplay-surface evidence may release the context blocker"
     );
 }
 

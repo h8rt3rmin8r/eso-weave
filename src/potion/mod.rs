@@ -430,7 +430,10 @@ impl AutoPotionController {
             game_active: false,
             focused: false,
             beacon_available: false,
-            gated: false,
+            // Fail closed until the reader positively observes the gameplay
+            // surface. A missing initial surface block emits no routing event,
+            // so an ungated default could synthesize before gameplay was proven.
+            gated: true,
             suspended: false,
             last_attempt_ms: None,
             state: AutoPotionState::Off,
@@ -517,7 +520,9 @@ impl AutoPotionController {
     pub fn set_game_active(&mut self, active: bool) {
         self.game_active = active;
         if !active {
-            self.gated = false;
+            // Surface evidence belongs to one game session. Require a fresh
+            // positive gameplay observation after the process returns.
+            self.gated = true;
         }
         self.apply_immediate_state();
     }
@@ -559,6 +564,9 @@ impl AutoPotionController {
     /// Records beacon signal loss without changing requested enablement.
     pub fn on_signal_lost(&mut self) {
         self.beacon_available = false;
+        // Do not reuse a gameplay observation across a signal outage. The first
+        // recovered heartbeat can precede a decodable surface block.
+        self.gated = true;
         self.apply_immediate_state();
     }
 
