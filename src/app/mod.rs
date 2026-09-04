@@ -35,7 +35,8 @@ use crate::pixelbus::{
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
 };
 use crate::potion::{
-    AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason, DormantReason,
+    AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
+    DormantReason,
 };
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
@@ -1760,12 +1761,14 @@ impl AppModel {
     }
 
     /// Reloads the live subsystems from the current settings, returning fallback
-    /// notices. Shared with startup.
+    /// notices.
     pub fn reload_from_settings(&mut self) -> Vec<Notice> {
         let mut notices = Vec::new();
         notices.extend(self.input.load_bindings(&self.settings));
         notices.extend(self.weave.lock().unwrap().load(&self.settings));
         self.weave.lock().unwrap().apply_activity(&self.input);
+        let potion_config = AutoPotionConfig::load(&self.settings.potion, &mut notices);
+        self.potion.lock().unwrap().set_config(potion_config);
         self.beacon_prefs = beacon::prefs_from_value(&self.settings.beacon);
         self.log.set_level(self.settings.logging.level);
         self.log

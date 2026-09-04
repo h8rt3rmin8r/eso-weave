@@ -90,7 +90,9 @@ pub fn route_reader_event(
             return;
         }
         PixelBusEvent::MenuGate(surface) => {
-            let gates = surface.is_some_and(crate::pixelbus::MenuSurface::gates);
+            // Missing surface evidence is not gameplay. Only a positively decoded
+            // gameplay surface may release any synthesis path.
+            let gates = surface.is_none_or(crate::pixelbus::MenuSurface::gates);
             input.set_menu_gated(gates);
             fishing.set_gated(gates);
             // The auto-potion controller is gated directly, for the same reason

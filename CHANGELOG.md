@@ -55,7 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resource, explicit usable-potion, cooldown, and retry evidence before submitting
   one complete quickslot down/up attempt. Signal loss blocks the feature without
   clearing the user's request. This intentionally corrects S039, which treated a
-  temporary beacon outage as a settings change.
+  temporary beacon outage as a settings change. Missing or corrupt surface
+  evidence now keeps the shared synthesis gate closed, and applied auto-potion
+  settings update the live controller without a restart.
 
 - The main quickslot readout now shows classification, potion availability, and
   cooldown instead of an ambiguous cooldown plus raw item number.

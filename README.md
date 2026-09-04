@@ -247,7 +247,7 @@ It presses the key only when all of these hold:
 - ESO is active and focused, and the PixelBeacon signal is fresh
 - The active quickslot explicitly holds a usable potion, and its cooldown has finished
 - The minimum retry interval since the last attempt has passed
-- ESO Weave is not suspended, and no game menu or text field is open
+- ESO Weave is not suspended, and Game Context is positively detected as Gameplay
 
 ### What it will not do
 

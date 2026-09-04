@@ -77,7 +77,7 @@
 - [x] T016 Document S043 behavior and the S039 lifecycle correction in `docs/ESO-Weave-Specification.md`, `CHANGELOG.md`, and any directly affected architecture comments
 - [x] T017 Run `specify check`, placeholder checks, punctuation checks, UTF-8/BOM checks, and the full repository gate
 - [x] T018 Review the complete diff for scope, safety, issue linkage, and absence of unrelated changes
-- [ ] T019 Push `codex/043-auto-potion-restoration`, open the official pull request referencing issue #25 without closing it, and wait for CI and third-party review
+- [x] T019 Push `codex/043-auto-potion-restoration`, open the official pull request referencing issue #25 without closing it, and wait for CI and third-party review
 - [ ] T020 Address every review comment, optionally request at most one authorized second Codex round, and stop for the user's final review and merge ritual once all checks are green
 
 ---
@@ -105,6 +105,7 @@
 - Inherited baseline on 2026-09-03: format, Clippy, all tests, and rustdoc passed. Rustdoc reported six pre-existing link warnings that the final documentation gate must resolve or explicitly reclassify.
 - Source audit confirmed the controller reads S041-provided game/focus state and the normalized S042 `QuickslotState`; no parallel process, focus, item, or cooldown detector is required.
 - Final local gate on 2026-09-03: format, warning-denied Clippy, all targets and features, and warning-denied private-item rustdoc passed. The six inherited rustdoc link warnings were corrected as documentation-only cleanup.
+- First Codex review on PR #39 identified two valid safety defects: unavailable menu evidence released the shared gate, and applied potion settings did not refresh the live controller. Both were reproduced by failing tests and corrected before the authorized second review round.
 - Real-client verification remains deferred until a fresh release exists.
 - Issue #25 must remain open after this pull request unless its post-release receipt is completed separately.
 - No addon protocol, dependency, or persistent enablement change belongs in this slice.

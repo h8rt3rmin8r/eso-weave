@@ -447,6 +447,14 @@ impl AutoPotionController {
         &self.config
     }
 
+    /// Replaces the live settings without changing request or lifecycle state.
+    pub fn set_config(&mut self, config: AutoPotionConfig) {
+        if config != self.config {
+            tracing::debug!(target: "eso_weave::potion", "auto-potion settings updated");
+        }
+        self.config = config;
+    }
+
     /// When the key was last pressed, if ever.
     pub fn last_attempt_ms(&self) -> Option<u64> {
         self.last_attempt_ms

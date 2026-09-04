@@ -398,6 +398,16 @@ fn model_with_beacon_root(root: &std::path::Path) -> AppModel {
 }
 
 fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
+    model_with_clock_and_potion(root, clock).0
+}
+
+fn model_with_clock_and_potion(
+    root: &std::path::Path,
+    clock: Instant,
+) -> (
+    AppModel,
+    Arc<Mutex<eso_weave::potion::AutoPotionController>>,
+) {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     engine.set_game_active(true);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
@@ -416,19 +426,21 @@ fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
         ..Settings::default()
     };
 
-    AppModel::new(
+    let potion = Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    )));
+    let model = AppModel::new(
         Arc::new(engine),
         weave,
         fishing,
         Box::new(MockFishingSink::new()),
-        Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
-            eso_weave::potion::AutoPotionConfig::default(),
-        ))),
+        potion.clone(),
         log,
         settings,
         None,
         clock,
-    )
+    );
+    (model, potion)
 }
 
 #[test]
@@ -581,6 +593,27 @@ fn log_filter_and_settings_level_stay_linked() {
     model.apply_intent(UiIntent::ToggleLogPanel(true));
     model.apply_intent(UiIntent::ToggleLogPanel(false));
     assert_eq!(model.settings_form().logging.level, LevelName::Warn);
+}
+
+#[test]
+fn applying_settings_refreshes_the_live_auto_potion_controller() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut model, potion) = model_with_clock_and_potion(dir.path(), Instant::now());
+    let mut form = model.settings_form();
+    form.potion.health = eso_weave::potion::ResourceWatch {
+        enabled: true,
+        threshold: 42,
+    };
+    form.potion.quickslot_key = eso_weave::input::Key::X;
+    form.potion.retry_interval_ms = 2345;
+
+    model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+
+    let config = *potion.lock().unwrap().config();
+    assert!(config.health.enabled);
+    assert_eq!(config.health.threshold, 42);
+    assert_eq!(config.quickslot_key, eso_weave::input::Key::X);
+    assert_eq!(config.retry_interval_ms, 2345);
 }
 
 #[test]
@@ -742,6 +775,35 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
     );
     assert!(!input.is_menu_gated());
     assert_eq!(weave.menu(), MenuSurface::None);
+
+    // Missing or corrupt surface evidence is not gameplay and must fail closed.
+    route_reader_event(
+        PixelBusEvent::MenuGate(None),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        3,
+        &mut sink,
+    );
+    assert!(input.is_menu_gated());
+
+    potion.set_game_active(true);
+    potion.set_focused(true);
+    potion.on_heartbeat();
+    potion.set_enabled(true);
+    let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                quickslot: QuickslotState::new_unknown(),
+            },
+            3,
+            &mut potion_sink,
+        ),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
 }
 
 // Slice 033: the resource readouts and routing.

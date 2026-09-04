@@ -769,7 +769,7 @@ hold, evaluated in this order:
 | 3 | The game is focused |
 | 4 | A fresh PixelBus heartbeat is available |
 | 5 | The application is not suspended |
-| 6 | No native game menu or text field is gating input |
+| 6 | The surface block is positively decoded as Gameplay |
 | 7 | At least one resource watch is enabled and at least one watched resource is fresh |
 | 8 | The active quickslot explicitly holds a usable potion |
 | 9 | The quickslot cooldown is ready |
