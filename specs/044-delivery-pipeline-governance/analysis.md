@@ -26,7 +26,9 @@
 
 Risk: pull request body and labels are attacker-controlled.
 
-Control: read-only permissions, environment transport, dependency-free parser, no secrets, and no `pull_request_target`.
+Control: read-only permissions, environment transport, dependency-free parser,
+base-commit enforcement, no secrets, and no `pull_request_target`. Proposed policy
+changes are tested separately from the trusted enforcement copy.
 
 ### False confidence from syntax-only validation
 

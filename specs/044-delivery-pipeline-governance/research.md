@@ -31,6 +31,11 @@
 
 **Rationale**: GitHub explicitly identifies pull request titles, bodies, branches, and similar context as attacker-controlled. Environment transport prevents metadata from becoming executable script source.
 
+The workflow tests the proposed policy copy but enforces the copy checked out
+from the base commit. S044 has a one-time bootstrap fallback because the base
+does not contain the new policy; once merged, normal pull requests cannot weaken
+the evaluator and its tests in the same change.
+
 **Source**: GitHub Docs, [Script injections](https://docs.github.com/en/actions/concepts/security/script-injections) and [Secure use reference](https://docs.github.com/en/actions/reference/security/secure-use).
 
 ## Decision 4: Keep exemptions narrow and visible

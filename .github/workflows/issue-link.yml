@@ -25,15 +25,29 @@ jobs:
     name: Check closing issue
     runs-on: ubuntu-latest
     steps:
-      - name: Check out policy implementation
+      - name: Check out proposed policy
         uses: actions/checkout@v7
+        with:
+          path: proposed
 
-      - name: Test issue-link policy
-        run: node --test .github/scripts/issue-link-policy.test.mjs
+      - name: Test proposed issue-link policy
+        run: node --test proposed/.github/scripts/issue-link-policy.test.mjs
+
+      - name: Check out trusted base policy
+        uses: actions/checkout@v7
+        with:
+          path: trusted
+          ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Enforce issue-link policy
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
-        run: node .github/scripts/issue-link-policy.mjs
+        run: |
+          if [ -f trusted/.github/scripts/issue-link-policy.mjs ]; then
+            node trusted/.github/scripts/issue-link-policy.mjs
+          else
+            echo "::notice::Bootstrapping the issue-link policy from this pull request."
+            node proposed/.github/scripts/issue-link-policy.mjs
+          fi
