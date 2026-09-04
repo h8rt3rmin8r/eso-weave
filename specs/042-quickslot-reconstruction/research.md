@@ -43,6 +43,11 @@ That collapse is the proven model defect.
 9. positive-stack usable potion as Potion(Usable)
 
 Cooldown and optional identity are attached facts. Neither may change the class.
+Because the game APIs do not provide an atomic snapshot, the publisher re-reads
+the selected slot, type, bound ID, link, count, and usability after collecting
+dependent facts. Any mismatch becomes Unavailable(InconsistentFacts). It does not
+equate `GetSlotBoundId` with `GetItemLinkItemId`, because the official API
+documents the former only as an action ID and does not promise matching domains.
 
 **Deviation from slice 038**: Remove `GetItemLinkOnUseAbilityInfo` as a gate.
 The official action-button logic uses action type, count, state failures, and

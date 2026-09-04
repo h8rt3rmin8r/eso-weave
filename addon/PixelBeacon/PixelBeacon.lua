@@ -624,6 +624,25 @@ local function computeQuickslot()
     facts.hasAbility = facts.linkPresent and GetItemLinkOnUseAbilityInfo ~= nil
         and GetItemLinkOnUseAbilityInfo(facts.link) or false
 
+    -- ESO exposes these facts as independent calls rather than an atomic
+    -- snapshot. Re-read the selected binding after the dependent facts so a
+    -- wheel edit cannot combine an old identity with new count/usability facts.
+    -- Do not compare boundId with GetItemLinkItemId: the documented contract
+    -- calls the former an actionId and does not guarantee those domains match.
+    facts.endingSlot = GetCurrentQuickslot()
+    facts.endingSlotType = GetSlotType(facts.slot, hotbar)
+    facts.endingBoundId = GetSlotBoundId(facts.slot, hotbar)
+    facts.endingLink = GetSlotItemLink(facts.slot, hotbar)
+    facts.endingCount = facts.endingSlotType == ACTION_TYPE_ITEM
+        and GetSlotItemCount(facts.slot, hotbar) or nil
+    facts.endingUsable = IsSlotUsable(facts.slot, hotbar)
+    facts.snapshotStable = facts.endingSlot == facts.slot
+        and facts.endingSlotType == facts.slotType
+        and facts.endingBoundId == facts.boundId
+        and facts.endingLink == facts.link
+        and facts.endingCount == facts.count
+        and facts.endingUsable == facts.usable
+
     -- Preserve the old pipeline's first failed predicate in the receipt. This is
     -- diagnostic evidence only; the reconstructed classifier below does not use
     -- the extra on-use metadata gate.
@@ -640,7 +659,9 @@ local function computeQuickslot()
     end
 
     local state
-    if facts.slotType == nil then
+    if not facts.snapshotStable then
+        state = QUICKSLOT_INCONSISTENT
+    elseif facts.slotType == nil then
         state = QUICKSLOT_INCONSISTENT
     elseif facts.slotType == ACTION_TYPE_NOTHING then
         state = QUICKSLOT_EMPTY
@@ -686,10 +707,11 @@ end
 
 local function quickslotDiagnostic(facts)
     return string.format(
-        "PixelBeacon quickslot oldFail=%s slot=%s hotbar=%s api=%s type=%s bound=%s link=%s itemType=%s count=%s ability=%s usable=%s cooldown=%s/%s global=%s globalType=%s state=0x%02X payload=%s/%s",
+        "PixelBeacon quickslot oldFail=%s slot=%s hotbar=%s api=%s stable=%s type=%s bound=%s link=%s itemType=%s count=%s ability=%s usable=%s cooldown=%s/%s global=%s globalType=%s state=0x%02X payload=%s/%s",
         diagnosticValue(facts.oldFail),
         diagnosticValue(facts.slot), diagnosticValue(facts.hotbarAvailable),
-        diagnosticValue(facts.apiAvailable), diagnosticValue(facts.slotType),
+        diagnosticValue(facts.apiAvailable), diagnosticValue(facts.snapshotStable),
+        diagnosticValue(facts.slotType),
         diagnosticValue(facts.boundId), diagnosticValue(facts.linkPresent),
         diagnosticValue(facts.itemType), diagnosticValue(facts.count),
         diagnosticValue(facts.hasAbility), diagnosticValue(facts.usable),

@@ -727,6 +727,7 @@ fn quickslot_diagnostics_are_opt_in_bounded_and_event_complete() {
         "quickslotWatch",
         "quickslotDiagnosticKey",
         "oldFail=",
+        "stable=",
         "EVENT_ACTIVE_QUICKSLOT_CHANGED",
         "EVENT_ACTION_SLOT_UPDATED",
         "EVENT_ACTION_SLOT_STATE_UPDATED",
@@ -750,6 +751,37 @@ fn quickslot_diagnostics_are_opt_in_bounded_and_event_complete() {
         !lua.contains("abilityDescription"),
         "diagnostics must not retain localized item descriptions"
     );
+}
+
+#[test]
+fn quickslot_classification_requires_a_stable_double_read() {
+    let lua = beacon::LUA;
+    let first_bound = lua
+        .find("facts.boundId = GetSlotBoundId")
+        .expect("quickslot sampling must read the initial bound id");
+    let ending_bound = lua
+        .find("facts.endingBoundId = GetSlotBoundId")
+        .expect("quickslot sampling must re-read the bound id");
+    let stability_gate = lua
+        .find("if not facts.snapshotStable then")
+        .expect("classification must fail closed on a mixed snapshot");
+
+    assert!(first_bound < ending_bound);
+    assert!(ending_bound < stability_gate);
+    for required in [
+        "facts.endingSlot == facts.slot",
+        "facts.endingSlotType == facts.slotType",
+        "facts.endingBoundId == facts.boundId",
+        "facts.endingLink == facts.link",
+        "facts.endingCount == facts.count",
+        "facts.endingUsable == facts.usable",
+        "state = QUICKSLOT_INCONSISTENT",
+    ] {
+        assert!(
+            lua.contains(required),
+            "mixed quickslot snapshots are not guarded by {required}"
+        );
+    }
 }
 
 /// Slice 038: the manifest advances so the beacon manager offers the update, and

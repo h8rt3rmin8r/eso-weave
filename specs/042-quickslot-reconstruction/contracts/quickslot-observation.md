@@ -47,6 +47,9 @@ or code becomes Unavailable(CorruptProtocol).
 - Empty, non-potion, and unavailable states discard identity bytes.
 - A valid Potion classification may have Unknown cooldown or absent identity;
   neither changes its classification or availability.
+- The publisher double-reads the selection and stable binding facts around each
+  sample. Any mismatch publishes Unavailable(InconsistentFacts), never a positive
+  potion class.
 - The application-level automation consumer gate remains false in S042 regardless of the decoded state.
 
 ## Cross-language agreement
