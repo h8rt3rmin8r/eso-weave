@@ -13,15 +13,14 @@
 
 use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{
-    QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
-    ResourceSet, SlotCooldown,
+    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    ResourceLevel, ResourceSet, SlotCooldown,
 };
 use eso_weave::potion::{
-    evaluate, AutoPotionConfig, AutoPotionController, Block, MockAutoPotionSink, PotionInputs,
-    PotionReadings, ResourceWatch, EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED,
+    evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState,
+    BlockReason, DormantReason, MockAutoPotionSink, PotionInputs, PotionReadings, ResourceWatch,
+    TriggerCause,
 };
-
-const _: () = assert!(!EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED);
 
 /// A configuration with all three resources watched at 50 percent.
 fn config_all_watched() -> AutoPotionConfig {
@@ -70,10 +69,150 @@ fn eligible_inputs() -> PotionInputs {
     PotionInputs {
         game_active: true,
         focused: true,
+        beacon_available: true,
         readings: eligible_readings(),
         suspended: false,
         gated: false,
     }
+}
+
+#[test]
+fn s043_effective_state_distinguishes_ready_triggered_and_every_runtime_family() {
+    let config = config_all_watched();
+    let mut inputs = eligible_inputs();
+
+    assert_eq!(
+        evaluate(inputs, &config, false, None, 10_000),
+        AutoPotionState::Off
+    );
+
+    inputs.game_active = false;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Dormant(DormantReason::GameInactive)
+    );
+    inputs.game_active = true;
+    inputs.focused = false;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Dormant(DormantReason::Unfocused)
+    );
+    inputs.focused = true;
+    inputs.beacon_available = false;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::BeaconUnavailable)
+    );
+    inputs.beacon_available = true;
+    inputs.suspended = true;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::Suspended)
+    );
+    inputs.suspended = false;
+    inputs.gated = true;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
+
+    let mut no_watches = config;
+    no_watches.health.enabled = false;
+    no_watches.magicka.enabled = false;
+    no_watches.stamina.enabled = false;
+    inputs.gated = false;
+    assert_eq!(
+        evaluate(inputs, &no_watches, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::NoWatchedResource)
+    );
+
+    inputs.readings.resources = ResourceSet::new_unknown();
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::ResourcesUnavailable)
+    );
+
+    inputs.readings.resources = levels(90, 90, 90);
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Ready
+    );
+
+    inputs.readings.resources = levels(10, 10, 10);
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
+    );
+}
+
+#[test]
+fn s043_quickslot_states_expose_their_specific_blocker() {
+    let config = config_all_watched();
+    let mut inputs = eligible_inputs();
+
+    inputs.readings.quickslot = QuickslotState::new_unknown();
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::QuickslotUnavailable)
+    );
+    inputs.readings.quickslot.classification = QuickslotClassification::Empty;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::NoPotion)
+    );
+    inputs.readings.quickslot.classification =
+        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Collectible);
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::NoPotion)
+    );
+    inputs.readings.quickslot.classification =
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Depleted);
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::PotionUnavailable)
+    );
+    inputs.readings.quickslot.classification =
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Blocked);
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::PotionUnavailable)
+    );
+    inputs.readings.quickslot.classification =
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Usable);
+    inputs.readings.quickslot.cooldown = SlotCooldown::Unknown;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::PotionCooldown)
+    );
+}
+
+#[test]
+fn s043_signal_loss_preserves_the_request_and_heartbeat_recovers() {
+    let mut controller = armed_controller();
+    let mut sink = MockAutoPotionSink::new();
+
+    controller.on_signal_lost();
+    assert!(controller.enabled());
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::BeaconUnavailable)
+    );
+    assert!(sink.ops.is_empty());
+
+    controller.on_heartbeat();
+    assert!(matches!(
+        controller.tick(eligible_readings(), 20_000, &mut sink),
+        AutoPotionState::Triggered(_)
+    ));
+    assert_eq!(
+        sink.ops,
+        vec![(Key::Q, Transition::Down), (Key::Q, Transition::Up)]
+    );
 }
 
 /// Eligible inputs with the resource levels replaced and everything else
@@ -90,7 +229,7 @@ fn inputs_at(resources: ResourceSet) -> PotionInputs {
 }
 
 /// Evaluates with everything satisfied unless the caller has changed it.
-fn eval(inputs: PotionInputs, enabled: bool, last: Option<u64>, now: u64) -> Result<(), Block> {
+fn eval(inputs: PotionInputs, enabled: bool, last: Option<u64>, now: u64) -> AutoPotionState {
     evaluate(inputs, &config_all_watched(), enabled, last, now)
 }
 
@@ -102,7 +241,14 @@ fn eval(inputs: PotionInputs, enabled: bool, last: Option<u64>, now: u64) -> Res
 fn it_fires_when_every_condition_is_satisfied() {
     // If this ever stops holding, every isolation test below becomes vacuous:
     // they would all "pass" by blocking for the wrong reason.
-    assert_eq!(eval(eligible_inputs(), true, None, 10_000), Ok(()));
+    assert_eq!(
+        eval(eligible_inputs(), true, None, 10_000),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +260,7 @@ fn it_fires_when_every_condition_is_satisfied() {
 fn condition_1_disabled_blocks_and_says_so() {
     assert_eq!(
         eval(eligible_inputs(), false, None, 10_000),
-        Err(Block::Disabled)
+        AutoPotionState::Off
     );
 }
 
@@ -122,28 +268,40 @@ fn condition_1_disabled_blocks_and_says_so() {
 fn condition_2_inactive_game_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.game_active = false;
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::GameInactive));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Dormant(DormantReason::GameInactive)
+    );
 }
 
 #[test]
 fn condition_3_unfocused_game_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.focused = false;
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::Unfocused));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Dormant(DormantReason::Unfocused)
+    );
 }
 
 #[test]
 fn condition_4_suspended_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.suspended = true;
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::Suspended));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::Suspended)
+    );
 }
 
 #[test]
 fn condition_5_gated_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.gated = true;
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::Gated));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
 }
 
 #[test]
@@ -151,7 +309,7 @@ fn condition_6_retry_too_soon_blocks_and_says_so() {
     let interval = u64::from(config_all_watched().retry_interval_ms);
     assert_eq!(
         eval(eligible_inputs(), true, Some(10_000), 10_000 + interval - 1),
-        Err(Block::RetryTooSoon)
+        AutoPotionState::Blocked(BlockReason::RetryInterval)
     );
 }
 
@@ -159,7 +317,10 @@ fn condition_6_retry_too_soon_blocks_and_says_so() {
 fn condition_7_no_potion_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.readings.quickslot = QuickslotState::new_unknown();
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoPotion));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::QuickslotUnavailable)
+    );
 }
 
 #[test]
@@ -170,14 +331,17 @@ fn condition_8_on_cooldown_blocks_and_says_so() {
         cooldown: SlotCooldown::RemainingMs(4000),
         item_id: Some(0x12_3456),
     };
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::OnCooldown));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::PotionCooldown)
+    );
 }
 
 #[test]
 fn condition_9_no_resource_low_blocks_and_says_so() {
     let mut inputs = eligible_inputs();
     inputs.readings.resources = levels(90, 90, 90);
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoResourceLow));
+    assert_eq!(eval(inputs, true, None, 10_000), AutoPotionState::Ready);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +359,15 @@ fn any_single_low_resource_fires_because_the_rule_is_an_or() {
     ] {
         assert_eq!(
             eval(inputs_at(resources), true, None, 10_000),
-            Ok(()),
+            AutoPotionState::Triggered(TriggerCause {
+                resource: match name {
+                    "health" => AutoPotionResource::Health,
+                    "magicka" => AutoPotionResource::Magicka,
+                    _ => AutoPotionResource::Stamina,
+                },
+                observed_percent: 10,
+                threshold_percent: 50,
+            }),
             "{name} alone being low should fire"
         );
     }
@@ -209,7 +381,7 @@ fn a_disabled_watch_contributes_nothing_however_low_it_is() {
     let inputs = inputs_at(levels(0, 100, 100));
     assert_eq!(
         evaluate(inputs, &config, true, None, 10_000),
-        Err(Block::NoResourceLow)
+        AutoPotionState::Ready
     );
 }
 
@@ -219,7 +391,7 @@ fn with_every_watch_disabled_nothing_ever_fires() {
     let inputs = inputs_at(levels(0, 0, 0));
     assert_eq!(
         evaluate(inputs, &config, true, None, 10_000),
-        Err(Block::NoResourceLow),
+        AutoPotionState::Blocked(BlockReason::NoWatchedResource),
         "an empty watch set must not fall back to watching anything"
     );
 }
@@ -256,7 +428,7 @@ fn an_unreadable_resource_is_never_low_at_any_threshold() {
             }
             assert_eq!(
                 evaluate(inputs_at(resources), &config, true, None, 10_000),
-                Err(Block::NoResourceLow),
+                AutoPotionState::Blocked(BlockReason::ResourcesUnavailable),
                 "unknown {resource} satisfied a threshold of {threshold}"
             );
         }
@@ -275,7 +447,10 @@ fn an_unreadable_quickslot_is_not_a_potion_and_an_unknown_cooldown_is_not_zero()
         cooldown: SlotCooldown::Unknown,
         item_id: None,
     };
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoPotion));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::QuickslotUnavailable)
+    );
 
     // An identity attached to an unavailable classification is still not a
     // potion. Identity is diagnostic context, never a safety input.
@@ -286,7 +461,10 @@ fn an_unreadable_quickslot_is_not_a_potion_and_an_unknown_cooldown_is_not_zero()
         cooldown: SlotCooldown::Unknown,
         item_id: Some(42),
     };
-    assert_eq!(eval(inputs, true, None, 10_000), Err(Block::NoPotion));
+    assert_eq!(
+        eval(inputs, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::QuickslotUnavailable)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +482,7 @@ fn the_comparison_is_at_or_below_not_strictly_below() {
         let inputs = inputs_at(levels(level, 100, 100));
         let outcome = eval(inputs, true, None, 10_000);
         assert_eq!(
-            outcome.is_ok(),
+            matches!(outcome, AutoPotionState::Triggered(_)),
             should_fire,
             "at level {level} against threshold {threshold}"
         );
@@ -323,18 +501,24 @@ fn thresholds_of_zero_and_one_hundred_are_both_valid() {
         ..AutoPotionConfig::default()
     };
     let empty = inputs_at(levels(0, 100, 100));
-    assert_eq!(evaluate(empty, &config, true, None, 10_000), Ok(()));
+    assert!(matches!(
+        evaluate(empty, &config, true, None, 10_000),
+        AutoPotionState::Triggered(_)
+    ));
     let one_percent = inputs_at(levels(1, 100, 100));
     assert_eq!(
         evaluate(one_percent, &config, true, None, 10_000),
-        Err(Block::NoResourceLow)
+        AutoPotionState::Ready
     );
 
     // A hundred fires whenever the resource is readable. Unusual, coherent, and
     // the operator's choice.
     config.health.threshold = 100;
     let full = inputs_at(levels(100, 100, 100));
-    assert_eq!(evaluate(full, &config, true, None, 10_000), Ok(()));
+    assert!(matches!(
+        evaluate(full, &config, true, None, 10_000),
+        AutoPotionState::Triggered(_)
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -350,15 +534,19 @@ fn the_retry_interval_bounds_the_rate_independently_of_the_cooldown() {
     // cooldown the last press caused.
     assert_eq!(
         eval(eligible_inputs(), true, Some(last), last),
-        Err(Block::RetryTooSoon)
+        AutoPotionState::Blocked(BlockReason::RetryInterval)
     );
     assert_eq!(
         eval(eligible_inputs(), true, Some(last), last + interval - 1),
-        Err(Block::RetryTooSoon)
+        AutoPotionState::Blocked(BlockReason::RetryInterval)
     );
     assert_eq!(
         eval(eligible_inputs(), true, Some(last), last + interval),
-        Ok(())
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
     );
 }
 
@@ -371,6 +559,7 @@ fn armed_controller() -> AutoPotionController {
     let mut controller = AutoPotionController::new(config_all_watched());
     controller.set_game_active(true);
     controller.set_focused(true);
+    controller.on_heartbeat();
     controller.set_enabled(true);
     controller
 }
@@ -382,7 +571,7 @@ fn inactive_game_blocks_without_clearing_the_requested_toggle() {
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Err(Block::GameInactive)
+        AutoPotionState::Dormant(DormantReason::GameInactive)
     );
     assert!(controller.enabled());
     assert!(sink.ops.is_empty());
@@ -398,7 +587,11 @@ fn game_exit_clears_a_stale_menu_gate_before_restart() {
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Ok(())
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
     );
     assert_eq!(sink.ops.len(), 2);
 }
@@ -410,7 +603,7 @@ fn unfocused_game_blocks_without_clearing_the_requested_toggle() {
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Err(Block::Unfocused)
+        AutoPotionState::Dormant(DormantReason::Unfocused)
     );
     assert!(controller.enabled());
     assert!(sink.ops.is_empty());
@@ -422,7 +615,11 @@ fn one_trigger_emits_exactly_one_press_and_one_release() {
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Ok(())
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
     );
     assert_eq!(
         sink.ops,
@@ -442,7 +639,10 @@ fn repeated_eligible_ticks_emit_only_what_the_interval_allows() {
     let step = 100u64;
     let mut fired = 0;
     for _ in 0..20 {
-        if controller.tick(eligible_readings(), now, &mut sink).is_ok() {
+        if matches!(
+            controller.tick(eligible_readings(), now, &mut sink),
+            AutoPotionState::Triggered(_)
+        ) {
             fired += 1;
         }
         now += step;
@@ -467,7 +667,7 @@ fn a_fresh_install_never_fires() {
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Err(Block::Disabled)
+        AutoPotionState::Off
     );
     assert!(sink.ops.is_empty());
 }
@@ -491,7 +691,7 @@ fn a_controller_never_enabled_emits_nothing_under_any_readings() {
                     };
                     assert_eq!(
                         controller.tick(readings, now, &mut sink),
-                        Err(Block::Disabled),
+                        AutoPotionState::Off,
                         "a disabled controller must report Disabled before any other reason"
                     );
                     now += 10_000;
@@ -512,14 +712,18 @@ fn the_menu_gate_reaches_the_controller_directly() {
     controller.set_gated(true);
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Err(Block::Gated)
+        AutoPotionState::Blocked(BlockReason::GameContext)
     );
     assert!(sink.ops.is_empty());
 
     controller.set_gated(false);
     assert_eq!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
-        Ok(())
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
     );
 }
 
@@ -530,28 +734,30 @@ fn suspend_stops_it_and_is_checked_rather_than_incidental() {
     controller.set_suspended(true);
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Err(Block::Suspended)
+        AutoPotionState::Blocked(BlockReason::Suspended)
     );
     assert!(sink.ops.is_empty());
 
     controller.set_suspended(false);
     assert_eq!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
-        Ok(())
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
     );
 }
 
 #[test]
-fn signal_loss_switches_it_off_rather_than_leaving_it_evaluating() {
-    // FR-011, matching fishing. Not a block inside the rule: the controller is
-    // switched off, so it stays off until the operator turns it back on.
+fn signal_loss_blocks_without_clearing_the_requested_setting() {
     let mut controller = armed_controller();
     let mut sink = MockAutoPotionSink::new();
     controller.on_signal_lost();
-    assert!(!controller.enabled());
+    assert!(controller.enabled());
     assert_eq!(
         controller.tick(eligible_readings(), 10_000, &mut sink),
-        Err(Block::Disabled)
+        AutoPotionState::Blocked(BlockReason::BeaconUnavailable)
     );
     assert!(sink.ops.is_empty());
 }
@@ -561,9 +767,10 @@ fn the_last_attempt_is_recorded_on_the_attempt_not_on_a_confirmed_drink() {
     let mut controller = armed_controller();
     let mut sink = MockAutoPotionSink::new();
     assert_eq!(controller.last_attempt_ms(), None);
-    controller
-        .tick(eligible_readings(), 7_777, &mut sink)
-        .unwrap();
+    assert!(matches!(
+        controller.tick(eligible_readings(), 7_777, &mut sink),
+        AutoPotionState::Triggered(_)
+    ));
     assert_eq!(controller.last_attempt_ms(), Some(7_777));
 }
 

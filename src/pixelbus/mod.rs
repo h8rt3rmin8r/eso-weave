@@ -342,7 +342,7 @@ pub enum SlotCooldown {
     Unknown,
     /// The slot is off cooldown.
     Ready,
-    /// Milliseconds remaining, quantized to [`COOLDOWN_STEP_MS`] steps and
+    /// Milliseconds remaining, quantized to `COOLDOWN_STEP_MS` steps and
     /// saturating at `COOLDOWN_STEP_MS * COOLDOWN_MAX_STEPS`.
     RemainingMs(u16),
 }
@@ -1263,7 +1263,7 @@ pub fn decode_menu(sample: Rgb, tolerance: u8) -> Option<MenuSurface> {
 /// by one reads as one percent off, where a lookup table would land on whichever
 /// entry happened to be nearest in colour space and could be wrong by any amount.
 ///
-/// Payloads slightly above [`RESOURCE_MAX_PERCENT`], within tolerance, clamp to it
+/// Payloads slightly above `RESOURCE_MAX_PERCENT`, within tolerance, clamp to it
 /// rather than being rejected. A full resource is the ordinary out-of-combat
 /// state, so rejecting it on any upward drift would make the most common value the
 /// least stable reading on the strip.
@@ -1308,7 +1308,7 @@ pub fn decode_resources(
 /// no cooldown blocks) and any unrelated screen content behind those points can
 /// never be read as a cooldown.
 ///
-/// The step count saturates at [`COOLDOWN_MAX_STEPS`] rather than wrapping, so a
+/// The step count saturates at `COOLDOWN_MAX_STEPS` rather than wrapping, so a
 /// cooldown longer than the encodable range reads as "at least this long" instead
 /// of as a small number.
 pub fn decode_cooldown(sample: Rgb, marker: u8, tolerance: u8) -> SlotCooldown {

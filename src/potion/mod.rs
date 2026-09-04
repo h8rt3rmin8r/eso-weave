@@ -18,9 +18,9 @@
 //!    condition can be tested in isolation with all the others satisfied. A bare
 //!    boolean would let a test pass because a *different* condition happened to be
 //!    false, which is the failure mode this feature can least afford.
-//! 3. **No state machine.** Unlike [`FishingController`](crate::fishing::FishingController)
-//!    there is no sequence to be partway through: every evaluation is a function
-//!    of the current readings plus the last attempt time.
+//! 3. **One effective state.** The pure rule produces the controller-owned state
+//!    shown by the UI. Requested enablement remains separate, so temporary game,
+//!    focus, or beacon loss cannot silently rewrite the operator's choice.
 //!
 //! The single most important rule in the module is that **an unreadable value is
 //! never a permissive one**. An unknown resource is not low, an unknown quickslot
@@ -34,11 +34,10 @@ use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
 use crate::input::{InputBackend, Key, Transition};
-use crate::pixelbus::{QuickslotState, ResourceLevel, ResourceSet, SlotCooldown};
-
-/// S042 observes explicit quickslot truth but does not activate its automation
-/// consumer. Issue #25 removes this gate after the end-to-end matrix is proven.
-pub const EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED: bool = false;
+use crate::pixelbus::{
+    QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
+    ResourceSet, SlotCooldown,
+};
 
 /// The largest accepted retry interval, in milliseconds.
 const MAX_RETRY_MS: u32 = 600_000;
@@ -98,32 +97,109 @@ impl Default for AutoPotionConfig {
     }
 }
 
-/// Why the trigger rule declined to fire.
-///
-/// A typed reason rather than a boolean, because the tests must assert *which*
-/// condition blocked. Without that, a test for one condition passes when a
-/// different condition is accidentally false, and the gate it thinks it is
-/// checking is never exercised.
+/// A watched resource that can authorize an auto-potion attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Block {
-    /// Auto-potion is switched off.
-    Disabled,
+pub enum AutoPotionResource {
+    /// The player's Health pool.
+    Health,
+    /// The player's Magicka pool.
+    Magicka,
+    /// The player's Stamina pool.
+    Stamina,
+}
+
+/// The low-resource observation that authorized one input attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TriggerCause {
+    /// The watched resource that crossed its threshold.
+    pub resource: AutoPotionResource,
+    /// The fresh observed percentage.
+    pub observed_percent: u8,
+    /// The configured threshold percentage.
+    pub threshold_percent: u8,
+}
+
+/// A normal lifecycle condition that makes a requested feature dormant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DormantReason {
     /// The ESO client is not active.
     GameInactive,
     /// The ESO client does not hold keyboard focus.
     Unfocused,
+}
+
+/// A current safety or observation condition that prevents input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockReason {
+    /// No fresh PixelBus heartbeat is available.
+    BeaconUnavailable,
     /// The application is suspended.
     Suspended,
     /// A native game UI surface or text field is up.
-    Gated,
-    /// The minimum retry interval has not elapsed.
-    RetryTooSoon,
-    /// The active quickslot holds no usable potion, or could not be read.
+    GameContext,
+    /// None of the three resource watches is enabled.
+    NoWatchedResource,
+    /// No enabled resource has a fresh percentage.
+    ResourcesUnavailable,
+    /// The quickslot observation is unavailable or untrusted.
+    QuickslotUnavailable,
+    /// The quickslot is empty or holds a non-potion action.
     NoPotion,
-    /// The quickslot is still counting down.
-    OnCooldown,
-    /// No enabled resource is readable and at or below its threshold.
-    NoResourceLow,
+    /// The selected potion is depleted or blocked by ESO.
+    PotionUnavailable,
+    /// The quickslot cooldown is active or unavailable.
+    PotionCooldown,
+    /// The minimum retry interval has not elapsed.
+    RetryInterval,
+}
+
+/// The truthful effective state of auto-potion at the latest evaluation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AutoPotionState {
+    /// The operator has not requested the feature.
+    #[default]
+    Off,
+    /// The request is retained while the game lifecycle is not actionable.
+    Dormant(DormantReason),
+    /// The request is retained while a safety or observation condition blocks.
+    Blocked(BlockReason),
+    /// Every precondition is satisfied, but no watched resource is low.
+    Ready,
+    /// One complete input attempt was submitted for this cause.
+    Triggered(TriggerCause),
+}
+
+impl AutoPotionState {
+    fn diagnostic_name(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Dormant(DormantReason::GameInactive) => "dormant_game_inactive",
+            Self::Dormant(DormantReason::Unfocused) => "dormant_unfocused",
+            Self::Blocked(BlockReason::BeaconUnavailable) => "blocked_beacon_unavailable",
+            Self::Blocked(BlockReason::Suspended) => "blocked_suspended",
+            Self::Blocked(BlockReason::GameContext) => "blocked_game_context",
+            Self::Blocked(BlockReason::NoWatchedResource) => "blocked_no_watched_resource",
+            Self::Blocked(BlockReason::ResourcesUnavailable) => "blocked_resources_unavailable",
+            Self::Blocked(BlockReason::QuickslotUnavailable) => "blocked_quickslot_unavailable",
+            Self::Blocked(BlockReason::NoPotion) => "blocked_no_potion",
+            Self::Blocked(BlockReason::PotionUnavailable) => "blocked_potion_unavailable",
+            Self::Blocked(BlockReason::PotionCooldown) => "blocked_potion_cooldown",
+            Self::Blocked(BlockReason::RetryInterval) => "blocked_retry_interval",
+            Self::Ready => "ready",
+            Self::Triggered(TriggerCause {
+                resource: AutoPotionResource::Health,
+                ..
+            }) => "triggered_health",
+            Self::Triggered(TriggerCause {
+                resource: AutoPotionResource::Magicka,
+                ..
+            }) => "triggered_magicka",
+            Self::Triggered(TriggerCause {
+                resource: AutoPotionResource::Stamina,
+                ..
+            }) => "triggered_stamina",
+        }
+    }
 }
 
 /// What the pixel bus decoded, which is all the caller supplies per tick.
@@ -151,6 +227,8 @@ pub struct PotionInputs {
     pub game_active: bool,
     /// Whether the ESO client holds keyboard focus.
     pub focused: bool,
+    /// Whether a fresh PixelBus heartbeat is available.
+    pub beacon_available: bool,
     /// Whether the application is suspended.
     ///
     /// Pushed in rather than read from the input engine, so the rule stays a pure
@@ -161,75 +239,108 @@ pub struct PotionInputs {
     pub gated: bool,
 }
 
-/// Whether one resource satisfies its watch.
-///
-/// Three things must hold, and the middle one is the safety-critical one: the
-/// level must be a real reading. [`ResourceLevel::Unknown`] never satisfies a
-/// watch, at any threshold, including 100.
-fn watch_satisfied(watch: ResourceWatch, level: ResourceLevel) -> bool {
-    if !watch.enabled {
-        return false;
+fn low_resource(
+    config: &AutoPotionConfig,
+    resources: ResourceSet,
+) -> Result<Option<TriggerCause>, BlockReason> {
+    let watches = [
+        (AutoPotionResource::Health, config.health, resources.health),
+        (
+            AutoPotionResource::Magicka,
+            config.magicka,
+            resources.magicka,
+        ),
+        (
+            AutoPotionResource::Stamina,
+            config.stamina,
+            resources.stamina,
+        ),
+    ];
+    if watches.iter().all(|(_, watch, _)| !watch.enabled) {
+        return Err(BlockReason::NoWatchedResource);
     }
-    match level {
-        ResourceLevel::Unknown => false,
-        ResourceLevel::Percent(p) => p <= watch.threshold,
+
+    let mut any_fresh = false;
+    for (resource, watch, level) in watches {
+        if !watch.enabled {
+            continue;
+        }
+        if let ResourceLevel::Percent(observed_percent) = level {
+            any_fresh = true;
+            if observed_percent <= watch.threshold {
+                return Ok(Some(TriggerCause {
+                    resource,
+                    observed_percent,
+                    threshold_percent: watch.threshold,
+                }));
+            }
+        }
+    }
+    if any_fresh {
+        Ok(None)
+    } else {
+        Err(BlockReason::ResourcesUnavailable)
     }
 }
 
 /// The complete trigger rule.
 ///
-/// `Ok(())` means fire. `Err(block)` names the first condition that declined, in
-/// the order given in `specs/039-auto-potion/contracts/trigger-rule.md`. The
-/// order affects only which reason is reported; the outcome is the conjunction
-/// either way.
-///
-/// Signal loss is deliberately absent: it is handled one level up, where the
-/// routing layer disables the controller, exactly as it does for fishing. Putting
-/// it here would leave the controller enabled with a stale reading in front of it.
+/// The result names the first non-actionable condition in the S043 contract. A
+/// caller may synthesize input only for [`AutoPotionState::Triggered`].
 pub fn evaluate(
     inputs: PotionInputs,
     config: &AutoPotionConfig,
     enabled: bool,
     last_attempt_ms: Option<u64>,
     now_ms: u64,
-) -> Result<(), Block> {
+) -> AutoPotionState {
     if !enabled {
-        return Err(Block::Disabled);
+        return AutoPotionState::Off;
     }
     if !inputs.game_active {
-        return Err(Block::GameInactive);
+        return AutoPotionState::Dormant(DormantReason::GameInactive);
     }
     if !inputs.focused {
-        return Err(Block::Unfocused);
+        return AutoPotionState::Dormant(DormantReason::Unfocused);
+    }
+    if !inputs.beacon_available {
+        return AutoPotionState::Blocked(BlockReason::BeaconUnavailable);
     }
     if inputs.suspended {
-        return Err(Block::Suspended);
+        return AutoPotionState::Blocked(BlockReason::Suspended);
     }
     if inputs.gated {
-        return Err(Block::Gated);
+        return AutoPotionState::Blocked(BlockReason::GameContext);
+    }
+
+    let cause = match low_resource(config, inputs.readings.resources) {
+        Ok(cause) => cause,
+        Err(reason) => return AutoPotionState::Blocked(reason),
+    };
+
+    match inputs.readings.quickslot.classification {
+        QuickslotClassification::Unavailable(_) => {
+            return AutoPotionState::Blocked(BlockReason::QuickslotUnavailable);
+        }
+        QuickslotClassification::Empty | QuickslotClassification::NonPotion(_) => {
+            return AutoPotionState::Blocked(BlockReason::NoPotion);
+        }
+        QuickslotClassification::Potion(
+            QuickslotPotionAvailability::Depleted | QuickslotPotionAvailability::Blocked,
+        ) => {
+            return AutoPotionState::Blocked(BlockReason::PotionUnavailable);
+        }
+        QuickslotClassification::Potion(QuickslotPotionAvailability::Usable) => {}
+    }
+    if inputs.readings.quickslot.cooldown != SlotCooldown::Ready {
+        return AutoPotionState::Blocked(BlockReason::PotionCooldown);
     }
     if let Some(last) = last_attempt_ms {
         if now_ms.saturating_sub(last) < u64::from(config.retry_interval_ms) {
-            return Err(Block::RetryTooSoon);
+            return AutoPotionState::Blocked(BlockReason::RetryInterval);
         }
     }
-    // Presence and usability come only from B20's explicit classification. The
-    // cooldown check remains independent: a usable potion can still be cooling
-    // down. Runtime activation of this consumer is held by the S042 gate above
-    // until issue #25 completes its end-to-end matrix.
-    if !inputs.readings.quickslot.authorizes_auto_potion() {
-        return Err(Block::NoPotion);
-    }
-    if inputs.readings.quickslot.cooldown != SlotCooldown::Ready {
-        return Err(Block::OnCooldown);
-    }
-    let any_low = watch_satisfied(config.health, inputs.readings.resources.health)
-        || watch_satisfied(config.magicka, inputs.readings.resources.magicka)
-        || watch_satisfied(config.stamina, inputs.readings.resources.stamina);
-    if !any_low {
-        return Err(Block::NoResourceLow);
-    }
-    Ok(())
+    cause.map_or(AutoPotionState::Ready, AutoPotionState::Triggered)
 }
 
 /// The seam through which the controller synthesizes the quickslot key.
@@ -297,9 +408,11 @@ pub struct AutoPotionController {
     enabled: bool,
     game_active: bool,
     focused: bool,
+    beacon_available: bool,
     gated: bool,
     suspended: bool,
     last_attempt_ms: Option<u64>,
+    state: AutoPotionState,
 }
 
 impl AutoPotionController {
@@ -316,13 +429,15 @@ impl AutoPotionController {
             enabled: false,
             game_active: false,
             focused: false,
+            beacon_available: false,
             gated: false,
             suspended: false,
             last_attempt_ms: None,
+            state: AutoPotionState::Off,
         }
     }
 
-    /// Whether auto-potion is switched on.
+    /// Whether the operator requests auto-potion for this session.
     pub fn enabled(&self) -> bool {
         self.enabled
     }
@@ -337,7 +452,46 @@ impl AutoPotionController {
         self.last_attempt_ms
     }
 
-    /// Switches auto-potion on or off.
+    /// The effective result of the most recent evaluation or lifecycle change.
+    pub fn state(&self) -> AutoPotionState {
+        self.state
+    }
+
+    fn set_state(&mut self, state: AutoPotionState) {
+        if state == self.state {
+            return;
+        }
+        tracing::info!(
+            target: "eso_weave::potion",
+            previous = self.state.diagnostic_name(),
+            current = state.diagnostic_name(),
+            "auto-potion state changed"
+        );
+        self.state = state;
+    }
+
+    fn apply_immediate_state(&mut self) {
+        let state = if !self.enabled {
+            Some(AutoPotionState::Off)
+        } else if !self.game_active {
+            Some(AutoPotionState::Dormant(DormantReason::GameInactive))
+        } else if !self.focused {
+            Some(AutoPotionState::Dormant(DormantReason::Unfocused))
+        } else if !self.beacon_available {
+            Some(AutoPotionState::Blocked(BlockReason::BeaconUnavailable))
+        } else if self.suspended {
+            Some(AutoPotionState::Blocked(BlockReason::Suspended))
+        } else if self.gated {
+            Some(AutoPotionState::Blocked(BlockReason::GameContext))
+        } else {
+            None
+        };
+        if let Some(state) = state {
+            self.set_state(state);
+        }
+    }
+
+    /// Changes requested auto-potion enablement for this session.
     pub fn set_enabled(&mut self, enabled: bool) {
         if enabled != self.enabled {
             tracing::debug!(
@@ -347,6 +501,7 @@ impl AutoPotionController {
             );
         }
         self.enabled = enabled;
+        self.apply_immediate_state();
     }
 
     /// Sets the process-derived game-active gate without changing the requested
@@ -356,12 +511,14 @@ impl AutoPotionController {
         if !active {
             self.gated = false;
         }
+        self.apply_immediate_state();
     }
 
     /// Sets the operating-system focus gate without changing the requested
     /// enable toggle.
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
+        self.apply_immediate_state();
     }
 
     /// Sets whether a native game UI surface is gating input.
@@ -372,6 +529,7 @@ impl AutoPotionController {
     /// gate landed and the fishing controller kept synthesizing through it.
     pub fn set_gated(&mut self, gated: bool) {
         self.gated = gated;
+        self.apply_immediate_state();
     }
 
     /// Sets whether the application is suspended.
@@ -381,27 +539,25 @@ impl AutoPotionController {
     /// worker loop is wired.
     pub fn set_suspended(&mut self, suspended: bool) {
         self.suspended = suspended;
+        self.apply_immediate_state();
     }
 
-    /// Switches auto-potion off because the beacon signal was lost.
-    ///
-    /// Matches fishing: without readings the rule has nothing trustworthy to act
-    /// on, and continuing to evaluate against stale values is precisely the
-    /// blind firing this feature must not do.
+    /// Records a fresh PixelBus heartbeat without changing requested enablement.
+    pub fn on_heartbeat(&mut self) {
+        self.beacon_available = true;
+        self.apply_immediate_state();
+    }
+
+    /// Records beacon signal loss without changing requested enablement.
     pub fn on_signal_lost(&mut self) {
-        if self.enabled {
-            tracing::debug!(
-                target: "eso_weave::potion",
-                "auto-potion disabled: beacon signal lost"
-            );
-            self.enabled = false;
-        }
+        self.beacon_available = false;
+        self.apply_immediate_state();
     }
 
     /// Evaluates the rule and, if it fires, presses the quickslot key once.
     ///
-    /// Returns the reason it declined, for the caller to log or a test to assert.
-    /// The last-attempt time is recorded on the *attempt*, not on a confirmed
+    /// Returns and stores the effective state. The last-attempt time is recorded
+    /// on the *attempt*, not on a confirmed
     /// drink, because the game's confirmation is the quickslot cooldown and that is
     /// exactly the reading that lags.
     pub fn tick(
@@ -409,7 +565,7 @@ impl AutoPotionController {
         readings: PotionReadings,
         now_ms: u64,
         sink: &mut dyn AutoPotionSink,
-    ) -> Result<(), Block> {
+    ) -> AutoPotionState {
         // The gates come from the controller, never from the caller. That is the
         // single source of truth the split between the two input types exists to
         // enforce.
@@ -417,6 +573,7 @@ impl AutoPotionController {
             readings,
             game_active: self.game_active,
             focused: self.focused,
+            beacon_available: self.beacon_available,
             suspended: self.suspended,
             gated: self.gated,
         };
@@ -427,7 +584,7 @@ impl AutoPotionController {
             self.last_attempt_ms,
             now_ms,
         );
-        if outcome.is_ok() {
+        if matches!(outcome, AutoPotionState::Triggered(_)) {
             tracing::debug!(
                 target: "eso_weave::potion",
                 key = %self.config.quickslot_key,
@@ -437,6 +594,7 @@ impl AutoPotionController {
             sink.key(self.config.quickslot_key, Transition::Up);
             self.last_attempt_ms = Some(now_ms);
         }
+        self.set_state(outcome);
         outcome
     }
 }

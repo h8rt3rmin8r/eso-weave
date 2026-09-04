@@ -917,27 +917,13 @@ impl EsoWeaveApp {
                 // reads, which is why it is worth showing at all.
                 widgets::label_strong(ui, &palette, strings::AUTO_POTION_TITLE)
                     .on_hover_text(strings::AUTO_POTION_TOOLTIP);
-                let (potion_text, potion_role) = if view.auto_potion_active
-                    && !crate::potion::EXPLICIT_QUICKSLOT_AUTOMATION_ENABLED
-                {
-                    (
-                        strings::AUTO_POTION_PENDING,
-                        crate::app::StatusRole::Warning,
-                    )
-                } else if view.auto_potion_active && !view.game_active {
-                    ("On (game not active)", crate::app::StatusRole::Warning)
-                } else if view.auto_potion_active {
-                    (strings::AUTO_POTION_ON, crate::app::StatusRole::Active)
-                } else {
-                    (strings::AUTO_POTION_OFF, crate::app::StatusRole::Muted)
-                };
-                let potion_color = crate::app::theme::status_color(&palette, potion_role);
-                ui.label(egui::RichText::new(potion_text).color(potion_color))
+                let potion_color = crate::app::theme::status_color(&palette, view.auto_potion.role);
+                ui.label(egui::RichText::new(&view.auto_potion.text).color(potion_color))
                     .on_hover_text(strings::AUTO_POTION_TOOLTIP);
                 // The control sits in the third column, like suspend and fishing,
                 // so the hotkey and the switch reach the same state by the same
                 // intent path.
-                let mut potion_on = view.auto_potion_active;
+                let mut potion_on = view.auto_potion_requested;
                 if widgets::toggle_switch(ui, &mut potion_on, &palette)
                     .on_hover_text(strings::AUTO_POTION_TOGGLE_TOOLTIP)
                     .clickable()

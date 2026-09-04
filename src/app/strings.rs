@@ -89,12 +89,23 @@ pub const QUICKSLOT_COOLDOWN_TOOLTIP: &str =
 
 // Auto-potion section.
 pub const AUTO_POTION_TITLE: &str = "Auto-potion";
-pub const AUTO_POTION_ON: &str = "On";
 pub const AUTO_POTION_OFF: &str = "Off";
-pub const AUTO_POTION_PENDING: &str = "Configured (verification pending)";
+pub const AUTO_POTION_DORMANT_GAME: &str = "Dormant: game inactive";
+pub const AUTO_POTION_DORMANT_UNFOCUSED: &str = "Dormant: game unfocused";
+pub const AUTO_POTION_BLOCKED_BEACON: &str = "Blocked: beacon unavailable";
+pub const AUTO_POTION_BLOCKED_SUSPENDED: &str = "Blocked: input suspended";
+pub const AUTO_POTION_BLOCKED_CONTEXT: &str = "Blocked: game context";
+pub const AUTO_POTION_BLOCKED_NO_WATCH: &str = "Blocked: no watched resource";
+pub const AUTO_POTION_BLOCKED_RESOURCES: &str = "Blocked: resources unavailable";
+pub const AUTO_POTION_BLOCKED_QUICKSLOT: &str = "Blocked: quickslot unavailable";
+pub const AUTO_POTION_BLOCKED_NO_POTION: &str = "Blocked: no potion selected";
+pub const AUTO_POTION_BLOCKED_POTION: &str = "Blocked: potion unavailable";
+pub const AUTO_POTION_BLOCKED_COOLDOWN: &str = "Blocked: potion cooldown";
+pub const AUTO_POTION_BLOCKED_RETRY: &str = "Blocked: retry interval";
+pub const AUTO_POTION_READY: &str = "Ready";
 pub const AUTO_POTION_TOGGLE_LABEL: &str = "Auto-potion";
 pub const AUTO_POTION_TOOLTIP: &str =
-    "Automatic input remains gated while the explicit quickslot signal completes live-client verification. F3 records the requested setting, but no potion input is emitted until the next work slice adopts the verified signal.";
+    "Shows whether auto-potion is Off, dormant, blocked, ready, or just triggered. The switch records your request; the state names the current runtime result.";
 pub const AUTO_POTION_TOGGLE_TOOLTIP: &str =
     "Turn auto-potion on or off (F3). It also needs at least one resource enabled in Settings; with none enabled it never fires.";
 pub const CLUSTER_AUTO_POTION: &str = "Auto-potion";
@@ -317,7 +328,20 @@ pub fn all_labels() -> Vec<&'static str> {
         MAGICKA_TITLE,
         AUTO_POTION_TITLE,
         AUTO_POTION_TOGGLE_LABEL,
-        AUTO_POTION_PENDING,
+        AUTO_POTION_OFF,
+        AUTO_POTION_DORMANT_GAME,
+        AUTO_POTION_DORMANT_UNFOCUSED,
+        AUTO_POTION_BLOCKED_BEACON,
+        AUTO_POTION_BLOCKED_SUSPENDED,
+        AUTO_POTION_BLOCKED_CONTEXT,
+        AUTO_POTION_BLOCKED_NO_WATCH,
+        AUTO_POTION_BLOCKED_RESOURCES,
+        AUTO_POTION_BLOCKED_QUICKSLOT,
+        AUTO_POTION_BLOCKED_NO_POTION,
+        AUTO_POTION_BLOCKED_POTION,
+        AUTO_POTION_BLOCKED_COOLDOWN,
+        AUTO_POTION_BLOCKED_RETRY,
+        AUTO_POTION_READY,
         QUICKSLOT_TITLE,
         QUICKSLOT_AVAILABILITY_TITLE,
         QUICKSLOT_COOLDOWN_TITLE,

@@ -2,7 +2,7 @@
 //!
 //! Discovery parses `libraryfolders.vdf` to find the library holding the ESO
 //! app id, then resolves the compatdata Documents path. The probe scans `/proc`
-//! and returns [`RunningState::Unknown`] on any failure.
+//! and returns [`crate::beacon::RunningState::Unknown`] on any failure.
 
 use std::path::PathBuf;
 
