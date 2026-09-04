@@ -1,0 +1,39 @@
+name: Issue linkage
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  closing-issue:
+    name: Check closing issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out policy implementation
+        uses: actions/checkout@v7
+
+      - name: Test issue-link policy
+        run: node --test .github/scripts/issue-link-policy.test.mjs
+
+      - name: Enforce issue-link policy
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: node .github/scripts/issue-link-policy.mjs

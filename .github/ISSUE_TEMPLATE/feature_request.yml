@@ -8,7 +8,9 @@ body:
       value: |
         Thanks for suggesting an improvement. Please describe the problem you are
         trying to solve, not just the solution you have in mind. Search the
-        existing issues first to avoid duplicates.
+        existing issues first to avoid duplicates. Keep this request to one
+        independently closeable outcome; use an epic with child issues for a
+        multi-outcome initiative.
   - type: textarea
     id: problem
     attributes:
@@ -58,6 +60,17 @@ body:
       description: Mockups, references, related add-ons, or anything else that helps explain the request.
     validations:
       required: false
+  - type: dropdown
+    id: verification
+    attributes:
+      label: Verification lifecycle
+      description: Will completion require evidence from a released build or real game session after implementation merges?
+      options:
+        - No, repository tests or review can prove completion
+        - Yes, create or link a separate release-verification issue
+        - Not sure, triage should decide
+    validations:
+      required: true
   - type: checkboxes
     id: checks
     attributes:

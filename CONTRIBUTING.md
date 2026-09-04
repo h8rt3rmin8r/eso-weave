@@ -10,6 +10,13 @@ Use the structured bug or feature form. Feature work is organized through the
 active milestones and coordinator issues. A feature is assigned a numbered work
 slice and specified under `specs/NNN-name/` before implementation.
 
+One actionable issue owns one independently closeable outcome and one lifecycle.
+If two outcomes can be merged, released, verified, or rolled back at different
+times, file separate issues. Multi-outcome initiatives belong in a coordinator
+epic whose native child issues carry the actual acceptance criteria. A single
+pull request may close several atomic issues when they share one coherent
+implementation and validation path.
+
 During triage, every actionable issue receives one type label, one or more area
 labels, exactly one priority, exactly one effort, and a milestone. Priority means
 impact and scheduling order: P0 is blocking or unsafe, P1 is a release-relevant
@@ -19,6 +26,13 @@ or two days, L is substantial cross-surface work, and XL should normally be spli
 Platform labels apply only to platform-specific behavior or evidence.
 `needs: verification` is temporary and remains only while reproduction or field
 proof is an entry gate.
+
+Implementation completion and release verification are different lifecycles.
+When merged code still needs proof from a fresh release or a real game session,
+close the implementation issue and leave a separate verification issue open.
+Apply `needs: verification` only to the issue that is actively waiting for that
+evidence. Never hold a completed implementation issue open merely because a
+different release event has not happened.
 
 Coordinator epics use native sub-issues when available and keep the same children
 in dependency order in the body. Dependencies belong on the blocked issue and in
@@ -33,10 +47,20 @@ than introduce a synonym.
 3. Keep `CHANGELOG.md` and user-facing documentation current.
 4. Run the local merge gate in the foreground.
 5. Push the branch and open a pull request using the repository template.
-6. Address every review thread and wait for required checks before asking a
+6. Give every issue its own complete closing reference, such as `Closes #123`.
+   For several issues, repeat the keyword on separate lines. A descriptive
+   reference such as `Related to #123` does not close the issue.
+7. Address every review thread and wait for required checks before asking a
    maintainer to merge.
-7. After merge, synchronize `main`, delete the merged branch, prune stale refs,
+8. After merge, confirm every referenced issue closed, synchronize `main`,
+   update Project stages, delete the merged branch, prune stale refs,
    and update any parent issue checklist.
+
+The issue-link check exempts Dependabot and pull requests labeled
+`dependencies`. The `skip: issue-link` label is reserved for rare release or
+repository-administration changes that genuinely have no atomic issue. Explain
+that exception in the pull request body. Normal documentation, workflow, and
+maintenance work should still begin with an issue.
 
 Direct pushes to `main` are reserved for explicitly authorized repository
 administration or release work.

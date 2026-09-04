@@ -21,7 +21,7 @@ body:
     id: children
     attributes:
       label: Ordered child issues
-      description: List child issues in dependency order, using placeholders if not yet filed.
+      description: List atomic child issues in dependency order. Each child must own one independently closeable outcome and lifecycle.
       placeholder: |
         1. [ ] #123 - Foundation
         2. [ ] #124 - Consumer
@@ -37,6 +37,13 @@ body:
         - [ ] User documentation matches the shipped states
     validations:
       required: true
+  - type: checkboxes
+    id: lifecycle
+    attributes:
+      label: Lifecycle confirmation
+      options:
+        - label: Implementation and release-verification outcomes use separate child issues when they can complete at different times.
+          required: true
   - type: textarea
     id: boundaries
     attributes:
