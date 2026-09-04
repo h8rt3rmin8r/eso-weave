@@ -1399,35 +1399,65 @@ fn decode_quickslot_classification(sample: Rgb, tolerance: u8) -> Option<Quicksl
     {
         return None;
     }
-    Some(if within(sample.r, QUICKSLOT_UNAVAILABLE_API, tolerance) {
-        QuickslotClassification::Unavailable(QuickslotUnavailableReason::UnsupportedApi)
-    } else if within(sample.r, QUICKSLOT_INVALID_SELECTION, tolerance) {
-        QuickslotClassification::Unavailable(QuickslotUnavailableReason::InvalidSelection)
-    } else if within(sample.r, QUICKSLOT_INCONSISTENT, tolerance) {
-        QuickslotClassification::Unavailable(QuickslotUnavailableReason::InconsistentFacts)
-    } else if within(sample.r, QUICKSLOT_EMPTY, tolerance) {
-        QuickslotClassification::Empty
-    } else if within(sample.r, QUICKSLOT_NON_POTION_ITEM, tolerance) {
-        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Item)
-    } else if within(sample.r, QUICKSLOT_NON_POTION_COLLECTIBLE, tolerance) {
-        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Collectible)
-    } else if within(sample.r, QUICKSLOT_NON_POTION_QUEST_ITEM, tolerance) {
-        QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuestItem)
-    } else if within(sample.r, QUICKSLOT_NON_POTION_EMOTE, tolerance) {
-        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Emote)
-    } else if within(sample.r, QUICKSLOT_NON_POTION_QUICK_CHAT, tolerance) {
-        QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuickChat)
-    } else if within(sample.r, QUICKSLOT_NON_POTION_OTHER, tolerance) {
-        QuickslotClassification::NonPotion(QuickslotNonPotionKind::Other)
-    } else if within(sample.r, QUICKSLOT_POTION_DEPLETED, tolerance) {
-        QuickslotClassification::Potion(QuickslotPotionAvailability::Depleted)
-    } else if within(sample.r, QUICKSLOT_POTION_BLOCKED, tolerance) {
-        QuickslotClassification::Potion(QuickslotPotionAvailability::Blocked)
-    } else if within(sample.r, QUICKSLOT_POTION_USABLE, tolerance) {
-        QuickslotClassification::Potion(QuickslotPotionAvailability::Usable)
-    } else {
+    let codes = [
+        (
+            QUICKSLOT_UNAVAILABLE_API,
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::UnsupportedApi),
+        ),
+        (
+            QUICKSLOT_INVALID_SELECTION,
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::InvalidSelection),
+        ),
+        (
+            QUICKSLOT_INCONSISTENT,
+            QuickslotClassification::Unavailable(QuickslotUnavailableReason::InconsistentFacts),
+        ),
+        (QUICKSLOT_EMPTY, QuickslotClassification::Empty),
+        (
+            QUICKSLOT_NON_POTION_ITEM,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Item),
+        ),
+        (
+            QUICKSLOT_NON_POTION_COLLECTIBLE,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Collectible),
+        ),
+        (
+            QUICKSLOT_NON_POTION_QUEST_ITEM,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuestItem),
+        ),
+        (
+            QUICKSLOT_NON_POTION_EMOTE,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Emote),
+        ),
+        (
+            QUICKSLOT_NON_POTION_QUICK_CHAT,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::QuickChat),
+        ),
+        (
+            QUICKSLOT_NON_POTION_OTHER,
+            QuickslotClassification::NonPotion(QuickslotNonPotionKind::Other),
+        ),
+        (
+            QUICKSLOT_POTION_DEPLETED,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Depleted),
+        ),
+        (
+            QUICKSLOT_POTION_BLOCKED,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Blocked),
+        ),
+        (
+            QUICKSLOT_POTION_USABLE,
+            QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
+        ),
+    ];
+    let mut matches = codes
+        .into_iter()
+        .filter(|(code, _)| within(sample.r, *code, tolerance));
+    let (_, classification) = matches.next()?;
+    if matches.next().is_some() {
         return None;
-    })
+    }
+    Some(classification)
 }
 
 /// Decodes the five quickslot blocks into one state.

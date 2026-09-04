@@ -2134,6 +2134,37 @@ fn quickslot_discriminant_survives_capture_drift_within_tolerance() {
 }
 
 #[test]
+fn ambiguous_quickslot_discriminants_fail_closed_at_any_tolerance() {
+    let codes = [
+        0x10u8, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0,
+    ];
+    for tolerance in 0..=u8::MAX {
+        for red in 0..=u8::MAX {
+            let matching = codes
+                .iter()
+                .filter(|code| red.abs_diff(**code) <= tolerance)
+                .count();
+            if matching == 1 {
+                continue;
+            }
+            let state = decode_quickslot(
+                Some(quickslot(0)),
+                None,
+                None,
+                None,
+                Some(Rgb::new(red, QUICKSLOT_STATE_MARK, 255 - red)),
+                tolerance,
+            );
+            assert_eq!(
+                state.classification,
+                QuickslotClassification::Unavailable(QuickslotUnavailableReason::CorruptProtocol),
+                "red {red:#04X} with tolerance {tolerance} matched {matching} codes"
+            );
+        }
+    }
+}
+
+#[test]
 fn decode_quickslot_reads_ready_durations_and_unavailable() {
     // The same five cases as the skill cooldown blocks, because it is the same
     // encoding read through the same decoder.

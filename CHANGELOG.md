@@ -79,8 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   count, usability failures, and cooldown; on-use metadata remains diagnostic
   context only. Double-read the selected binding and fail closed when its facts
   change during collection, without assuming the documented action ID equals an
-  item-link ID. One dedicated B20 discriminant is the smallest protocol change
-  that keeps classification independent from cooldown and identity.
+  item-link ID. Reject a B20 sample when a widened user tolerance matches multiple
+  state codes. One dedicated B20 discriminant is the smallest protocol change that
+  keeps classification independent from cooldown and identity.
 
 - 2026-09-03: Adopt the sibling-project pull-request baseline without copying
   their product-specific matrices. ESO Weave runs only its canonical Rust gate

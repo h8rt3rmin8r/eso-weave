@@ -38,7 +38,8 @@ Every block uses red payload, green marker, and blue `255 - red` checksum.
 
 An absent B20 becomes Unavailable(LegacyProtocol) when legacy B16 is readable,
 otherwise Unavailable(NoSignal). A present B20 with an invalid marker, checksum,
-or code becomes Unavailable(CorruptProtocol).
+code, or more than one code inside the configured tolerance becomes
+Unavailable(CorruptProtocol).
 
 ## Composition rules
 

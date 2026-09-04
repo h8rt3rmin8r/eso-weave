@@ -69,6 +69,10 @@ code and blue its complement.
 One block is sufficient because the state code combines the bounded non-potion
 kind or potion availability. Exact raw count remains diagnostic evidence; the
 transport needs only depleted versus positive and usable versus blocked.
+The decoder accepts a state only when exactly one code is within the configured
+tolerance. This matters above the default tolerance: adjacent codes are 16 apart,
+so a midpoint can otherwise match two classes and inherit whichever branch runs
+first. Ambiguous neighborhoods are corrupt protocol and fail closed.
 
 **Alternatives rejected**:
 
