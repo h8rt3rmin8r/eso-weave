@@ -50,7 +50,7 @@
 - [x] T022 Run `cargo clippy --all-targets --all-features -- -D warnings`
 - [x] T023 Run `cargo test --all-targets --all-features`
 - [x] T024 Run repository policy checks, UTF-8/BOM/mojibake checks, and inspect the complete diff
-- [ ] T025 Commit, push, open the official PR, process CI and every Codex review through at most two rounds, then request the operator's real-client and merge review
+- [x] T025 Commit, push, open the official PR, process CI and every Codex review through at most two rounds, then request the operator's real-client and merge review
 
 ## Dependencies & Execution Order
 
