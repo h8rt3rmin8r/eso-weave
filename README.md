@@ -228,10 +228,9 @@ Auto-potion drinks the potion in your active quickslot when a resource you are
 watching runs low. It is the one part of ESO Weave that acts on what the addon
 reports rather than just showing it to you, so it is deliberately cautious.
 
-**Current development status:** automatic input remains gated while the rebuilt
-quickslot signal completes its live-client verification. The status view and the
-`/pbquickslot` receipt are available now; the next work slice adopts the proven
-signal for end-to-end triggering.
+The status row separates the request switch from the effective result. It shows
+Off, a dormant game condition, the current safety or observation blocker, Ready,
+or the resource that just triggered an attempt.
 
 **It ships off, and it is off again after every restart.** Turning it on takes two
 steps: enable at least one resource in Settings, then press `F3`. With no resource
@@ -245,17 +244,19 @@ the potion no longer helps.
 It presses the key only when all of these hold:
 
 - Auto-potion is on, and an enabled resource is at or below its threshold
-- The active quickslot holds a potion, and its cooldown has finished
+- ESO is active and focused, and the PixelBeacon signal is fresh
+- The active quickslot explicitly holds a usable potion, and its cooldown has finished
 - The minimum retry interval since the last attempt has passed
-- ESO Weave is not suspended, and no game menu or text field is open
+- ESO Weave is not suspended, and Game Context is positively detected as Gameplay
 
 ### What it will not do
 
 - **It never fires on a reading it cannot make.** If the beacon signal drops, the
   addon reloads, or a loading screen clears the overlay, an unreadable resource
   counts as *not* low. It does nothing rather than something.
-- **It stops when the signal is lost**, switching itself off rather than acting on
-  stale values.
+- **It blocks when the signal is lost** without forgetting that you requested it.
+  Fresh game, focus, beacon, resource, and quickslot evidence must return before it
+  can act again.
 - **It does not know what your potion restores.** The game exposes that only as
   tooltip text, so you pick the stats to watch instead. Slotting a
   tri-restoration potion? Enable all three.

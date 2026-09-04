@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S043 restores production auto-potion triggering through the explicit S042
+  quickslot contract. The controller now reports Off, dormant, blocked, Ready,
+  and bounded Triggered states, identifies the current blocker in the main view,
+  records the triggering resource, and preserves the session-only request across
+  game, focus, and beacon lifecycle changes (issue #25).
+
 - S042 reconstructs selected-quickslot observation around an explicit B20
   classification. Empty, non-potion wheel kinds, depleted or blocked potions,
   usable potions, legacy addons, corrupt samples, and unavailable game facts are
@@ -45,9 +51,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Auto-potion now requires positive game, focus, beacon, suspension, context,
+  resource, explicit usable-potion, cooldown, and retry evidence before submitting
+  one complete quickslot down/up attempt. Signal loss blocks the feature without
+  clearing the user's request. This intentionally corrects S039, which treated a
+  temporary beacon outage as a settings change. Missing or corrupt surface
+  evidence now keeps the shared synthesis gate closed, and applied auto-potion
+  settings update the live controller without a restart.
+
 - The main quickslot readout now shows classification, potion availability, and
-  cooldown instead of an ambiguous cooldown plus raw item number. Auto-potion
-  input remains explicitly gated until issue #25 consumes the verified state.
+  cooldown instead of an ambiguous cooldown plus raw item number.
 
 - Routine dependency maintenance updates serde, serde_json, time, dirs,
   windows-sys, ureq, eframe, and the matching egui test harness. The ureq 3
@@ -73,6 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-03: Separate requested auto-potion enablement from effective runtime
+  state. Temporary game, focus, beacon, suspension, and context conditions block
+  input but do not rewrite user intent. Keep enablement session-only and default
+  it Off, reuse S041 and S042 as authoritative facts, and emit normal diagnostics
+  only on categorical state changes. The post-release real-client matrix remains
+  required before issue #25 closes.
 
 - 2026-09-03: Remove `GetItemLinkOnUseAbilityInfo` as a quickslot acceptance
   predicate. ESO's action-button source bases slot truth on action type, bound ID,

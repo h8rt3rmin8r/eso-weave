@@ -2,7 +2,7 @@
 //!
 //! Discovery resolves the Documents known folder through the shell API (via the
 //! `dirs` crate), never a literal path. The probe is a read-only process
-//! snapshot and returns [`RunningState::Unknown`] on any failure.
+//! snapshot and returns [`crate::beacon::RunningState::Unknown`] on any failure.
 
 use std::path::PathBuf;
 

@@ -34,7 +34,10 @@ use crate::pixelbus::{
     QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
 };
-use crate::potion::AutoPotionController;
+use crate::potion::{
+    AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
+    DormantReason,
+};
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
@@ -195,6 +198,62 @@ pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
         role,
         tooltip: strings::BEACON_TOOLTIP,
     }
+}
+
+/// The normalized effective auto-potion state shown beside its request switch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoPotionView {
+    /// The concise state or current blocker.
+    pub text: String,
+    /// The palette role that colors the state.
+    pub role: StatusRole,
+}
+
+/// Maps the controller-owned effective state to user-facing text without
+/// reproducing any trigger logic in the UI.
+pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
+    let (text, role) = match state {
+        AutoPotionState::Off => (strings::AUTO_POTION_OFF.to_string(), StatusRole::Muted),
+        AutoPotionState::Dormant(DormantReason::GameInactive) => (
+            strings::AUTO_POTION_DORMANT_GAME.to_string(),
+            StatusRole::Muted,
+        ),
+        AutoPotionState::Dormant(DormantReason::Unfocused) => (
+            strings::AUTO_POTION_DORMANT_UNFOCUSED.to_string(),
+            StatusRole::Muted,
+        ),
+        AutoPotionState::Blocked(reason) => {
+            let text = match reason {
+                BlockReason::BeaconUnavailable => strings::AUTO_POTION_BLOCKED_BEACON,
+                BlockReason::Suspended => strings::AUTO_POTION_BLOCKED_SUSPENDED,
+                BlockReason::GameContext => strings::AUTO_POTION_BLOCKED_CONTEXT,
+                BlockReason::NoWatchedResource => strings::AUTO_POTION_BLOCKED_NO_WATCH,
+                BlockReason::ResourcesUnavailable => strings::AUTO_POTION_BLOCKED_RESOURCES,
+                BlockReason::QuickslotUnavailable => strings::AUTO_POTION_BLOCKED_QUICKSLOT,
+                BlockReason::NoPotion => strings::AUTO_POTION_BLOCKED_NO_POTION,
+                BlockReason::PotionUnavailable => strings::AUTO_POTION_BLOCKED_POTION,
+                BlockReason::PotionCooldown => strings::AUTO_POTION_BLOCKED_COOLDOWN,
+                BlockReason::RetryInterval => strings::AUTO_POTION_BLOCKED_RETRY,
+            };
+            (text.to_string(), StatusRole::Warning)
+        }
+        AutoPotionState::Ready => (strings::AUTO_POTION_READY.to_string(), StatusRole::Healthy),
+        AutoPotionState::Triggered(cause) => {
+            let resource = match cause.resource {
+                AutoPotionResource::Health => "Health",
+                AutoPotionResource::Magicka => "Magicka",
+                AutoPotionResource::Stamina => "Stamina",
+            };
+            (
+                format!(
+                    "Triggered: {resource} at {}% (threshold {}%)",
+                    cause.observed_percent, cause.threshold_percent
+                ),
+                StatusRole::Active,
+            )
+        }
+    };
+    AutoPotionView { text, role }
 }
 
 /// The display name for a weapon class.
@@ -511,7 +570,7 @@ pub fn cooldown_view(cooldown: SlotCooldown) -> CooldownView {
 /// value in effect.
 ///
 /// Pure, so the arithmetic is testable without a frame. Derived from the same
-/// [`pixelbus::grid_extent`] the reader and the addon use, so it cannot describe a
+/// [`crate::pixelbus::grid_extent`] the reader and the addon use, so it cannot describe a
 /// grid other than the one actually drawn.
 pub fn grid_footprint_caption(block_px: u32) -> String {
     let extent = crate::pixelbus::grid_extent(
@@ -990,10 +1049,10 @@ pub struct AppView {
     pub resources: ResourcesView,
     /// The detected quickslot state.
     pub quickslot: QuickslotView,
-    /// Whether auto-potion is switched on.
-    pub auto_potion_active: bool,
-    /// Whether process observation currently permits game-directed behavior.
-    pub game_active: bool,
+    /// Whether the operator currently requests auto-potion.
+    pub auto_potion_requested: bool,
+    /// The effective auto-potion state or current blocker.
+    pub auto_potion: AutoPotionView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
     /// The panel-local minimum log level.
@@ -1008,7 +1067,7 @@ pub struct AppView {
 ///
 /// A change is either meaningful (a settings change: a toggle or a form-field
 /// edit) or layout-only (a window move/resize or a log-pane resize). Both persist
-/// identically, but only a meaningful change sets [`dirty_notify`], which is what
+/// identically, but only a meaningful change sets `dirty_notify`, which is what
 /// gates the "Settings saved" confirmation so pure layout writes stay silent
 /// (issue #6, FR-009/FR-010). Invariant: `dirty_notify` implies dirty.
 #[derive(Debug)]
@@ -1227,6 +1286,10 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason(), fishing.enabled())
         };
+        let (auto_potion_requested, auto_potion_state) = {
+            let potion = self.potion.lock().unwrap();
+            (potion.enabled(), potion.state())
+        };
         let (mut skills, active_bar, classes, combat, movement, resources, quickslot) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
             let weave = self.weave.lock().unwrap();
@@ -1312,8 +1375,8 @@ impl AppModel {
             menu: game_context_view(game.context()),
             resources,
             quickslot,
-            auto_potion_active: self.auto_potion_on(),
-            game_active: active,
+            auto_potion_requested,
+            auto_potion: auto_potion_view(auto_potion_state),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }
@@ -1698,12 +1761,14 @@ impl AppModel {
     }
 
     /// Reloads the live subsystems from the current settings, returning fallback
-    /// notices. Shared with startup.
+    /// notices.
     pub fn reload_from_settings(&mut self) -> Vec<Notice> {
         let mut notices = Vec::new();
         notices.extend(self.input.load_bindings(&self.settings));
         notices.extend(self.weave.lock().unwrap().load(&self.settings));
         self.weave.lock().unwrap().apply_activity(&self.input);
+        let potion_config = AutoPotionConfig::load(&self.settings.potion, &mut notices);
+        self.potion.lock().unwrap().set_config(potion_config);
         self.beacon_prefs = beacon::prefs_from_value(&self.settings.beacon);
         self.log.set_level(self.settings.logging.level);
         self.log

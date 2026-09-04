@@ -39,14 +39,14 @@ pub fn app_toggle_intent(
 /// - `MenuGate(surface)` sets the menu gate on the input engine, the fishing
 ///   controller, and the auto-potion controller, so none starts new work while a
 ///   game UI surface is up.
-/// - `Resources(set)` stores the decoded resource levels (nothing acts on them).
+/// - `Resources(set)` stores the decoded resource levels for the next auto-potion tick.
 /// - `Movement(signal)` stores the decoded movement state (nothing acts on it).
 /// - `Cooldowns(set)` stores the decoded slot cooldowns (nothing acts on them).
-/// - `Quickslot(state)` stores the decoded quickslot state (nothing acts on it).
-/// - `SignalLost` clears the weave latency, disables fishing, and switches
-///   auto-potion off rather than letting it act on stale readings.
+/// - `Quickslot(state)` stores the decoded quickslot state for the next auto-potion tick.
+/// - `SignalLost` clears the weave latency, disables fishing, and marks the
+///   auto-potion beacon unavailable without clearing its requested setting.
 /// - `FishingStarted`, `BiteDetected`, `FishingStopped` reach the controller.
-/// - `Heartbeat` is forwarded to the controller (a no-op there).
+/// - `Heartbeat` marks the auto-potion beacon available and reaches fishing.
 ///
 /// The fishing forwarding reuses [`map_event`], so the reader-to-detector mapping
 /// has one source of truth; latency is set before the map, so a `Latency` event
@@ -90,7 +90,9 @@ pub fn route_reader_event(
             return;
         }
         PixelBusEvent::MenuGate(surface) => {
-            let gates = surface.is_some_and(crate::pixelbus::MenuSurface::gates);
+            // Missing surface evidence is not gameplay. Only a positively decoded
+            // gameplay surface may release any synthesis path.
+            let gates = surface.is_none_or(crate::pixelbus::MenuSurface::gates);
             input.set_menu_gated(gates);
             fishing.set_gated(gates);
             // The auto-potion controller is gated directly, for the same reason
@@ -103,11 +105,9 @@ pub fn route_reader_event(
         }
         PixelBusEvent::SignalLost => {
             weave.set_latency(None);
-            // Without readings the trigger rule has nothing trustworthy to act
-            // on, so auto-potion switches off rather than evaluating against
-            // stale values. Matches fishing, which disables on the same event.
             potion.on_signal_lost();
         }
+        PixelBusEvent::Heartbeat => potion.on_heartbeat(),
         _ => {}
     }
     if let Some(detector_event) = map_event(event) {

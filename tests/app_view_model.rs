@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{
-    app_state_label, beacon_light, combat_view, default_delay_for, fishing_label, menu_view,
-    modal_extent, override_edit_for, quickslot_view, resource_view, route_reader_event, skill_rows,
-    status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view,
-    AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
+    app_state_label, auto_potion_view, beacon_light, combat_view, default_delay_for, fishing_label,
+    menu_view, modal_extent, override_edit_for, quickslot_view, resource_view, route_reader_event,
+    skill_rows, status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled,
+    weapon_bar_view, AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -25,6 +25,10 @@ use eso_weave::pixelbus::{
     WeaponClass,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
+
+use eso_weave::potion::{
+    AutoPotionResource, AutoPotionState, BlockReason, DormantReason, TriggerCause,
+};
 
 fn active_fishing_controller() -> FishingController {
     let mut controller = FishingController::new(FishingConfig::default());
@@ -394,6 +398,16 @@ fn model_with_beacon_root(root: &std::path::Path) -> AppModel {
 }
 
 fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
+    model_with_clock_and_potion(root, clock).0
+}
+
+fn model_with_clock_and_potion(
+    root: &std::path::Path,
+    clock: Instant,
+) -> (
+    AppModel,
+    Arc<Mutex<eso_weave::potion::AutoPotionController>>,
+) {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     engine.set_game_active(true);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
@@ -412,19 +426,21 @@ fn model_with_clock(root: &std::path::Path, clock: Instant) -> AppModel {
         ..Settings::default()
     };
 
-    AppModel::new(
+    let potion = Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    )));
+    let model = AppModel::new(
         Arc::new(engine),
         weave,
         fishing,
         Box::new(MockFishingSink::new()),
-        Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
-            eso_weave::potion::AutoPotionConfig::default(),
-        ))),
+        potion.clone(),
         log,
         settings,
         None,
         clock,
-    )
+    );
+    (model, potion)
 }
 
 #[test]
@@ -500,6 +516,25 @@ fn set_fishing_intent_enables_controller() {
 }
 
 #[test]
+fn set_auto_potion_intent_separates_request_from_effective_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+    let initial = model.view();
+    assert!(!initial.auto_potion_requested);
+    assert_eq!(initial.auto_potion.text, "Off");
+
+    model.apply_intent(UiIntent::SetAutoPotion(true));
+    let requested = model.view();
+    assert!(requested.auto_potion_requested);
+    assert_eq!(requested.auto_potion.text, "Dormant: game inactive");
+
+    model.apply_intent(UiIntent::SetAutoPotion(false));
+    let disabled = model.view();
+    assert!(!disabled.auto_potion_requested);
+    assert_eq!(disabled.auto_potion.text, "Off");
+}
+
+#[test]
 fn install_and_uninstall_beacon_intents() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());
@@ -558,6 +593,27 @@ fn log_filter_and_settings_level_stay_linked() {
     model.apply_intent(UiIntent::ToggleLogPanel(true));
     model.apply_intent(UiIntent::ToggleLogPanel(false));
     assert_eq!(model.settings_form().logging.level, LevelName::Warn);
+}
+
+#[test]
+fn applying_settings_refreshes_the_live_auto_potion_controller() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut model, potion) = model_with_clock_and_potion(dir.path(), Instant::now());
+    let mut form = model.settings_form();
+    form.potion.health = eso_weave::potion::ResourceWatch {
+        enabled: true,
+        threshold: 42,
+    };
+    form.potion.quickslot_key = eso_weave::input::Key::X;
+    form.potion.retry_interval_ms = 2345;
+
+    model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+
+    let config = *potion.lock().unwrap().config();
+    assert!(config.health.enabled);
+    assert_eq!(config.health.threshold, 42);
+    assert_eq!(config.quickslot_key, eso_weave::input::Key::X);
+    assert_eq!(config.retry_interval_ms, 2345);
 }
 
 #[test]
@@ -719,6 +775,35 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
     );
     assert!(!input.is_menu_gated());
     assert_eq!(weave.menu(), MenuSurface::None);
+
+    // Missing or corrupt surface evidence is not gameplay and must fail closed.
+    route_reader_event(
+        PixelBusEvent::MenuGate(None),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        3,
+        &mut sink,
+    );
+    assert!(input.is_menu_gated());
+
+    potion.set_game_active(true);
+    potion.set_focused(true);
+    potion.on_heartbeat();
+    potion.set_enabled(true);
+    let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                quickslot: QuickslotState::new_unknown(),
+            },
+            3,
+            &mut potion_sink,
+        ),
+        AutoPotionState::Blocked(BlockReason::GameContext)
+    );
 }
 
 // Slice 033: the resource readouts and routing.
@@ -813,6 +898,7 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
     // as Gated rather than firing.
     potion.set_game_active(true);
     potion.set_focused(true);
+    potion.on_heartbeat();
     potion.set_enabled(true);
     let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
     let readings = eso_weave::potion::PotionReadings {
@@ -829,15 +915,13 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
     };
     assert_eq!(
         potion.tick(readings, 1000, &mut potion_sink),
-        Err(eso_weave::potion::Block::Gated)
+        AutoPotionState::Blocked(BlockReason::GameContext)
     );
     assert!(potion_sink.ops.is_empty());
 }
 
 #[test]
-fn a_signal_lost_event_switches_auto_potion_off() {
-    // FR-011: without readings there is nothing trustworthy to act on, so it
-    // switches off rather than evaluating against stale values.
+fn a_signal_lost_event_blocks_auto_potion_without_clearing_the_request() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = active_fishing_controller();
     let mut potion = eso_weave::potion::AutoPotionController::new(
@@ -846,6 +930,9 @@ fn a_signal_lost_event_switches_auto_potion_off() {
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
+    potion.set_game_active(true);
+    potion.set_focused(true);
+    potion.on_heartbeat();
     potion.set_enabled(true);
     assert!(potion.enabled());
 
@@ -858,10 +945,137 @@ fn a_signal_lost_event_switches_auto_potion_off() {
         1,
         &mut sink,
     );
-    assert!(
-        !potion.enabled(),
-        "auto-potion must switch off when the beacon signal is lost"
+    assert!(potion.enabled());
+    assert_eq!(
+        potion.state(),
+        AutoPotionState::Blocked(BlockReason::BeaconUnavailable)
     );
+
+    route_reader_event(
+        PixelBusEvent::Heartbeat,
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        2,
+        &mut sink,
+    );
+    let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                quickslot: QuickslotState::new_unknown(),
+            },
+            2,
+            &mut potion_sink,
+        ),
+        AutoPotionState::Blocked(BlockReason::GameContext),
+        "heartbeat must not substitute for a fresh gameplay-surface observation"
+    );
+
+    route_reader_event(
+        PixelBusEvent::MenuGate(Some(MenuSurface::None)),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        3,
+        &mut sink,
+    );
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                quickslot: QuickslotState::new_unknown(),
+            },
+            3,
+            &mut potion_sink,
+        ),
+        AutoPotionState::Blocked(BlockReason::NoWatchedResource),
+        "only positive gameplay-surface evidence may release the context blocker"
+    );
+}
+
+#[test]
+fn s043_auto_potion_view_names_every_effective_family() {
+    let cases = [
+        (AutoPotionState::Off, "Off", StatusRole::Muted),
+        (
+            AutoPotionState::Dormant(DormantReason::GameInactive),
+            "Dormant: game inactive",
+            StatusRole::Muted,
+        ),
+        (
+            AutoPotionState::Dormant(DormantReason::Unfocused),
+            "Dormant: game unfocused",
+            StatusRole::Muted,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::BeaconUnavailable),
+            "Blocked: beacon unavailable",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::Suspended),
+            "Blocked: input suspended",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::GameContext),
+            "Blocked: game context",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::NoWatchedResource),
+            "Blocked: no watched resource",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::ResourcesUnavailable),
+            "Blocked: resources unavailable",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::QuickslotUnavailable),
+            "Blocked: quickslot unavailable",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::NoPotion),
+            "Blocked: no potion selected",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::PotionUnavailable),
+            "Blocked: potion unavailable",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::PotionCooldown),
+            "Blocked: potion cooldown",
+            StatusRole::Warning,
+        ),
+        (
+            AutoPotionState::Blocked(BlockReason::RetryInterval),
+            "Blocked: retry interval",
+            StatusRole::Warning,
+        ),
+        (AutoPotionState::Ready, "Ready", StatusRole::Healthy),
+    ];
+    for (state, expected_text, expected_role) in cases {
+        let view = auto_potion_view(state);
+        assert_eq!(view.text, expected_text);
+        assert_eq!(view.role, expected_role);
+    }
+
+    let triggered = auto_potion_view(AutoPotionState::Triggered(TriggerCause {
+        resource: AutoPotionResource::Health,
+        observed_percent: 20,
+        threshold_percent: 35,
+    }));
+    assert_eq!(triggered.text, "Triggered: Health at 20% (threshold 35%)");
+    assert_eq!(triggered.role, StatusRole::Active);
 }
 
 // Slice 042: the explicitly classified quickslot readout.

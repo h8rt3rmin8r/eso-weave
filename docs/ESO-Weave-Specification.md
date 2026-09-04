@@ -754,25 +754,29 @@ Auto-potion synthesizes the quickslot key when a watched resource runs low. It i
 the only feature that acts on a beacon-derived value by producing input, which puts
 it on the same safety surface as the input engine itself.
 
-S042 keeps the worker-loop consumer gate disabled while the explicit quickslot
-contract completes its real-client matrix. The pure rule below remains the target
-contract and is covered by tests, but no automatic input is emitted until S043
-adopts the verified signal and exposes its effective blocker state.
+S043 activates the worker-loop consumer through the explicit S042 quickslot
+contract and exposes the controller's effective state. Requested enablement is a
+session-only user choice; effective state reports whether the feature is Off,
+dormant, blocked, Ready, or just Triggered and names the current reason.
 
 **The trigger rule.** The key is pressed when, and only when, all of the following
 hold, evaluated in this order:
 
 | # | Condition |
 | --- | --- |
-| 1 | Auto-potion is enabled |
-| 2 | The application is not suspended |
-| 3 | No native game menu or text field is gating input |
-| 4 | The minimum retry interval since the last attempt has elapsed |
-| 5 | The active quickslot holds a usable potion |
-| 6 | The quickslot cooldown is zero |
-| 7 | At least one enabled resource is readable and at or below its own threshold |
+| 1 | Auto-potion is requested for this session |
+| 2 | The game is active |
+| 3 | The game is focused |
+| 4 | A fresh PixelBus heartbeat is available |
+| 5 | The application is not suspended |
+| 6 | The surface block is positively decoded as Gameplay |
+| 7 | At least one resource watch is enabled and at least one watched resource is fresh |
+| 8 | The active quickslot explicitly holds a usable potion |
+| 9 | The quickslot cooldown is ready |
+| 10 | The minimum retry interval since the last attempt has elapsed |
+| 11 | At least one fresh watched resource is at or below its own threshold |
 
-Condition 7 is a disjunction across the three resources and is not configurable.
+Condition 11 is a disjunction across the three resources and is not configurable.
 Requiring all three to be low would fire only when a potion no longer helps. Each
 resource carries an independent enable and threshold, because the right number
 differs between health and magicka, and because per-resource controls make the
@@ -798,9 +802,20 @@ input path of its own. The menu gate is applied to the controller directly rathe
 than only to the interception decision, because the controller acts on its own
 timers and never passes through that decision. Suspension is a condition checked in
 the controller rather than a consequence of how the worker loop is wired. Losing the
-beacon signal switches the feature off rather than leaving it evaluating stale
-readings. The controller ticks on the pixel-bus worker, adding no thread and no
-timer, and nothing reaches the hook thread.
+game, focus, or beacon makes the effective state dormant or blocked without
+clearing the requested setting. Fresh positive observations are required before
+evaluation can become Ready or Triggered again. The controller ticks on the
+pixel-bus worker, adding no thread and no timer, and nothing reaches the hook
+thread.
+
+**Effective state.** Off means the user has not requested the feature. Dormant
+names an inactive or unfocused game. Blocked names the first current safety or
+observation failure: beacon unavailable, suspension, disallowed game context, no
+watched resource, resources unavailable, quickslot unavailable, no potion,
+unusable potion, cooldown, or retry interval. Ready means every precondition is
+satisfied but no fresh watched resource is low. Triggered lasts until the next
+evaluation and identifies the resource, observed percentage, and threshold for the
+submitted attempt. Normal logging records categorical state changes only.
 
 **Defaults.** The feature is off, every resource watch is off, and the enable is not
 restored across sessions. That last point is a deliberate departure from suspend and
