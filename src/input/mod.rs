@@ -36,23 +36,65 @@ pub use key::Key;
 /// weave sink reads it between timed operations. That separation prevents a
 /// running weave from delaying authoritative death evidence.
 #[derive(Debug, Clone)]
-pub struct LifeGate(Arc<AtomicBool>);
+struct AtomicGate(Arc<AtomicBool>);
 
-impl Default for LifeGate {
+impl Default for AtomicGate {
     fn default() -> Self {
         Self(Arc::new(AtomicBool::new(true)))
     }
 }
 
+impl AtomicGate {
+    fn set(&self, gated: bool) {
+        self.0.store(gated, Ordering::Relaxed);
+    }
+
+    fn is_gated(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct LifeGate(AtomicGate);
+
 impl LifeGate {
     /// Changes the gate. Only a validated Alive signal sets this to false.
     pub fn set(&self, gated: bool) {
-        self.0.store(gated, Ordering::Relaxed);
+        self.0.set(gated);
     }
 
     /// Whether new synthesized presses are currently forbidden.
     pub fn is_gated(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
+        self.0.is_gated()
+    }
+}
+
+/// A cheaply cloned gate for the generated-weave roll-dodge boundary.
+#[derive(Debug, Clone, Default)]
+pub struct RollGate(AtomicGate);
+
+impl RollGate {
+    fn set(&self, gated: bool) {
+        self.0.set(gated);
+    }
+
+    /// Whether roll-dodge evidence currently forbids generated weave work.
+    pub fn is_gated(&self) -> bool {
+        self.0.is_gated()
+    }
+}
+
+/// The independently updated safety gates observed by a running weave sequence.
+#[derive(Debug, Clone)]
+pub struct WeaveGates {
+    life: LifeGate,
+    roll: RollGate,
+}
+
+impl WeaveGates {
+    /// Whether any safety authority currently blocks generated weave work.
+    pub fn is_gated(&self) -> bool {
+        self.life.is_gated() || self.roll.is_gated()
     }
 }
 
@@ -126,6 +168,7 @@ pub struct InputEngine {
     suspended: AtomicBool,
     menu_gated: AtomicBool,
     life_gate: LifeGate,
+    roll_gate: RollGate,
     held: Mutex<HashSet<Key>>,
     passed_through: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
@@ -144,6 +187,7 @@ impl InputEngine {
             suspended: AtomicBool::new(false),
             menu_gated: AtomicBool::new(false),
             life_gate: LifeGate::default(),
+            roll_gate: RollGate::default(),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
@@ -167,6 +211,7 @@ impl InputEngine {
         if !active {
             self.menu_gated.store(false, Ordering::Relaxed);
             self.life_gate.set(true);
+            self.roll_gate.set(true);
             self.held.lock().unwrap().clear();
         }
     }
@@ -227,6 +272,28 @@ impl InputEngine {
         self.life_gate.clone()
     }
 
+    /// Sets whether roll-dodge evidence blocks generated weave work.
+    ///
+    /// This defaults true and is released only by a valid Inactive signal. Like
+    /// the life gate, it passes physical skill input through and leaves toggle
+    /// hotkeys available.
+    pub fn set_roll_gated(&self, gated: bool) {
+        self.roll_gate.set(gated);
+    }
+
+    /// Whether roll-dodge evidence currently blocks generated weave work.
+    pub fn is_roll_gated(&self) -> bool {
+        self.roll_gate.is_gated()
+    }
+
+    /// Shared safety handles for the running weave sink.
+    pub fn weave_gates(&self) -> WeaveGates {
+        WeaveGates {
+            life: self.life_gate.clone(),
+            roll: self.roll_gate.clone(),
+        }
+    }
+
     /// Sets whether an action is active. An inactive action's bound key passes
     /// through to the game instead of being intercepted (master specification
     /// section 7.1: an inactive slot's key passes through unmodified).
@@ -281,6 +348,9 @@ impl InputEngine {
             return self.pass_physical(event);
         }
         if self.life_gate.is_gated() && !suspend_exempt {
+            return self.pass_physical(event);
+        }
+        if self.roll_gate.is_gated() && !suspend_exempt {
             return self.pass_physical(event);
         }
 

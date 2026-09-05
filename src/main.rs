@@ -146,19 +146,19 @@ fn main() {
         let weave = weave.clone();
         let input = input.clone();
         thread::spawn(move || {
-            let life_gate = input.life_gate();
-            let mut sink = RealSink::new(SharedBackend(backend), life_gate.clone());
+            let weave_gates = input.weave_gates();
+            let mut sink = RealSink::new(SharedBackend(backend), weave_gates.clone());
             while let Ok(action) = actions.recv() {
                 if action.is_app_toggle() {
                     // A send error means the GUI receiver is gone (the app is
                     // exiting); dropping the toggle is the correct response.
                     let _ = toggle_tx.send(action);
                 } else {
-                    if life_gate.is_gated() {
+                    if weave_gates.is_gated() {
                         continue;
                     }
                     let mut weave = weave.lock().unwrap();
-                    if life_gate.is_gated() {
+                    if weave_gates.is_gated() {
                         continue;
                     }
                     weave.handle(action, &mut sink);

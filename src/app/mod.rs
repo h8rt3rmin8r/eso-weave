@@ -34,7 +34,8 @@ use crate::logging::LogHandle;
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass, WorldState,
+    QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState, SlotCooldown,
+    WeaponClass, WorldState,
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
@@ -454,6 +455,27 @@ pub fn life_state_view(state: LifeState) -> LifeStateView {
             LifeState::Alive => StatusRole::Healthy,
             LifeState::Dead | LifeState::Reincarnating => StatusRole::Warning,
             LifeState::Unknown => StatusRole::Muted,
+        },
+    }
+}
+
+/// A normalized bounded roll-dodge view for Live HUD.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RollDodgeView {
+    pub state: &'static str,
+    pub role: StatusRole,
+}
+
+pub fn roll_dodge_view(state: RollDodgeState) -> RollDodgeView {
+    RollDodgeView {
+        state: match state {
+            RollDodgeState::Unknown => "Not detected",
+            RollDodgeState::Inactive => "Inactive",
+            RollDodgeState::Active => "Active",
+        },
+        role: match state {
+            RollDodgeState::Unknown | RollDodgeState::Active => StatusRole::Warning,
+            RollDodgeState::Inactive => StatusRole::Muted,
         },
     }
 }
@@ -1268,6 +1290,8 @@ pub struct AppView {
     pub movement: MovementView,
     /// The authoritative player life state.
     pub life: LifeStateView,
+    /// The bounded player roll-dodge state.
+    pub roll_dodge: RollDodgeView,
     /// Whether the current world is active after a fresh addon baseline.
     pub world: WorldStateView,
     /// The detected game UI surface, and whether it is gating input.
@@ -1532,7 +1556,17 @@ impl AppModel {
             let potion = self.potion.lock().unwrap();
             (potion.enabled(), potion.state(), *potion.config())
         };
-        let (mut skills, active_bar, classes, combat, movement, life, resources, quickslot) = {
+        let (
+            mut skills,
+            active_bar,
+            classes,
+            combat,
+            movement,
+            life,
+            roll_dodge,
+            resources,
+            quickslot,
+        ) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
             let weave = self.weave.lock().unwrap();
             (
@@ -1542,6 +1576,7 @@ impl AppModel {
                 weave.combat(),
                 weave.movement(),
                 weave.life(),
+                weave.roll_dodge(),
                 weave.resources(),
                 weave.quickslot(),
             )
@@ -1553,6 +1588,7 @@ impl AppModel {
         let mut combat = combat_view(combat);
         let mut movement = movement_view(movement);
         let mut life = life_state_view(life);
+        let mut roll_dodge = roll_dodge_view(roll_dodge);
         let mut world = world_state_view(game.world);
         let mut resources = resources_view_with_config(resources, auto_potion_config);
         let mut quickslot = quickslot_view(quickslot);
@@ -1575,6 +1611,10 @@ impl AppModel {
                 role: StatusRole::Muted,
             };
             life = LifeStateView {
+                state: "Game not active",
+                role: StatusRole::Muted,
+            };
+            roll_dodge = RollDodgeView {
                 state: "Game not active",
                 role: StatusRole::Muted,
             };
@@ -1625,6 +1665,7 @@ impl AppModel {
             combat,
             movement,
             life,
+            roll_dodge,
             world,
             menu: game_context_view(game.context()),
             resources,

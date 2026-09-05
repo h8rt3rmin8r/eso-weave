@@ -15,10 +15,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
-use crate::input::{Action, InputBackend, InputEngine, Key, LifeGate, MouseButton, Transition};
+use crate::input::{Action, InputBackend, InputEngine, Key, MouseButton, Transition, WeaveGates};
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
-    QuickslotState, ResourceSet, WeaponBarSignal, WeaponClass,
+    QuickslotState, ResourceSet, RollDodgeState, WeaponBarSignal, WeaponClass,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -180,7 +180,7 @@ impl WeaveSink for MockSink {
 pub struct RealSink<B> {
     backend: B,
     origin: Instant,
-    life_gate: LifeGate,
+    gates: WeaveGates,
     sequence_cancelled: bool,
     pressed_keys: HashSet<Key>,
     pressed_mouse: HashSet<MouseButton>,
@@ -188,11 +188,11 @@ pub struct RealSink<B> {
 
 impl<B: InputBackend> RealSink<B> {
     /// Creates a real sink over the given input backend.
-    pub fn new(backend: B, life_gate: LifeGate) -> Self {
+    pub fn new(backend: B, gates: WeaveGates) -> Self {
         Self {
             backend,
             origin: Instant::now(),
-            life_gate,
+            gates,
             sequence_cancelled: false,
             pressed_keys: HashSet::new(),
             pressed_mouse: HashSet::new(),
@@ -202,7 +202,7 @@ impl<B: InputBackend> RealSink<B> {
 
 impl<B: InputBackend> WeaveSink for RealSink<B> {
     fn begin_sequence(&mut self) {
-        self.sequence_cancelled = self.life_gate.is_gated();
+        self.sequence_cancelled = self.gates.is_gated();
     }
 
     fn emit(&mut self, op: InputOp) {
@@ -212,10 +212,10 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
                 (transition, self.pressed_mouse.contains(&button))
             }
         };
-        // Once life evidence closes the gate, start no new input. Releases still
+        // Once life or roll-dodge evidence closes the gate, start no new input. Releases still
         // run so a key or mouse button pressed before the transition cannot be
         // stranded logically down.
-        if self.life_gate.is_gated() {
+        if self.gates.is_gated() {
             self.sequence_cancelled = true;
         }
         if self.sequence_cancelled && transition == Transition::Down {
@@ -252,7 +252,7 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
     fn wait(&mut self, ms: u32) {
         let deadline = Instant::now() + Duration::from_millis(u64::from(ms));
         while !self.sequence_cancelled {
-            if self.life_gate.is_gated() {
+            if self.gates.is_gated() {
                 self.sequence_cancelled = true;
                 break;
             }
@@ -281,6 +281,7 @@ pub struct WeaveEngine {
     combat: CombatSignal,
     movement: MovementSignal,
     life: LifeState,
+    roll_dodge: RollDodgeState,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
     menu: MenuSurface,
@@ -303,6 +304,7 @@ impl WeaveEngine {
             combat: CombatSignal::Unknown,
             movement: MovementSignal::Unknown,
             life: LifeState::Unknown,
+            roll_dodge: RollDodgeState::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
@@ -353,6 +355,16 @@ impl WeaveEngine {
     /// The last decoded player life state.
     pub fn life(&self) -> LifeState {
         self.life
+    }
+
+    /// Records the bounded roll-dodge state used by the worker-side gate.
+    pub fn set_roll_dodge(&mut self, roll_dodge: RollDodgeState) {
+        self.roll_dodge = roll_dodge;
+    }
+
+    /// The last decoded roll-dodge state.
+    pub fn roll_dodge(&self) -> RollDodgeState {
+        self.roll_dodge
     }
 
     /// Records the decoded slot cooldowns, for display only.
@@ -437,6 +449,7 @@ impl WeaveEngine {
         self.combat = CombatSignal::Unknown;
         self.movement = MovementSignal::Unknown;
         self.life = LifeState::Unknown;
+        self.roll_dodge = RollDodgeState::Unknown;
         self.cooldowns = CooldownSet::new_unknown();
         self.quickslot = QuickslotState::new_unknown();
         self.menu = MenuSurface::None;
@@ -527,6 +540,9 @@ impl WeaveEngine {
         // Re-check after handoff. Death can arrive after the hook suppressed and
         // queued a physical key but before this worker executes it.
         if self.life.gates() {
+            return;
+        }
+        if self.roll_dodge.gates() {
             return;
         }
 

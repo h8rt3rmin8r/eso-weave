@@ -344,6 +344,28 @@ pub enum WorldState {
     Active,
 }
 
+/// Whether the player is inside the bounded roll-dodge action window.
+///
+/// Unknown and Active both gate generated weave work. Only a positively decoded
+/// Inactive observation releases that gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RollDodgeState {
+    /// No trustworthy current roll-dodge evidence is available.
+    #[default]
+    Unknown,
+    /// The addon positively reports no active roll dodge.
+    Inactive,
+    /// The addon observed roll-dodge entry and has not observed or inferred exit.
+    Active,
+}
+
+impl RollDodgeState {
+    /// Whether generated weave work must be blocked.
+    pub fn gates(self) -> bool {
+        self != Self::Inactive
+    }
+}
+
 /// The green marker identifying the B21 life-state sample.
 ///
 /// This is the midpoint of the widest remaining gap in
@@ -363,6 +385,16 @@ const WORLD_MARKER: u8 = 0xCC;
 const WORLD_UNKNOWN_RED: u8 = 0x20;
 const WORLD_TRANSITIONING_RED: u8 = 0x80;
 const WORLD_ACTIVE_RED: u8 = 0xE0;
+
+/// The green marker identifying the B23 roll-dodge sample.
+///
+/// This is the midpoint of the widest remaining gap in
+/// [`BLOCK_CENTER_GREENS`], six channel values from both nearest neighbors and
+/// three times the default tolerance.
+const ROLL_DODGE_MARKER: u8 = 0xF9;
+const ROLL_DODGE_UNKNOWN_RED: u8 = 0x20;
+const ROLL_DODGE_INACTIVE_RED: u8 = 0x80;
+const ROLL_DODGE_ACTIVE_RED: u8 = 0xE0;
 
 /// The green marker that identifies a movement sample.
 ///
@@ -603,7 +635,7 @@ const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 27] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 28] = [
     ("H0 layout magic", LAYOUT_MAGIC_G),
     ("H1 layout high marker", LAYOUT_HIGH_MARKER),
     ("H2 layout low marker", LAYOUT_LOW_MARKER),
@@ -631,6 +663,7 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 27] = [
     ("B20 quickslot state marker", QUICKSLOT_STATE_MARKER),
     ("B21 life-state marker", LIFE_MARKER),
     ("B22 world-state marker", WORLD_MARKER),
+    ("B23 roll-dodge marker", ROLL_DODGE_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -679,6 +712,9 @@ pub enum PixelBusEvent {
     /// A change in the authoritative world lifecycle. Unknown covers startup,
     /// unavailable, invalid, and lost evidence.
     World(WorldState),
+    /// A change in the bounded player roll-dodge state. Unknown and Active gate
+    /// generated weave work.
+    RollDodge(RollDodgeState),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -738,6 +774,8 @@ pub struct BlockSamples {
     pub life: Option<Rgb>,
     /// B22, the player world-state block.
     pub world: Option<Rgb>,
+    /// B23, the player roll-dodge block.
+    pub roll_dodge: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -858,11 +896,11 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In the version-16 addon, the 23 blocks follow three negotiated header cells
+/// In the version-17 addon, the 24 blocks follow three negotiated header cells
 /// and remain on one row at every supported client width and block size. In the
 /// explicit legacy layout they retain the two-row 16-column shape introduced by
 /// slices 038 and 042.
-pub const NUM_BLOCKS: u32 = 23;
+pub const NUM_BLOCKS: u32 = 24;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -882,15 +920,19 @@ pub const COLUMNS: u32 = 16;
 /// identified by its legacy heartbeat at cell zero.
 pub const LEGACY_COLUMNS: u32 = COLUMNS;
 
-/// Current negotiated geometry header version. Version 2 identifies the B22
-/// world-state payload introduced by addon version 16.
-pub const LAYOUT_PROTOCOL_VERSION: u8 = 2;
-/// Spaced blue-channel wire code representing current protocol version 2.
-pub const LAYOUT_VERSION_CODE: u8 = 0x40;
+/// Current negotiated geometry header version. Version 3 identifies the B23
+/// roll-dodge payload introduced by addon version 17.
+pub const LAYOUT_PROTOCOL_VERSION: u8 = 3;
+/// Spaced blue-channel wire code representing current protocol version 3.
+pub const LAYOUT_VERSION_CODE: u8 = 0x60;
 /// Frozen blue-channel wire code for negotiated protocol version 1.
 pub const LAYOUT_VERSION_ONE_CODE: u8 = 0x20;
 /// Payload count of negotiated protocol version 1 (addon versions 14 and 15).
 pub const LAYOUT_VERSION_ONE_BLOCKS: u32 = 22;
+/// Frozen blue-channel wire code for negotiated protocol version 2.
+pub const LAYOUT_VERSION_TWO_CODE: u8 = 0x40;
+/// Payload count of negotiated protocol version 2 (addon version 16).
+pub const LAYOUT_VERSION_TWO_BLOCKS: u32 = 23;
 /// Maximum tolerance accepted for geometry metadata.
 ///
 /// This remains below half the 0x20 version-code spacing so a caller's broad
@@ -961,6 +1003,7 @@ impl BusLayout {
     pub const fn payload_blocks(self) -> u32 {
         match self.mode {
             LayoutMode::Negotiated { version: 1 } => LAYOUT_VERSION_ONE_BLOCKS,
+            LayoutMode::Negotiated { version: 2 } => LAYOUT_VERSION_TWO_BLOCKS,
             LayoutMode::Legacy | LayoutMode::Negotiated { .. } => NUM_BLOCKS,
         }
     }
@@ -968,6 +1011,11 @@ impl BusLayout {
     /// Whether this geometry generation positively identifies B22.
     pub const fn supports_world_state(self) -> bool {
         matches!(self.mode, LayoutMode::Negotiated { version } if version >= 2)
+    }
+
+    /// Whether this geometry generation positively identifies B23.
+    pub const fn supports_roll_dodge(self) -> bool {
+        matches!(self.mode, LayoutMode::Negotiated { version } if version >= 3)
     }
 
     /// Total occupied cells, including the negotiated header when present.
@@ -1251,6 +1299,10 @@ impl ReaderConfig {
     pub fn world_point(&self) -> (u32, u32) {
         block_center(self.block_px, 22)
     }
+    /// The legacy-grid player roll-dodge block (B23) sample point.
+    pub fn roll_dodge_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 23)
+    }
 }
 
 impl Default for ReaderConfig {
@@ -1413,6 +1465,8 @@ pub fn decode_layout_header(
     }
     let version = if within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
         LAYOUT_PROTOCOL_VERSION
+    } else if within(h0.b, LAYOUT_VERSION_TWO_CODE, layout_tolerance) {
+        2
     } else if within(h0.b, LAYOUT_VERSION_ONE_CODE, layout_tolerance) {
         1
     } else {
@@ -1607,6 +1661,33 @@ pub fn decode_world_state(sample: Rgb, tolerance: u8) -> WorldState {
     };
     if matches.next().is_some() {
         return WorldState::Unknown;
+    }
+    state
+}
+
+/// Decodes B23 into the bounded player roll-dodge state.
+///
+/// Marker, complement checksum, and a uniquely matching discrete payload are
+/// required. Every failure is Unknown and therefore closes generated weave work.
+pub fn decode_roll_dodge(sample: Rgb, tolerance: u8) -> RollDodgeState {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, ROLL_DODGE_MARKER, tolerance)
+        || checksum.abs_diff(255) > u16::from(tolerance)
+    {
+        return RollDodgeState::Unknown;
+    }
+    let mut matches = [
+        (ROLL_DODGE_UNKNOWN_RED, RollDodgeState::Unknown),
+        (ROLL_DODGE_INACTIVE_RED, RollDodgeState::Inactive),
+        (ROLL_DODGE_ACTIVE_RED, RollDodgeState::Active),
+    ]
+    .into_iter()
+    .filter(|(code, _)| within(sample.r, *code, tolerance));
+    let Some((_, state)) = matches.next() else {
+        return RollDodgeState::Unknown;
+    };
+    if matches.next().is_some() {
+        return RollDodgeState::Unknown;
     }
     state
 }
@@ -1922,6 +2003,7 @@ pub struct PixelBusReader {
     quickslot: QuickslotState,
     life: LifeState,
     world: WorldState,
+    roll_dodge: RollDodgeState,
     had_heartbeat: bool,
 }
 
@@ -1943,6 +2025,7 @@ impl PixelBusReader {
             quickslot: QuickslotState::new_unknown(),
             life: LifeState::Unknown,
             world: WorldState::Unknown,
+            roll_dodge: RollDodgeState::Unknown,
             had_heartbeat: false,
         }
     }
@@ -2018,6 +2101,10 @@ impl PixelBusReader {
             self.world = WorldState::Unknown;
             events.push(PixelBusEvent::World(WorldState::Unknown));
         }
+        if self.roll_dodge != RollDodgeState::Unknown {
+            self.roll_dodge = RollDodgeState::Unknown;
+            events.push(PixelBusEvent::RollDodge(RollDodgeState::Unknown));
+        }
         events
     }
 
@@ -2048,6 +2135,7 @@ impl PixelBusReader {
             quickslot_state: b20,
             life: b21,
             world: b22,
+            roll_dodge: b23,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -2126,6 +2214,20 @@ impl PixelBusReader {
                     "player life state detected"
                 );
                 events.push(PixelBusEvent::Life(life));
+            }
+
+            // B23 is safety-authoritative for generated weaves and therefore
+            // precedes any event that could hand work to a synthesis controller.
+            let roll_dodge =
+                b23.map_or(RollDodgeState::Unknown, |c| decode_roll_dodge(c, tolerance));
+            if roll_dodge != self.roll_dodge {
+                self.roll_dodge = roll_dodge;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?roll_dodge,
+                    "player roll-dodge state detected"
+                );
+                events.push(PixelBusEvent::RollDodge(roll_dodge));
             }
 
             let signal = b1.map_or(FishingSignal::None, |c| fishing_signal(c, tolerance));
@@ -2375,6 +2477,11 @@ impl PixelBusReader {
             life: sample(21),
             world: if layout.supports_world_state() {
                 sample(22)
+            } else {
+                None
+            },
+            roll_dodge: if layout.supports_roll_dodge() {
+                sample(23)
             } else {
                 None
             },
