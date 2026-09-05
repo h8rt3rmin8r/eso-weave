@@ -511,26 +511,27 @@ every frame.
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders twenty-one blocks anchored to the top-left of the game window's
-client area. Blocks are 16 by 16 physical pixels by default, and the addon
-compensates for the interface scale so block geometry is constant in physical
-pixels. The game's UI lifecycle hides the blocks during loading screens.
+PixelBeacon renders a three-cell layout header followed by twenty-one signal
+blocks anchored to the top-left of the game window's client area. Blocks are 16
+by 16 physical pixels by default, and the addon compensates for the interface
+scale so block geometry is constant in physical pixels. The game's UI lifecycle
+hides the blocks during loading screens.
 
-**Geometry.** Blocks form a grid. Block `index` occupies column `index mod COLUMNS`
-and row `index div COLUMNS`, so the beacon wraps and grows downward rather than
-sideways, and its width is bounded forever at `BLOCK_PX * COLUMNS`. The column
-count is 16 and is fixed on both sides of the contract, never derived from the
-display resolution: two independently obtained measurements would have to yield the
-identical integer, and a disagreement of one does not degrade gracefully. It shifts
-every block from row 1 onward, so the reader samples real blocks that pass their
-marker and checksum checks while reporting each signal as another signal's value,
-an error sitting underneath the validation built to catch it.
+**Geometry.** PixelBeacon is the sole authority for the live column count. It
+computes the number of complete physical blocks that fit the current `GuiRoot`
+width and publishes that 16-bit count in the invariant header. The application
+does not derive a competing count. It validates the published value against its
+measured client surface before using it. This authority model supersedes the
+fixed 16-column contract from slice 035, while retaining that geometry only for
+positively identified pre-version-14 addons.
 
-At twenty-one blocks the grid is two rows: row 0 is full, and the five quickslot blocks
-occupy the first five positions of row 1. The occupied extent is
-`BLOCK_PX * min(NUM_BLOCKS, COLUMNS)` wide by `BLOCK_PX * ceil(NUM_BLOCKS /
-COLUMNS)` tall, which is 256 by 32 physical pixels at the default block size. Cells
-beside the last block in a partial row are neither drawn nor read.
+The first three cells are always H0 through H2 at row zero, columns zero through
+two. Payload block `i` occupies logical cell `3 + i`, column `cell mod columns`,
+and row `cell div columns`. At all supported client widths and block sizes the
+current 24 total cells fit on one row. The occupied extent is `BLOCK_PX *
+min(3 + NUM_BLOCKS, columns)` wide by `BLOCK_PX * ceil((3 + NUM_BLOCKS) /
+columns)` tall, which is 384 by 16 physical pixels at the default block size.
+Cells after the last payload block are neither drawn nor read.
 
 The overlay is not movable. Its anchor is part of the shared geometry contract, so
 relocating it would require both sides to agree on a new origin, with the same
@@ -538,31 +539,49 @@ undetectable failure mode as a column-count disagreement. The block size setting
 the supported way to reduce the footprint, and the application reports the current
 footprint beside that setting and in its log.
 
-**Single-sourcing.** The block count and the column count are each stated exactly
-once per side (`NUM_BLOCKS` and `COLUMNS` in the addon, `pixelbus::NUM_BLOCKS` and
-`pixelbus::COLUMNS` in the application). Both the drawn extent and the captured
-region derive from them. The test suite parses the addon source it embeds and fails
-the build if either disagrees, so a divergence cannot ship as a silently dead
-signal.
+**Negotiation.** H0 is `(0x45, 0x53, 0x20)`: two magic channels and the spaced
+wire code for protocol version 1. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
+`(columns_low, 0x9C, 255 - columns_low)`. Magic, markers, and complements honor
+the configured capture tolerance. Recognized magic
+with any invalid field, unsupported version, impossible count, or surface-fit
+failure makes the layout unavailable and suppresses all payload decoding. A
+non-magic H0 selects the legacy 16-column, zero-offset layout only when it is a
+valid legacy magenta heartbeat. Geometry metadata caps effective tolerance at
+15, below half the version-code spacing, even when payload tolerance is broader.
 
-**Blocks.** Positions and sample points are given at the default block size.
+The addon and application each state the header constants once, and contract
+tests parse the embedded addon source to prevent byte-level drift. Capture extent
+and every payload point derive from one validated `BusLayout`. The reader captures
+one occupied frame per steady batch, with one additional capture allowed during
+initial negotiation or growth beyond the prepared frame.
+
+**Header.** Positions and sample points are fixed at the default block size.
+
+| Cell | Position | Sample | Encoding |
+| --- | --- | --- | --- |
+| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0x20)`, where `0x20` is logical version 1 |
+| H1 Column high byte | (16, 0) | (24, 8) | `(high, 0x64, 255 - high)` |
+| H2 Column low byte | (32, 0) | (40, 8) | `(low, 0x9C, 255 - low)` |
+
+**Blocks.** Positions and sample points are the negotiated one-row positions at
+the default block size. Legacy addons retain the pre-version-14 positions.
 
 | Block | Position | Sample | Encoding and meaning |
 | --- | --- | --- | --- |
-| B0 Status | (0, 0) | (8, 8) | Solid `#FF00FF` whenever the addon is loaded and rendering. The heartbeat. |
-| B1 Fishing | (16, 0) | (24, 8) | `#0080FF` while a cast is active and waiting; `#00FF00` on a detected bite; hidden otherwise. |
-| B2 Latency | (32, 0) | (40, 8) | `R = clamp(GetLatency(), 0, 1020) / 4`, `G = 0xA5`, `B = 255 - R`. Updated at 1 Hz. |
-| B3 Weapon bar | (48, 0) | (56, 8) | `G = 0x5A`, `R` packs the front and back weapon-class nibbles (`front * 16 + back`), `B` is the active-bar code (0 unknown, 1 front, 2 back). |
-| B4 Combat | (64, 0) | (72, 8) | `G = 0x2D`, `R` is `0xE0` in combat or `0x20` out of combat, `B = 255 - R`. Driven by `EVENT_PLAYER_COMBAT_STATE`, re-baselined from `IsUnitInCombat("player")` on `EVENT_PLAYER_ACTIVATED`. |
-| B5 Menu | (80, 0) | (88, 8) | `G = 0xD2`, `R` is the surface code times 24 (0 gameplay, 1 system, 2 map, 3 inventory, 4 mail, 5 character, 6 guild store, 7 crown store, 8 journal, 9 chat entry, 10 other), `B = 255 - R`. Published on the fast tick. |
-| B6 Health | (96, 0) | (104, 8) | `G = 0x16`, `R` is the percentage of the current maximum (0 to 100, or `0xFF` unavailable), `B = 255 - R`. |
-| B7 Stamina | (112, 0) | (120, 8) | As B6 with `G = 0x6D`. |
-| B8 Magicka | (128, 0) | (136, 8) | As B6 with `G = 0xBB`. |
-| B9 Movement | (144, 0) | (152, 8) | `G = 0x43`, `R` is a two-bit code (bit 0 mounted, bit 1 sprint) scaled to `0x20` on foot or `0x60` mounted, `B = 255 - R`. Driven by `EVENT_MOUNTED_STATE_CHANGED`, re-baselined from `IsMounted()`, with a 1 Hz backstop. The two sprint codes `0xA0` and `0xE0` are reserved and never emitted, because the game exposes no sprint state to an addon; the reader decodes them as unavailable. |
-| B10 to B15 Cooldowns | (160, 0) to (240, 0) | (168, 8) to (248, 8) | One block per action slot the game exposes a cooldown for: skills 1 to 5, then the ultimate. `G` is a per-slot marker (`0x0B`, `0x21`, `0x4E`, `0x92`, `0xC6`, `0xE8`), `R` is the remaining time in 50 ms steps (`0` ready, `1` to `254` a duration saturating at 12700 ms, `0xFF` unavailable), `B = 255 - R`. Polled on the 1 Hz tick with change detection and re-baselined on `EVENT_PLAYER_ACTIVATED`, because the game fires no per-slot cooldown event. Synergy has no block: it is a contextual prompt rather than an action slot, so the game exposes no cooldown for it. |
-| B16 Quickslot cooldown | (0, 16) | (8, 24) | The first block on row 1. `G = 0x38`, `R` is the active quickslot's remaining cooldown in the same 50 ms steps, and `B = 255 - R`. This is an attached fact and never classifies the selected entry. |
-| B17 to B19 Quickslot item | (16, 16) to (48, 16) | (24, 24) to (56, 24) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
-| B20 Quickslot classification | (64, 16) | (72, 24) | `G = 0x76`, `B = 255 - R`, and spaced `R` codes distinguish unsupported API, invalid selection, inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion. Missing B20 with a valid legacy B16 reports an addon update requirement. Invalid or tolerance-ambiguous B20 reports a corrupt signal. Classification uses `GetCurrentQuickslot`, `GetSlotType`, `GetSlotBoundId`, `GetSlotItemLink`, `GetSlotItemCount`, `IsSlotUsable`, and `GetSlotCooldownInfo`. Events for selection, slot contents, slot state, cooldowns, inventory, and player activation converge through one change-detected path with a 1 Hz recovery backstop. |
+| B0 Status | (48, 0) | (56, 8) | Solid `#FF00FF` whenever the addon is loaded and rendering. The heartbeat. |
+| B1 Fishing | (64, 0) | (72, 8) | `#0080FF` while a cast is active and waiting; `#00FF00` on a detected bite; hidden otherwise. |
+| B2 Latency | (80, 0) | (88, 8) | `R = clamp(GetLatency(), 0, 1020) / 4`, `G = 0xA5`, `B = 255 - R`. Updated at 1 Hz. |
+| B3 Weapon bar | (96, 0) | (104, 8) | `G = 0x5A`, `R` packs the front and back weapon-class nibbles (`front * 16 + back`), `B` is the active-bar code (0 unknown, 1 front, 2 back). |
+| B4 Combat | (112, 0) | (120, 8) | `G = 0x2D`, `R` is `0xE0` in combat or `0x20` out of combat, `B = 255 - R`. Driven by `EVENT_PLAYER_COMBAT_STATE`, re-baselined from `IsUnitInCombat("player")` on `EVENT_PLAYER_ACTIVATED`. |
+| B5 Menu | (128, 0) | (136, 8) | `G = 0xD2`, `R` is the surface code times 24 (0 gameplay, 1 system, 2 map, 3 inventory, 4 mail, 5 character, 6 guild store, 7 crown store, 8 journal, 9 chat entry, 10 other), `B = 255 - R`. Published on the fast tick. |
+| B6 Health | (144, 0) | (152, 8) | `G = 0x16`, `R` is the percentage of the current maximum (0 to 100, or `0xFF` unavailable), `B = 255 - R`. |
+| B7 Stamina | (160, 0) | (168, 8) | As B6 with `G = 0x6D`. |
+| B8 Magicka | (176, 0) | (184, 8) | As B6 with `G = 0xBB`. |
+| B9 Movement | (192, 0) | (200, 8) | `G = 0x43`, `R` is a two-bit code (bit 0 mounted, bit 1 sprint) scaled to `0x20` on foot or `0x60` mounted, `B = 255 - R`. Driven by `EVENT_MOUNTED_STATE_CHANGED`, re-baselined from `IsMounted()`, with a 1 Hz backstop. The two sprint codes `0xA0` and `0xE0` are reserved and never emitted, because the game exposes no sprint state to an addon; the reader decodes them as unavailable. |
+| B10 to B15 Cooldowns | (208, 0) to (288, 0) | (216, 8) to (296, 8) | One block per action slot the game exposes a cooldown for: skills 1 to 5, then the ultimate. `G` is a per-slot marker (`0x0B`, `0x21`, `0x4E`, `0x92`, `0xC6`, `0xE8`), `R` is the remaining time in 50 ms steps (`0` ready, `1` to `254` a duration saturating at 12700 ms, `0xFF` unavailable), `B = 255 - R`. Polled on the 1 Hz tick with change detection and re-baselined on `EVENT_PLAYER_ACTIVATED`, because the game fires no per-slot cooldown event. Synergy has no block: it is a contextual prompt rather than an action slot, so the game exposes no cooldown for it. |
+| B16 Quickslot cooldown | (304, 0) | (312, 8) | `G = 0x38`, `R` is the active quickslot's remaining cooldown in the same 50 ms steps, and `B = 255 - R`. This is an attached fact and never classifies the selected entry. |
+| B17 to B19 Quickslot item | (320, 0) to (352, 0) | (328, 8) to (360, 8) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
+| B20 Quickslot classification | (368, 0) | (376, 8) | `G = 0x76`, `B = 255 - R`, and spaced `R` codes distinguish unsupported API, invalid selection, inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion. Missing B20 with a valid legacy B16 reports an addon update requirement. Invalid or tolerance-ambiguous B20 reports a corrupt signal. Classification uses `GetCurrentQuickslot`, `GetSlotType`, `GetSlotBoundId`, `GetSlotItemLink`, `GetSlotItemCount`, `IsSlotUsable`, and `GetSlotCooldownInfo`. Events for selection, slot contents, slot state, cooldowns, inventory, and player activation converge through one change-detected path with a 1 Hz recovery backstop. |
 
 No block is ever hidden to express a state. Absence means only that the addon is
 too old to draw it, which is what keeps an old addon from being read as a state.
@@ -641,8 +660,9 @@ the menu gate, which is worthless if it engages a second after the operator star
 typing. A suspended application intercepts and synthesizes nothing, so it has no
 gate to keep current and samples slowly.
 
-Losing B0 for longer than `heartbeat_timeout_ms` (default 2000) raises
-`SignalLost`.
+The reader validates H0 through H2 before reading payload from the same prepared
+frame. Losing B0 for longer than `heartbeat_timeout_ms` (default 2000) raises
+`SignalLost`. A corrupt recognized header suppresses payload reads immediately.
 
 On Windows the sampler captures a small region of the composited desktop at the
 game window's top-left client area, so pixels rendered through a hardware
@@ -660,14 +680,11 @@ the game's stored video settings serves as a cross-check and a pre-launch fallba
 and never overrides a live measurement. Every value is in physical pixels, the same
 unit as the block geometry, and the scale is reported rather than applied.
 
-The descriptor confirms that the grid's extent fits inside the measured client area
-and warns when it does not. That check is not decoration: a block drawn past the
-client edge is captured as black, fails its marker check, and decodes as absent,
-which is indistinguishable from an addon that was never installed. Without the
-warning an operator would debug an addon that is installed, loaded, and drawing
-correctly. The check is advisory, and nothing branches on it, because the blocks
-that do fit still decode and refusing to sample would turn a partial loss into a
-total one.
+The descriptor validates that the announced row width and complete occupied
+extent fit inside the measured client area. A failure makes the layout
+unavailable before any payload is decoded. This is intentionally fail-closed:
+reading only the cells that happen to fit could associate a valid marker with
+the wrong logical signal after a geometry disagreement.
 
 Two limits are deliberate. The stored window-mode value is reported exactly as read
 and never mapped to a named mode, because no verified mapping exists; a configured

@@ -21,6 +21,7 @@ pub use linux::X11Sampler;
 #[cfg(windows)]
 pub use windows::GdiSampler;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use serde::Deserialize;
@@ -542,7 +543,10 @@ const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 22] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 25] = [
+    ("H0 layout magic", LAYOUT_MAGIC_G),
+    ("H1 layout high marker", LAYOUT_HIGH_MARKER),
+    ("H2 layout low marker", LAYOUT_LOW_MARKER),
     ("B0 status", 0x00),
     ("B1 fishing waiting", 0x80),
     ("B1 fishing bite", 0xFF),
@@ -570,6 +574,8 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 22] = [
 /// A typed event decoded from the pixel bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelBusEvent {
+    /// A change in the validated bus geometry or its unavailable reason.
+    Layout(LayoutState),
     /// The status block is present.
     Heartbeat,
     /// The status block has been absent past the timeout.
@@ -650,7 +656,7 @@ pub struct BlockSamples {
     pub cooldown_skill_5: Option<Rgb>,
     /// B15, the ultimate cooldown block.
     pub cooldown_ultimate: Option<Rgb>,
-    /// B16, the quickslot cooldown block. The first block on row 1.
+    /// B16, the quickslot cooldown block.
     pub quickslot_status: Option<Rgb>,
     /// B17, the quickslot item identity's high byte.
     pub quickslot_id_hi: Option<Rgb>,
@@ -669,7 +675,7 @@ pub trait SurfaceSampler {
     /// (the Windows screen-composited capture) does so once per batch rather than
     /// per point. The default is a no-op (the mock and the X11 backend read points
     /// directly).
-    fn prepare(&self) {}
+    fn prepare(&self, _extent: Size) {}
 
     /// The color at a client-area point, or `None` when the surface cannot be
     /// sampled.
@@ -717,6 +723,7 @@ pub fn strip_pixel(buffer: &[u8], width: u32, height: u32, x: u32, y: u32) -> Op
 pub struct MockSampler {
     points: HashMap<(u32, u32), Rgb>,
     display: Option<display::MeasuredDisplay>,
+    prepared: RefCell<Vec<Size>>,
 }
 
 impl MockSampler {
@@ -740,9 +747,23 @@ impl MockSampler {
     pub fn set_display(&mut self, measured: Option<display::MeasuredDisplay>) {
         self.display = measured;
     }
+
+    /// The extents requested since construction or the last clear.
+    pub fn prepared_extents(&self) -> Vec<Size> {
+        self.prepared.borrow().clone()
+    }
+
+    /// Clears recorded prepare requests without changing sampled pixels.
+    pub fn clear_prepared_extents(&self) {
+        self.prepared.borrow_mut().clear();
+    }
 }
 
 impl SurfaceSampler for MockSampler {
+    fn prepare(&self, extent: Size) {
+        self.prepared.borrow_mut().push(extent);
+    }
+
     fn sample(&self, x: u32, y: u32) -> Option<Rgb> {
         self.points.get(&(x, y)).copied()
     }
@@ -764,12 +785,10 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// **Twenty-one blocks occupy two rows.** Slice 038 is the first shipping count to
-/// cross [`COLUMNS`]: row 0 is full at sixteen and the four original quickslot
-/// blocks are the first four positions of row 1; slice 042 adds the fifth.
-/// Everything that depends on the shape
-/// derives it from this value and [`COLUMNS`] rather than restating it, and
-/// `tests/pixelbus.rs` asserts the two-row shape at compile time.
+/// In a negotiated version-14 layout, the 21 blocks follow three header cells
+/// and remain on one row at every supported client width and block size. In the
+/// explicit legacy layout they retain the two-row 16-column shape introduced by
+/// slices 038 and 042.
 pub const NUM_BLOCKS: u32 = 21;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
@@ -779,38 +798,180 @@ pub const MIN_BLOCK_PX: u32 = 2;
 /// The largest supported block edge length in physical pixels.
 pub const MAX_BLOCK_PX: u32 = 32;
 
-/// The number of blocks in one row of the beacon grid.
+/// Historical column count for the pre-version-14 layout.
 ///
-/// Blocks wrap to the next row when a row is full, so the beacon grows downward
-/// and its width is bounded forever at `block_px * COLUMNS`. Without this the
-/// strip widened by one block per signal and would have run off the side of the
-/// client area long before the observables worth publishing were exhausted.
-///
-/// Like [`NUM_BLOCKS`], this is stated once on each side of the contract (`local
-/// COLUMNS` in `PixelBeacon.lua`) and `tests/beacon.rs` asserts the two agree by
-/// parsing the embedded addon source.
-///
-/// It is deliberately **not** derived from the display resolution or the client
-/// area on either side, which is what the issue that prompted the out-of-band
-/// display detection originally assumed it would be. Two independently obtained
-/// measurements would have to yield the identical integer, and a disagreement of
-/// one does not degrade: it shifts every block from row 1 onward, so the reader
-/// samples real blocks that pass their marker and checksum checks and reports
-/// each signal as another signal's value. That error would sit underneath the
-/// validation built to catch exactly it. The measured surface is used to check
-/// the grid *fits* (see [`display::grid_fit`]), which is a job only a
-/// measurement can do.
-///
-/// The value 16 satisfies two bounds: it is at least [`NUM_BLOCKS`], so no
-/// existing block moved when the wrap landed, and one row at [`MAX_BLOCK_PX`] is
-/// 512 pixels, half the narrowest client width the game supports.
+/// New addons publish their live width in an invariant header. This alias stays
+/// public only for compatibility with callers and tests written against the old
+/// fixed-grid helpers; runtime negotiated sampling does not use it.
 pub const COLUMNS: u32 = 16;
+
+/// The frozen column count used only when a live pre-version-14 addon is
+/// identified by its legacy heartbeat at cell zero.
+pub const LEGACY_COLUMNS: u32 = COLUMNS;
+
+/// Version of the negotiated geometry header introduced by addon version 14.
+pub const LAYOUT_PROTOCOL_VERSION: u8 = 1;
+/// Spaced blue-channel wire code representing protocol version 1.
+pub const LAYOUT_VERSION_CODE: u8 = 0x20;
+/// Maximum tolerance accepted for geometry metadata.
+///
+/// This remains below half the 0x20 version-code spacing so a caller's broad
+/// payload tolerance cannot turn a future version into version 1.
+pub const MAX_LAYOUT_TOLERANCE: u8 = 0x0F;
+/// Number of invariant cells preceding negotiated payload cells.
+pub const LAYOUT_HEADER_BLOCKS: u32 = 3;
+/// Smallest count that keeps the complete header on row zero.
+pub const MIN_LAYOUT_COLUMNS: u32 = LAYOUT_HEADER_BLOCKS;
+/// Largest count carried by the two-byte column payload.
+pub const MAX_LAYOUT_COLUMNS: u32 = u16::MAX as u32;
+/// H0 magic red byte.
+pub const LAYOUT_MAGIC_R: u8 = 0x45;
+/// H0 magic green byte.
+pub const LAYOUT_MAGIC_G: u8 = 0x53;
+/// H1 marker for the high column byte.
+pub const LAYOUT_HIGH_MARKER: u8 = 0x64;
+/// H2 marker for the low column byte.
+pub const LAYOUT_LOW_MARKER: u8 = 0x9C;
+
+/// Which geometry contract positioned the payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutMode {
+    /// Addon version 13 or earlier: no header, payload offset zero, 16 columns.
+    Legacy,
+    /// Header-backed geometry with the decoded protocol version.
+    Negotiated { version: u8 },
+}
+
+/// One validated payload geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BusLayout {
+    /// Legacy or negotiated protocol generation.
+    pub mode: LayoutMode,
+    /// Complete cells per row, including negotiated header cells.
+    pub columns: u32,
+    /// Number of invariant cells before payload B0.
+    pub payload_offset: u32,
+}
+
+impl BusLayout {
+    /// Frozen layout for a positively identified old addon.
+    pub const fn legacy() -> Self {
+        Self {
+            mode: LayoutMode::Legacy,
+            columns: LEGACY_COLUMNS,
+            payload_offset: 0,
+        }
+    }
+
+    /// Constructs a version-1 negotiated layout after numeric validation.
+    pub fn negotiated(columns: u32) -> Result<Self, LayoutFailure> {
+        if !(MIN_LAYOUT_COLUMNS..=MAX_LAYOUT_COLUMNS).contains(&columns) {
+            return Err(LayoutFailure::ColumnsOutOfRange { observed: columns });
+        }
+        Ok(Self {
+            mode: LayoutMode::Negotiated {
+                version: LAYOUT_PROTOCOL_VERSION,
+            },
+            columns,
+            payload_offset: LAYOUT_HEADER_BLOCKS,
+        })
+    }
+
+    /// Total occupied cells, including the negotiated header when present.
+    pub const fn total_cells(self) -> u32 {
+        self.payload_offset + NUM_BLOCKS
+    }
+
+    /// Rows occupied by the complete header and payload.
+    pub const fn rows(self) -> u32 {
+        grid_rows(self.total_cells(), self.columns)
+    }
+
+    /// Occupied physical-pixel extent.
+    pub fn extent(self, block_px: u32) -> Size {
+        grid_extent(block_px, self.total_cells(), self.columns)
+    }
+
+    /// Center of any logical cell under this layout.
+    pub fn cell_point(self, block_px: u32, cell: u32) -> (u32, u32) {
+        cell_center(block_px, cell, self.columns)
+    }
+
+    /// Center of payload signal B`index`.
+    pub fn payload_point(self, block_px: u32, index: u32) -> (u32, u32) {
+        self.cell_point(block_px, self.payload_offset + index)
+    }
+}
+
+/// Why no payload geometry is currently authoritative.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutFailure {
+    /// Neither a negotiated header nor a legacy heartbeat is present.
+    Missing,
+    /// Reader configuration supplied a zero-sized physical block.
+    InvalidBlockSize,
+    /// H0 resembles the header but does not contain both magic bytes.
+    CorruptMagic,
+    /// H0 carries a protocol-version wire code this reader does not implement.
+    UnsupportedVersion { observed: u8 },
+    /// H1 is absent or fails its marker or complement.
+    CorruptHighByte,
+    /// H2 is absent or fails its marker or complement.
+    CorruptLowByte,
+    /// The decoded count cannot keep the invariant header on row zero.
+    ColumnsOutOfRange { observed: u32 },
+    /// The announced row width exceeds the measured physical capacity.
+    ExceedsSurface { columns: u32, capacity: u32 },
+    /// The occupied grid height exceeds the measured physical surface.
+    ExtentExceedsSurface { extent: Size, surface: Size },
+}
+
+/// Live geometry observation shared with diagnostics and the settings UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LayoutState {
+    /// No sample has been attempted since startup or reset.
+    #[default]
+    Unknown,
+    /// Payload positions and capture extent are authoritative.
+    Ready(BusLayout),
+    /// Payload decoding is suppressed for a bounded reason.
+    Unavailable(LayoutFailure),
+}
+
+/// Raw invariant header samples H0 through H2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LayoutHeaderSamples {
+    pub h0: Option<Rgb>,
+    pub h1: Option<Rgb>,
+    pub h2: Option<Rgb>,
+}
+
+impl From<[Rgb; 3]> for LayoutHeaderSamples {
+    fn from(colors: [Rgb; 3]) -> Self {
+        Self {
+            h0: Some(colors[0]),
+            h1: Some(colors[1]),
+            h2: Some(colors[2]),
+        }
+    }
+}
+
+/// Builds the exact version-1 header colors for contract tests and tooling.
+pub fn layout_header_colors(columns: u32) -> Result<[Rgb; 3], LayoutFailure> {
+    BusLayout::negotiated(columns)?;
+    let high = ((columns >> 8) & 0xFF) as u8;
+    let low = (columns & 0xFF) as u8;
+    Ok([
+        Rgb::new(LAYOUT_MAGIC_R, LAYOUT_MAGIC_G, LAYOUT_VERSION_CODE),
+        Rgb::new(high, LAYOUT_HIGH_MARKER, 255 - high),
+        Rgb::new(low, LAYOUT_LOW_MARKER, 255 - low),
+    ])
+}
 
 /// The column and row of block `index` in a grid `columns` wide.
 ///
-/// Takes the column count as a parameter rather than reading [`COLUMNS`] so the
-/// wrap's properties can be exercised at other widths without changing what
-/// ships.
+/// Takes the authoritative column count as a parameter so negotiated and legacy
+/// layouts use the same arithmetic.
 ///
 /// `const` so the grid's shape can be asserted at compile time (see the
 /// assertions in `tests/pixelbus.rs`) by calling this function rather than by
@@ -818,6 +979,12 @@ pub const COLUMNS: u32 = 16;
 /// drift into disagreeing.
 pub const fn grid_position(index: u32, columns: u32) -> (u32, u32) {
     (index % columns, index / columns)
+}
+
+/// Physical center of logical `cell` in a grid with `columns` cells per row.
+pub fn cell_center(block_px: u32, cell: u32, columns: u32) -> (u32, u32) {
+    let (col, row) = grid_position(cell, columns);
+    (block_px * col + block_px / 2, block_px * row + block_px / 2)
 }
 
 /// The number of rows `count` blocks occupy in a grid `columns` wide. An exact
@@ -841,25 +1008,17 @@ pub fn grid_extent(block_px: u32, count: u32, columns: u32) -> display::Size {
     )
 }
 
-/// The sampled center of block `index`, derived solely from `block_px`. This is
-/// the single geometry contract shared byte for byte with the PixelBeacon addon,
-/// which draws block `index` at grid position `grid_position(index, COLUMNS)`
-/// and fills it with its center color. `block_px` is even, so the center is
-/// always a whole pixel on both axes.
+/// The sampled center of legacy payload block `index`.
 ///
-/// For `index < COLUMNS` this reduces to the pre-wrap strip formula
-/// `(block_px * index + block_px / 2, block_px / 2)`, which is why introducing
-/// the grid moved no existing block.
+/// Negotiated runtime sampling uses [`BusLayout::payload_point`]. This helper is
+/// retained for the frozen pre-version-14 contract and its compatibility tests.
 pub fn block_center(block_px: u32, index: u32) -> (u32, u32) {
-    let (col, row) = grid_position(index, COLUMNS);
-    (block_px * col + block_px / 2, block_px * row + block_px / 2)
+    cell_center(block_px, index, LEGACY_COLUMNS)
 }
 
-/// The screen-capture region for the whole grid, derived from `block_px`: wide
-/// enough for the blocks in use and tall enough for the rows they occupy.
+/// The complete legacy payload extent.
 ///
-/// For `NUM_BLOCKS <= COLUMNS` this reduces to the pre-wrap
-/// `(block_px * NUM_BLOCKS, block_px)`.
+/// Negotiated runtime capture uses [`BusLayout::extent`].
 pub fn capture_dims(block_px: u32) -> (u32, u32) {
     let extent = grid_extent(block_px, NUM_BLOCKS, COLUMNS);
     (extent.width, extent.height)
@@ -884,9 +1043,8 @@ pub fn sanitize_block_px(value: u32, notices: &mut Vec<Notice>) -> u32 {
     corrected
 }
 
-/// Reader configuration. Beacon geometry derives entirely from `block_px`: the
-/// four block-center read points and the screen-capture region are computed, not
-/// stored, so the reader and the addon can never disagree.
+/// Reader configuration. Block size is local configuration; negotiated columns
+/// and payload offset come exclusively from a validated addon header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReaderConfig {
     /// Per-channel color match tolerance.
@@ -903,71 +1061,71 @@ pub struct ReaderConfig {
 }
 
 impl ReaderConfig {
-    /// The status block (B0) sample point, derived from `block_px`.
+    /// The legacy status block (B0) sample point.
     pub fn status_point(&self) -> (u32, u32) {
         block_center(self.block_px, 0)
     }
-    /// The fishing block (B1) sample point, derived from `block_px`.
+    /// The legacy fishing block (B1) sample point.
     pub fn fishing_point(&self) -> (u32, u32) {
         block_center(self.block_px, 1)
     }
-    /// The latency block (B2) sample point, derived from `block_px`.
+    /// The legacy latency block (B2) sample point.
     pub fn latency_point(&self) -> (u32, u32) {
         block_center(self.block_px, 2)
     }
-    /// The weapon-bar block (B3) sample point, derived from `block_px`.
+    /// The legacy weapon-bar block (B3) sample point.
     pub fn weapon_point(&self) -> (u32, u32) {
         block_center(self.block_px, 3)
     }
-    /// The combat block (B4) sample point, derived from `block_px`.
+    /// The legacy combat block (B4) sample point.
     pub fn combat_point(&self) -> (u32, u32) {
         block_center(self.block_px, 4)
     }
-    /// The menu block (B5) sample point, derived from `block_px`.
+    /// The legacy menu block (B5) sample point.
     pub fn menu_point(&self) -> (u32, u32) {
         block_center(self.block_px, 5)
     }
-    /// The health block (B6) sample point, derived from `block_px`.
+    /// The legacy health block (B6) sample point.
     pub fn health_point(&self) -> (u32, u32) {
         block_center(self.block_px, 6)
     }
-    /// The stamina block (B7) sample point, derived from `block_px`.
+    /// The legacy stamina block (B7) sample point.
     pub fn stamina_point(&self) -> (u32, u32) {
         block_center(self.block_px, 7)
     }
-    /// The magicka block (B8) sample point, derived from `block_px`.
+    /// The legacy magicka block (B8) sample point.
     pub fn magicka_point(&self) -> (u32, u32) {
         block_center(self.block_px, 8)
     }
-    /// The movement block (B9) sample point, derived from `block_px`.
+    /// The legacy movement block (B9) sample point.
     pub fn movement_point(&self) -> (u32, u32) {
         block_center(self.block_px, 9)
     }
-    /// The skill 1 cooldown block (B10) sample point, derived from `block_px`.
+    /// The legacy skill 1 cooldown block (B10) sample point.
     pub fn cooldown_skill_1_point(&self) -> (u32, u32) {
         block_center(self.block_px, 10)
     }
-    /// The skill 2 cooldown block (B11) sample point, derived from `block_px`.
+    /// The legacy skill 2 cooldown block (B11) sample point.
     pub fn cooldown_skill_2_point(&self) -> (u32, u32) {
         block_center(self.block_px, 11)
     }
-    /// The skill 3 cooldown block (B12) sample point, derived from `block_px`.
+    /// The legacy skill 3 cooldown block (B12) sample point.
     pub fn cooldown_skill_3_point(&self) -> (u32, u32) {
         block_center(self.block_px, 12)
     }
-    /// The skill 4 cooldown block (B13) sample point, derived from `block_px`.
+    /// The legacy skill 4 cooldown block (B13) sample point.
     pub fn cooldown_skill_4_point(&self) -> (u32, u32) {
         block_center(self.block_px, 13)
     }
-    /// The skill 5 cooldown block (B14) sample point, derived from `block_px`.
+    /// The legacy skill 5 cooldown block (B14) sample point.
     pub fn cooldown_skill_5_point(&self) -> (u32, u32) {
         block_center(self.block_px, 14)
     }
-    /// The ultimate cooldown block (B15) sample point, derived from `block_px`.
+    /// The legacy ultimate cooldown block (B15) sample point.
     pub fn cooldown_ultimate_point(&self) -> (u32, u32) {
         block_center(self.block_px, 15)
     }
-    /// The quickslot cooldown block (B16) sample point, derived from `block_px`.
+    /// The legacy quickslot cooldown block (B16) sample point.
     ///
     /// The first sample point in the project whose `y` is not `block_px / 2`:
     /// index 16 wraps to row 1. Nothing here says so, which is the point. The
@@ -976,19 +1134,19 @@ impl ReaderConfig {
     pub fn quickslot_status_point(&self) -> (u32, u32) {
         block_center(self.block_px, 16)
     }
-    /// The quickslot identity high byte block (B17) sample point.
+    /// The legacy quickslot identity high byte block (B17) sample point.
     pub fn quickslot_id_hi_point(&self) -> (u32, u32) {
         block_center(self.block_px, 17)
     }
-    /// The quickslot identity middle byte block (B18) sample point.
+    /// The legacy quickslot identity middle byte block (B18) sample point.
     pub fn quickslot_id_mid_point(&self) -> (u32, u32) {
         block_center(self.block_px, 18)
     }
-    /// The quickslot identity low byte block (B19) sample point.
+    /// The legacy quickslot identity low byte block (B19) sample point.
     pub fn quickslot_id_lo_point(&self) -> (u32, u32) {
         block_center(self.block_px, 19)
     }
-    /// The explicit quickslot classification block (B20) sample point.
+    /// The legacy explicit quickslot classification block (B20) sample point.
     pub fn quickslot_state_point(&self) -> (u32, u32) {
         block_center(self.block_px, 20)
     }
@@ -1121,6 +1279,83 @@ pub fn status_present(sample: Rgb, tolerance: u8) -> bool {
     within(sample.r, 0xFF, tolerance)
         && within(sample.g, 0x00, tolerance)
         && within(sample.b, 0xFF, tolerance)
+}
+
+/// Decodes and validates the invariant layout header before any payload point is
+/// trusted. A valid legacy heartbeat is the only path that can select the frozen
+/// pre-version-14 geometry. Once H0 magic is recognized, every later failure is
+/// unavailable and never falls back.
+pub fn decode_layout_header(
+    samples: LayoutHeaderSamples,
+    tolerance: u8,
+    block_px: u32,
+    surface: Option<Size>,
+) -> LayoutState {
+    if block_px == 0 {
+        return LayoutState::Unavailable(LayoutFailure::InvalidBlockSize);
+    }
+    let Some(h0) = samples.h0 else {
+        return LayoutState::Unavailable(LayoutFailure::Missing);
+    };
+    let layout_tolerance = tolerance.min(MAX_LAYOUT_TOLERANCE);
+    let magic_r = within(h0.r, LAYOUT_MAGIC_R, layout_tolerance);
+    let magic_g = within(h0.g, LAYOUT_MAGIC_G, layout_tolerance);
+    if !(magic_r && magic_g) {
+        if status_present(h0, layout_tolerance) {
+            return LayoutState::Ready(BusLayout::legacy());
+        }
+        return LayoutState::Unavailable(if magic_r || magic_g {
+            LayoutFailure::CorruptMagic
+        } else {
+            LayoutFailure::Missing
+        });
+    }
+    if !within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
+        return LayoutState::Unavailable(LayoutFailure::UnsupportedVersion { observed: h0.b });
+    }
+
+    let decode_byte = |sample: Option<Rgb>, marker: u8, failure: LayoutFailure| {
+        let sample = sample.ok_or(failure)?;
+        let checksum = u16::from(sample.r) + u16::from(sample.b);
+        if !within(sample.g, marker, layout_tolerance)
+            || checksum.abs_diff(255) > u16::from(layout_tolerance)
+        {
+            return Err(failure);
+        }
+        Ok(sample.r)
+    };
+    let high = match decode_byte(
+        samples.h1,
+        LAYOUT_HIGH_MARKER,
+        LayoutFailure::CorruptHighByte,
+    ) {
+        Ok(value) => value,
+        Err(failure) => return LayoutState::Unavailable(failure),
+    };
+    let low = match decode_byte(samples.h2, LAYOUT_LOW_MARKER, LayoutFailure::CorruptLowByte) {
+        Ok(value) => value,
+        Err(failure) => return LayoutState::Unavailable(failure),
+    };
+    let columns = (u32::from(high) << 8) | u32::from(low);
+    let layout = match BusLayout::negotiated(columns) {
+        Ok(layout) => layout,
+        Err(failure) => return LayoutState::Unavailable(failure),
+    };
+
+    if let Some(surface) = surface {
+        let capacity = surface.width / block_px;
+        if columns > capacity {
+            return LayoutState::Unavailable(LayoutFailure::ExceedsSurface { columns, capacity });
+        }
+        let extent = layout.extent(block_px);
+        if extent.width > surface.width || extent.height > surface.height {
+            return LayoutState::Unavailable(LayoutFailure::ExtentExceedsSurface {
+                extent,
+                surface,
+            });
+        }
+    }
+    LayoutState::Ready(layout)
 }
 
 /// Decodes the fishing signal from a sample.
@@ -1523,6 +1758,7 @@ pub fn decode_quickslot(
 /// The pixel bus reader state machine.
 pub struct PixelBusReader {
     config: ReaderConfig,
+    layout: LayoutState,
     last_heartbeat_ms: Option<u64>,
     signal_lost: bool,
     fishing: FishingSignal,
@@ -1541,6 +1777,7 @@ impl PixelBusReader {
     pub fn new(config: ReaderConfig) -> Self {
         Self {
             config,
+            layout: LayoutState::Unknown,
             last_heartbeat_ms: None,
             signal_lost: false,
             fishing: FishingSignal::None,
@@ -1560,10 +1797,65 @@ impl PixelBusReader {
         self.signal_lost
     }
 
+    /// The most recently validated layout or bounded unavailable reason.
+    pub fn layout(&self) -> LayoutState {
+        self.layout
+    }
+
     /// Clears all history so a restarted game republishes even unchanged values.
     pub fn reset(&mut self) {
         let config = self.config;
         *self = Self::new(config);
+    }
+
+    /// Clears every payload-derived observation exactly once. This is used both
+    /// after heartbeat timeout and immediately when recognized layout metadata
+    /// becomes invalid, because stale action-driving values are unsafe when the
+    /// reader no longer has authoritative payload positions.
+    fn lose_signal(&mut self) -> Vec<PixelBusEvent> {
+        if self.signal_lost {
+            return Vec::new();
+        }
+        self.signal_lost = true;
+        self.had_heartbeat = false;
+        self.fishing = FishingSignal::None;
+        if self.weapon.is_some() {
+            tracing::debug!(
+                target: "eso_weave::pixelbus",
+                "weapon bar cleared (signal lost)"
+            );
+        }
+        self.weapon = None;
+
+        let mut events = vec![PixelBusEvent::SignalLost];
+        if self.combat != CombatSignal::Unknown {
+            self.combat = CombatSignal::Unknown;
+            events.push(PixelBusEvent::Combat(CombatSignal::Unknown));
+        }
+        if self.menu.is_some() {
+            self.menu = None;
+            events.push(PixelBusEvent::MenuGate(None));
+        }
+        let cleared_resources = ResourceSet::new_unknown();
+        if self.resources != cleared_resources {
+            self.resources = cleared_resources;
+            events.push(PixelBusEvent::Resources(cleared_resources));
+        }
+        if self.movement != MovementSignal::Unknown {
+            self.movement = MovementSignal::Unknown;
+            events.push(PixelBusEvent::Movement(MovementSignal::Unknown));
+        }
+        let cleared_cooldowns = CooldownSet::new_unknown();
+        if self.cooldowns != cleared_cooldowns {
+            self.cooldowns = cleared_cooldowns;
+            events.push(PixelBusEvent::Cooldowns(cleared_cooldowns));
+        }
+        let cleared_quickslot = QuickslotState::new_unknown();
+        if self.quickslot != cleared_quickslot {
+            self.quickslot = cleared_quickslot;
+            events.push(PixelBusEvent::Quickslot(cleared_quickslot));
+        }
+        events
     }
 
     /// Observes one set of block samples at `now_ms` and returns the resulting
@@ -1774,44 +2066,7 @@ impl PixelBusReader {
             }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
-                self.signal_lost = true;
-                self.fishing = FishingSignal::None;
-                if self.weapon.is_some() {
-                    tracing::debug!(
-                        target: "eso_weave::pixelbus",
-                        "weapon bar cleared (signal lost)"
-                    );
-                }
-                self.weapon = None;
-                events.push(PixelBusEvent::SignalLost);
-                if self.combat != CombatSignal::Unknown {
-                    self.combat = CombatSignal::Unknown;
-                    events.push(PixelBusEvent::Combat(CombatSignal::Unknown));
-                }
-                // Losing the signal must open the gate, never close it.
-                if self.menu.is_some() {
-                    self.menu = None;
-                    events.push(PixelBusEvent::MenuGate(None));
-                }
-                let cleared = ResourceSet::new_unknown();
-                if self.resources != cleared {
-                    self.resources = cleared;
-                    events.push(PixelBusEvent::Resources(cleared));
-                }
-                if self.movement != MovementSignal::Unknown {
-                    self.movement = MovementSignal::Unknown;
-                    events.push(PixelBusEvent::Movement(MovementSignal::Unknown));
-                }
-                let cleared_cooldowns = CooldownSet::new_unknown();
-                if self.cooldowns != cleared_cooldowns {
-                    self.cooldowns = cleared_cooldowns;
-                    events.push(PixelBusEvent::Cooldowns(cleared_cooldowns));
-                }
-                let cleared_quickslot = QuickslotState::new_unknown();
-                if self.quickslot != cleared_quickslot {
-                    self.quickslot = cleared_quickslot;
-                    events.push(PixelBusEvent::Quickslot(cleared_quickslot));
-                }
+                events.extend(self.lose_signal());
             }
         }
 
@@ -1824,52 +2079,107 @@ impl PixelBusReader {
         sampler: &dyn SurfaceSampler,
         now_ms: u64,
     ) -> Vec<PixelBusEvent> {
-        // Let the backend capture a fresh frame once, before the point reads.
-        sampler.prepare();
-        let (sx, sy) = self.config.status_point();
-        let (fx, fy) = self.config.fishing_point();
-        let (lx, ly) = self.config.latency_point();
-        let (wx, wy) = self.config.weapon_point();
-        let (cx, cy) = self.config.combat_point();
-        let (mx, my) = self.config.menu_point();
-        let (hx, hy) = self.config.health_point();
-        let (tx, ty) = self.config.stamina_point();
-        let (gx, gy) = self.config.magicka_point();
-        let (vx, vy) = self.config.movement_point();
-        let (c1x, c1y) = self.config.cooldown_skill_1_point();
-        let (c2x, c2y) = self.config.cooldown_skill_2_point();
-        let (c3x, c3y) = self.config.cooldown_skill_3_point();
-        let (c4x, c4y) = self.config.cooldown_skill_4_point();
-        let (c5x, c5y) = self.config.cooldown_skill_5_point();
-        let (cux, cuy) = self.config.cooldown_ultimate_point();
-        let (qsx, qsy) = self.config.quickslot_status_point();
-        let (qhx, qhy) = self.config.quickslot_id_hi_point();
-        let (qmx, qmy) = self.config.quickslot_id_mid_point();
-        let (qlx, qly) = self.config.quickslot_id_lo_point();
-        let (qtx, qty) = self.config.quickslot_state_point();
-        let samples = BlockSamples {
-            status: sampler.sample(sx, sy),
-            fishing: sampler.sample(fx, fy),
-            latency: sampler.sample(lx, ly),
-            weapon: sampler.sample(wx, wy),
-            combat: sampler.sample(cx, cy),
-            menu: sampler.sample(mx, my),
-            health: sampler.sample(hx, hy),
-            stamina: sampler.sample(tx, ty),
-            magicka: sampler.sample(gx, gy),
-            movement: sampler.sample(vx, vy),
-            cooldown_skill_1: sampler.sample(c1x, c1y),
-            cooldown_skill_2: sampler.sample(c2x, c2y),
-            cooldown_skill_3: sampler.sample(c3x, c3y),
-            cooldown_skill_4: sampler.sample(c4x, c4y),
-            cooldown_skill_5: sampler.sample(c5x, c5y),
-            cooldown_ultimate: sampler.sample(cux, cuy),
-            quickslot_status: sampler.sample(qsx, qsy),
-            quickslot_id_hi: sampler.sample(qhx, qhy),
-            quickslot_id_mid: sampler.sample(qmx, qmy),
-            quickslot_id_lo: sampler.sample(qlx, qly),
-            quickslot_state: sampler.sample(qtx, qty),
+        let surface = sampler.display().map(|measured| measured.surface);
+        self.sample_and_observe_with_surface(sampler, now_ms, surface)
+    }
+
+    /// Runtime variant that reuses a surface measurement already taken by the
+    /// display detector, avoiding a second operating-system query per tick.
+    pub fn sample_and_observe_with_surface(
+        &mut self,
+        sampler: &dyn SurfaceSampler,
+        now_ms: u64,
+        surface: Option<Size>,
+    ) -> Vec<PixelBusEvent> {
+        let block_px = self.config.block_px;
+        let header_extent = grid_extent(block_px, LAYOUT_HEADER_BLOCKS, LAYOUT_HEADER_BLOCKS);
+        let desired = match self.layout {
+            LayoutState::Ready(layout) => layout.extent(block_px),
+            LayoutState::Unknown | LayoutState::Unavailable(_) => header_extent,
         };
-        self.observe(samples, now_ms)
+        let prepared = surface.map_or(desired, |surface| {
+            Size::new(
+                desired.width.min(surface.width),
+                desired.height.min(surface.height),
+            )
+        });
+        sampler.prepare(prepared);
+
+        let header_point = |cell| cell_center(block_px, cell, LAYOUT_HEADER_BLOCKS);
+        let (h0x, h0y) = header_point(0);
+        let (h1x, h1y) = header_point(1);
+        let (h2x, h2y) = header_point(2);
+        let layout_state = decode_layout_header(
+            LayoutHeaderSamples {
+                h0: sampler.sample(h0x, h0y),
+                h1: sampler.sample(h1x, h1y),
+                h2: sampler.sample(h2x, h2y),
+            },
+            self.config.tolerance,
+            block_px,
+            surface,
+        );
+
+        let mut events = Vec::new();
+        if layout_state != self.layout {
+            self.layout = layout_state;
+            tracing::info!(
+                target: "eso_weave::pixelbus",
+                state = ?layout_state,
+                block_px,
+                "pixel bus layout changed"
+            );
+            events.push(PixelBusEvent::Layout(layout_state));
+        }
+
+        let LayoutState::Ready(layout) = layout_state else {
+            // Missing pixels retain the ordinary heartbeat grace period for
+            // transient loading and compositor loss. Recognized invalid geometry
+            // is different: payload positions are known to be untrustworthy, so
+            // action-driving state is cleared in this same batch.
+            if !matches!(
+                layout_state,
+                LayoutState::Unavailable(LayoutFailure::Missing)
+            ) {
+                events.extend(self.lose_signal());
+            }
+            events.extend(self.observe(BlockSamples::default(), now_ms));
+            return events;
+        };
+        let required = layout.extent(block_px);
+        if required.width > prepared.width || required.height > prepared.height {
+            sampler.prepare(required);
+        }
+
+        let point = |index| layout.payload_point(block_px, index);
+        let sample = |index| {
+            let (x, y) = point(index);
+            sampler.sample(x, y)
+        };
+        let samples = BlockSamples {
+            status: sample(0),
+            fishing: sample(1),
+            latency: sample(2),
+            weapon: sample(3),
+            combat: sample(4),
+            menu: sample(5),
+            health: sample(6),
+            stamina: sample(7),
+            magicka: sample(8),
+            movement: sample(9),
+            cooldown_skill_1: sample(10),
+            cooldown_skill_2: sample(11),
+            cooldown_skill_3: sample(12),
+            cooldown_skill_4: sample(13),
+            cooldown_skill_5: sample(14),
+            cooldown_ultimate: sample(15),
+            quickslot_status: sample(16),
+            quickslot_id_hi: sample(17),
+            quickslot_id_mid: sample(18),
+            quickslot_id_lo: sample(19),
+            quickslot_state: sample(20),
+        };
+        events.extend(self.observe(samples, now_ms));
+        events
     }
 }

@@ -19,8 +19,8 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, MenuSurface, PixelBusEvent, QuickslotClassification,
-    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    ActiveBar, BusLayout, CombatSignal, LayoutState, MenuSurface, PixelBusEvent,
+    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal,
     WeaponClass,
 };
@@ -617,6 +617,20 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
 }
 
 #[test]
+fn drafted_block_size_does_not_relabel_the_running_reader_geometry() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+    assert_eq!(model.runtime_block_px(), 16);
+
+    let mut form = model.settings_form();
+    form.reader.block_px = 32;
+    model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+
+    assert_eq!(model.settings_form().reader.block_px, 32);
+    assert_eq!(model.runtime_block_px(), 16);
+}
+
+#[test]
 fn modal_extent_fits_small_grows_and_caps() {
     // A small window: the modal fits inside it (about max_frac of the window).
     let small = modal_extent(480.0, 440.0, 1000.0, 0.92);
@@ -711,6 +725,31 @@ fn routing_a_combat_event_stores_it_without_touching_fishing() {
         FishingState::Armed,
         "combat state does not touch fishing"
     );
+}
+
+#[test]
+fn routing_a_layout_event_stores_it_for_display_only() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+    let layout = LayoutState::Ready(BusLayout::negotiated(120).unwrap());
+
+    route_reader_event(
+        PixelBusEvent::Layout(layout),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+
+    assert_eq!(weave.layout(), layout);
+    assert_eq!(fishing.state(), FishingState::Disabled);
 }
 
 // Slice 032: the menu-gate readout and routing.

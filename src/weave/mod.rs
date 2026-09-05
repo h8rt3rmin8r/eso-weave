@@ -17,8 +17,8 @@ use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotState, ResourceSet,
-    WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, LayoutState, MenuSurface, MovementSignal, QuickslotState,
+    ResourceSet, WeaponBarSignal, WeaponClass,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -224,6 +224,7 @@ pub struct WeaveEngine {
     quickslot: QuickslotState,
     menu: MenuSurface,
     resources: ResourceSet,
+    layout: LayoutState,
 }
 
 impl WeaveEngine {
@@ -244,6 +245,7 @@ impl WeaveEngine {
             quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
+            layout: LayoutState::Unknown,
         }
     }
 
@@ -344,6 +346,16 @@ impl WeaveEngine {
         self.resources
     }
 
+    /// Records the decoded pixel-bus geometry for diagnostics and display only.
+    pub fn set_layout(&mut self, layout: LayoutState) {
+        self.layout = layout;
+    }
+
+    /// The last decoded pixel-bus geometry.
+    pub fn layout(&self) -> LayoutState {
+        self.layout
+    }
+
     /// Clears every game-derived observation when the client exits.
     pub fn clear_game_observations(&mut self) {
         self.current_latency = None;
@@ -356,6 +368,7 @@ impl WeaveEngine {
         self.quickslot = QuickslotState::new_unknown();
         self.menu = MenuSurface::None;
         self.resources = ResourceSet::new_unknown();
+        self.layout = LayoutState::Unknown;
     }
 
     /// Records the decoded weapon-bar state (active bar and each bar's weapon

@@ -205,10 +205,9 @@ pub enum DisplaySource {
 /// The feature's output: the render surface, where it is, and what it is on.
 ///
 /// Every value is in physical device pixels, the same unit as
-/// [`block_center`](super::block_center) and [`capture_dims`](super::capture_dims),
-/// so a consumer dividing `surface.width` by a block size is comparing like with
-/// like. The scale is never applied to those values; it is carried so a consumer
-/// can use it.
+/// [`BusLayout`](super::BusLayout) points and extents, so validating published
+/// columns against `surface.width` compares like with like. The scale is never
+/// applied to those values; it is carried so a consumer can use it.
 ///
 /// `surface` is the only field always present. Everything else is absent-capable
 /// because a configured descriptor can supply the surface size and nothing else,

@@ -572,23 +572,43 @@ pub fn cooldown_view(cooldown: SlotCooldown) -> CooldownView {
 /// Pure, so the arithmetic is testable without a frame. Derived from the same
 /// [`crate::pixelbus::grid_extent`] the reader and the addon use, so it cannot describe a
 /// grid other than the one actually drawn.
-pub fn grid_footprint_caption(block_px: u32) -> String {
-    let extent = crate::pixelbus::grid_extent(
-        block_px,
-        crate::pixelbus::NUM_BLOCKS,
-        crate::pixelbus::COLUMNS,
-    );
-    let rows = crate::pixelbus::grid_rows(crate::pixelbus::NUM_BLOCKS, crate::pixelbus::COLUMNS);
-    // Deliberately one short line. The settings body is bounded by FR-017 (at
-    // least half of it visible at the modal maximum), and a caption that wrapped
-    // to three lines pushed it past that bound.
-    format!(
-        "Overlay: {} squares, {} rows, {} by {} pixels.",
-        crate::pixelbus::NUM_BLOCKS,
-        rows,
-        extent.width,
-        extent.height
-    )
+pub fn grid_footprint_caption(block_px: u32, state: crate::pixelbus::LayoutState) -> String {
+    use crate::pixelbus::{LayoutFailure, LayoutMode, LayoutState};
+    match state {
+        LayoutState::Ready(layout) => {
+            let extent = layout.extent(block_px);
+            let mode = match layout.mode {
+                LayoutMode::Legacy => "Legacy overlay",
+                LayoutMode::Negotiated { .. } => "Live overlay",
+            };
+            let rows = layout.rows();
+            let row_label = if rows == 1 { "row" } else { "rows" };
+            format!(
+                "{mode}: {} data cells, {} columns, {} {row_label}, {} by {} pixels.",
+                crate::pixelbus::NUM_BLOCKS,
+                layout.columns,
+                rows,
+                extent.width,
+                extent.height
+            )
+        }
+        LayoutState::Unknown => "Live overlay: waiting for PixelBeacon geometry.".to_string(),
+        LayoutState::Unavailable(reason) => {
+            let reason = match reason {
+                LayoutFailure::Missing => "layout header not detected",
+                LayoutFailure::InvalidBlockSize => "block size is invalid",
+                LayoutFailure::CorruptMagic => "layout magic is corrupt",
+                LayoutFailure::UnsupportedVersion { .. } => "layout version is unsupported",
+                LayoutFailure::CorruptHighByte | LayoutFailure::CorruptLowByte => {
+                    "layout checksum is corrupt"
+                }
+                LayoutFailure::ColumnsOutOfRange { .. } => "layout columns are invalid",
+                LayoutFailure::ExceedsSurface { .. }
+                | LayoutFailure::ExtentExceedsSurface { .. } => "layout exceeds the game surface",
+            };
+            format!("Live overlay unavailable: {reason}.")
+        }
+    }
 }
 
 /// A normalized view of the decoded quickslot for the status region.
@@ -1188,6 +1208,7 @@ pub struct AppModel {
     settings: Settings,
     config_dir: Option<PathBuf>,
     beacon_prefs: BeaconPrefs,
+    runtime_block_px: u32,
     log_panel_open: bool,
     log_filter: LevelName,
     scheduler: SaveScheduler,
@@ -1239,6 +1260,9 @@ impl AppModel {
     ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
         let log_filter = settings.logging.level;
+        let mut reader_notices = Vec::new();
+        let runtime_block_px =
+            crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices).block_px;
         Self {
             input,
             weave,
@@ -1251,6 +1275,7 @@ impl AppModel {
             settings,
             config_dir,
             beacon_prefs,
+            runtime_block_px,
             log_panel_open: false,
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
@@ -1277,6 +1302,16 @@ impl AppModel {
     /// A fresh settings form seeded from the current configuration.
     pub fn settings_form(&self) -> SettingsForm {
         SettingsForm::load(&self.settings).0
+    }
+
+    /// Current runtime pixel-bus geometry for the settings footprint caption.
+    pub fn layout_state(&self) -> crate::pixelbus::LayoutState {
+        self.weave.lock().unwrap().layout()
+    }
+
+    /// Block size used by this process's reader until the next application start.
+    pub fn runtime_block_px(&self) -> u32 {
+        self.runtime_block_px
     }
 
     /// The current derived display state.

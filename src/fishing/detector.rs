@@ -12,6 +12,7 @@ use super::DetectorEvent;
 /// Maps a Pixel Bus Reader event to a detector event, dropping latency.
 pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
     match event {
+        PixelBusEvent::Layout(_) => None,
         PixelBusEvent::Heartbeat => Some(DetectorEvent::Heartbeat),
         PixelBusEvent::SignalLost => Some(DetectorEvent::SignalLost),
         PixelBusEvent::FishingStarted => Some(DetectorEvent::FishingStarted),

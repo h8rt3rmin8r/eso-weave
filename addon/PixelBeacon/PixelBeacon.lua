@@ -1,8 +1,9 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders twenty-one square blocks (BLOCK_PX physical pixels on a side, default
--- 16; the companion sets this value on deploy) anchored to the top-left of the
--- client area, encoding load status (B0), fishing state (B1), server latency
+-- It renders a three-cell negotiated layout header followed by twenty-one square
+-- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
+-- sets this value on deploy) anchored to the top-left of the client area. Signals
+-- encode load status (B0), fishing state (B1), server latency
 -- (B2), the active weapon bar with each bar's weapon class (B3), the player's
 -- combat state (B4), which native game UI surface is active (B5), the player's
 -- health, stamina, and magicka (B6 to B8), whether the player is mounted (B9),
@@ -16,12 +17,10 @@
 -- slice 032 menu block, the slice 033 resource blocks, the slice 036 movement
 -- block, the slice 037 cooldown blocks, and the slice 038 quickslot blocks.
 --
--- At twenty-one blocks the grid occupies two rows: row 0 is full at COLUMNS, and
--- the five quickslot blocks are the first five positions of row 1. Slice 038 is the
--- first shipping count to cross that boundary, so the overlay is twice as tall as
--- it was. Nothing here needed changing for the crossing: the grid arithmetic has
--- handled multiple rows since it was written, and every block position is a call
--- to positionBlock with an index.
+-- PixelBeacon alone chooses how many complete physical blocks fit the live client
+-- width and publishes that 16-bit count in the invariant header. The companion
+-- validates and consumes this decision before locating any signal. All current
+-- cells remain on one row at every supported client width and block size.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -34,14 +33,20 @@ local BLOCK_PX = 16
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
 local NUM_BLOCKS = 21
--- The blocks in one row. Blocks wrap to the next row when a row is full, so the
--- beacon grows downward and its width is bounded forever at BLOCK_PX * COLUMNS.
--- The companion states the same number once as pixelbus::COLUMNS and its test
--- suite parses this line too, because a disagreement here would not degrade: it
--- would shift every block from row 1 onward, and the companion would read real
--- blocks that pass their marker and checksum checks while reporting each signal
--- as another signal's value.
-local COLUMNS = 16
+-- Version-1 negotiated geometry header, shared byte for byte with the companion.
+-- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
+-- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
+local LAYOUT_PROTOCOL_VERSION = 1
+local LAYOUT_VERSION_CODE = 0x20
+local LAYOUT_HEADER_BLOCKS = 3
+local LAYOUT_MAGIC_R = 0x45
+local LAYOUT_MAGIC_G = 0x53
+local LAYOUT_HIGH_MARKER = 0x64
+local LAYOUT_LOW_MARKER = 0x9C
+-- Frozen only for the new companion's explicit pre-version-14 compatibility path.
+local LEGACY_COLUMNS = 16
+local MIN_LAYOUT_COLUMNS = LAYOUT_HEADER_BLOCKS
+local MAX_LAYOUT_COLUMNS = 65535
 local LATENCY_UPDATE_MS = 1000
 local FAST_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
@@ -243,6 +248,9 @@ local fishingState = "idle"
 
 local root
 local blocks = {}
+local payloadBlocks = {}
+local layoutColumns = MIN_LAYOUT_COLUMNS
+local layoutScale = nil
 
 -- Converts an 8-bit channel to the 0 to 1 range the API expects.
 local function channel(value)
@@ -251,31 +259,44 @@ end
 
 -- Converts a physical-pixel measurement to UI units so block geometry is constant
 -- in physical pixels regardless of the user's UI scale.
-local function physicalToUi(px)
+local function currentScale()
     local scale = GetUIGlobalScale()
-    if scale == nil or scale == 0 then
+    if scale == nil or scale <= 0 then
         scale = 1
     end
+    return scale
+end
+
+local function physicalToUi(px, scale)
     return px / scale
 end
 
--- Places block `index` at its grid position: column first, then row. This is the
--- geometry contract shared byte for byte with the companion's
--- pixelbus::block_center. For index < COLUMNS the row is 0 and this reduces to
--- the single-row placement it replaced, which is why introducing the grid moved
--- no existing block.
-local function positionBlock(control, index)
-    local col = index % COLUMNS
-    local row = math.floor(index / COLUMNS)
+-- Complete physical blocks that fit the live client width. PixelBeacon is the
+-- sole authority for this value; the companion validates the published count
+-- rather than deriving a competing one.
+local function computeLayoutColumns(scale)
+    local width = GuiRoot:GetWidth()
+    if width == nil or width <= 0 then
+        return MIN_LAYOUT_COLUMNS
+    end
+    local physicalWidth = math.floor(width * scale)
+    local columns = math.floor(physicalWidth / BLOCK_PX)
+    return math.max(MIN_LAYOUT_COLUMNS, math.min(MAX_LAYOUT_COLUMNS, columns))
+end
+
+-- Places one logical cell using the currently published column count.
+local function positionCell(control, cell, scale)
+    local col = cell % layoutColumns
+    local row = math.floor(cell / layoutColumns)
     control:ClearAnchors()
     control:SetAnchor(
         TOPLEFT,
         root,
         TOPLEFT,
-        physicalToUi(BLOCK_PX * col),
-        physicalToUi(BLOCK_PX * row)
+        physicalToUi(BLOCK_PX * col, scale),
+        physicalToUi(BLOCK_PX * row, scale)
     )
-    local dimension = physicalToUi(BLOCK_PX)
+    local dimension = physicalToUi(BLOCK_PX, scale)
     control:SetDimensions(dimension, dimension)
 end
 
@@ -284,6 +305,50 @@ local function createBlock(suffix)
     control:SetEdgeTexture("", 1, 1, 0)
     control:SetEdgeColor(0, 0, 0, 0)
     return control
+end
+
+local function renderLayoutHeader()
+    local high = math.floor(layoutColumns / 256)
+    local low = layoutColumns % 256
+    blocks.layoutMagic:SetCenterColor(
+        channel(LAYOUT_MAGIC_R), channel(LAYOUT_MAGIC_G), channel(LAYOUT_VERSION_CODE), 1
+    )
+    blocks.layoutHigh:SetCenterColor(
+        channel(high), channel(LAYOUT_HIGH_MARKER), channel(255 - high), 1
+    )
+    blocks.layoutLow:SetCenterColor(
+        channel(low), channel(LAYOUT_LOW_MARKER), channel(255 - low), 1
+    )
+    blocks.layoutMagic:SetHidden(false)
+    blocks.layoutHigh:SetHidden(false)
+    blocks.layoutLow:SetHidden(false)
+end
+
+-- Recomputes, publishes, and applies one authoritative layout. Returns true only
+-- when the count changed or a caller explicitly requested a full reflow.
+local function refreshLayout(force)
+    local nextScale = currentScale()
+    local nextColumns = computeLayoutColumns(nextScale)
+    if not force and nextColumns == layoutColumns and nextScale == layoutScale then
+        return false
+    end
+    layoutColumns = nextColumns
+    layoutScale = nextScale
+    local totalCells = LAYOUT_HEADER_BLOCKS + NUM_BLOCKS
+    local columnsUsed = math.min(totalCells, layoutColumns)
+    local rows = math.ceil(totalCells / layoutColumns)
+    root:SetDimensions(
+        physicalToUi(BLOCK_PX * columnsUsed, layoutScale),
+        physicalToUi(BLOCK_PX * rows, layoutScale)
+    )
+    positionCell(blocks.layoutMagic, 0, layoutScale)
+    positionCell(blocks.layoutHigh, 1, layoutScale)
+    positionCell(blocks.layoutLow, 2, layoutScale)
+    for index, control in ipairs(payloadBlocks) do
+        positionCell(control, LAYOUT_HEADER_BLOCKS + index - 1, layoutScale)
+    end
+    renderLayoutHeader()
+    return true
 end
 
 -- B0 Status: solid magenta whenever the addon is loaded and rendering.
@@ -1054,17 +1119,11 @@ end
 local function buildBlocks()
     root = wm:CreateTopLevelWindow(ADDON_NAME .. "Root")
     root:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, 0, 0)
-    -- The grid extent, derived rather than restated: as wide as the blocks in use
-    -- require (never a full row's width for a partial row) and as tall as the
-    -- rows they occupy.
-    local columnsUsed = math.min(NUM_BLOCKS, COLUMNS)
-    local rows = math.ceil(NUM_BLOCKS / COLUMNS)
-    root:SetDimensions(
-        physicalToUi(BLOCK_PX * columnsUsed),
-        physicalToUi(BLOCK_PX * rows)
-    )
     root:SetDrawLayer(DL_OVERLAY)
 
+    blocks.layoutMagic = createBlock("LayoutMagic")
+    blocks.layoutHigh = createBlock("LayoutHigh")
+    blocks.layoutLow = createBlock("LayoutLow")
     blocks.status = createBlock("Status")
     blocks.fishing = createBlock("Fishing")
     blocks.latency = createBlock("Latency")
@@ -1087,28 +1146,32 @@ local function buildBlocks()
     blocks.quickslotIdLo = createBlock("QuickslotIdLo")
     blocks.quickslotState = createBlock("QuickslotState")
 
-    -- Block indices, not pixel offsets: the grid decides where an index lands.
-    positionBlock(blocks.status, 0)
-    positionBlock(blocks.fishing, 1)
-    positionBlock(blocks.latency, 2)
-    positionBlock(blocks.weapon, 3)
-    positionBlock(blocks.combat, 4)
-    positionBlock(blocks.menu, 5)
-    positionBlock(blocks.health, 6)
-    positionBlock(blocks.stamina, 7)
-    positionBlock(blocks.magicka, 8)
-    positionBlock(blocks.movement, 9)
-    for i = 1, #COOLDOWN_BLOCK_KEYS do
-        positionBlock(blocks[COOLDOWN_BLOCK_KEYS[i]], 9 + i)
-    end
-    -- Indices 16 to 19, which the grid places on row 1. Nothing here says so:
-    -- positionBlock takes an index and works out the column and row itself, which
-    -- is why crossing the boundary needed no new placement code.
-    positionBlock(blocks.quickslot, 16)
-    for i = 1, #QUICKSLOT_ID_BLOCK_KEYS do
-        positionBlock(blocks[QUICKSLOT_ID_BLOCK_KEYS[i]], 16 + i)
-    end
-    positionBlock(blocks.quickslotState, 20)
+    -- Payload order is the wire contract. The layout owns positions, and adding a
+    -- signal requires adding exactly one entry here beside its block creation.
+    payloadBlocks = {
+        blocks.status,
+        blocks.fishing,
+        blocks.latency,
+        blocks.weapon,
+        blocks.combat,
+        blocks.menu,
+        blocks.health,
+        blocks.stamina,
+        blocks.magicka,
+        blocks.movement,
+        blocks.cooldown1,
+        blocks.cooldown2,
+        blocks.cooldown3,
+        blocks.cooldown4,
+        blocks.cooldown5,
+        blocks.cooldownUltimate,
+        blocks.quickslot,
+        blocks.quickslotIdHi,
+        blocks.quickslotIdMid,
+        blocks.quickslotIdLo,
+        blocks.quickslotState,
+    }
+    refreshLayout(true)
 
     renderStatus()
     renderFishing()
@@ -1130,6 +1193,9 @@ local function buildBlocks()
 end
 
 local function onLatencyTick()
+    -- Screen resize is the immediate path; this periodic check also catches a
+    -- UI-scale change or a missed resize notification.
+    refreshLayout(false)
     renderStatus()
     renderLatency()
     -- A 1 Hz recompute picks up equipment changes; renders idempotently, so the
@@ -1157,6 +1223,10 @@ local function onLatencyTick()
     end
 end
 
+local function onScreenResized()
+    refreshLayout(true)
+end
+
 local function onAddOnLoaded(_, name)
     if name ~= ADDON_NAME then
         return
@@ -1167,6 +1237,7 @@ local function onAddOnLoaded(_, name)
 
     em:RegisterForUpdate(ADDON_NAME .. "Latency", LATENCY_UPDATE_MS, onLatencyTick)
     em:RegisterForUpdate(ADDON_NAME .. "Fast", FAST_UPDATE_MS, onFastTick)
+    em:RegisterForEvent(ADDON_NAME .. "Resize", EVENT_SCREEN_RESIZED, onScreenResized)
     em:RegisterForEvent(ADDON_NAME .. "Inv", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, onInventorySlotUpdate)
     em:RegisterForEvent(ADDON_NAME .. "Chatter", EVENT_CHATTER_END, onChatterEnd)
 

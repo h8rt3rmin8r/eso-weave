@@ -61,6 +61,10 @@ pub fn route_reader_event(
     sink: &mut dyn FishingSink,
 ) {
     match event {
+        PixelBusEvent::Layout(layout) => {
+            weave.set_layout(layout);
+            return;
+        }
         PixelBusEvent::Latency(ms) => {
             weave.set_latency(Some(ms));
             return;

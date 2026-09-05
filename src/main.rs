@@ -178,30 +178,6 @@ fn main() {
             // It is change-detected, so a stationary window costs nothing beyond
             // the operating system queries the capture already performs.
             let mut display = pixelbus::DisplayDetector::new();
-            // Whether the beacon grid fits inside the client area. The block size
-            // is fixed for this thread's lifetime, so the answer can only change
-            // when the measurement does, which is exactly when the detector hands
-            // back an update; the watch is still needed so two successive
-            // overflowing measurements report once rather than twice.
-            let mut grid_fit = pixelbus::GridFitWatch::new();
-            let (grid_w, grid_h) = pixelbus::capture_dims(reader_config.block_px);
-            let grid_extent = pixelbus::Size::new(grid_w, grid_h);
-            // The overlay's footprint, recorded once. The block size is fixed for
-            // this thread's lifetime, so this can only change across a restart,
-            // which is exactly when a line is worth writing. It exists because
-            // slice 038 took the grid onto a second row and doubled the overlay's
-            // height: the operator-facing answer is the caption beside the block
-            // size setting, and this is the record that explains a field report
-            // after the fact.
-            tracing::debug!(
-                target: "eso_weave::pixelbus",
-                blocks = pixelbus::NUM_BLOCKS,
-                columns = pixelbus::COLUMNS,
-                rows = pixelbus::grid_rows(pixelbus::NUM_BLOCKS, pixelbus::COLUMNS),
-                block_px = reader_config.block_px,
-                extent = format!("{grid_w}x{grid_h}"),
-                "beacon grid footprint"
-            );
             let origin = clock_origin;
             let mut next_game_probe_ms = 0;
             loop {
@@ -283,11 +259,12 @@ fn main() {
                     continue;
                 }
                 if sampler.is_none() {
-                    sampler = resolve_sampler(reader_config.block_px);
+                    sampler = resolve_sampler();
                 }
                 // Resolved before the sampler check, because the absence of a
                 // window is exactly when the stored-settings fallback matters.
                 let measured = sampler.as_ref().and_then(|active| active.display());
+                let measured_surface = measured.map(|value| value.surface);
                 if let Some(update) = display.update(measured, || {
                     let path = user_settings_path.as_ref()?;
                     std::fs::read_to_string(path)
@@ -295,18 +272,12 @@ fn main() {
                         .map(|text| pixelbus::parse_user_settings(&text))
                 }) {
                     log_display_update(&update);
-                    // Advisory only: a grid that overflows the client area is
-                    // reported and changes nothing, because the blocks that do
-                    // fit still decode and refusing to sample would turn a
-                    // partial loss into a total one.
-                    if let Some(fit) = grid_fit.observe(grid_extent, update.descriptor.as_ref()) {
-                        log_grid_fit(fit);
-                    }
                 }
                 let Some(active) = sampler.as_ref() else {
                     continue;
                 };
-                let events = reader.sample_and_observe(active.as_ref(), now);
+                let events =
+                    reader.sample_and_observe_with_surface(active.as_ref(), now, measured_surface);
                 let mut weave = weave.lock().unwrap();
                 let mut fishing = fishing.lock().unwrap();
                 let mut potion = potion.lock().unwrap();
@@ -558,42 +529,14 @@ fn log_display_update(update: &eso_weave::pixelbus::DisplayUpdate) {
     }
 }
 
-/// Records a change in whether the beacon grid fits inside the game's client
-/// area.
-///
-/// A grid that overflows is a warning rather than the debug level the signal
-/// slices use, and the difference is deliberate. Those record observations about
-/// the game, which are interesting while diagnosing and noise otherwise. This is
-/// a misconfiguration the operator can act on, and its symptom is badly
-/// misleading: a block drawn past the client edge is captured as black, fails
-/// its marker check, and decodes as absent, which looks exactly like an addon
-/// that was never installed. A line at a level nobody runs at would not do the
-/// job the check exists for.
-fn log_grid_fit(fit: eso_weave::pixelbus::GridFit) {
-    use eso_weave::pixelbus::GridFit;
-    match fit {
-        GridFit::Fits => tracing::debug!(
-            target: "eso_weave::pixelbus",
-            "beacon grid fits the game client area"
-        ),
-        GridFit::Exceeds { grid, surface } => tracing::warn!(
-            target: "eso_weave::pixelbus",
-            grid = format!("{}x{}", grid.width, grid.height),
-            client = format!("{}x{}", surface.width, surface.height),
-            "beacon grid does not fit the game client area; blocks drawn past the \
-             edge will read as absent"
-        ),
-    }
-}
-
 #[cfg(windows)]
-fn resolve_sampler(block_px: u32) -> Option<Box<dyn SurfaceSampler>> {
-    eso_weave::pixelbus::GdiSampler::for_window(WINDOW_TITLE, block_px)
+fn resolve_sampler() -> Option<Box<dyn SurfaceSampler>> {
+    eso_weave::pixelbus::GdiSampler::for_window(WINDOW_TITLE)
         .map(|sampler| Box::new(sampler) as Box<dyn SurfaceSampler>)
 }
 
 #[cfg(target_os = "linux")]
-fn resolve_sampler(_block_px: u32) -> Option<Box<dyn SurfaceSampler>> {
+fn resolve_sampler() -> Option<Box<dyn SurfaceSampler>> {
     // The X11 sampler reads each derived point with a 1x1 request, so it has no
     // capture region to size from the block width.
     Some(Box::new(eso_weave::pixelbus::X11Sampler::for_window(

@@ -1123,6 +1123,8 @@ impl EsoWeaveApp {
     /// The modal closes on an outside click, on Escape, or on the close control.
     fn settings_modal(&mut self, ctx: &egui::Context, intents: &mut Vec<UiIntent>) {
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
+        let layout = self.model.layout_state();
+        let runtime_block_px = self.model.runtime_block_px();
         let mut draft = match self.settings_draft.take() {
             Some(draft) => draft,
             None => {
@@ -1198,7 +1200,7 @@ impl EsoWeaveApp {
                     .min_scrolled_height(body_max_h)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        settings_body(ui, &palette, &mut draft);
+                        settings_body(ui, &palette, &mut draft, layout, runtime_block_px);
                     });
                 (body.content_size.y, body_max_h)
             });
@@ -1233,6 +1235,8 @@ fn settings_body(
     ui: &mut egui::Ui,
     palette: &crate::app::theme::Palette,
     draft: &mut SettingsForm,
+    layout: crate::pixelbus::LayoutState,
+    runtime_block_px: u32,
 ) {
     widgets::heading(ui, strings::CLUSTER_APPEARANCE);
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -1355,14 +1359,13 @@ fn settings_body(
                 .response
                 .clickable();
         });
-        // The overlay's footprint at the size being edited, so the operator can see
-        // what the setting does to the thing on their screen without measuring it.
-        // Derived from the drafted value rather than the one in effect, because the
-        // question being asked here is what it will become.
+        // Report one coherent live observation. A drafted size is deployed for
+        // the next addon reload and reader restart; combining it with columns
+        // negotiated by this running reader would describe neither layout.
         widgets::muted_help(
             ui,
             palette,
-            &crate::app::grid_footprint_caption(draft.reader.block_px),
+            &crate::app::grid_footprint_caption(runtime_block_px, layout),
         );
         setting(ui, palette, &strings::SET_TOLERANCE, |ui| {
             ui.add(egui::DragValue::new(&mut draft.reader.tolerance));

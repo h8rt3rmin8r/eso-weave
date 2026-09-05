@@ -8,9 +8,9 @@
 //! CopyFromScreen workaround that captures accelerated content) and reads the
 //! block points from it.
 //!
-//! The captured region is two-dimensional and always was: it is sized from
-//! `capture_dims`, which since the grid wrap returns the extent of however many
-//! rows the blocks occupy. At the current block count that is still one row.
+//! The reader requests the extent derived from the layout header for each batch.
+//! That keeps steady-state capture to the small occupied region while allowing
+//! a resize to change the row width without restarting the sampler.
 
 use std::cell::RefCell;
 use std::mem::size_of;
@@ -26,7 +26,7 @@ use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, GetClientRect};
 
 use crate::pixelbus::display::{MeasuredDisplay, Point, Size};
-use crate::pixelbus::{capture_dims, strip_pixel, Rgb, SurfaceSampler};
+use crate::pixelbus::{strip_pixel, Rgb, SurfaceSampler};
 
 /// The captured beacon strip: a small top-left region of the client area, as
 /// composited on screen, in 32-bit BGRA (the layout `GetDIBits` fills).
@@ -37,30 +37,24 @@ struct CapturedStrip {
 }
 
 /// Samples the beacon grid from the composited desktop for one window. The
-/// captured dimensions are derived from the block size (`capture_dims`), so the
-/// capture region tracks the same single source of truth as the read points: at
-/// the default block size and the current block count it is 144 by 16.
+/// reader supplies a validated per-batch capture extent, which is also the
+/// geometry used for all point reads from that captured frame.
 pub struct GdiSampler {
     hwnd: HWND,
-    capture_w: i32,
-    capture_h: i32,
     frame: RefCell<Option<CapturedStrip>>,
 }
 
 impl GdiSampler {
-    /// Resolves the window by its exact title, sizing the capture region from
-    /// `block_px`. Returns `None` if the window is not found.
-    pub fn for_window(title: &str, block_px: u32) -> Option<Self> {
+    /// Resolves the window by its exact title. The reader supplies the validated
+    /// capture extent for each batch. Returns `None` if the window is not found.
+    pub fn for_window(title: &str) -> Option<Self> {
         let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
         let hwnd = unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) };
         if hwnd.is_null() {
             None
         } else {
-            let (w, h) = capture_dims(block_px);
             Some(Self {
                 hwnd,
-                capture_w: w as i32,
-                capture_h: h as i32,
                 frame: RefCell::new(None),
             })
         }
@@ -68,7 +62,12 @@ impl GdiSampler {
 
     /// Captures the beacon strip from the composited desktop, or `None` if any GDI
     /// step fails (for example the window is minimized).
-    fn capture(&self) -> Option<CapturedStrip> {
+    fn capture(&self, extent: Size) -> Option<CapturedStrip> {
+        let capture_w = i32::try_from(extent.width).ok()?;
+        let capture_h = i32::try_from(extent.height).ok()?;
+        if capture_w <= 0 || capture_h <= 0 {
+            return None;
+        }
         // SAFETY: a sequence of GDI calls whose handles are each released on every
         // exit path; all pointers passed are to local, correctly sized values.
         unsafe {
@@ -97,7 +96,7 @@ impl GdiSampler {
                 ReleaseDC(std::ptr::null_mut(), screen_dc);
                 return None;
             }
-            let bitmap = CreateCompatibleBitmap(screen_dc, self.capture_w, self.capture_h);
+            let bitmap = CreateCompatibleBitmap(screen_dc, capture_w, capture_h);
             if bitmap.is_null() {
                 DeleteDC(mem_dc);
                 ReleaseDC(std::ptr::null_mut(), screen_dc);
@@ -110,8 +109,8 @@ impl GdiSampler {
                 mem_dc,
                 0,
                 0,
-                self.capture_w,
-                self.capture_h,
+                capture_w,
+                capture_h,
                 screen_dc,
                 origin.x,
                 origin.y,
@@ -122,28 +121,28 @@ impl GdiSampler {
             if blitted != 0 {
                 let mut bmi: BITMAPINFO = std::mem::zeroed();
                 bmi.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
-                bmi.bmiHeader.biWidth = self.capture_w;
+                bmi.bmiHeader.biWidth = capture_w;
                 // A negative height requests top-down rows, so index 0 is the
                 // top-left pixel and the block coordinates map directly.
-                bmi.bmiHeader.biHeight = -self.capture_h;
+                bmi.bmiHeader.biHeight = -capture_h;
                 bmi.bmiHeader.biPlanes = 1;
                 bmi.bmiHeader.biBitCount = 32;
                 bmi.bmiHeader.biCompression = BI_RGB;
 
-                let mut pixels = vec![0u8; (self.capture_w * self.capture_h * 4) as usize];
+                let mut pixels = vec![0u8; (capture_w * capture_h * 4) as usize];
                 let lines = GetDIBits(
                     mem_dc,
                     bitmap,
                     0,
-                    self.capture_h as u32,
+                    capture_h as u32,
                     pixels.as_mut_ptr().cast(),
                     &mut bmi,
                     DIB_RGB_COLORS,
                 );
                 if lines != 0 {
                     result = Some(CapturedStrip {
-                        width: self.capture_w as u32,
-                        height: self.capture_h as u32,
+                        width: capture_w as u32,
+                        height: capture_h as u32,
                         pixels,
                     });
                 }
@@ -227,8 +226,8 @@ impl GdiSampler {
 }
 
 impl SurfaceSampler for GdiSampler {
-    fn prepare(&self) {
-        *self.frame.borrow_mut() = self.capture();
+    fn prepare(&self, extent: Size) {
+        *self.frame.borrow_mut() = self.capture(extent);
     }
 
     fn sample(&self, x: u32, y: u32) -> Option<Rgb> {
