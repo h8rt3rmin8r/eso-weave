@@ -2007,6 +2007,21 @@ impl PixelBusReader {
             self.signal_lost = false;
             events.push(PixelBusEvent::Heartbeat);
 
+            // B21 is safety-authoritative and therefore precedes every event
+            // that can drive synthesized work from the same captured frame.
+            // This ordering closes the gate before a death-associated fishing
+            // stop and opens it before a genuine recovery cast edge.
+            let life = b21.map_or(LifeState::Unknown, |c| decode_life_state(c, tolerance));
+            if life != self.life {
+                self.life = life;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?life,
+                    "player life state detected"
+                );
+                events.push(PixelBusEvent::Life(life));
+            }
+
             let signal = b1.map_or(FishingSignal::None, |c| fishing_signal(c, tolerance));
             if signal != self.fishing {
                 match signal {
@@ -2069,20 +2084,6 @@ impl PixelBusReader {
                     "movement state detected"
                 );
                 events.push(PixelBusEvent::Movement(movement));
-            }
-
-            // B21 is safety-authoritative. A heartbeat without a valid life block
-            // is Unknown rather than Alive, including during legacy-addon use and
-            // the first sample after signal recovery.
-            let life = b21.map_or(LifeState::Unknown, |c| decode_life_state(c, tolerance));
-            if life != self.life {
-                self.life = life;
-                tracing::debug!(
-                    target: "eso_weave::pixelbus",
-                    signal = ?life,
-                    "player life state detected"
-                );
-                events.push(PixelBusEvent::Life(life));
             }
 
             // The six cooldown blocks travel as one set, following the resource

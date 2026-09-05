@@ -15,7 +15,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use eso_weave::app::{route_game_observation, route_reader_event, ui::EsoWeaveApp, AppModel};
+use eso_weave::app::{
+    route_game_observation, route_reader_event, route_reader_safety_gate, ui::EsoWeaveApp, AppModel,
+};
 use eso_weave::config::state::{sanitize_geometry, RestoreBounds};
 use eso_weave::config::{self, LoadOutcome};
 use eso_weave::fishing::{FishingConfig, FishingController, FishingState, RealFishingSink};
@@ -139,15 +141,24 @@ fn main() {
     {
         let backend = backend.clone();
         let weave = weave.clone();
+        let input = input.clone();
         thread::spawn(move || {
-            let mut sink = RealSink::new(SharedBackend(backend));
+            let life_gate = input.life_gate();
+            let mut sink = RealSink::new(SharedBackend(backend), life_gate.clone());
             while let Ok(action) = actions.recv() {
                 if action.is_app_toggle() {
                     // A send error means the GUI receiver is gone (the app is
                     // exiting); dropping the toggle is the correct response.
                     let _ = toggle_tx.send(action);
                 } else {
-                    weave.lock().unwrap().handle(action, &mut sink);
+                    if life_gate.is_gated() {
+                        continue;
+                    }
+                    let mut weave = weave.lock().unwrap();
+                    if life_gate.is_gated() {
+                        continue;
+                    }
+                    weave.handle(action, &mut sink);
                 }
             }
         });
@@ -278,6 +289,11 @@ fn main() {
                 };
                 let events =
                     reader.sample_and_observe_with_surface(active.as_ref(), now, measured_surface);
+                // Close or open the independently shared gate before waiting on
+                // a weave that may currently be inside a timed sequence.
+                for event in &events {
+                    route_reader_safety_gate(*event, &input);
+                }
                 let mut weave = weave.lock().unwrap();
                 let mut fishing = fishing.lock().unwrap();
                 let mut potion = potion.lock().unwrap();

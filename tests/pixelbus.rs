@@ -2093,6 +2093,60 @@ fn life_state_uses_b21_and_clears_on_invalid_or_lost_signal() {
 }
 
 #[test]
+fn life_state_transitions_precede_same_sample_fishing_edges() {
+    let mut reader = reader();
+    reader.observe(
+        BlockSamples {
+            fishing: Some(WAITING),
+            life: Some(life(0x20)),
+            ..alive()
+        },
+        0,
+    );
+
+    let death = reader.observe(
+        BlockSamples {
+            life: Some(life(0x80)),
+            ..alive()
+        },
+        100,
+    );
+    let life_index = death
+        .iter()
+        .position(|event| *event == PixelBusEvent::Life(LifeState::Dead))
+        .unwrap();
+    let fishing_index = death
+        .iter()
+        .position(|event| *event == PixelBusEvent::FishingStopped)
+        .unwrap();
+    assert!(
+        life_index < fishing_index,
+        "death must close the gate first"
+    );
+
+    let recovery = reader.observe(
+        BlockSamples {
+            fishing: Some(WAITING),
+            life: Some(life(0x20)),
+            ..alive()
+        },
+        200,
+    );
+    let life_index = recovery
+        .iter()
+        .position(|event| *event == PixelBusEvent::Life(LifeState::Alive))
+        .unwrap();
+    let fishing_index = recovery
+        .iter()
+        .position(|event| *event == PixelBusEvent::FishingStarted)
+        .unwrap();
+    assert!(
+        life_index < fishing_index,
+        "recovery must open the gate before the fresh cast edge"
+    );
+}
+
+#[test]
 fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.

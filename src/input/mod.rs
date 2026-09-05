@@ -22,13 +22,39 @@ pub use windows::WindowsBackend;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::config::{Notice, Settings};
 
 pub use action::Action;
 pub use bindings::{BindingTable, Conflict};
 pub use key::Key;
+
+/// A cheaply cloned, independently updateable life-state synthesis gate.
+///
+/// The pixel worker closes this before it waits for controller mutexes, and the
+/// weave sink reads it between timed operations. That separation prevents a
+/// running weave from delaying authoritative death evidence.
+#[derive(Debug, Clone)]
+pub struct LifeGate(Arc<AtomicBool>);
+
+impl Default for LifeGate {
+    fn default() -> Self {
+        Self(Arc::new(AtomicBool::new(true)))
+    }
+}
+
+impl LifeGate {
+    /// Changes the gate. Only a validated Alive signal sets this to false.
+    pub fn set(&self, gated: bool) {
+        self.0.store(gated, Ordering::Relaxed);
+    }
+
+    /// Whether new synthesized presses are currently forbidden.
+    pub fn is_gated(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
 
 /// Whether a key event is a press or a release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,8 +125,9 @@ pub struct InputEngine {
     game_active: AtomicBool,
     suspended: AtomicBool,
     menu_gated: AtomicBool,
-    life_gated: AtomicBool,
+    life_gate: LifeGate,
     held: Mutex<HashSet<Key>>,
+    passed_through: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
     tx: SyncSender<Action>,
 }
@@ -116,8 +143,9 @@ impl InputEngine {
             game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             menu_gated: AtomicBool::new(false),
-            life_gated: AtomicBool::new(true),
+            life_gate: LifeGate::default(),
             held: Mutex::new(HashSet::new()),
+            passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
             tx,
         };
@@ -138,7 +166,7 @@ impl InputEngine {
         self.game_active.store(active, Ordering::Relaxed);
         if !active {
             self.menu_gated.store(false, Ordering::Relaxed);
-            self.life_gated.store(true, Ordering::Relaxed);
+            self.life_gate.set(true);
             self.held.lock().unwrap().clear();
         }
     }
@@ -185,12 +213,18 @@ impl InputEngine {
     /// menu gate it can only make a bound physical key pass through, and it keeps
     /// application toggle hotkeys available.
     pub fn set_life_gated(&self, gated: bool) {
-        self.life_gated.store(gated, Ordering::Relaxed);
+        self.life_gate.set(gated);
     }
 
     /// Whether player life state currently blocks synthesized work.
     pub fn is_life_gated(&self) -> bool {
-        self.life_gated.load(Ordering::Relaxed)
+        self.life_gate.is_gated()
+    }
+
+    /// A shared handle for synthesis workers that must observe life transitions
+    /// without waiting for a controller mutex.
+    pub fn life_gate(&self) -> LifeGate {
+        self.life_gate.clone()
     }
 
     /// Sets whether an action is active. An inactive action's bound key passes
@@ -218,33 +252,36 @@ impl InputEngine {
         // without handing off its action.
         if event.transition == Transition::Up {
             self.held.lock().unwrap().remove(&event.key);
+            if self.passed_through.lock().unwrap().remove(&event.key) {
+                return Decision::Pass;
+            }
         }
         if !self.game_active.load(Ordering::Relaxed) {
-            return Decision::Pass;
+            return self.pass_physical(event);
         }
         if !self.focused.load(Ordering::Relaxed) {
-            return Decision::Pass;
+            return self.pass_physical(event);
         }
 
         let bound = self.bindings.lock().unwrap().lookup(event.key);
         let Some((action, suspend_exempt)) = bound else {
-            return Decision::Pass;
+            return self.pass_physical(event);
         };
         if !self.active.lock().unwrap().contains(&action) {
-            return Decision::Pass;
+            return self.pass_physical(event);
         }
         if self.suspended.load(Ordering::Relaxed) && !suspend_exempt {
-            return Decision::Pass;
+            return self.pass_physical(event);
         }
         // The menu gate: a native game UI surface is up, so the operator may be
         // typing. Same shape and same exemption as the suspend check above, and
         // like every other check here it can only produce a Pass, which is what
         // makes it impossible for this gate to widen interception.
         if self.menu_gated.load(Ordering::Relaxed) && !suspend_exempt {
-            return Decision::Pass;
+            return self.pass_physical(event);
         }
-        if self.life_gated.load(Ordering::Relaxed) && !suspend_exempt {
-            return Decision::Pass;
+        if self.life_gate.is_gated() && !suspend_exempt {
+            return self.pass_physical(event);
         }
 
         match event.transition {
@@ -260,6 +297,13 @@ impl InputEngine {
             }
         }
         Decision::Suppress
+    }
+
+    fn pass_physical(&self, event: KeyEvent) -> Decision {
+        if event.transition == Transition::Down {
+            self.passed_through.lock().unwrap().insert(event.key);
+        }
+        Decision::Pass
     }
 
     fn hand_off(&self, action: Action) {

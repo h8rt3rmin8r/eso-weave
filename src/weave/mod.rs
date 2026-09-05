@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
-use crate::input::{Action, InputBackend, InputEngine, Key};
+use crate::input::{Action, InputBackend, InputEngine, Key, LifeGate, Transition};
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
     QuickslotState, ResourceSet, WeaponBarSignal, WeaponClass,
@@ -124,6 +124,9 @@ impl WeaveConfig {
 
 /// The execution seam: synthesized operations, waits, and a monotonic clock.
 pub trait WeaveSink {
+    /// Starts one handed-off sequence. Production sinks use this boundary to
+    /// reset cancellation only after the worker has re-validated its gates.
+    fn begin_sequence(&mut self) {}
     /// Performs one synthesized operation.
     fn emit(&mut self, op: InputOp);
     /// Waits the given number of milliseconds.
@@ -177,20 +180,40 @@ impl WeaveSink for MockSink {
 pub struct RealSink<B> {
     backend: B,
     origin: Instant,
+    life_gate: LifeGate,
+    sequence_cancelled: bool,
 }
 
 impl<B: InputBackend> RealSink<B> {
     /// Creates a real sink over the given input backend.
-    pub fn new(backend: B) -> Self {
+    pub fn new(backend: B, life_gate: LifeGate) -> Self {
         Self {
             backend,
             origin: Instant::now(),
+            life_gate,
+            sequence_cancelled: false,
         }
     }
 }
 
 impl<B: InputBackend> WeaveSink for RealSink<B> {
+    fn begin_sequence(&mut self) {
+        self.sequence_cancelled = self.life_gate.is_gated();
+    }
+
     fn emit(&mut self, op: InputOp) {
+        let transition = match op {
+            InputOp::Key(_, transition) | InputOp::Mouse(_, transition) => transition,
+        };
+        // Once life evidence closes the gate, start no new input. Releases still
+        // run so a key or mouse button pressed before the transition cannot be
+        // stranded logically down.
+        if self.life_gate.is_gated() {
+            self.sequence_cancelled = true;
+        }
+        if self.sequence_cancelled && transition == Transition::Down {
+            return;
+        }
         let result = match op {
             InputOp::Key(key, transition) => self.backend.synthesize(key, transition),
             InputOp::Mouse(button, transition) => self.backend.synthesize_mouse(button, transition),
@@ -201,7 +224,18 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
     }
 
     fn wait(&mut self, ms: u32) {
-        std::thread::sleep(Duration::from_millis(u64::from(ms)));
+        let deadline = Instant::now() + Duration::from_millis(u64::from(ms));
+        while !self.sequence_cancelled {
+            if self.life_gate.is_gated() {
+                self.sequence_cancelled = true;
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            std::thread::sleep(remaining.min(Duration::from_millis(10)));
+        }
     }
 
     fn now_ms(&self) -> u64 {
@@ -478,6 +512,7 @@ impl WeaveEngine {
             }
         }
         self.last_weave_ms = Some(now);
+        sink.begin_sequence();
 
         for step in sequence_for_adapted(&slot, &timing, self.current_latency, &self.latency) {
             match step {

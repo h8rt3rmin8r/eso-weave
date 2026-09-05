@@ -8,6 +8,19 @@ use crate::pixelbus::PixelBusEvent;
 use crate::potion::AutoPotionController;
 use crate::weave::WeaveEngine;
 
+/// Publishes safety-authoritative reader evidence without taking a controller lock.
+///
+/// The pixel worker calls this for the captured batch before it waits for the
+/// weave mutex. [`route_reader_event`] also calls it so all other callers retain
+/// the same behavior.
+pub fn route_reader_safety_gate(event: PixelBusEvent, input: &InputEngine) {
+    match event {
+        PixelBusEvent::Life(life) => input.set_life_gated(life.gates()),
+        PixelBusEvent::SignalLost => input.set_life_gated(true),
+        _ => {}
+    }
+}
+
 /// Maps an application-level toggle action (delivered by a hotkey) to the same
 /// [`UiIntent`] the corresponding GUI button raises, so a hotkey and its button
 /// reach one shared state, one persistence mark, and one display path.
@@ -61,6 +74,7 @@ pub fn route_reader_event(
     now_ms: u64,
     sink: &mut dyn FishingSink,
 ) {
+    route_reader_safety_gate(event, input);
     match event {
         PixelBusEvent::Layout(layout) => {
             weave.set_layout(layout);
@@ -87,7 +101,6 @@ pub fn route_reader_event(
             return;
         }
         PixelBusEvent::Life(life) => {
-            input.set_life_gated(life.gates());
             weave.set_life(life);
             fishing.set_life_state(life);
             potion.set_life_state(life);
@@ -118,7 +131,6 @@ pub fn route_reader_event(
         PixelBusEvent::SignalLost => {
             weave.set_latency(None);
             let life = crate::pixelbus::LifeState::Unknown;
-            input.set_life_gated(true);
             weave.set_life(life);
             fishing.set_life_state(life);
             potion.set_life_state(life);

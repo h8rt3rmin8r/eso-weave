@@ -2,6 +2,7 @@
 //! and persistence (spec user stories US2, US3, US4).
 
 use eso_weave::config::{self, Settings};
+use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
@@ -10,8 +11,10 @@ use eso_weave::pixelbus::{
     QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
     ResourceSet, SlotCooldown, WeaponBarSignal, WeaponClass,
 };
-use eso_weave::weave::types::{TimingConfig, WeaveType};
-use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
+use eso_weave::weave::types::{InputOp, TimingConfig, WeaveType};
+use eso_weave::weave::{
+    effective_timing, heavy_preset, MockSink, RealSink, WeaveConfig, WeaveEngine, WeaveSink,
+};
 
 fn down(key: Key) -> KeyEvent {
     KeyEvent {
@@ -19,6 +22,39 @@ fn down(key: Key) -> KeyEvent {
         transition: Transition::Down,
         origin: Origin::Real,
     }
+}
+
+#[test]
+fn real_sink_stops_new_presses_but_releases_held_input_when_life_gate_closes() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    let backend = MockBackend::new();
+    let captured = backend.synthesized.clone();
+    let mut sink = RealSink::new(backend, input.life_gate());
+
+    input.set_life_gated(false);
+    sink.begin_sequence();
+    sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
+    input.set_life_gated(true);
+    sink.emit(InputOp::Key(Key::Digit2, Transition::Down));
+    input.set_life_gated(false);
+    sink.emit(InputOp::Key(Key::Digit3, Transition::Down));
+    sink.emit(InputOp::Key(Key::Digit1, Transition::Up));
+
+    assert_eq!(
+        *captured.lock().unwrap(),
+        vec![
+            (Key::Digit1, Transition::Down),
+            (Key::Digit1, Transition::Up)
+        ]
+    );
+
+    sink.begin_sequence();
+    sink.emit(InputOp::Key(Key::Digit3, Transition::Down));
+    assert_eq!(
+        captured.lock().unwrap().last(),
+        Some(&(Key::Digit3, Transition::Down)),
+        "only a newly validated sequence may clear the cancellation latch"
+    );
 }
 
 #[test]

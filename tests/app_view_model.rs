@@ -8,9 +8,9 @@ use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
     combat_view, dashboard_layout, default_delay_for, fishing_label, life_state_view, menu_view,
     modal_extent, override_edit_for, quickslot_view, resource_view, resource_view_with_watch,
-    route_reader_event, skill_rows, status_line_app, status_line_beacon, status_line_fishing,
-    uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition, BeaconPrimaryAction,
-    DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
+    route_reader_event, route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon,
+    status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition,
+    BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -447,6 +447,20 @@ fn routing_life_state_updates_every_synthesis_consumer() {
     assert_eq!(fishing.state(), FishingState::Disabled);
     assert_eq!(fishing.stop_reason(), Some(StopReason::PlayerUnavailable));
     assert_eq!(potion.life_state(), LifeState::Dead);
+}
+
+#[test]
+fn safety_preroute_closes_input_without_waiting_for_controller_access() {
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 4);
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    assert!(!input.is_life_gated());
+
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Dead), &input);
+    assert!(input.is_life_gated());
+
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    route_reader_safety_gate(PixelBusEvent::SignalLost, &input);
+    assert!(input.is_life_gated());
 }
 
 #[test]

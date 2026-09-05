@@ -446,6 +446,32 @@ fn life_gate_defaults_closed_passes_weaves_and_exempts_toggles() {
 }
 
 #[test]
+fn life_gated_press_keeps_its_release_passed_after_recovery() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.set_life_gated(true);
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    engine.set_life_gated(false);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real)),
+        Decision::Pass,
+        "a pass-through key-down must keep its matching key-up pass-through"
+    );
+    assert!(rx.try_recv().is_err());
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress,
+        "the next complete press may be intercepted after recovery"
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+}
+
+#[test]
 fn ungating_restores_the_previous_decision_everywhere() {
     // FR-012. A gate that engages but never releases is worse than no gate.
     for input in decision_inputs() {
