@@ -2125,6 +2125,20 @@ impl PixelBusReader {
         *self = Self::new(config);
     }
 
+    /// Invalidates cached world and travel evidence before input resumes.
+    ///
+    /// The returned fail-closed events synchronize every controller immediately.
+    /// The next valid sample then republishes both values even when their encoded
+    /// states are unchanged from the observations made before suspension.
+    pub fn invalidate_safety_observations(&mut self) -> [PixelBusEvent; 2] {
+        self.world = WorldState::Unknown;
+        self.travel = TravelState::Unknown;
+        [
+            PixelBusEvent::World(WorldState::Unknown),
+            PixelBusEvent::Travel(TravelState::Unknown),
+        ]
+    }
+
     /// Clears every payload-derived observation exactly once. This is used both
     /// after heartbeat timeout and immediately when recognized layout metadata
     /// becomes invalid, because stale action-driving values are unsafe when the

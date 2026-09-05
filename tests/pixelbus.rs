@@ -506,6 +506,31 @@ fn reader() -> PixelBusReader {
     PixelBusReader::new(ReaderConfig::default())
 }
 
+#[test]
+fn safety_invalidation_fails_closed_and_republishes_unchanged_values() {
+    let mut reader = reader();
+    let safe = BlockSamples {
+        status: Some(MAGENTA),
+        world: Some(world(0xE0)),
+        travel: Some(travel(0x80)),
+        ..Default::default()
+    };
+    let initial = reader.observe(safe, 0);
+    assert!(initial.contains(&PixelBusEvent::World(WorldState::Active)));
+    assert!(initial.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+
+    assert_eq!(
+        reader.invalidate_safety_observations(),
+        [
+            PixelBusEvent::World(WorldState::Unknown),
+            PixelBusEvent::Travel(TravelState::Unknown),
+        ]
+    );
+    let refreshed = reader.observe(safe, 1);
+    assert!(refreshed.contains(&PixelBusEvent::World(WorldState::Active)));
+    assert!(refreshed.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+}
+
 /// A sample set carrying only the status block, so the reader sees a live beacon
 /// and every other block reads as absent. Written as a base for struct-update
 /// syntax (`BlockSamples { fishing: Some(..), ..alive() }`), which is what lets a

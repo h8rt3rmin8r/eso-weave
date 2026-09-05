@@ -20,7 +20,7 @@ pub use linux::LinuxBackend;
 pub use windows::WindowsBackend;
 
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 
@@ -200,6 +200,7 @@ pub struct InputEngine {
     roll_gate: RollGate,
     world_gate: AtomicGate,
     travel_gate: AtomicGate,
+    safety_refresh_generation: AtomicU64,
     held: Mutex<HashSet<Key>>,
     passed_through: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
@@ -221,6 +222,7 @@ impl InputEngine {
             roll_gate: RollGate::default(),
             world_gate: AtomicGate::default(),
             travel_gate: AtomicGate::default(),
+            safety_refresh_generation: AtomicU64::new(0),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
@@ -257,13 +259,30 @@ impl InputEngine {
     }
 
     /// Sets whether the engine is suspended.
+    ///
+    /// Resuming closes the world and travel gates before interception reopens.
+    /// The pixel worker observes the generation change and republishes fresh
+    /// safety evidence before either gate may open again.
     pub fn set_suspended(&self, suspended: bool) {
-        self.suspended.store(suspended, Ordering::Relaxed);
+        if !suspended && self.suspended.load(Ordering::Acquire) {
+            self.world_gate.set(true);
+            self.travel_gate.set(true);
+            self.suspended.store(false, Ordering::Release);
+            self.safety_refresh_generation
+                .fetch_add(1, Ordering::Release);
+            return;
+        }
+        self.suspended.store(suspended, Ordering::Release);
     }
 
     /// Whether the engine is suspended.
     pub fn is_suspended(&self) -> bool {
-        self.suspended.load(Ordering::Relaxed)
+        self.suspended.load(Ordering::Acquire)
+    }
+
+    /// Monotonic request observed by the pixel worker after every resume.
+    pub fn safety_refresh_generation(&self) -> u64 {
+        self.safety_refresh_generation.load(Ordering::Acquire)
     }
 
     /// Sets whether a native game UI surface is active, as read from the beacon.
@@ -402,7 +421,7 @@ impl InputEngine {
         if !self.active.lock().unwrap().contains(&action) {
             return self.pass_physical(event);
         }
-        if self.suspended.load(Ordering::Relaxed) && !suspend_exempt {
+        if self.suspended.load(Ordering::Acquire) && !suspend_exempt {
             return self.pass_physical(event);
         }
         // The menu gate: a native game UI surface is up, so the operator may be

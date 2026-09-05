@@ -195,6 +195,7 @@ fn main() {
             let mut display = pixelbus::DisplayDetector::new();
             let origin = clock_origin;
             let mut next_game_probe_ms = 0;
+            let mut safety_refresh_generation = input.safety_refresh_generation();
             loop {
                 // Poll fast while a fishing session is active so transient cast
                 // and bite signals are sampled and the state machine ticks in
@@ -215,6 +216,28 @@ fn main() {
                     thread::sleep(Duration::from_millis(sleep_ms));
                 }
                 let now = origin.elapsed().as_millis() as u64;
+                let requested_generation = input.safety_refresh_generation();
+                if requested_generation != safety_refresh_generation {
+                    safety_refresh_generation = requested_generation;
+                    let events = reader.invalidate_safety_observations();
+                    for event in &events {
+                        route_reader_safety_gate(*event, &input);
+                    }
+                    let mut weave = weave.lock().unwrap();
+                    let mut fishing = fishing.lock().unwrap();
+                    let mut potion = potion.lock().unwrap();
+                    for event in events {
+                        route_reader_event(
+                            event,
+                            &mut weave,
+                            &mut fishing,
+                            &mut potion,
+                            &input,
+                            now,
+                            &mut sink,
+                        );
+                    }
+                }
                 if now >= next_game_probe_ms {
                     next_game_probe_ms = now.saturating_add(1000);
                     let before = game.snapshot().runtime;
@@ -319,14 +342,18 @@ fn main() {
                 // pushed in rather than read inside the rule, so the rule stays a
                 // pure function of its inputs.
                 potion.set_suspended(input.is_suspended());
-                let _ = potion.tick(
-                    eso_weave::potion::PotionReadings {
-                        resources: weave.resources(),
-                        quickslot: weave.quickslot(),
-                    },
-                    now,
-                    &mut potion_sink,
-                );
+                // The shared gates close synchronously on resume, before the
+                // reader worker can refresh controller-local safety evidence.
+                if !input.is_world_gated() && !input.is_travel_gated() {
+                    let _ = potion.tick(
+                        eso_weave::potion::PotionReadings {
+                            resources: weave.resources(),
+                            quickslot: weave.quickslot(),
+                        },
+                        now,
+                        &mut potion_sink,
+                    );
+                }
             }
         });
     }

@@ -238,8 +238,20 @@ fn resume_restores_interception() {
     engine.set_suspended(false);
 
     let decision = engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
+    assert_eq!(decision, Decision::Pass);
+    assert!(rx.try_recv().is_err());
+    assert!(engine.is_world_gated());
+    assert!(engine.is_travel_gated());
+    assert_eq!(engine.safety_refresh_generation(), 1);
+
+    engine.set_world_gated(false);
+    engine.set_travel_gated(false);
+    let decision = engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
     assert_eq!(decision, Decision::Suppress);
     assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+
+    engine.set_suspended(false);
+    assert_eq!(engine.safety_refresh_generation(), 1);
 }
 
 // US4: bindings.
