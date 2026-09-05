@@ -144,7 +144,16 @@ assert_fails_with "Highlights subsection is empty" 1.2.3 example/project "$empty
 
 empty_bullet="$tmp_dir/empty-bullet.md"
 printf '%s\n' '# Changelog' '## [1.2.3]' '### Highlights' '- ' > "$empty_bullet"
-assert_fails_with "contains no words" 1.2.3 example/project "$empty_bullet"
+assert_fails_with "each top-level bullet must contain text" 1.2.3 example/project "$empty_bullet"
+
+mixed_empty_bullet="$tmp_dir/mixed-empty-bullet.md"
+printf '%s\n' \
+  '# Changelog' \
+  '## [1.2.3]' \
+  '### Highlights' \
+  '- Real item.' \
+  '- ' > "$mixed_empty_bullet"
+assert_fails_with "each top-level bullet must contain text" 1.2.3 example/project "$mixed_empty_bullet"
 
 duplicate_highlights="$tmp_dir/duplicate-highlights.md"
 printf '%s\n' \

@@ -143,6 +143,11 @@ if [[ "$bullet_count" -gt 6 ]]; then
   exit 6
 fi
 
+if printf '%s\n' "$highlights" | grep -Eq '^- [[:space:]]*$'; then
+  echo "release-notes: each top-level bullet must contain text" >&2
+  exit 5
+fi
+
 word_count="$(printf '%s\n' "$highlights" | sed -E 's/^[[:space:]]*-[[:space:]]+//' | wc -w | tr -d '[:space:]')"
 if [[ "$word_count" -eq 0 ]]; then
   echo "release-notes: Highlights contains no words" >&2
