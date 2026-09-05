@@ -288,6 +288,10 @@ mod tests {
                 "primary text on base is not legible for {theme:?}"
             );
             assert!(
+                contrast(p.text, p.panel) >= 4.5,
+                "resource text on panel is not legible for {theme:?}"
+            );
+            assert!(
                 contrast(p.gold_text, p.gold) >= 4.0,
                 "text on a gold button is not legible for {theme:?}"
             );

@@ -556,6 +556,58 @@ fn log_pane_never_covers_controls_during_a_window_resize() {
     }
 }
 
+#[test]
+fn log_never_overlaps_during_a_width_only_switch_to_the_taller_layout() {
+    let mut harness = harness_at(egui::vec2(1400.0, 1100.0));
+    harness.step();
+    harness.state_mut().set_log_panel_open(true);
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Wide)
+    );
+    assert_no_overlap(harness.state(), "wide layout before width-only resize");
+
+    let wide_min_height = harness.state().last_min_sent().expect("wide log minimum").y;
+    harness.input_mut().screen_rect = Some(egui::Rect::from_min_size(
+        egui::Pos2::ZERO,
+        egui::vec2(700.0, wide_min_height),
+    ));
+    harness.step();
+
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Narrow)
+    );
+    if harness.state().last_log_top().is_some() {
+        assert_no_overlap(
+            harness.state(),
+            "first narrow frame after width-only resize",
+        );
+    } else {
+        assert!(
+            harness.state().last_content_bottom().is_none(),
+            "no log boundary should be recorded while the pane is deferred"
+        );
+    }
+
+    let narrow_min_height = harness
+        .state()
+        .last_min_sent()
+        .expect("narrow log minimum")
+        .y;
+    harness.input_mut().screen_rect = Some(egui::Rect::from_min_size(
+        egui::Pos2::ZERO,
+        egui::vec2(700.0, narrow_min_height),
+    ));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_no_overlap(harness.state(), "log restored after narrow growth");
+}
+
 /// FR-011: a height committed past the boundary is clamped before it is stored,
 /// so nothing out of range is persisted or restored.
 #[test]

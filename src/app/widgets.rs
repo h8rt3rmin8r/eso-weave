@@ -95,7 +95,7 @@ pub fn resource_meter(
             egui::Align2::LEFT_CENTER,
             &view.text,
             font,
-            crate::app::theme::status_color(palette, view.role),
+            palette.text,
         );
     }
 
