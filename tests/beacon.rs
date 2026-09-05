@@ -1082,6 +1082,26 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         !detector.contains("GetActiveWeaponPairInfo"),
         "temporary and special action bars must use the actual active hotbar"
     );
+
+    let update = lua
+        .split("local function updateSprintState()")
+        .nth(1)
+        .and_then(|suffix| {
+            suffix
+                .split("local function onSprintEvidenceChanged()")
+                .next()
+        })
+        .expect("sprint update has a bounded source section");
+    let fresh_sample = update
+        .find("local qualified = allActiveSlotsHaveNonCostFailure()")
+        .expect("sprint update samples current slot evidence");
+    let watchdog = update
+        .find("now - sprintLastQualified >= SPRINT_WATCHDOG_MS")
+        .expect("sprint update applies the stale-state watchdog");
+    assert!(
+        fresh_sample < watchdog,
+        "fresh qualifying evidence must refresh state before watchdog expiry"
+    );
 }
 
 /// Slice 034: the settings file the display detector reads sits beside the

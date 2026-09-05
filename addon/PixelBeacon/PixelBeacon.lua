@@ -835,14 +835,14 @@ local function updateSprintState()
         return
     end
 
-    if isSprinting and (sprintLastQualified == nil
-        or now - sprintLastQualified >= SPRINT_WATCHDOG_MS) then
-        setSprintState(false)
-    end
-
     local qualified = allActiveSlotsHaveNonCostFailure()
     if qualified then
         sprintLastQualified = now
+    end
+
+    if isSprinting and (sprintLastQualified == nil
+        or now - sprintLastQualified >= SPRINT_WATCHDOG_MS) then
+        setSprintState(false)
     end
 
     if qualified == isSprinting then
