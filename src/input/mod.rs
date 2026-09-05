@@ -99,6 +99,7 @@ pub struct InputEngine {
     game_active: AtomicBool,
     suspended: AtomicBool,
     menu_gated: AtomicBool,
+    life_gated: AtomicBool,
     held: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
     tx: SyncSender<Action>,
@@ -115,6 +116,7 @@ impl InputEngine {
             game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             menu_gated: AtomicBool::new(false),
+            life_gated: AtomicBool::new(true),
             held: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
             tx,
@@ -136,6 +138,7 @@ impl InputEngine {
         self.game_active.store(active, Ordering::Relaxed);
         if !active {
             self.menu_gated.store(false, Ordering::Relaxed);
+            self.life_gated.store(true, Ordering::Relaxed);
             self.held.lock().unwrap().clear();
         }
     }
@@ -174,6 +177,20 @@ impl InputEngine {
     /// Whether a native game UI surface is currently gating input.
     pub fn is_menu_gated(&self) -> bool {
         self.menu_gated.load(Ordering::Relaxed)
+    }
+
+    /// Sets whether the authoritative player life state blocks input.
+    ///
+    /// This defaults true and is released only by a valid Alive signal. Like the
+    /// menu gate it can only make a bound physical key pass through, and it keeps
+    /// application toggle hotkeys available.
+    pub fn set_life_gated(&self, gated: bool) {
+        self.life_gated.store(gated, Ordering::Relaxed);
+    }
+
+    /// Whether player life state currently blocks synthesized work.
+    pub fn is_life_gated(&self) -> bool {
+        self.life_gated.load(Ordering::Relaxed)
     }
 
     /// Sets whether an action is active. An inactive action's bound key passes
@@ -224,6 +241,9 @@ impl InputEngine {
         // like every other check here it can only produce a Pass, which is what
         // makes it impossible for this gate to widen interception.
         if self.menu_gated.load(Ordering::Relaxed) && !suspend_exempt {
+            return Decision::Pass;
+        }
+        if self.life_gated.load(Ordering::Relaxed) && !suspend_exempt {
             return Decision::Pass;
         }
 

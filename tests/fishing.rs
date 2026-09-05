@@ -12,13 +12,41 @@ use eso_weave::fishing::{
 };
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{Key, Transition};
-use eso_weave::pixelbus::{MockSampler, PixelBusReader, ReaderConfig, Rgb};
+use eso_weave::pixelbus::{LifeState, MockSampler, PixelBusReader, ReaderConfig, Rgb};
 
 fn controller() -> FishingController {
     let mut controller = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
     controller.set_game_environment(true, true, 0, &mut sink);
+    controller.set_life_state(LifeState::Alive);
     controller
+}
+
+#[test]
+fn non_alive_cancels_pending_fishing_without_replay_and_keeps_request() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    sink.clear();
+
+    c.set_life_state(LifeState::Dead);
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::PlayerUnavailable));
+    c.tick(20 + u64::from(cfg.reel_delay_ms), &mut sink);
+    assert!(sink.ops.is_empty());
+
+    c.set_life_state(LifeState::Alive);
+    assert!(sink.ops.is_empty(), "alive must not replay the reel");
+    c.on_event(DetectorEvent::FishingStarted, 10_000, &mut sink);
+    assert_eq!(c.state(), FishingState::Waiting);
+    assert!(
+        sink.ops.is_empty(),
+        "a manual fresh cast is observed, not synthesized"
+    );
 }
 
 fn press_release(key: Key) -> Vec<(Key, Transition)> {

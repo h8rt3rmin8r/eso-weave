@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders a three-cell negotiated layout header followed by twenty-one square
+-- It renders a three-cell negotiated layout header followed by twenty-two square
 -- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
 -- sets this value on deploy) anchored to the top-left of the client area. Signals
 -- encode load status (B0), fishing state (B1), server latency
@@ -9,7 +9,8 @@
 -- health, stamina, and magicka (B6 to B8), whether the player is mounted (B9),
 -- the remaining cooldown of each action slot the game exposes one for, the five
 -- skills and the ultimate (B10 to B15), and the active quickslot's remaining
--- cooldown (B16), item identity (B17 to B19), and explicit classification (B20).
+-- cooldown (B16), item identity (B17 to B19), explicit classification (B20),
+-- and the player's life state (B21).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -32,7 +33,7 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 21
+local NUM_BLOCKS = 22
 -- Version-1 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
@@ -96,6 +97,17 @@ local MOVEMENT_MOUNTED_RED = 0x60
 -- The last rendered mounted state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
 local isMounted = nil
+
+-- The authoritative player life state. Red carries one of three discrete states,
+-- green identifies B21, and blue is the complement checksum. The marker is the
+-- midpoint of the widest remaining gap in the companion's marker registry.
+local LIFE_MARKER = 0x89
+local LIFE_ALIVE_RED = 0x20
+local LIFE_DEAD_RED = 0x80
+local LIFE_REINCARNATING_RED = 0xE0
+
+-- Last rendered state, nil until the first render.
+local lifeState = nil
 
 -- The six cooldown block markers (green channel), shared byte for byte with the
 -- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
@@ -527,6 +539,37 @@ local function computeMovement()
     end
     isMounted = current
     return true
+end
+
+-- B21 Player life state ------------------------------------------------------
+
+local function computeLifeState()
+    local nextState
+    if IsUnitReincarnating("player") then
+        nextState = LIFE_REINCARNATING_RED
+    elseif IsUnitDead("player") then
+        nextState = LIFE_DEAD_RED
+    else
+        nextState = LIFE_ALIVE_RED
+    end
+    local changed = nextState ~= lifeState
+    lifeState = nextState
+    return changed
+end
+
+local function renderLifeState()
+    if blocks.status:IsHidden() then
+        blocks.life:SetHidden(true)
+        return
+    end
+    blocks.life:SetCenterColor(channel(lifeState), channel(LIFE_MARKER), channel(255 - lifeState), 1)
+    blocks.life:SetHidden(false)
+end
+
+local function onLifeStateChanged()
+    if computeLifeState() then
+        renderLifeState()
+    end
 end
 
 -- Reacts to the mounted state changing: re-render only on a real transition.
@@ -1145,6 +1188,7 @@ local function buildBlocks()
     blocks.quickslotIdMid = createBlock("QuickslotIdMid")
     blocks.quickslotIdLo = createBlock("QuickslotIdLo")
     blocks.quickslotState = createBlock("QuickslotState")
+    blocks.life = createBlock("Life")
 
     -- Payload order is the wire contract. The layout owns positions, and adding a
     -- signal requires adding exactly one entry here beside its block creation.
@@ -1170,6 +1214,7 @@ local function buildBlocks()
         blocks.quickslotIdMid,
         blocks.quickslotIdLo,
         blocks.quickslotState,
+        blocks.life,
     }
     refreshLayout(true)
 
@@ -1190,6 +1235,8 @@ local function buildBlocks()
     renderCooldowns()
     updateQuickslot()
     renderQuickslot()
+    computeLifeState()
+    renderLifeState()
 end
 
 local function onLatencyTick()
@@ -1220,6 +1267,9 @@ local function onLatencyTick()
     -- event. Render-if-changed, so a steady quickslot still redraws nothing.
     if updateQuickslot() then
         renderQuickslot()
+    end
+    if computeLifeState() then
+        renderLifeState()
     end
 end
 
@@ -1268,6 +1318,8 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlot", EVENT_ACTION_SLOT_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlotState", EVENT_ACTION_SLOT_STATE_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "QuickslotCooldown", EVENT_ACTION_UPDATE_COOLDOWNS, onQuickslotChanged)
+    em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onLifeStateChanged)
+    em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onLifeStateChanged)
     SLASH_COMMANDS["/pbquickslot"] = onQuickslotCommand
 
     em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
@@ -1286,6 +1338,8 @@ local function onAddOnLoaded(_, name)
         -- is already true when the world finishes loading.
         updateQuickslot()
         renderQuickslot()
+        computeLifeState()
+        renderLifeState()
     end)
 end
 

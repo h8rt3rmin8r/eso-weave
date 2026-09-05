@@ -3,17 +3,17 @@
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
     block_center, capture_dims, decode_combat, decode_cooldown, decode_latency,
-    decode_layout_header, decode_menu, decode_movement, decode_quickslot, decode_resource,
-    decode_resources, decode_weapon_bar, fishing_signal, grid_extent, grid_position, grid_rows,
-    layout_header_colors, load_reader_config, poll_interval, sanitize_block_px, status_present,
-    store_reader_config, strip_pixel, ActiveBar, BlockSamples, BusLayout, CombatSignal,
-    CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples, LayoutMode, LayoutState,
-    MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
-    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown,
-    WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX,
-    LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX,
-    NUM_BLOCKS,
+    decode_layout_header, decode_life_state, decode_menu, decode_movement, decode_quickslot,
+    decode_resource, decode_resources, decode_weapon_bar, fishing_signal, grid_extent,
+    grid_position, grid_rows, layout_header_colors, load_reader_config, poll_interval,
+    sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
+    BusLayout, CombatSignal, CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples,
+    LayoutMode, LayoutState, LifeState, MenuSurface, MockSampler, MovementSignal, PixelBusEvent,
+    PixelBusReader, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
+    QuickslotState, QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb,
+    Size, SlotCooldown, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS,
+    DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX,
+    MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 #[test]
@@ -136,7 +136,7 @@ fn negotiated_geometry_uses_capacity_and_wraps_at_the_exact_boundary() {
     let block_px = 16;
     let one_row = BusLayout::negotiated(LAYOUT_HEADER_BLOCKS + NUM_BLOCKS).unwrap();
     assert_eq!(one_row.rows(), 1);
-    assert_eq!(one_row.extent(block_px), Size::new(24 * block_px, block_px));
+    assert_eq!(one_row.extent(block_px), Size::new(25 * block_px, block_px));
     for index in 0..NUM_BLOCKS {
         let (x, y) = one_row.payload_point(block_px, index);
         assert_eq!(y, block_px / 2);
@@ -212,7 +212,7 @@ fn invalid_block_size_and_short_surface_are_rejected() {
             Some(Size::new(48, 127))
         ),
         LayoutState::Unavailable(LayoutFailure::ExtentExceedsSurface {
-            extent: Size::new(48, 128),
+            extent: Size::new(48, 144),
             surface: Size::new(48, 127),
         })
     );
@@ -431,6 +431,10 @@ fn alive() -> BlockSamples {
         status: Some(MAGENTA),
         ..Default::default()
     }
+}
+
+fn life(red: u8) -> Rgb {
+    Rgb::new(red, 0x89, 255 - red)
 }
 
 /// The combat block color for a state, mirroring the addon's encoder: the state
@@ -863,7 +867,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 21);
+    assert_eq!(NUM_BLOCKS, 22);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -2045,6 +2049,50 @@ fn movement_clears_to_unknown_on_signal_loss() {
 }
 
 #[test]
+fn life_state_decodes_all_authoritative_values_and_rejects_invalid_evidence() {
+    let tolerance = ReaderConfig::default().tolerance;
+    assert_eq!(decode_life_state(life(0x20), tolerance), LifeState::Alive);
+    assert_eq!(decode_life_state(life(0x80), tolerance), LifeState::Dead);
+    assert_eq!(
+        decode_life_state(life(0xE0), tolerance),
+        LifeState::Reincarnating
+    );
+    assert_eq!(
+        decode_life_state(Rgb::new(0x20, 0x00, 0xDF), tolerance),
+        LifeState::Unknown
+    );
+    assert_eq!(
+        decode_life_state(Rgb::new(0x20, 0x89, 0x00), tolerance),
+        LifeState::Unknown
+    );
+    assert_eq!(decode_life_state(life(0x50), tolerance), LifeState::Unknown);
+}
+
+#[test]
+fn life_state_uses_b21_and_clears_on_invalid_or_lost_signal() {
+    let config = ReaderConfig::default();
+    assert_eq!(config.life_point(), block_center(config.block_px, 21));
+
+    let mut reader = PixelBusReader::new(config);
+    let mut samples = alive();
+    samples.life = Some(life(0x20));
+    assert!(reader
+        .observe(samples, 0)
+        .contains(&PixelBusEvent::Life(LifeState::Alive)));
+
+    samples.life = Some(Rgb::new(0x20, 0x89, 0x00));
+    assert!(reader
+        .observe(samples, 100)
+        .contains(&PixelBusEvent::Life(LifeState::Unknown)));
+
+    samples.life = Some(life(0x80));
+    reader.observe(samples, 200);
+    let lost = reader.observe(BlockSamples::default(), config.heartbeat_timeout_ms + 500);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::Life(LifeState::Unknown)));
+}
+
+#[test]
 fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.
@@ -2071,8 +2119,8 @@ fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     assert_eq!(grid_rows(NUM_BLOCKS, COLUMNS), 2);
     assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
 
-    // The shape in full: a full first row, four blocks on the second.
-    assert_eq!(NUM_BLOCKS - COLUMNS, 5, "row 1 should hold five blocks");
+    // The shape in full: a full first row, six blocks on the second.
+    assert_eq!(NUM_BLOCKS - COLUMNS, 6, "row 1 should hold six blocks");
 }
 
 // Slice 037: the six skill-cooldown blocks (B10 to B15).

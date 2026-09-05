@@ -304,6 +304,40 @@ pub enum MovementSignal {
     Mounted,
 }
 
+/// The player's authoritative life state.
+///
+/// Unknown is the fail-closed value for an absent legacy block, invalid capture,
+/// or signal loss. Only [`LifeState::Alive`] permits synthesized input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LifeState {
+    /// No trustworthy life-state evidence is available.
+    #[default]
+    Unknown,
+    /// The player is alive and can perform ordinary actions.
+    Alive,
+    /// The player is dead.
+    Dead,
+    /// The player is transitioning back to life.
+    Reincarnating,
+}
+
+impl LifeState {
+    /// Whether this state must block every synthesized-input path.
+    pub fn gates(self) -> bool {
+        self != Self::Alive
+    }
+}
+
+/// The green marker identifying the B21 life-state sample.
+///
+/// This is the midpoint of the widest remaining gap in
+/// [`BLOCK_CENTER_GREENS`], nine channel values from its nearest neighbor and
+/// more than four times the default tolerance.
+const LIFE_MARKER: u8 = 0x89;
+const LIFE_ALIVE_RED: u8 = 0x20;
+const LIFE_DEAD_RED: u8 = 0x80;
+const LIFE_REINCARNATING_RED: u8 = 0xE0;
+
 /// The green marker that identifies a movement sample.
 ///
 /// Chosen as the midpoint of the widest gap left in [`BLOCK_CENTER_GREENS`]
@@ -543,7 +577,7 @@ const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 25] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 26] = [
     ("H0 layout magic", LAYOUT_MAGIC_G),
     ("H1 layout high marker", LAYOUT_HIGH_MARKER),
     ("H2 layout low marker", LAYOUT_LOW_MARKER),
@@ -569,6 +603,7 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 25] = [
     ("B18 quickslot id middle marker", QUICKSLOT_ID_MID_MARKER),
     ("B19 quickslot id low marker", QUICKSLOT_ID_LO_MARKER),
     ("B20 quickslot state marker", QUICKSLOT_STATE_MARKER),
+    ("B21 life-state marker", LIFE_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -611,6 +646,9 @@ pub enum PixelBusEvent {
     /// swap moves the identity and the cooldown in the same sample and four
     /// events for one swap would be four log entries for one thing happening.
     Quickslot(QuickslotState),
+    /// A change in authoritative player life state. Unknown covers unavailable
+    /// and invalid evidence and therefore keeps every synthesis path closed.
+    Life(LifeState),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -666,6 +704,8 @@ pub struct BlockSamples {
     pub quickslot_id_lo: Option<Rgb>,
     /// B20, the explicit quickslot classification.
     pub quickslot_state: Option<Rgb>,
+    /// B21, the player life-state block.
+    pub life: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -776,7 +816,8 @@ impl SurfaceSampler for MockSampler {
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
 /// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka,
 /// B9 movement, B10 to B15 skill cooldowns, B16 quickslot cooldown, B17 to B19
-/// the quickslot item identity, and B20 its explicit classification.
+/// the quickslot item identity, B20 its explicit classification, and B21 player
+/// life state.
 ///
 /// This is the companion's single statement of the grid length; the drawn extent
 /// and the capture region both derive from it. The addon states the same number
@@ -785,11 +826,11 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In a negotiated version-14 layout, the 21 blocks follow three header cells
+/// In the version-15 addon, the 22 blocks follow three negotiated header cells
 /// and remain on one row at every supported client width and block size. In the
 /// explicit legacy layout they retain the two-row 16-column shape introduced by
 /// slices 038 and 042.
-pub const NUM_BLOCKS: u32 = 21;
+pub const NUM_BLOCKS: u32 = 22;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -1150,6 +1191,10 @@ impl ReaderConfig {
     pub fn quickslot_state_point(&self) -> (u32, u32) {
         block_center(self.block_px, 20)
     }
+    /// The legacy player life-state block (B21) sample point.
+    pub fn life_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 21)
+    }
 }
 
 impl Default for ReaderConfig {
@@ -1457,6 +1502,27 @@ pub fn decode_movement(sample: Rgb, tolerance: u8) -> MovementSignal {
         MovementSignal::Unknown
     } else {
         MovementSignal::Unknown
+    }
+}
+
+/// Decodes B21 into the authoritative player life state.
+///
+/// Marker, complement checksum, and the discrete payload are all validated.
+/// There is no nearest-state fallback: any failure is Unknown and closes the
+/// synthesis gate.
+pub fn decode_life_state(sample: Rgb, tolerance: u8) -> LifeState {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, LIFE_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        return LifeState::Unknown;
+    }
+    if within(sample.r, LIFE_ALIVE_RED, tolerance) {
+        LifeState::Alive
+    } else if within(sample.r, LIFE_DEAD_RED, tolerance) {
+        LifeState::Dead
+    } else if within(sample.r, LIFE_REINCARNATING_RED, tolerance) {
+        LifeState::Reincarnating
+    } else {
+        LifeState::Unknown
     }
 }
 
@@ -1769,6 +1835,7 @@ pub struct PixelBusReader {
     movement: MovementSignal,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
+    life: LifeState,
     had_heartbeat: bool,
 }
 
@@ -1788,6 +1855,7 @@ impl PixelBusReader {
             movement: MovementSignal::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
+            life: LifeState::Unknown,
             had_heartbeat: false,
         }
     }
@@ -1855,6 +1923,10 @@ impl PixelBusReader {
             self.quickslot = cleared_quickslot;
             events.push(PixelBusEvent::Quickslot(cleared_quickslot));
         }
+        if self.life != LifeState::Unknown {
+            self.life = LifeState::Unknown;
+            events.push(PixelBusEvent::Life(LifeState::Unknown));
+        }
         events
     }
 
@@ -1883,6 +1955,7 @@ impl PixelBusReader {
             quickslot_id_mid: b18,
             quickslot_id_lo: b19,
             quickslot_state: b20,
+            life: b21,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -1996,6 +2069,20 @@ impl PixelBusReader {
                     "movement state detected"
                 );
                 events.push(PixelBusEvent::Movement(movement));
+            }
+
+            // B21 is safety-authoritative. A heartbeat without a valid life block
+            // is Unknown rather than Alive, including during legacy-addon use and
+            // the first sample after signal recovery.
+            let life = b21.map_or(LifeState::Unknown, |c| decode_life_state(c, tolerance));
+            if life != self.life {
+                self.life = life;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?life,
+                    "player life state detected"
+                );
+                events.push(PixelBusEvent::Life(life));
             }
 
             // The six cooldown blocks travel as one set, following the resource
@@ -2178,6 +2265,7 @@ impl PixelBusReader {
             quickslot_id_mid: sample(18),
             quickslot_id_lo: sample(19),
             quickslot_state: sample(20),
+            life: sample(21),
         };
         events.extend(self.observe(samples, now_ms));
         events

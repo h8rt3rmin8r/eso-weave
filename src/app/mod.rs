@@ -32,8 +32,8 @@ use crate::game::{
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotClassification,
-    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
+    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
 };
 use crate::potion::{
@@ -93,6 +93,7 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
             Some(StopReason::SignalLost) => strings::FISHING_IDLE_SIGNAL_LOST,
             Some(StopReason::GameInactive) => strings::FISHING_IDLE_GAME_INACTIVE,
             Some(StopReason::Unfocused) => strings::FISHING_IDLE_UNFOCUSED,
+            Some(StopReason::PlayerUnavailable) => strings::FISHING_IDLE_PLAYER_UNAVAILABLE,
             None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
     }
@@ -128,9 +129,9 @@ pub enum StatusRole {
 /// The responsive arrangement used by the pre-Skills dashboard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DashboardLayout {
-    /// Live HUD followed by System and automation in one vertical flow.
+    /// Live HUD followed by System and State in one vertical flow.
     Narrow,
-    /// Live HUD and System and automation in side-by-side columns.
+    /// Live HUD and System and State in side-by-side columns.
     Wide,
 }
 
@@ -188,7 +189,8 @@ pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> S
             Some(StopReason::NoCastDetected)
             | Some(StopReason::SignalLost)
             | Some(StopReason::GameInactive)
-            | Some(StopReason::Unfocused) => StatusRole::Warning,
+            | Some(StopReason::Unfocused)
+            | Some(StopReason::PlayerUnavailable) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
         },
         _ => StatusRole::Active,
@@ -270,6 +272,15 @@ pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
                 BlockReason::BeaconUnavailable => strings::AUTO_POTION_BLOCKED_BEACON,
                 BlockReason::Suspended => strings::AUTO_POTION_BLOCKED_SUSPENDED,
                 BlockReason::GameContext => strings::AUTO_POTION_BLOCKED_CONTEXT,
+                BlockReason::PlayerUnavailable(LifeState::Unknown | LifeState::Alive) => {
+                    strings::AUTO_POTION_BLOCKED_PLAYER_UNKNOWN
+                }
+                BlockReason::PlayerUnavailable(LifeState::Dead) => {
+                    strings::AUTO_POTION_BLOCKED_PLAYER_DEAD
+                }
+                BlockReason::PlayerUnavailable(LifeState::Reincarnating) => {
+                    strings::AUTO_POTION_BLOCKED_PLAYER_REINCARNATING
+                }
                 BlockReason::NoWatchedResource => strings::AUTO_POTION_BLOCKED_NO_WATCH,
                 BlockReason::ResourcesUnavailable => strings::AUTO_POTION_BLOCKED_RESOURCES,
                 BlockReason::QuickslotUnavailable => strings::AUTO_POTION_BLOCKED_QUICKSLOT,
@@ -418,6 +429,29 @@ pub fn movement_view(signal: MovementSignal) -> MovementView {
             StatusRole::Active
         } else {
             StatusRole::Muted
+        },
+    }
+}
+
+/// A normalized player life-state view for Live HUD.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LifeStateView {
+    pub state: &'static str,
+    pub role: StatusRole,
+}
+
+pub fn life_state_view(state: LifeState) -> LifeStateView {
+    LifeStateView {
+        state: match state {
+            LifeState::Unknown => "Not detected",
+            LifeState::Alive => "Alive",
+            LifeState::Dead => "Dead",
+            LifeState::Reincarnating => "Reincarnating",
+        },
+        role: match state {
+            LifeState::Alive => StatusRole::Healthy,
+            LifeState::Dead | LifeState::Reincarnating => StatusRole::Warning,
+            LifeState::Unknown => StatusRole::Muted,
         },
     }
 }
@@ -989,6 +1023,8 @@ pub enum UiIntent {
     SetLogFilter(LevelName),
     /// Persist the live-log panel height (a user layout preference), in points.
     SetLogHeight(u32),
+    /// Persist the System and State disclosure preference.
+    SetSystemStateExpanded(bool),
     /// Record the latest window geometry (session state), restored on next launch.
     SetWindowGeometry(WindowGeometry),
 }
@@ -1206,6 +1242,8 @@ pub struct AppView {
     pub combat: CombatView,
     /// The detected movement state.
     pub movement: MovementView,
+    /// The authoritative player life state.
+    pub life: LifeStateView,
     /// The detected game UI surface, and whether it is gating input.
     pub menu: MenuView,
     /// The detected resource levels.
@@ -1468,7 +1506,7 @@ impl AppModel {
             let potion = self.potion.lock().unwrap();
             (potion.enabled(), potion.state(), *potion.config())
         };
-        let (mut skills, active_bar, classes, combat, movement, resources, quickslot) = {
+        let (mut skills, active_bar, classes, combat, movement, life, resources, quickslot) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
             let weave = self.weave.lock().unwrap();
             (
@@ -1477,6 +1515,7 @@ impl AppModel {
                 weave.weapon_classes(),
                 weave.combat(),
                 weave.movement(),
+                weave.life(),
                 weave.resources(),
                 weave.quickslot(),
             )
@@ -1487,6 +1526,7 @@ impl AppModel {
         let mut weapon_bar = weapon_bar_view(active_bar, classes.0, classes.1);
         let mut combat = combat_view(combat);
         let mut movement = movement_view(movement);
+        let mut life = life_state_view(life);
         let mut resources = resources_view_with_config(resources, auto_potion_config);
         let mut quickslot = quickslot_view(quickslot);
         if !active {
@@ -1504,6 +1544,10 @@ impl AppModel {
             };
             movement = MovementView {
                 detected: false,
+                state: "Game not active",
+                role: StatusRole::Muted,
+            };
+            life = LifeStateView {
                 state: "Game not active",
                 role: StatusRole::Muted,
             };
@@ -1549,6 +1593,7 @@ impl AppModel {
             weapon_bar,
             combat,
             movement,
+            life,
             menu: game_context_view(game.context()),
             resources,
             quickslot,
@@ -1631,6 +1676,13 @@ impl AppModel {
                 self.settings.ui = settings_form::ui_to_value(&prefs);
                 // Resizing the log pane is a layout change: it persists but does
                 // not raise the save confirmation (issue #6).
+                self.scheduler.mark_config_layout(Instant::now());
+                Vec::new()
+            }
+            UiIntent::SetSystemStateExpanded(expanded) => {
+                let mut prefs = settings_form::ui_from_value(&self.settings.ui).0;
+                prefs.system_state_expanded = expanded;
+                self.settings.ui = settings_form::ui_to_value(&prefs);
                 self.scheduler.mark_config_layout(Instant::now());
                 Vec::new()
             }

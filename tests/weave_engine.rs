@@ -6,9 +6,9 @@ use eso_weave::input::{
     Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
 };
 use eso_weave::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, MenuSurface, MovementSignal, QuickslotClassification,
-    QuickslotPotionAvailability, QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
-    WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
+    QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
+    ResourceSet, SlotCooldown, WeaponBarSignal, WeaponClass,
 };
 use eso_weave::weave::types::{TimingConfig, WeaveType};
 use eso_weave::weave::{effective_timing, heavy_preset, MockSink, WeaveConfig, WeaveEngine};
@@ -61,6 +61,7 @@ fn clearing_game_observations_restores_every_dormant_value() {
 #[test]
 fn cooldown_gates_repeated_weaves() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.set_life(LifeState::Alive);
     let mut sink = MockSink::new();
 
     sink.set_now(0);
@@ -81,6 +82,29 @@ fn cooldown_gates_repeated_weaves() {
     sink.set_now(600);
     engine.handle(Action::Skill1, &mut sink);
     assert!(sink.log.len() > after_first, "request after cooldown runs");
+}
+
+#[test]
+fn queued_weave_requires_alive_and_is_not_replayed_after_recovery() {
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    let mut sink = MockSink::new();
+    for state in [
+        LifeState::Unknown,
+        LifeState::Dead,
+        LifeState::Reincarnating,
+    ] {
+        engine.set_life(state);
+        engine.handle(Action::Skill1, &mut sink);
+    }
+    assert!(sink.log.is_empty());
+
+    engine.set_life(LifeState::Alive);
+    assert!(
+        sink.log.is_empty(),
+        "recovery must not replay queued actions"
+    );
+    engine.handle(Action::Skill1, &mut sink);
+    assert!(!sink.log.is_empty(), "a fresh action may run once alive");
 }
 
 #[test]
@@ -118,6 +142,7 @@ fn inactive_slot_key_passes_through() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 16);
     input.set_game_active(true);
     input.set_focused(true);
+    input.set_life_gated(false);
 
     // Default config: Ultimate (slot 6, key R) is inactive; Skill1 is active.
     let weave = WeaveEngine::new(WeaveConfig::default());
@@ -132,6 +157,7 @@ fn activating_slot_restores_interception() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 16);
     input.set_game_active(true);
     input.set_focused(true);
+    input.set_life_gated(false);
 
     let mut config = WeaveConfig::default();
     config.slots[5].active = true; // slot index 6 (Ultimate)
@@ -383,6 +409,7 @@ fn combat_state_changes_no_engine_behavior() {
     // rather than accidental.
     fn run(combat: CombatSignal) -> Vec<String> {
         let mut engine = WeaveEngine::new(WeaveConfig::default());
+        engine.set_life(LifeState::Alive);
         let mut sink = MockSink::new();
         engine.set_combat(combat);
         engine.set_weapon_bar(WeaponBarSignal {
@@ -423,6 +450,7 @@ fn combat_state_round_trips_through_the_engine() {
 fn resource_levels_change_no_engine_behavior() {
     fn run(resources: ResourceSet) -> Vec<String> {
         let mut engine = WeaveEngine::new(WeaveConfig::default());
+        engine.set_life(LifeState::Alive);
         let mut sink = MockSink::new();
         engine.set_resources(resources);
 
@@ -466,6 +494,7 @@ fn resource_levels_change_no_engine_behavior() {
 fn quickslot_state_changes_no_engine_behavior() {
     fn run(quickslot: QuickslotState) -> Vec<String> {
         let mut engine = WeaveEngine::new(WeaveConfig::default());
+        engine.set_life(LifeState::Alive);
         let mut sink = MockSink::new();
         engine.set_quickslot(quickslot);
 

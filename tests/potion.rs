@@ -13,8 +13,8 @@
 
 use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{
-    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    ResourceLevel, ResourceSet, SlotCooldown,
+    LifeState, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
+    QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
 };
 use eso_weave::potion::{
     evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState,
@@ -73,6 +73,24 @@ fn eligible_inputs() -> PotionInputs {
         readings: eligible_readings(),
         suspended: false,
         gated: false,
+        life: LifeState::Alive,
+    }
+}
+
+#[test]
+fn every_non_alive_state_blocks_auto_potion_without_replay() {
+    let config = config_all_watched();
+    for life in [
+        LifeState::Unknown,
+        LifeState::Dead,
+        LifeState::Reincarnating,
+    ] {
+        let mut inputs = eligible_inputs();
+        inputs.life = life;
+        assert_eq!(
+            evaluate(inputs, &config, true, None, 10_000),
+            AutoPotionState::Blocked(BlockReason::PlayerUnavailable(life))
+        );
     }
 }
 
@@ -212,6 +230,7 @@ fn s043_signal_loss_preserves_the_request_and_heartbeat_recovers() {
     assert!(sink.ops.is_empty());
 
     controller.set_gated(false);
+    controller.set_life_state(LifeState::Alive);
     assert!(matches!(
         controller.tick(eligible_readings(), 30_000, &mut sink),
         AutoPotionState::Triggered(_)
@@ -569,6 +588,7 @@ fn armed_controller() -> AutoPotionController {
     controller.on_heartbeat();
     // A positive gameplay-surface observation is required before synthesis.
     controller.set_gated(false);
+    controller.set_life_state(LifeState::Alive);
     controller.set_enabled(true);
     controller
 }
@@ -579,6 +599,7 @@ fn startup_stays_gated_until_gameplay_surface_is_observed() {
     controller.set_game_active(true);
     controller.set_focused(true);
     controller.on_heartbeat();
+    controller.set_life_state(LifeState::Alive);
     controller.set_enabled(true);
 
     let mut sink = MockAutoPotionSink::new();
@@ -589,6 +610,7 @@ fn startup_stays_gated_until_gameplay_surface_is_observed() {
     assert!(sink.ops.is_empty());
 
     controller.set_gated(false);
+    controller.set_life_state(LifeState::Alive);
     assert!(matches!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
         AutoPotionState::Triggered(_)
@@ -623,6 +645,7 @@ fn game_exit_requires_a_fresh_gameplay_surface_before_restart() {
     assert!(sink.ops.is_empty());
 
     controller.set_gated(false);
+    controller.set_life_state(LifeState::Alive);
     assert_eq!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
         AutoPotionState::Triggered(TriggerCause {

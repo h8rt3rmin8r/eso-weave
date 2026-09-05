@@ -13,6 +13,7 @@ use eso_weave::input::{
 fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
     let pair = InputEngine::new(BindingTable::default(), 64);
     pair.0.set_game_active(true);
+    pair.0.set_life_gated(false);
     pair
 }
 
@@ -91,6 +92,8 @@ fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
     );
 
     engine.set_game_active(true);
+    assert!(engine.is_life_gated());
+    engine.set_life_gated(false);
     assert_eq!(
         engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
         Decision::Suppress
@@ -154,6 +157,7 @@ fn auto_repeat_down_hands_off_only_once() {
 fn full_channel_drops_without_blocking() {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 1);
     engine.set_game_active(true);
+    engine.set_life_gated(false);
     engine.set_focused(true);
 
     // First press fills the capacity-1 channel; further distinct presses must not
@@ -419,6 +423,26 @@ fn the_gate_exempts_the_toggle_hotkeys() {
         Decision::Suppress,
         "the suspend hotkey must still be intercepted while gated"
     );
+}
+
+#[test]
+fn life_gate_defaults_closed_passes_weaves_and_exempts_toggles() {
+    let (engine, rx) = InputEngine::new(BindingTable::default(), 16);
+    engine.set_game_active(true);
+    engine.set_focused(true);
+    assert!(engine.is_life_gated());
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+
+    let suspend = BindingTable::default().key_for(Action::ToggleSuspend);
+    assert_eq!(
+        engine.classify(ev(suspend, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::ToggleSuspend));
 }
 
 #[test]

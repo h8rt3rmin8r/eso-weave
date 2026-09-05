@@ -41,6 +41,7 @@ pub fn app_toggle_intent(
 ///   game UI surface is up.
 /// - `Resources(set)` stores the decoded resource levels for the next auto-potion tick.
 /// - `Movement(signal)` stores the decoded movement state (nothing acts on it).
+/// - `Life(signal)` updates every synthesis boundary from one authority.
 /// - `Cooldowns(set)` stores the decoded slot cooldowns (nothing acts on them).
 /// - `Quickslot(state)` stores the decoded quickslot state for the next auto-potion tick.
 /// - `SignalLost` clears the weave latency, disables fishing, and marks the
@@ -85,6 +86,13 @@ pub fn route_reader_event(
             weave.set_movement(signal);
             return;
         }
+        PixelBusEvent::Life(life) => {
+            input.set_life_gated(life.gates());
+            weave.set_life(life);
+            fishing.set_life_state(life);
+            potion.set_life_state(life);
+            return;
+        }
         PixelBusEvent::Cooldowns(set) => {
             weave.set_cooldowns(set);
             return;
@@ -109,6 +117,11 @@ pub fn route_reader_event(
         }
         PixelBusEvent::SignalLost => {
             weave.set_latency(None);
+            let life = crate::pixelbus::LifeState::Unknown;
+            input.set_life_gated(true);
+            weave.set_life(life);
+            fishing.set_life_state(life);
+            potion.set_life_state(life);
             potion.on_signal_lost();
         }
         PixelBusEvent::Heartbeat => potion.on_heartbeat(),

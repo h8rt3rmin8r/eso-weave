@@ -35,7 +35,7 @@ use serde::Deserialize;
 use crate::config::{Notice, NoticeKind};
 use crate::input::{InputBackend, Key, Transition};
 use crate::pixelbus::{
-    QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
+    LifeState, QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
     ResourceSet, SlotCooldown,
 };
 
@@ -137,6 +137,8 @@ pub enum BlockReason {
     Suspended,
     /// A native game UI surface or text field is up.
     GameContext,
+    /// The player is not authoritatively alive.
+    PlayerUnavailable(LifeState),
     /// None of the three resource watches is enabled.
     NoWatchedResource,
     /// No enabled resource has a fresh percentage.
@@ -178,6 +180,16 @@ impl AutoPotionState {
             Self::Blocked(BlockReason::BeaconUnavailable) => "blocked_beacon_unavailable",
             Self::Blocked(BlockReason::Suspended) => "blocked_suspended",
             Self::Blocked(BlockReason::GameContext) => "blocked_game_context",
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Unknown)) => {
+                "blocked_player_unknown"
+            }
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Dead)) => "blocked_player_dead",
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Reincarnating)) => {
+                "blocked_player_reincarnating"
+            }
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Alive)) => {
+                "blocked_player_alive_invalid"
+            }
             Self::Blocked(BlockReason::NoWatchedResource) => "blocked_no_watched_resource",
             Self::Blocked(BlockReason::ResourcesUnavailable) => "blocked_resources_unavailable",
             Self::Blocked(BlockReason::QuickslotUnavailable) => "blocked_quickslot_unavailable",
@@ -237,6 +249,8 @@ pub struct PotionInputs {
     pub suspended: bool,
     /// Whether a native game UI surface is gating input.
     pub gated: bool,
+    /// The authoritative player life state. Only Alive permits synthesis.
+    pub life: LifeState,
 }
 
 fn low_resource(
@@ -311,6 +325,9 @@ pub fn evaluate(
     }
     if inputs.gated {
         return AutoPotionState::Blocked(BlockReason::GameContext);
+    }
+    if inputs.life.gates() {
+        return AutoPotionState::Blocked(BlockReason::PlayerUnavailable(inputs.life));
     }
 
     let cause = match low_resource(config, inputs.readings.resources) {
@@ -411,6 +428,7 @@ pub struct AutoPotionController {
     beacon_available: bool,
     gated: bool,
     suspended: bool,
+    life: LifeState,
     last_attempt_ms: Option<u64>,
     state: AutoPotionState,
 }
@@ -435,6 +453,7 @@ impl AutoPotionController {
             // so an ungated default could synthesize before gameplay was proven.
             gated: true,
             suspended: false,
+            life: LifeState::Unknown,
             last_attempt_ms: None,
             state: AutoPotionState::Off,
         }
@@ -468,6 +487,11 @@ impl AutoPotionController {
         self.state
     }
 
+    /// The authoritative player life state used by the synthesis gate.
+    pub fn life_state(&self) -> LifeState {
+        self.life
+    }
+
     fn set_state(&mut self, state: AutoPotionState) {
         if state == self.state {
             return;
@@ -494,6 +518,10 @@ impl AutoPotionController {
             Some(AutoPotionState::Blocked(BlockReason::Suspended))
         } else if self.gated {
             Some(AutoPotionState::Blocked(BlockReason::GameContext))
+        } else if self.life.gates() {
+            Some(AutoPotionState::Blocked(BlockReason::PlayerUnavailable(
+                self.life,
+            )))
         } else {
             None
         };
@@ -545,6 +573,12 @@ impl AutoPotionController {
         self.apply_immediate_state();
     }
 
+    /// Sets the authoritative player life state without changing requested enablement.
+    pub fn set_life_state(&mut self, life: LifeState) {
+        self.life = life;
+        self.apply_immediate_state();
+    }
+
     /// Sets whether the application is suspended.
     ///
     /// Suspend is the operator saying "stop touching my game", so it is a checked
@@ -567,6 +601,7 @@ impl AutoPotionController {
         // Do not reuse a gameplay observation across a signal outage. The first
         // recovered heartbeat can precede a decodable surface block.
         self.gated = true;
+        self.life = LifeState::Unknown;
         self.apply_immediate_state();
     }
 
@@ -592,6 +627,7 @@ impl AutoPotionController {
             beacon_available: self.beacon_available,
             suspended: self.suspended,
             gated: self.gated,
+            life: self.life,
         };
         let outcome = evaluate(
             inputs,

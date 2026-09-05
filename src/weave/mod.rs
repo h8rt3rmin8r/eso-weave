@@ -17,8 +17,8 @@ use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key};
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, LayoutState, MenuSurface, MovementSignal, QuickslotState,
-    ResourceSet, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
+    QuickslotState, ResourceSet, WeaponBarSignal, WeaponClass,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -220,6 +220,7 @@ pub struct WeaveEngine {
     back_class: WeaponClass,
     combat: CombatSignal,
     movement: MovementSignal,
+    life: LifeState,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
     menu: MenuSurface,
@@ -241,6 +242,7 @@ impl WeaveEngine {
             back_class: WeaponClass::Unknown,
             combat: CombatSignal::Unknown,
             movement: MovementSignal::Unknown,
+            life: LifeState::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
@@ -281,6 +283,16 @@ impl WeaveEngine {
     /// The last decoded movement state.
     pub fn movement(&self) -> MovementSignal {
         self.movement
+    }
+
+    /// Records the authoritative player life state used by the worker-side gate.
+    pub fn set_life(&mut self, life: LifeState) {
+        self.life = life;
+    }
+
+    /// The last decoded player life state.
+    pub fn life(&self) -> LifeState {
+        self.life
     }
 
     /// Records the decoded slot cooldowns, for display only.
@@ -364,6 +376,7 @@ impl WeaveEngine {
         self.back_class = WeaponClass::Unknown;
         self.combat = CombatSignal::Unknown;
         self.movement = MovementSignal::Unknown;
+        self.life = LifeState::Unknown;
         self.cooldowns = CooldownSet::new_unknown();
         self.quickslot = QuickslotState::new_unknown();
         self.menu = MenuSurface::None;
@@ -449,6 +462,11 @@ impl WeaveEngine {
             return;
         };
         if !slot.active {
+            return;
+        }
+        // Re-check after handoff. Death can arrive after the hook suppressed and
+        // queued a physical key but before this worker executes it.
+        if self.life.gates() {
             return;
         }
 

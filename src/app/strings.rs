@@ -8,7 +8,9 @@
 
 // Status region titles.
 pub const LIVE_HUD_TITLE: &str = "Live HUD";
-pub const SYSTEM_AUTOMATION_TITLE: &str = "System and automation";
+pub const SYSTEM_STATE_TITLE: &str = "System and State";
+pub const SYSTEM_STATE_TOOLTIP: &str =
+    "Expand or collapse application, addon, and automation state. This layout preference is saved.";
 pub const STATUS_TITLE: &str = "ESO Weave";
 pub const FISHING_TITLE: &str = "Fishing";
 pub const BEACON_TITLE: &str = "PixelBeacon installation";
@@ -16,6 +18,7 @@ pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon signal";
 pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game installation";
 pub const GAME_RUNTIME_TITLE: &str = "Game state";
+pub const LIFE_TITLE: &str = "Life state";
 
 // Status region tooltips.
 pub const STATUS_TOOLTIP: &str =
@@ -42,6 +45,7 @@ pub const FISHING_IDLE_NO_CAST: &str = "Idle (no cast detected)";
 pub const FISHING_IDLE_SIGNAL_LOST: &str = "Idle (signal lost)";
 pub const FISHING_IDLE_GAME_INACTIVE: &str = "Idle (game not active)";
 pub const FISHING_IDLE_UNFOCUSED: &str = "Idle (game not focused)";
+pub const FISHING_IDLE_PLAYER_UNAVAILABLE: &str = "Idle (player unavailable)";
 
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";
@@ -69,6 +73,8 @@ pub const COMBAT_TOOLTIP: &str =
 pub const MOVEMENT_TITLE: &str = "Movement";
 pub const MOVEMENT_TOOLTIP: &str =
     "Whether the character is mounted, read from the Pixel Beacon addon. Requires addon version 10 or later; shows Not detected without a signal. Sprinting is not shown because the game exposes no sprint state to an addon. Nothing in the application acts on this yet.";
+pub const LIFE_TOOLTIP: &str =
+    "Whether the character is alive, dead, or reincarnating. Only a fresh Alive signal permits automated input; unavailable evidence blocks safely.";
 
 // Menu-gate section.
 pub const MENU_TITLE: &str = "Game Context";
@@ -101,6 +107,9 @@ pub const AUTO_POTION_DORMANT_UNFOCUSED: &str = "Dormant: game unfocused";
 pub const AUTO_POTION_BLOCKED_BEACON: &str = "Blocked: beacon unavailable";
 pub const AUTO_POTION_BLOCKED_SUSPENDED: &str = "Blocked: input suspended";
 pub const AUTO_POTION_BLOCKED_CONTEXT: &str = "Blocked: game context";
+pub const AUTO_POTION_BLOCKED_PLAYER_UNKNOWN: &str = "Blocked: life state unavailable";
+pub const AUTO_POTION_BLOCKED_PLAYER_DEAD: &str = "Blocked: player dead";
+pub const AUTO_POTION_BLOCKED_PLAYER_REINCARNATING: &str = "Blocked: reincarnating";
 pub const AUTO_POTION_BLOCKED_NO_WATCH: &str = "Blocked: no watched resource";
 pub const AUTO_POTION_BLOCKED_RESOURCES: &str = "Blocked: resources unavailable";
 pub const AUTO_POTION_BLOCKED_QUICKSLOT: &str = "Blocked: quickslot unavailable";

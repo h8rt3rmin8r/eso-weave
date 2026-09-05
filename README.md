@@ -79,11 +79,12 @@ Input interception reads keyboard devices and synthesizes input through
 ## Game state and context
 
 The main window separates information by the question it answers. **Live HUD**
-shows resources, Game Context, combat, movement, weapon setup, and the selected
-quickslot. **System and automation** shows whether the game, ESO Weave,
+shows resources, Game Context, combat, movement, life state, weapon setup, and the selected
+quickslot. **System and State** shows whether the game, ESO Weave,
 PixelBeacon, fishing, and auto-potion are ready and why an action is blocked. The
 two sections sit side by side in a wide window and stack with Live HUD first in a
-narrow one. The Skills table remains below them.
+narrow one. System and State can be collapsed from its full keyboard-accessible
+header, and that preference survives restart. The Skills table remains below it.
 
 The Game row reports runtime and installation provider together. Installation is
 detected from provider-owned evidence for the ESO Store, Steam, Epic Games, or
@@ -119,7 +120,9 @@ normal and the app supplies the weave.
 
 Press `F1` to suspend and resume at any time. While suspended, nothing is sent.
 
-Weaving needs no addon and no setup. It works the moment you launch the app.
+Weaving requires the current PixelBeacon addon and a freshly detected Alive
+state. If either signal is unavailable, bound skill keys pass through to the game
+unchanged instead of starting a weave.
 
 ### Skill slots
 
@@ -241,7 +244,7 @@ Auto-potion drinks the potion in your active quickslot when a resource you are
 watching runs low. It is the one part of ESO Weave that acts on what the addon
 reports rather than just showing it to you, so it is deliberately cautious.
 
-The System and automation row separates the request switch from the effective result. It shows
+The System and State row separates the request switch from the effective result. It shows
 Off, a dormant game condition, the current safety or observation blocker, Ready,
 or the resource that just triggered an attempt.
 
@@ -258,6 +261,7 @@ It presses the key only when all of these hold:
 
 - Auto-potion is on, and an enabled resource is at or below its threshold
 - ESO is active and focused, and the PixelBeacon signal is fresh
+- PixelBeacon authoritatively reports the player Alive
 - The active quickslot explicitly holds a usable potion, and its cooldown has finished
 - The minimum retry interval since the last attempt has passed
 - ESO Weave is not suspended, and Game Context is positively detected as Gameplay
@@ -293,15 +297,15 @@ same thing: a small grid of colored squares that PixelBeacon draws in the
 That grid is the entire channel between the addon and the app. It has to be
 visible, because anything drawn over it reads as a missing signal.
 
-At the default square size it covers **384 by 16 physical pixels**: a three-cell
-layout header followed by twenty-one signal squares in one row. PixelBeacon uses
+At the default square size it covers **400 by 16 physical pixels**: a three-cell
+layout header followed by twenty-two signal squares in one row. PixelBeacon uses
 the current client width and wraps only when the complete next square would cross
 the right edge.
 
 **To make it smaller**, lower **Block size (px)** in Settings, under the beacon
 group. The app shows the running reader's detected footprint beside that setting
 and records layout transitions in the log. At the smallest supported size the
-current overlay is 48 by 2 pixels. A newly selected size is not mixed with the old
+current overlay is 50 by 2 pixels. A newly selected size is not mixed with the old
 live column count: it redeploys the addon and becomes the reported geometry after
 a `/reloadui` and an app restart.
 

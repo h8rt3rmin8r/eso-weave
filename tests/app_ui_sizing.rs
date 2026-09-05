@@ -254,7 +254,7 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
     }
 
     harness.get_by_label("Live HUD");
-    harness.get_by_label("System and automation");
+    harness.get_by_label("System and State");
     for label in [
         "Health: Game not active",
         "Stamina: Game not active",
@@ -263,6 +263,24 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
         let meter = harness.get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, label);
         assert_eq!(meter.accesskit_node().numeric_value(), None);
     }
+}
+
+#[test]
+fn system_state_disclosure_collapses_accessibly_and_reclaims_height() {
+    let mut harness = harness_at(egui::vec2(760.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    let expanded_height = harness.state().content_extent().y;
+    let disclosure = harness.get_by_label("System and State");
+    disclosure.click_accesskit();
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert!(!harness.state().system_state_expanded());
+    assert!(harness.state().content_extent().y < expanded_height);
+    assert!(harness.query_by_label("Application").is_none());
+    harness.get_by_label("Skills");
 }
 
 /// C1 (S046 FR-016/FR-017): intrinsic width is independent of the window while
