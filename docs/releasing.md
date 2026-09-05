@@ -7,7 +7,21 @@ rest and fails loudly if anything required is missing.
 ## Cut a release
 
 Prerequisite: every change since the last release is logged under `## [Unreleased]` in
-`CHANGELOG.md`. That section becomes the release notes, so keep it current as features land.
+`CHANGELOG.md`. Keep the complete Added, Changed, Fixed, and Decisions history there.
+
+The same section must begin with `### Highlights`: one through six top-level bullets totaling no
+more than 120 words. Summarize the outcomes users need to know and leave implementation detail in
+the full changelog subsections. GitHub release pages contain only this excerpt followed by a link
+to the complete changelog at the release tag, keeping downloads immediately discoverable.
+
+Preview the candidate notes before releasing:
+
+```bash
+CHANGELOG_HEADING=Unreleased scripts/release-notes.sh X.Y.Z h8rt3rmin8r/eso-weave
+```
+
+The command fails when Highlights is missing, empty, malformed, or over budget. Replace `X.Y.Z`
+with the version being prepared.
 
 Run one command:
 
@@ -36,16 +50,17 @@ version; let the release command set it.
 The release workflow performs these as gated steps and fails the release if any does not hold:
 
 1. The tag version matches the version in `Cargo.toml`. A tag without a version bump fails here.
-2. The `CHANGELOG.md` section for the version exists and is non-empty. A release with nothing
-   logged fails here.
-3. A Windows x64 MSI installer is built with `cargo-wix` and checksummed.
-4. Linux x86_64 assets are built and checksummed: a `.deb` package (`cargo-deb`), an AppImage
+2. The complete `CHANGELOG.md` section for the version exists and is non-empty. A release with
+   nothing logged fails here.
+3. The version has a valid Highlights excerpt within the six-item and 120-word budget.
+4. A Windows x64 MSI installer is built with `cargo-wix` and checksummed.
+5. Linux x86_64 assets are built and checksummed: a `.deb` package (`cargo-deb`), an AppImage
    (assembled from `packaging/appimage/`), and a plain tarball.
-5. A GitHub Release is created, with notes taken from the changelog section and every asset plus
-   the combined `SHA256SUMS` attached.
+6. A GitHub Release is created, with notes taken only from Highlights, a tag-specific link to the
+   complete changelog, and every asset plus the combined `SHA256SUMS` attached.
 
 You are responsible for the version number and that the changelog is current. Everything else is
-the machine's job, and steps 1 and 2 catch the common omissions before any asset is built.
+the machine's job, and steps 1 through 3 catch the common omissions before any asset is built.
 
 ## Asset shape
 
@@ -58,10 +73,12 @@ installed from the application UI. Change this shape only with a dated decision 
 
 ## Supporting scripts
 
-Two pinned scripts back the pipeline and are shared with local development:
+Three pinned scripts back the pipeline and are shared with local development:
 
 - `scripts/changelog-section.sh <version>`: prints the changelog body for a version; used by the
-  verify gate and to assemble release notes.
+  verify gate to protect the complete release record.
+- `scripts/release-notes.sh <version> [owner/repository] [changelog-file]`: validates Highlights
+  and prints the compact GitHub release body; exercised by `scripts/release-notes.test.sh`.
 - `scripts/linux-build-deps.sh`: installs the system libraries required to build the GUI and
   input backends on Linux (X11/XCB, xkbcommon, Wayland, GL, evdev/udev headers). The dependency
   list lives only in this script so CI and developer machines cannot drift apart.
