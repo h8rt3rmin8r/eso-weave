@@ -97,7 +97,9 @@ session disappear.
 **World state** reports **Active** only after ESO finishes player activation and
 PixelBeacon refreshes every player-derived payload for the current world. It
 reports **Transitioning** from player deactivation through the loading interval,
-and **Not detected** when current lifecycle evidence is unavailable.
+and **Not detected** when current lifecycle evidence is unavailable. PixelBeacon
+version 16 advertises protocol version 2 for this field; older negotiated layouts
+remain readable but are never sampled beyond their last defined block.
 
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which

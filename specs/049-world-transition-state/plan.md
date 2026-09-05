@@ -95,6 +95,8 @@ No constitution violations require justification.
 ## Key Decisions
 
 1. A dedicated B22 avoids conflating world readiness with heartbeat or life.
-2. `0xCC` is the strongest remaining marker placement under the current registry.
-3. A named complete baseline function makes the Active ordering durable.
-4. Synthesis consumption remains in #59 so S049 closes one atomic observable.
+2. Negotiated-header version 2 positively identifies the 23-cell payload; version
+   1 stays geometry-readable with 22 cells and never samples B22.
+3. `0xCC` is the strongest remaining marker placement under the current registry.
+4. A named complete baseline function makes the Active ordering durable.
+5. Synthesis consumption remains in #59 so S049 closes one atomic observable.

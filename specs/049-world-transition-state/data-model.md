@@ -30,6 +30,9 @@ B = 255 - R
 The marker and checksum must validate within reader tolerance before the red
 payload is considered. There is no nearest-value fallback.
 
+B22 exists only in negotiated-header protocol version 2. Protocol version 1
+retains its 22-cell payload extent and never samples a B22 candidate.
+
 ## GameObservations.world
 
 The shared runtime snapshot stores `WorldState`. It defaults to Unknown, receives

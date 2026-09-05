@@ -2,7 +2,8 @@
 
 ## Addon publication
 
-PixelBeacon version 16 publishes payload block B22 after B21 life state.
+PixelBeacon version 16 publishes negotiated-header protocol version 2 and payload
+block B22 after B21 life state.
 
 ```text
 marker green: 0xCC
@@ -40,9 +41,13 @@ inactivity overrides all three with Game not active.
 
 ## Compatibility
 
-Version 15 and earlier omit B22. Their heartbeat and earlier blocks remain
-readable, while world state stays Unknown. The managed addon status exposes the
-normal Update action because the embedded manifest advances to version 16.
+Versions 14 and 15 retain negotiated-header protocol version 1 (`0x20`) and omit
+B22. Their geometry, heartbeat, and earlier blocks remain readable, while the
+reader suppresses B22 sampling and world state stays Unknown. This prevents an
+ordinary screen pixel just beyond the older overlay from impersonating B22.
+Pre-version-14 heartbeat layouts remain on the existing legacy path. The managed
+addon status exposes the normal Update action because the embedded manifest
+advances to version 16.
 
 ## Exclusions
 

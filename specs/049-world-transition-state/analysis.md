@@ -36,7 +36,8 @@ unresolved clarification markers, or coverage gaps remain.
 
 ## Post-implementation verification
 
-- B22 values, geometry, registry membership, and Rust/Lua agreement are tested.
+- B22 values, protocol-version gating, geometry, registry membership, and
+  Rust/Lua agreement are tested.
 - Deactivation, complete activation rebaseline, duplicate suppression, invalid
   samples, signal loss, and process exit are covered.
 - Routing and the accessible System and State presentation are covered.

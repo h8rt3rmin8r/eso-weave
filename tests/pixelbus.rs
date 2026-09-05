@@ -12,8 +12,9 @@ use eso_weave::pixelbus::{
     PixelBusReader, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
     QuickslotState, QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb,
     Size, SlotCooldown, WeaponBarSignal, WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS,
-    DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX,
-    MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
+    DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE,
+    LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE,
+    MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 #[test]
@@ -32,6 +33,43 @@ fn negotiated_header_round_trips_boundaries_and_checksums() {
             LayoutState::Ready(BusLayout::negotiated(columns).unwrap())
         );
     }
+}
+
+#[test]
+fn negotiated_version_one_geometry_remains_readable_without_b22_support() {
+    let columns = 120;
+    let mut colors = layout_header_colors(columns).unwrap();
+    colors[0].b = LAYOUT_VERSION_ONE_CODE;
+    let expected = BusLayout {
+        mode: LayoutMode::Negotiated { version: 1 },
+        columns,
+        payload_offset: LAYOUT_HEADER_BLOCKS,
+    };
+
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(colors),
+            ReaderConfig::default().tolerance,
+            DEFAULT_BLOCK_PX,
+            None,
+        ),
+        LayoutState::Ready(expected)
+    );
+    assert_eq!(expected.payload_blocks(), LAYOUT_VERSION_ONE_BLOCKS);
+    assert_eq!(
+        expected.total_cells(),
+        LAYOUT_HEADER_BLOCKS + LAYOUT_VERSION_ONE_BLOCKS
+    );
+    assert!(!expected.supports_world_state());
+    assert_eq!(
+        BusLayout::negotiated(columns).unwrap().mode,
+        LayoutMode::Negotiated {
+            version: LAYOUT_PROTOCOL_VERSION,
+        }
+    );
+    assert!(BusLayout::negotiated(columns)
+        .unwrap()
+        .supports_world_state());
 }
 
 #[test]
@@ -2219,6 +2257,42 @@ fn world_state_uses_b22_change_detection_and_signal_loss() {
     let lost = reader.observe(BlockSamples::default(), config.heartbeat_timeout_ms + 500);
     assert!(lost.contains(&PixelBusEvent::SignalLost));
     assert!(lost.contains(&PixelBusEvent::World(WorldState::Unknown)));
+}
+
+#[test]
+fn negotiated_version_one_never_samples_a_screen_pixel_as_b22() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    let current = BusLayout::negotiated(120).unwrap();
+    let mut header = layout_header_colors(120).unwrap();
+    header[0].b = LAYOUT_VERSION_ONE_CODE;
+    for (index, color) in header.into_iter().enumerate() {
+        let point = current.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = current.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, Rgb::new(0xFF, 0x00, 0xFF));
+    let ordinary_screen_pixel = current.payload_point(config.block_px, 22);
+    sampler.set(
+        ordinary_screen_pixel.0,
+        ordinary_screen_pixel.1,
+        world(0xE0),
+    );
+
+    let events = reader.sample_and_observe(&sampler, 0);
+    assert!(events.contains(&PixelBusEvent::Heartbeat));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::World(WorldState::Active))));
+    assert_eq!(
+        reader.layout(),
+        LayoutState::Ready(BusLayout {
+            mode: LayoutMode::Negotiated { version: 1 },
+            columns: 120,
+            payload_offset: LAYOUT_HEADER_BLOCKS,
+        })
+    );
 }
 
 #[test]

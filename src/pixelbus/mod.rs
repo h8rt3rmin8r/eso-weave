@@ -882,10 +882,15 @@ pub const COLUMNS: u32 = 16;
 /// identified by its legacy heartbeat at cell zero.
 pub const LEGACY_COLUMNS: u32 = COLUMNS;
 
-/// Version of the negotiated geometry header introduced by addon version 14.
-pub const LAYOUT_PROTOCOL_VERSION: u8 = 1;
-/// Spaced blue-channel wire code representing protocol version 1.
-pub const LAYOUT_VERSION_CODE: u8 = 0x20;
+/// Current negotiated geometry header version. Version 2 identifies the B22
+/// world-state payload introduced by addon version 16.
+pub const LAYOUT_PROTOCOL_VERSION: u8 = 2;
+/// Spaced blue-channel wire code representing current protocol version 2.
+pub const LAYOUT_VERSION_CODE: u8 = 0x40;
+/// Frozen blue-channel wire code for negotiated protocol version 1.
+pub const LAYOUT_VERSION_ONE_CODE: u8 = 0x20;
+/// Payload count of negotiated protocol version 1 (addon versions 14 and 15).
+pub const LAYOUT_VERSION_ONE_BLOCKS: u32 = 22;
 /// Maximum tolerance accepted for geometry metadata.
 ///
 /// This remains below half the 0x20 version-code spacing so a caller's broad
@@ -936,23 +941,38 @@ impl BusLayout {
         }
     }
 
-    /// Constructs a version-1 negotiated layout after numeric validation.
+    /// Constructs a current-version negotiated layout after numeric validation.
     pub fn negotiated(columns: u32) -> Result<Self, LayoutFailure> {
+        Self::negotiated_version(columns, LAYOUT_PROTOCOL_VERSION)
+    }
+
+    fn negotiated_version(columns: u32, version: u8) -> Result<Self, LayoutFailure> {
         if !(MIN_LAYOUT_COLUMNS..=MAX_LAYOUT_COLUMNS).contains(&columns) {
             return Err(LayoutFailure::ColumnsOutOfRange { observed: columns });
         }
         Ok(Self {
-            mode: LayoutMode::Negotiated {
-                version: LAYOUT_PROTOCOL_VERSION,
-            },
+            mode: LayoutMode::Negotiated { version },
             columns,
             payload_offset: LAYOUT_HEADER_BLOCKS,
         })
     }
 
+    /// Payload cells physically defined by this protocol generation.
+    pub const fn payload_blocks(self) -> u32 {
+        match self.mode {
+            LayoutMode::Negotiated { version: 1 } => LAYOUT_VERSION_ONE_BLOCKS,
+            LayoutMode::Legacy | LayoutMode::Negotiated { .. } => NUM_BLOCKS,
+        }
+    }
+
+    /// Whether this geometry generation positively identifies B22.
+    pub const fn supports_world_state(self) -> bool {
+        matches!(self.mode, LayoutMode::Negotiated { version } if version >= 2)
+    }
+
     /// Total occupied cells, including the negotiated header when present.
     pub const fn total_cells(self) -> u32 {
-        self.payload_offset + NUM_BLOCKS
+        self.payload_offset + self.payload_blocks()
     }
 
     /// Rows occupied by the complete header and payload.
@@ -1029,7 +1049,7 @@ impl From<[Rgb; 3]> for LayoutHeaderSamples {
     }
 }
 
-/// Builds the exact version-1 header colors for contract tests and tooling.
+/// Builds the exact current-version header colors for contract tests and tooling.
 pub fn layout_header_colors(columns: u32) -> Result<[Rgb; 3], LayoutFailure> {
     BusLayout::negotiated(columns)?;
     let high = ((columns >> 8) & 0xFF) as u8;
@@ -1391,9 +1411,13 @@ pub fn decode_layout_header(
             LayoutFailure::Missing
         });
     }
-    if !within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
+    let version = if within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
+        LAYOUT_PROTOCOL_VERSION
+    } else if within(h0.b, LAYOUT_VERSION_ONE_CODE, layout_tolerance) {
+        1
+    } else {
         return LayoutState::Unavailable(LayoutFailure::UnsupportedVersion { observed: h0.b });
-    }
+    };
 
     let decode_byte = |sample: Option<Rgb>, marker: u8, failure: LayoutFailure| {
         let sample = sample.ok_or(failure)?;
@@ -1418,7 +1442,7 @@ pub fn decode_layout_header(
         Err(failure) => return LayoutState::Unavailable(failure),
     };
     let columns = (u32::from(high) << 8) | u32::from(low);
-    let layout = match BusLayout::negotiated(columns) {
+    let layout = match BusLayout::negotiated_version(columns, version) {
         Ok(layout) => layout,
         Err(failure) => return LayoutState::Unavailable(failure),
     };
@@ -2344,7 +2368,11 @@ impl PixelBusReader {
             quickslot_id_lo: sample(19),
             quickslot_state: sample(20),
             life: sample(21),
-            world: sample(22),
+            world: if layout.supports_world_state() {
+                sample(22)
+            } else {
+                None
+            },
         };
         events.extend(self.observe(samples, now_ms));
         events

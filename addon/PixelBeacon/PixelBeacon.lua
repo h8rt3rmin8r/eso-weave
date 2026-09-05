@@ -34,11 +34,11 @@ local BLOCK_PX = 16
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
 local NUM_BLOCKS = 23
--- Version-1 negotiated geometry header, shared byte for byte with the companion.
+-- Version-2 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
-local LAYOUT_PROTOCOL_VERSION = 1
-local LAYOUT_VERSION_CODE = 0x20
+local LAYOUT_PROTOCOL_VERSION = 2
+local LAYOUT_VERSION_CODE = 0x40
 local LAYOUT_HEADER_BLOCKS = 3
 local LAYOUT_MAGIC_R = 0x45
 local LAYOUT_MAGIC_G = 0x53

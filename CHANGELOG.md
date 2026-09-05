@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-09-05: Model world transition as a dedicated B22 observable rather than
   overloading heartbeat or life state. Player deactivation owns Transitioning,
   and player activation owns Active only after one complete named baseline.
+- 2026-09-05: Advance the negotiated header to protocol version 2 for B22 while
+  retaining version 1 geometry at its 22-cell extent. World state is sampled only
+  from version 2, preventing ordinary pixels beyond older overlays from decoding.
 - 2026-09-05: Treat every player life state except a freshly decoded Alive as a
   hard input gate, enforced independently at physical interception, queued weave
   execution, fishing timers, and auto-potion evaluation. Blocked work is dropped

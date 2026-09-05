@@ -74,8 +74,10 @@ Active only after the full baseline function returns.
 - A loading screen or compositor obscures the addon before Transitioning is
   sampled. The reader eventually reports Unknown through invalid evidence or
   heartbeat loss, never a fabricated transition value.
-- An older addon has only B0 through B21. The reader reports Unknown for B22 and
-  the existing managed-addon Update action remains available.
+- An older addon has only B0 through B21. Its protocol-version-1 header keeps
+  geometry and earlier signals readable while preventing any B22 sample, so an
+  ordinary screen pixel beyond the overlay cannot fabricate world state. The
+  existing managed-addon Update action remains available.
 - Activation occurs after a reload. The addon starts Unknown, rebuilds every
   payload, then publishes Active.
 - A payload API returns unavailable data during activation. The payload's own
@@ -91,8 +93,8 @@ Active only after the full baseline function returns.
 
 - **FR-001**: PixelBeacon MUST publish B22 with distinct Unknown, Transitioning,
   and Active payloads, a unique green marker, and the complement checksum.
-- **FR-002**: Addon and companion constants MUST agree on block count, index,
-  marker, payloads, and checksum behavior.
+- **FR-002**: Addon and companion constants MUST agree on layout protocol version,
+  block count, index, marker, payloads, and checksum behavior.
 - **FR-003**: The addon MUST initialize world state to Unknown and MUST NOT infer
   Active during addon construction or a periodic tick.
 - **FR-004**: `EVENT_PLAYER_DEACTIVATED` MUST set and render Transitioning
@@ -120,6 +122,9 @@ Active only after the full baseline function returns.
   cross-language constants, routing, process exit, and dormant presentation.
 - **FR-015**: S049 MUST NOT implement TravelPending, change synthesis gates, or
   absorb roll-dodge, sprint, potion-cooldown, or effect-database scope.
+- **FR-016**: The reader MUST retain negotiated protocol version 1 for geometry
+  and earlier payloads, MUST use its 22-cell extent, and MUST NOT sample B22
+  unless protocol version 2 is positively identified.
 
 ### Key Entities
 
@@ -142,6 +147,9 @@ Active only after the full baseline function returns.
 - **SC-005**: View tests cover Active, Transitioning, Not detected, and Game not
   active without changing the Skills section.
 - **SC-006**: Existing safety-critical and full CI parity tests remain green.
+- **SC-007**: A protocol-version-1 overlay remains readable but cannot produce a
+  World event even when the first ordinary screen pixel beyond B21 matches a
+  valid B22 color.
 
 ## Assumptions
 

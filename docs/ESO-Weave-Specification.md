@@ -539,8 +539,8 @@ undetectable failure mode as a column-count disagreement. The block size setting
 the supported way to reduce the footprint, and the application reports the current
 footprint beside that setting and in its log.
 
-**Negotiation.** H0 is `(0x45, 0x53, 0x20)`: two magic channels and the spaced
-wire code for protocol version 1. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
+**Negotiation.** H0 is `(0x45, 0x53, 0x40)`: two magic channels and the spaced
+wire code for protocol version 2. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
 `(columns_low, 0x9C, 255 - columns_low)`. Magic, markers, and complements honor
 the configured capture tolerance. Recognized magic
 with any invalid field, unsupported version, impossible count, or surface-fit
@@ -548,6 +548,10 @@ failure makes the layout unavailable and suppresses all payload decoding. A
 non-magic H0 selects the legacy 16-column, zero-offset layout only when it is a
 valid legacy magenta heartbeat. Geometry metadata caps effective tolerance at
 15, below half the version-code spacing, even when payload tolerance is broader.
+Protocol version 1 (`0x20`) remains readable with its 22-cell payload extent,
+but cannot publish B22. The reader does not sample the would-be B22 position
+unless version 2 is positively identified, so ordinary screen pixels beyond an
+older overlay cannot impersonate world state.
 
 The addon and application each state the header constants once, and contract
 tests parse the embedded addon source to prevent byte-level drift. Capture extent
@@ -559,7 +563,7 @@ initial negotiation or growth beyond the prepared frame.
 
 | Cell | Position | Sample | Encoding |
 | --- | --- | --- | --- |
-| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0x20)`, where `0x20` is logical version 1 |
+| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0x40)`, where `0x40` is logical version 2; version 1 (`0x20`) remains geometry-readable without B22 |
 | H1 Column high byte | (16, 0) | (24, 8) | `(high, 0x64, 255 - high)` |
 | H2 Column low byte | (32, 0) | (40, 8) | `(low, 0x9C, 255 - low)` |
 
@@ -583,7 +587,7 @@ the default block size. Legacy addons retain the pre-version-14 positions.
 | B17 to B19 Quickslot item | (320, 0) to (352, 0) | (328, 8) to (360, 8) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
 | B20 Quickslot classification | (368, 0) | (376, 8) | `G = 0x76`, `B = 255 - R`, and spaced `R` codes distinguish unsupported API, invalid selection, inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion. Missing B20 with a valid legacy B16 reports an addon update requirement. Invalid or tolerance-ambiguous B20 reports a corrupt signal. Classification uses `GetCurrentQuickslot`, `GetSlotType`, `GetSlotBoundId`, `GetSlotItemLink`, `GetSlotItemCount`, `IsSlotUsable`, and `GetSlotCooldownInfo`. Events for selection, slot contents, slot state, cooldowns, inventory, and player activation converge through one change-detected path with a 1 Hz recovery backstop. |
 | B21 Life state | (384, 0) | (392, 8) | `G = 0x89`, `R` is `0x20` Alive, `0x80` Dead, or `0xE0` Reincarnating, and `B = 255 - R`. `IsUnitReincarnating("player")` takes precedence over `IsUnitDead("player")`; player dead, alive, and activation events plus a 1 Hz backstop converge through one computation. Missing or invalid evidence is Unknown and blocks synthesis. |
-| B22 World state | (400, 0) | (408, 8) | `G = 0xCC`, `R` is `0x20` Unknown, `0x80` Transitioning, or `0xE0` Active, and `B = 255 - R`. `EVENT_PLAYER_DEACTIVATED` publishes Transitioning immediately. `EVENT_PLAYER_ACTIVATED` refreshes weapon, combat, menu, resources, movement, cooldowns, quickslot, life, and fishing payloads before publishing Active. No timer infers Active. Missing, invalid, or lost evidence is Unknown. |
+| B22 World state | (400, 0) | (408, 8) | Protocol version 2 only. `G = 0xCC`, `R` is `0x20` Unknown, `0x80` Transitioning, or `0xE0` Active, and `B = 255 - R`. `EVENT_PLAYER_DEACTIVATED` publishes Transitioning immediately. `EVENT_PLAYER_ACTIVATED` refreshes weapon, combat, menu, resources, movement, cooldowns, quickslot, life, and fishing payloads before publishing Active. No timer infers Active. Missing, invalid, or lost evidence is Unknown. |
 
 No block is ever hidden to express a state. Absence means only that the addon is
 too old to draw it, which is what keeps an old addon from being read as a state.

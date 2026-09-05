@@ -44,6 +44,18 @@ Rejected alternatives:
 - overload B21 life: Alive and world Active are different facts during loading.
 - omit wire Unknown: the addon must represent its pre-activation state truthfully.
 
+## Protocol generation
+
+Decision: advance the negotiated layout header from version 1 (`0x20`) to version
+2 (`0x40`) with addon version 16. Continue decoding version 1 geometry using its
+22-cell payload extent, but sample B22 only after positively identifying version 2.
+
+Rationale: a version-15 overlay ends at B21. Sampling the next ordinary screen
+pixel as if it were B22 creates a low-probability false positive even with marker
+and checksum validation. The header generation is the existing authority for
+payload shape, so it is the correct discriminator and preserves all earlier
+signals without trusting pixels the older protocol never defined.
+
 ## Activation baseline
 
 Decision: extract one `rebaselinePlayerState()` addon function that refreshes
