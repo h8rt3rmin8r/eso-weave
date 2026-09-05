@@ -38,6 +38,7 @@ fn real_sink_stops_new_presses_but_releases_held_input_when_life_gate_closes() {
     sink.emit(InputOp::Key(Key::Digit2, Transition::Down));
     input.set_life_gated(false);
     sink.emit(InputOp::Key(Key::Digit3, Transition::Down));
+    sink.emit(InputOp::Key(Key::Digit2, Transition::Up));
     sink.emit(InputOp::Key(Key::Digit1, Transition::Up));
 
     assert_eq!(

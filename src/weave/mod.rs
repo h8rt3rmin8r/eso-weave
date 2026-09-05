@@ -8,14 +8,14 @@
 pub mod sequence;
 pub mod types;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
-use crate::input::{Action, InputBackend, InputEngine, Key, LifeGate, Transition};
+use crate::input::{Action, InputBackend, InputEngine, Key, LifeGate, MouseButton, Transition};
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
     QuickslotState, ResourceSet, WeaponBarSignal, WeaponClass,
@@ -182,6 +182,8 @@ pub struct RealSink<B> {
     origin: Instant,
     life_gate: LifeGate,
     sequence_cancelled: bool,
+    pressed_keys: HashSet<Key>,
+    pressed_mouse: HashSet<MouseButton>,
 }
 
 impl<B: InputBackend> RealSink<B> {
@@ -192,6 +194,8 @@ impl<B: InputBackend> RealSink<B> {
             origin: Instant::now(),
             life_gate,
             sequence_cancelled: false,
+            pressed_keys: HashSet::new(),
+            pressed_mouse: HashSet::new(),
         }
     }
 }
@@ -202,8 +206,11 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
     }
 
     fn emit(&mut self, op: InputOp) {
-        let transition = match op {
-            InputOp::Key(_, transition) | InputOp::Mouse(_, transition) => transition,
+        let (transition, was_pressed) = match op {
+            InputOp::Key(key, transition) => (transition, self.pressed_keys.contains(&key)),
+            InputOp::Mouse(button, transition) => {
+                (transition, self.pressed_mouse.contains(&button))
+            }
         };
         // Once life evidence closes the gate, start no new input. Releases still
         // run so a key or mouse button pressed before the transition cannot be
@@ -214,12 +221,31 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
         if self.sequence_cancelled && transition == Transition::Down {
             return;
         }
+        if self.sequence_cancelled && transition == Transition::Up && !was_pressed {
+            return;
+        }
         let result = match op {
             InputOp::Key(key, transition) => self.backend.synthesize(key, transition),
             InputOp::Mouse(button, transition) => self.backend.synthesize_mouse(button, transition),
         };
-        if let Err(err) = result {
-            tracing::warn!(target: "eso_weave::weave", "synthesis failed: {err}");
+        match result {
+            Ok(()) => match op {
+                InputOp::Key(key, Transition::Down) => {
+                    self.pressed_keys.insert(key);
+                }
+                InputOp::Key(key, Transition::Up) => {
+                    self.pressed_keys.remove(&key);
+                }
+                InputOp::Mouse(button, Transition::Down) => {
+                    self.pressed_mouse.insert(button);
+                }
+                InputOp::Mouse(button, Transition::Up) => {
+                    self.pressed_mouse.remove(&button);
+                }
+            },
+            Err(err) => {
+                tracing::warn!(target: "eso_weave::weave", "synthesis failed: {err}");
+            }
         }
     }
 

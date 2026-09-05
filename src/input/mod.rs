@@ -75,7 +75,7 @@ pub enum Origin {
 }
 
 /// A mouse button the engine can synthesize (used by weave sequences).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MouseButton {
     /// The left mouse button (basic attack).
     Primary,

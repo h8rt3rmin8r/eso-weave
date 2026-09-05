@@ -85,7 +85,10 @@ fn main() {
     for notice in &fishing_notices {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
-    let fishing = Arc::new(Mutex::new(FishingController::new(fishing_config)));
+    let fishing = Arc::new(Mutex::new(FishingController::with_life_gate(
+        fishing_config,
+        input.life_gate(),
+    )));
 
     // Auto-potion controller. Always starts switched off, deliberately, even
     // though suspend and fishing are both restored from the previous session: a

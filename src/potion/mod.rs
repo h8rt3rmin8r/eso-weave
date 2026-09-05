@@ -551,6 +551,7 @@ impl AutoPotionController {
             // Surface evidence belongs to one game session. Require a fresh
             // positive gameplay observation after the process returns.
             self.gated = true;
+            self.life = LifeState::Unknown;
         }
         self.apply_immediate_state();
     }

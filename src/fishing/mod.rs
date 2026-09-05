@@ -16,7 +16,7 @@ pub use detector::{map_event, BiteDetector, PixelBusDetector, StubDetector};
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
-use crate::input::{InputBackend, Key, Transition};
+use crate::input::{InputBackend, Key, LifeGate, Transition};
 use crate::pixelbus::LifeState;
 
 /// The maximum accepted value for a fishing timing parameter, in milliseconds.
@@ -260,6 +260,7 @@ pub struct FishingController {
     game_active: bool,
     focused: bool,
     life: LifeState,
+    life_gate: LifeGate,
 }
 
 /// How long an interact deferred by the menu gate waits before trying again.
@@ -270,6 +271,11 @@ const GATE_DEFER_MS: u64 = 100;
 impl FishingController {
     /// Creates a controller in the Disabled state.
     pub fn new(config: FishingConfig) -> Self {
+        Self::with_life_gate(config, LifeGate::default())
+    }
+
+    /// Creates a controller attached to the independently updated synthesis gate.
+    pub fn with_life_gate(config: FishingConfig, life_gate: LifeGate) -> Self {
         Self {
             config,
             requested_enabled: false,
@@ -280,6 +286,7 @@ impl FishingController {
             game_active: false,
             focused: false,
             life: LifeState::Unknown,
+            life_gate,
         }
     }
 
@@ -322,8 +329,7 @@ impl FishingController {
                     self.stop_reason = Some(StopReason::Unfocused);
                     return;
                 }
-                if self.life.gates() {
-                    self.stop_reason = Some(StopReason::PlayerUnavailable);
+                if self.block_for_life() {
                     return;
                 }
                 tracing::debug!(target: "eso_weave::fishing", "fishing enabled");
@@ -340,6 +346,11 @@ impl FishingController {
 
     /// Handles a detector event.
     pub fn on_event(&mut self, event: DetectorEvent, now_ms: u64, sink: &mut dyn FishingSink) {
+        if !matches!(event, DetectorEvent::SignalLost | DetectorEvent::Heartbeat)
+            && self.block_for_life()
+        {
+            return;
+        }
         match event {
             DetectorEvent::SignalLost => {
                 if self.requested_enabled || self.state != FishingState::Disabled {
@@ -357,7 +368,7 @@ impl FishingController {
                     && self.state == FishingState::Disabled
                     && self.game_active
                     && self.focused
-                    && !self.life.gates()
+                    && !self.life_gate.is_gated()
                 {
                     tracing::debug!(target: "eso_weave::fishing", "fresh manual cast detected after life-state recovery");
                     self.state = FishingState::Waiting;
@@ -406,6 +417,9 @@ impl FishingController {
 
     /// Fires the pending deadline if it is due at `now_ms`.
     pub fn tick(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
+        if self.block_for_life() {
+            return;
+        }
         let Some((at_ms, kind)) = self.deadline else {
             return;
         };
@@ -486,14 +500,8 @@ impl FishingController {
     /// observation or a new toggle is required before fishing can proceed.
     pub fn set_life_state(&mut self, life: LifeState) {
         self.life = life;
-        if life.gates() && self.requested_enabled {
-            if self.state != FishingState::Disabled {
-                self.disable(StopReason::PlayerUnavailable);
-            } else {
-                self.stop_reason = Some(StopReason::PlayerUnavailable);
-                self.deadline = None;
-            }
-        }
+        self.life_gate.set(life.gates());
+        self.block_for_life();
     }
 
     /// Updates the process and focus gates together. Losing either gate pauses an
@@ -511,6 +519,7 @@ impl FishingController {
         if !active {
             self.gated = false;
             self.life = LifeState::Unknown;
+            self.life_gate.set(true);
             self.on_game_inactive();
         } else if !focused {
             if self.state != FishingState::Disabled {
@@ -520,6 +529,7 @@ impl FishingController {
             }
         } else if self.requested_enabled
             && self.state == FishingState::Disabled
+            && !self.life_gate.is_gated()
             && matches!(
                 self.stop_reason,
                 Some(StopReason::GameInactive | StopReason::Unfocused)
@@ -542,6 +552,9 @@ impl FishingController {
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and
     /// clears any prior stop reason now that a fresh session is starting.
     fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
+        if self.block_for_life() {
+            return;
+        }
         tracing::debug!(
             target: "eso_weave::fishing",
             "cast interact sent; armed with a {} ms cast-confirmation window",
@@ -563,6 +576,21 @@ impl FishingController {
         self.state = FishingState::Disabled;
         self.deadline = None;
         self.stop_reason = Some(reason);
+    }
+
+    fn block_for_life(&mut self) -> bool {
+        if !self.life_gate.is_gated() {
+            return false;
+        }
+        if self.requested_enabled || self.state != FishingState::Disabled {
+            if self.state != FishingState::Disabled {
+                self.disable(StopReason::PlayerUnavailable);
+            } else {
+                self.stop_reason = Some(StopReason::PlayerUnavailable);
+                self.deadline = None;
+            }
+        }
+        true
     }
 
     /// Emits one interact: a key press followed by a key release.

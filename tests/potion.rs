@@ -230,6 +230,13 @@ fn s043_signal_loss_preserves_the_request_and_heartbeat_recovers() {
     assert!(sink.ops.is_empty());
 
     controller.set_gated(false);
+    assert_eq!(controller.life_state(), LifeState::Unknown);
+    assert_eq!(
+        controller.tick(eligible_readings(), 15_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::PlayerUnavailable(LifeState::Unknown))
+    );
+    assert!(sink.ops.is_empty());
+
     controller.set_life_state(LifeState::Alive);
     assert!(matches!(
         controller.tick(eligible_readings(), 30_000, &mut sink),
