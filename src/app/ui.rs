@@ -1235,6 +1235,17 @@ impl EsoWeaveApp {
                                     ui.label("");
                                     ui.end_row();
 
+                                    metric_cells(
+                                        ui,
+                                        palette,
+                                        strings::WORLD_TITLE,
+                                        view.world.state,
+                                        view.world.role,
+                                        strings::WORLD_TOOLTIP,
+                                    );
+                                    ui.label("");
+                                    ui.end_row();
+
                                     status_cells(ui, palette, &view.status_line);
                                     let mut running = !view.suspended;
                                     if widgets::toggle_switch(ui, &mut running, palette)

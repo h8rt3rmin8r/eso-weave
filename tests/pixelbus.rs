@@ -4,16 +4,17 @@ use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
     block_center, capture_dims, decode_combat, decode_cooldown, decode_latency,
     decode_layout_header, decode_life_state, decode_menu, decode_movement, decode_quickslot,
-    decode_resource, decode_resources, decode_weapon_bar, fishing_signal, grid_extent,
-    grid_position, grid_rows, layout_header_colors, load_reader_config, poll_interval,
+    decode_resource, decode_resources, decode_weapon_bar, decode_world_state, fishing_signal,
+    grid_extent, grid_position, grid_rows, layout_header_colors, load_reader_config, poll_interval,
     sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
     BusLayout, CombatSignal, CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples,
     LayoutMode, LayoutState, LifeState, MenuSurface, MockSampler, MovementSignal, PixelBusEvent,
     PixelBusReader, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
     QuickslotState, QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb,
-    Size, SlotCooldown, WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS,
-    DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX,
-    MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
+    Size, SlotCooldown, WeaponBarSignal, WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS,
+    DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE,
+    LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE,
+    MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 #[test]
@@ -32,6 +33,43 @@ fn negotiated_header_round_trips_boundaries_and_checksums() {
             LayoutState::Ready(BusLayout::negotiated(columns).unwrap())
         );
     }
+}
+
+#[test]
+fn negotiated_version_one_geometry_remains_readable_without_b22_support() {
+    let columns = 120;
+    let mut colors = layout_header_colors(columns).unwrap();
+    colors[0].b = LAYOUT_VERSION_ONE_CODE;
+    let expected = BusLayout {
+        mode: LayoutMode::Negotiated { version: 1 },
+        columns,
+        payload_offset: LAYOUT_HEADER_BLOCKS,
+    };
+
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(colors),
+            ReaderConfig::default().tolerance,
+            DEFAULT_BLOCK_PX,
+            None,
+        ),
+        LayoutState::Ready(expected)
+    );
+    assert_eq!(expected.payload_blocks(), LAYOUT_VERSION_ONE_BLOCKS);
+    assert_eq!(
+        expected.total_cells(),
+        LAYOUT_HEADER_BLOCKS + LAYOUT_VERSION_ONE_BLOCKS
+    );
+    assert!(!expected.supports_world_state());
+    assert_eq!(
+        BusLayout::negotiated(columns).unwrap().mode,
+        LayoutMode::Negotiated {
+            version: LAYOUT_PROTOCOL_VERSION,
+        }
+    );
+    assert!(BusLayout::negotiated(columns)
+        .unwrap()
+        .supports_world_state());
 }
 
 #[test]
@@ -136,7 +174,10 @@ fn negotiated_geometry_uses_capacity_and_wraps_at_the_exact_boundary() {
     let block_px = 16;
     let one_row = BusLayout::negotiated(LAYOUT_HEADER_BLOCKS + NUM_BLOCKS).unwrap();
     assert_eq!(one_row.rows(), 1);
-    assert_eq!(one_row.extent(block_px), Size::new(25 * block_px, block_px));
+    assert_eq!(
+        one_row.extent(block_px),
+        Size::new((LAYOUT_HEADER_BLOCKS + NUM_BLOCKS) * block_px, block_px)
+    );
     for index in 0..NUM_BLOCKS {
         let (x, y) = one_row.payload_point(block_px, index);
         assert_eq!(y, block_px / 2);
@@ -435,6 +476,10 @@ fn alive() -> BlockSamples {
 
 fn life(red: u8) -> Rgb {
     Rgb::new(red, 0x89, 255 - red)
+}
+
+fn world(red: u8) -> Rgb {
+    Rgb::new(red, 0xCC, 255 - red)
 }
 
 /// The combat block color for a state, mirroring the addon's encoder: the state
@@ -737,6 +782,8 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (5, 3),
                 (7, 3),
                 (9, 3),
+                (11, 3),
+                (13, 3),
             ],
             (32u32, 4u32),
         ),
@@ -765,6 +812,8 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (10, 6),
                 (14, 6),
                 (18, 6),
+                (22, 6),
+                (26, 6),
             ],
             (64, 8),
         ),
@@ -793,6 +842,8 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (20, 12),
                 (28, 12),
                 (36, 12),
+                (44, 12),
+                (52, 12),
             ],
             (128, 16),
         ),
@@ -821,6 +872,8 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (40, 24),
                 (56, 24),
                 (72, 24),
+                (88, 24),
+                (104, 24),
             ],
             (256, 32),
         ),
@@ -849,6 +902,8 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (80, 48),
                 (112, 48),
                 (144, 48),
+                (176, 48),
+                (208, 48),
             ],
             (512, 64),
         ),
@@ -867,7 +922,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 22);
+    assert_eq!(NUM_BLOCKS, 23);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -2147,6 +2202,165 @@ fn life_state_transitions_precede_same_sample_fishing_edges() {
 }
 
 #[test]
+fn world_state_decodes_all_wire_values_and_rejects_invalid_evidence() {
+    let tolerance = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_world_state(world(0x20), tolerance),
+        WorldState::Unknown
+    );
+    assert_eq!(
+        decode_world_state(world(0x80), tolerance),
+        WorldState::Transitioning
+    );
+    assert_eq!(
+        decode_world_state(world(0xE0), tolerance),
+        WorldState::Active
+    );
+    assert_eq!(
+        decode_world_state(Rgb::new(0xE0, 0x00, 0x1F), tolerance),
+        WorldState::Unknown
+    );
+    assert_eq!(
+        decode_world_state(Rgb::new(0xE0, 0xCC, 0x00), tolerance),
+        WorldState::Unknown
+    );
+    assert_eq!(
+        decode_world_state(world(0x50), tolerance),
+        WorldState::Unknown
+    );
+}
+
+#[test]
+fn ambiguous_world_state_payloads_fail_closed_at_any_tolerance() {
+    let codes = [
+        (0x20u8, WorldState::Unknown),
+        (0x80, WorldState::Transitioning),
+        (0xE0, WorldState::Active),
+    ];
+    for tolerance in 0..=u8::MAX {
+        for red in 0..=u8::MAX {
+            let matching: Vec<_> = codes
+                .iter()
+                .filter(|(code, _)| red.abs_diff(*code) <= tolerance)
+                .collect();
+            let expected = if matching.len() == 1 {
+                matching[0].1
+            } else {
+                WorldState::Unknown
+            };
+            assert_eq!(
+                decode_world_state(Rgb::new(red, 0xCC, 255 - red), tolerance),
+                expected,
+                "red {red:#04X} with tolerance {tolerance} matched {} codes",
+                matching.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn world_state_uses_b22_change_detection_and_signal_loss() {
+    let config = ReaderConfig::default();
+    assert_eq!(config.world_point(), block_center(config.block_px, 22));
+
+    let mut reader = PixelBusReader::new(config);
+    let mut samples = alive();
+    samples.world = Some(world(0xE0));
+    assert!(reader
+        .observe(samples, 0)
+        .contains(&PixelBusEvent::World(WorldState::Active)));
+
+    assert!(!reader
+        .observe(samples, 100)
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::World(_))));
+
+    samples.world = Some(Rgb::new(0xE0, 0xCC, 0x00));
+    assert!(reader
+        .observe(samples, 200)
+        .contains(&PixelBusEvent::World(WorldState::Unknown)));
+
+    samples.world = Some(world(0x80));
+    reader.observe(samples, 300);
+    let lost = reader.observe(BlockSamples::default(), config.heartbeat_timeout_ms + 500);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::World(WorldState::Unknown)));
+}
+
+#[test]
+fn negotiated_version_one_never_samples_a_screen_pixel_as_b22() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    let current = BusLayout::negotiated(120).unwrap();
+    let mut header = layout_header_colors(120).unwrap();
+    header[0].b = LAYOUT_VERSION_ONE_CODE;
+    for (index, color) in header.into_iter().enumerate() {
+        let point = current.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = current.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, Rgb::new(0xFF, 0x00, 0xFF));
+    let ordinary_screen_pixel = current.payload_point(config.block_px, 22);
+    sampler.set(
+        ordinary_screen_pixel.0,
+        ordinary_screen_pixel.1,
+        world(0xE0),
+    );
+
+    let events = reader.sample_and_observe(&sampler, 0);
+    assert!(events.contains(&PixelBusEvent::Heartbeat));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::World(WorldState::Active))));
+    assert_eq!(
+        reader.layout(),
+        LayoutState::Ready(BusLayout {
+            mode: LayoutMode::Negotiated { version: 1 },
+            columns: 120,
+            payload_offset: LAYOUT_HEADER_BLOCKS,
+        })
+    );
+}
+
+#[test]
+fn world_state_precedes_other_same_sample_transitions() {
+    let mut reader = reader();
+    reader.observe(
+        BlockSamples {
+            fishing: Some(WAITING),
+            life: Some(life(0x20)),
+            world: Some(world(0xE0)),
+            ..alive()
+        },
+        0,
+    );
+
+    let events = reader.observe(
+        BlockSamples {
+            life: Some(life(0x80)),
+            world: Some(world(0x80)),
+            ..alive()
+        },
+        100,
+    );
+    let world_index = events
+        .iter()
+        .position(|event| *event == PixelBusEvent::World(WorldState::Transitioning))
+        .unwrap();
+    let life_index = events
+        .iter()
+        .position(|event| *event == PixelBusEvent::Life(LifeState::Dead))
+        .unwrap();
+    let fishing_index = events
+        .iter()
+        .position(|event| *event == PixelBusEvent::FishingStopped)
+        .unwrap();
+    assert!(world_index < life_index);
+    assert!(world_index < fishing_index);
+}
+
+#[test]
 fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.
@@ -2174,7 +2388,7 @@ fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
 
     // The shape in full: a full first row, six blocks on the second.
-    assert_eq!(NUM_BLOCKS - COLUMNS, 6, "row 1 should hold six blocks");
+    assert_eq!(NUM_BLOCKS - COLUMNS, 7, "row 1 should hold seven blocks");
 }
 
 // Slice 037: the six skill-cooldown blocks (B10 to B15).

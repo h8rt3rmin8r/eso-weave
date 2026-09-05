@@ -34,7 +34,7 @@ use crate::logging::LogHandle;
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass,
+    QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponClass, WorldState,
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
@@ -458,6 +458,28 @@ pub fn life_state_view(state: LifeState) -> LifeStateView {
     }
 }
 
+/// A normalized player world-state view for System and State.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorldStateView {
+    pub state: &'static str,
+    pub role: StatusRole,
+}
+
+pub fn world_state_view(state: WorldState) -> WorldStateView {
+    WorldStateView {
+        state: match state {
+            WorldState::Unknown => "Not detected",
+            WorldState::Transitioning => "Transitioning",
+            WorldState::Active => "Active",
+        },
+        role: match state {
+            WorldState::Active => StatusRole::Healthy,
+            WorldState::Transitioning => StatusRole::Warning,
+            WorldState::Unknown => StatusRole::Muted,
+        },
+    }
+}
+
 /// A normalized view of the detected game UI surface for the status region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MenuView {
@@ -762,7 +784,7 @@ pub fn grid_footprint_caption(block_px: u32, state: crate::pixelbus::LayoutState
             let row_label = if rows == 1 { "row" } else { "rows" };
             format!(
                 "{mode}: {} data cells, {} columns, {} {row_label}, {} by {} pixels.",
-                crate::pixelbus::NUM_BLOCKS,
+                layout.payload_blocks(),
                 layout.columns,
                 rows,
                 extent.width,
@@ -1246,6 +1268,8 @@ pub struct AppView {
     pub movement: MovementView,
     /// The authoritative player life state.
     pub life: LifeStateView,
+    /// Whether the current world is active after a fresh addon baseline.
+    pub world: WorldStateView,
     /// The detected game UI surface, and whether it is gating input.
     pub menu: MenuView,
     /// The detected resource levels.
@@ -1529,6 +1553,7 @@ impl AppModel {
         let mut combat = combat_view(combat);
         let mut movement = movement_view(movement);
         let mut life = life_state_view(life);
+        let mut world = world_state_view(game.world);
         let mut resources = resources_view_with_config(resources, auto_potion_config);
         let mut quickslot = quickslot_view(quickslot);
         if !active {
@@ -1550,6 +1575,10 @@ impl AppModel {
                 role: StatusRole::Muted,
             };
             life = LifeStateView {
+                state: "Game not active",
+                role: StatusRole::Muted,
+            };
+            world = WorldStateView {
                 state: "Game not active",
                 role: StatusRole::Muted,
             };
@@ -1596,6 +1625,7 @@ impl AppModel {
             combat,
             movement,
             life,
+            world,
             menu: game_context_view(game.context()),
             resources,
             quickslot,

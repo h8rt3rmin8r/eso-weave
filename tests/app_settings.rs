@@ -130,7 +130,9 @@ fn settings_form_round_trips_custom_values() {
 #[test]
 fn the_footprint_caption_follows_the_block_size() {
     use eso_weave::app::grid_footprint_caption;
-    use eso_weave::pixelbus::{BusLayout, LayoutFailure, LayoutState, NUM_BLOCKS};
+    use eso_weave::pixelbus::{
+        BusLayout, LayoutFailure, LayoutMode, LayoutState, LAYOUT_HEADER_BLOCKS, NUM_BLOCKS,
+    };
 
     let negotiated = LayoutState::Ready(BusLayout::negotiated(120).unwrap());
     for block_px in [2u32, 4, 8, 16, 32] {
@@ -157,13 +159,22 @@ fn the_footprint_caption_follows_the_block_size() {
     assert!(
         default.contains("120 columns")
             && default.contains("1 row")
-            && default.contains("400 by 16 pixels"),
+            && default.contains("416 by 16 pixels"),
         "the negotiated footprint should report the live shape: {default}"
     );
 
     let legacy = grid_footprint_caption(16, LayoutState::Ready(BusLayout::legacy()));
     assert!(legacy.contains("Legacy overlay"));
     assert!(legacy.contains("16 columns") && legacy.contains("2 rows"));
+
+    let version_one = BusLayout {
+        mode: LayoutMode::Negotiated { version: 1 },
+        columns: 120,
+        payload_offset: LAYOUT_HEADER_BLOCKS,
+    };
+    let version_one_caption = grid_footprint_caption(16, LayoutState::Ready(version_one));
+    assert!(version_one_caption.contains("22 data cells"));
+    assert!(version_one_caption.contains("400 by 16 pixels"));
 
     assert!(grid_footprint_caption(16, LayoutState::Unknown).contains("waiting"));
     assert!(

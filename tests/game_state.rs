@@ -6,7 +6,7 @@ use eso_weave::game::{
     GameState, InstallationCandidate, InstallationProvider, InstallationState, Presence,
     ProcessObservation, SurfaceObservation,
 };
-use eso_weave::pixelbus::MenuSurface;
+use eso_weave::pixelbus::{MenuSurface, WorldState};
 
 fn candidate(provider: InstallationProvider, root: impl Into<PathBuf>) -> InstallationCandidate {
     InstallationCandidate {
@@ -109,6 +109,7 @@ fn observations(
         focus,
         freshness,
         surface,
+        world: WorldState::Unknown,
     }
 }
 
@@ -197,6 +198,7 @@ fn leaving_active_clears_focus_freshness_and_surface() {
     });
     state.observe_heartbeat();
     state.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    state.observe_world(WorldState::Active);
     state.update_processes(ProcessObservation {
         game: Presence::Absent,
         launcher: Presence::Absent,
@@ -207,6 +209,19 @@ fn leaving_active_clears_focus_freshness_and_surface() {
     assert_eq!(snapshot.focus, FocusObservation::Unknown);
     assert_eq!(snapshot.freshness, BeaconFreshness::NeverObserved);
     assert_eq!(snapshot.surface, SurfaceObservation::Unavailable);
+    assert_eq!(snapshot.world, WorldState::Unknown);
+}
+
+#[test]
+fn world_state_is_runtime_only_and_signal_loss_clears_it() {
+    let state = GameState::default();
+    assert_eq!(state.snapshot().world, WorldState::Unknown);
+    state.observe_world(WorldState::Transitioning);
+    assert_eq!(state.snapshot().world, WorldState::Transitioning);
+    state.observe_world(WorldState::Active);
+    assert_eq!(state.snapshot().world, WorldState::Active);
+    state.signal_lost();
+    assert_eq!(state.snapshot().world, WorldState::Unknown);
 }
 
 #[test]

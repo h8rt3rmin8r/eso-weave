@@ -25,6 +25,7 @@ pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
         PixelBusEvent::Resources(_) => None,
         PixelBusEvent::Movement(_) => None,
         PixelBusEvent::Life(_) => None,
+        PixelBusEvent::World(_) => None,
         PixelBusEvent::Cooldowns(_) => None,
         PixelBusEvent::Quickslot(_) => None,
     }

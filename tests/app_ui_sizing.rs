@@ -255,6 +255,7 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
 
     harness.get_by_label("Live HUD");
     harness.get_by_label("System and State");
+    harness.get_by_label("World state");
     for label in [
         "Health: Game not active",
         "Stamina: Game not active",
@@ -280,6 +281,7 @@ fn system_state_disclosure_collapses_accessibly_and_reclaims_height() {
     assert!(!harness.state().system_state_expanded());
     assert!(harness.state().content_extent().y < expanded_height);
     assert!(harness.query_by_label("Application").is_none());
+    assert!(harness.query_by_label("World state").is_none());
     harness.get_by_label("Skills");
 }
 
@@ -491,7 +493,7 @@ fn assert_no_overlap(app: &EsoWeaveApp, context: &str) {
 /// control, on any frame of the gesture.
 #[test]
 fn log_pane_never_covers_controls_during_a_splitter_drag() {
-    let mut harness = harness_at(egui::vec2(900.0, 800.0));
+    let mut harness = harness_at(egui::vec2(900.0, 1000.0));
     harness.step();
     harness.state_mut().set_log_panel_open(true);
     for _ in 0..SETTLE {
@@ -630,7 +632,8 @@ fn log_never_overlaps_during_a_width_only_switch_to_the_taller_layout() {
 /// so nothing out of range is persisted or restored.
 #[test]
 fn committed_log_height_is_clamped_before_it_is_stored() {
-    let mut harness = harness_at(egui::vec2(900.0, 800.0));
+    let window_h = 1000.0;
+    let mut harness = harness_at(egui::vec2(900.0, window_h));
     harness.step();
     harness.state_mut().set_log_panel_open(true);
     for _ in 0..SETTLE {
@@ -649,8 +652,8 @@ fn committed_log_height_is_clamped_before_it_is_stored() {
     let content_h = app.content_extent().y;
     let stored = app.log_height();
     assert!(
-        stored <= (800.0 - content_h).max(0.0) + 0.5,
-        "stored log height {stored} exceeds the boundary (window 800 - content {content_h})"
+        stored <= (window_h - content_h).max(0.0) + 0.5,
+        "stored log height {stored} exceeds the boundary (window {window_h} - content {content_h})"
     );
 }
 
