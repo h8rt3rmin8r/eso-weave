@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S050 adds authoritative roll-dodge detection to PixelBeacon and Live HUD. The
   generated-weave path now fails closed while a dodge is active or unavailable,
   passes the player's physical skill input through, cancels remaining mid-sequence
-  synthesis safely, and never replays blocked work (issues #57 and #60).
+  synthesis safely, and never replays blocked work. Lifecycle-invalidated state
+  ignores late combat events, and interception sampling is capped at 375 ms so the
+  bounded Active signal cannot disappear between supported reads (issues #57 and #60).
 - S049 adds a PixelBeacon world-state signal and System and State field that
   distinguish Unknown, Transitioning, and Active. Active is published only after
   every player-derived payload has been freshly re-baselined for the current

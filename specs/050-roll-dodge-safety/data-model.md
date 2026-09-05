@@ -13,11 +13,12 @@ Transitions:
 ```text
 startup -> Unknown
 Unknown|Inactive -> Active (effect gained)
-Active|Unknown -> Inactive (effect faded)
+Active|Unknown -> Inactive (effect faded while lifecycle-valid)
 Active -> Inactive (1,500 ms watchdog)
 any -> Unknown (death, deactivation, invalid sample, signal loss, process exit)
 Unknown -> Inactive (completed activation baseline)
 Unknown -> Inactive (in-place resurrection)
+Unknown -> Unknown (late gained/faded after lifecycle invalidation)
 ```
 
 Duplicate observations are idempotent.
@@ -38,6 +39,8 @@ B23 exists only in negotiated protocol version 3. Versions 1 and 2 retain their
 The addon stores a nullable monotonic deadline. Effect gained sets it to current
 game time plus 1,500 ms. Effect faded, death, deactivation, activation, and player
 alive clear it. The fast tick changes Active to Inactive when the deadline is reached.
+The companion caps polling at 375 ms while interception is active, allowing multiple
+samples before the watchdog can clear Active even when the configured interval is longer.
 
 ## Roll gate
 

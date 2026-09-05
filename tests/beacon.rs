@@ -879,12 +879,26 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         "EVENT_PLAYER_ALIVE, onPlayerAlive",
         "EVENT_PLAYER_DEACTIVATED",
         "rebaselinePlayerState()",
+        "rollDodgeLifecycleValid = false",
+        "if not rollDodgeLifecycleValid",
+        "worldState ~= WORLD_ACTIVE_RED",
+        "lifeState ~= LIFE_ALIVE_RED",
     ] {
         assert!(
             lua.contains(required),
             "roll-dodge pipeline is missing {required}"
         );
     }
+    let invalidation = lua
+        .find("local function invalidateRollDodgeState()")
+        .expect("roll lifecycle invalidation exists");
+    let late_event_guard = lua
+        .find("local function onRollDodgeCombatEvent")
+        .expect("roll combat event handler exists");
+    assert!(
+        invalidation < late_event_guard,
+        "lifecycle invalidation must be established before late combat events are handled"
+    );
     assert_eq!(beacon::embedded_version(), 17);
 }
 

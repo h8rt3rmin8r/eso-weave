@@ -77,6 +77,10 @@ seams through Active, Unknown, and Inactive transitions and inspect emitted inpu
 - In-place resurrection publishes Inactive even when no player activation follows.
 - Player deactivation publishes Unknown before loading; activation publishes
   Inactive only after the complete player baseline.
+- Roll events delivered after death or deactivation are ignored until a fresh
+  activation or in-place resurrection baseline.
+- A configured fast interval longer than the bounded Active window is capped while
+  interception is active so the companion observes Active before watchdog recovery.
 - An older addon advertises protocol version 2 and only B0 through B22. The
   companion reads its earlier payloads but never samples an ordinary screen pixel
   as B23, so roll state remains Unknown and generated weaves remain fail closed.
@@ -128,6 +132,9 @@ seams through Active, Unknown, and Inactive transitions and inspect emitted inpu
   non-replay, recovery, routing, process exit, and dormant presentation.
 - **FR-019**: S050 MUST NOT add sprint detection, auto-potion gating, effect
   databases, configurable remapping, or coordinate/resource inference.
+- **FR-020**: Lifecycle-invalidated combat events MUST NOT reopen the gate, and
+  every supported interception polling cadence MUST sample multiple times inside
+  the 1,500 ms Active watchdog window.
 
 ### Key Entities
 
@@ -150,6 +157,8 @@ seams through Active, Unknown, and Inactive transitions and inspect emitted inpu
 - **SC-006**: Live HUD and dormant UI tests cover every state and identify the
   roll-dodge weave blocker.
 - **SC-007**: Existing safety-critical and full CI parity tests remain green.
+- **SC-008**: Tests prove late roll events remain Unknown after lifecycle
+  invalidation and a maximum configured fast interval is safety-capped to 375 ms.
 
 ## Assumptions
 

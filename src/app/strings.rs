@@ -277,8 +277,8 @@ pub const SET_TOLERANCE: Setting = Setting {
     help: "How much a sampled pixel may differ from the expected color and still match.",
 };
 pub const SET_INTERVAL_FISHING: Setting = Setting {
-    label: "Sample interval while fishing (ms)",
-    help: "How often the pixel signal is read while a cast is active.",
+    label: "Fast sample interval (ms)",
+    help: "How often the pixel signal is read while fishing or input interception is active. Interception is safety-capped at 375 ms.",
 };
 pub const SET_INTERVAL_IDLE: Setting = Setting {
     label: "Sample interval while idle (ms)",

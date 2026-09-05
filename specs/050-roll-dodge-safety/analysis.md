@@ -21,7 +21,7 @@ No blocking inconsistency remains.
 | Generated-weave safety gate | FR-012 through FR-016 | T011 through T025 | Covered |
 | Truthful Live HUD state | FR-011 | T013, T026 | Covered |
 | Manifest and documentation | FR-017 | T019, T027 through T028 | Covered |
-| Verification and boundaries | FR-018 through FR-019 | T029 through T035 | Covered |
+| Verification and boundaries | FR-018 through FR-020 | T029 through T035 | Covered |
 
 - Addon, reader, router, hook, worker, sink, and presentation use one three-state
   contract with identical wire constants.

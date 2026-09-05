@@ -482,6 +482,25 @@ fn poll_interval_is_fast_whenever_the_gate_matters() {
     );
 }
 
+#[test]
+fn poll_interval_caps_interception_inside_the_roll_watchdog_window() {
+    use eso_weave::pixelbus::SAFETY_POLL_MAX_MS;
+
+    let cfg = ReaderConfig {
+        interval_fishing_ms: 60_000,
+        interval_idle_ms: 60_000,
+        ..ReaderConfig::default()
+    };
+
+    assert_eq!(
+        poll_interval(false, true, &cfg),
+        SAFETY_POLL_MAX_MS,
+        "every supported interception cadence must sample Active repeatedly before the watchdog clears it"
+    );
+    assert_eq!(poll_interval(true, false, &cfg), 60_000);
+    assert_eq!(poll_interval(false, false, &cfg), 60_000);
+}
+
 fn reader() -> PixelBusReader {
     PixelBusReader::new(ReaderConfig::default())
 }

@@ -105,7 +105,10 @@ remain readable but are never sampled beyond their last defined block.
 **Roll dodge** reports **Active** from the player's dodge-roll combat event until
 its matching effect fade. A 1500 ms watchdog clears a rejected dodge that emits a
 gain without a fade. Loading, death, or lost telemetry clears the observation to
-**Not detected**; resurrection in place establishes a fresh **Inactive** baseline.
+**Not detected**; late combat events cannot overwrite that invalidation, and
+resurrection in place establishes a fresh **Inactive** baseline. While interception
+is active, companion sampling is capped at 375 ms so every watchdog-bounded Active
+window contains multiple supported observations.
 PixelBeacon version 17 advertises protocol version 3 for this field; version 1 and
 2 layouts remain readable at their original extents.
 

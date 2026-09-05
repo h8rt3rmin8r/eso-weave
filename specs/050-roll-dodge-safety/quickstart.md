@@ -10,8 +10,11 @@
 7. Press a bound skill during Active and confirm the physical key is not swallowed
    and no delayed weave fires after recovery.
 8. Reload, zone, die, resurrect in place, and stop ESO; confirm death clears stale
-   Active and resurrection restores Inactive without requiring a zone.
-9. Temporarily use a version-16 addon and confirm earlier readings work while Roll
+   Active, a late fade cannot reopen the gate, and resurrection restores Inactive
+   without requiring a zone.
+9. Set the fast reader interval above 1,500 ms and confirm interception still
+   samples Roll dodge at the safety-capped 375 ms cadence.
+10. Temporarily use a version-16 addon and confirm earlier readings work while Roll
    dodge stays Not detected and generated weaves fail closed.
 
 The implementation pull request closes #57 and #60. Sprint detection and

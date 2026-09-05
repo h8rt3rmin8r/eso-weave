@@ -9,6 +9,8 @@
 - Recovery: fixed 1,500 ms from the most recent gained event
 - Invalidation: player death and player deactivation
 - Baseline: Inactive after completed player activation rebaseline or player alive
+- Late-event rule: gained and faded are ignored while lifecycle evidence is invalid
+- Reader cadence: at most 375 ms while input interception is active
 
 ## Pixel bus
 

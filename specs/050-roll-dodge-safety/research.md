@@ -42,6 +42,7 @@ Decision: normalize the current evidence as follows.
 | Player death | `EVENT_PLAYER_DEAD` | Unknown |
 | In-place resurrection | `EVENT_PLAYER_ALIVE` | Inactive |
 | Zoning starts | `EVENT_PLAYER_DEACTIVATED` | Unknown |
+| Late roll event after death or zoning | invalid lifecycle epoch | Remain Unknown |
 | Zoning completes | completed activation rebaseline | Inactive |
 | Beacon or game signal loss | reader/runtime authority | Unknown |
 
@@ -49,7 +50,12 @@ Rationale: Unknown distinguishes invalidated evidence from a positive inactive
 observation. Activation is a safe baseline because a roll cannot survive a
 completed world load. Player alive is also required because an in-place
 resurrection need not emit player activation. Death and zoning cancel any pending
-watchdog.
+watchdog. Combat events are ignored while that lifecycle is invalid, so delayed
+delivery cannot reopen the gate.
+
+The companion's configurable fast interval is capped at 375 ms while interception
+is active. This preserves slow configured polling while synthesis is disabled but
+guarantees multiple supported reads within the 1,500 ms bounded Active publication.
 
 ## Missing-completion watchdog
 

@@ -1325,16 +1325,17 @@ impl Default for ReaderConfig {
 /// in time and the reel is not delayed.
 ///
 /// The fast cadence also applies whenever the application can intercept, because
-/// the menu gate is only useful if it engages before the operator has typed half a
-/// sentence. Note what this deliberately is not: an unconditional fast cadence.
-/// That would leave `interval_idle_ms` with no effect at all, which is the mirror
-/// image of the defect where `interval_fishing_ms` was the dead setting and every
-/// fishing session sampled once a second. A suspended application intercepts
-/// nothing and synthesizes nothing, so it has no gate to keep current and can
-/// sample slowly; both settings keep a real meaning and the extra capture cost is
-/// paid only while the application is actually working.
+/// the menu and roll-dodge gates must be observed before generated input can be
+/// admitted. The configured fast interval is capped at one quarter of the addon's
+/// 1,500 ms roll watchdog, leaving multiple supported samples inside every Active
+/// window. A suspended application intercepts and synthesizes nothing, so the
+/// uncapped settings retain their meaning outside that safety-authoritative path.
+pub const SAFETY_POLL_MAX_MS: u64 = 375;
+
 pub fn poll_interval(fishing_active: bool, can_intercept: bool, cfg: &ReaderConfig) -> u64 {
-    if fishing_active || can_intercept {
+    if can_intercept {
+        cfg.interval_fishing_ms.min(SAFETY_POLL_MAX_MS)
+    } else if fishing_active {
         cfg.interval_fishing_ms
     } else {
         cfg.interval_idle_ms

@@ -130,6 +130,10 @@ local ROLL_DODGE_ABILITY_ID = 28549
 local ROLL_DODGE_WATCHDOG_MS = 1500
 local rollDodgeState = ROLL_DODGE_UNKNOWN_RED
 local rollDodgeDeadline = nil
+-- Combat events can arrive after death or player deactivation. Keep an explicit
+-- lifecycle guard so those late events cannot replace the fail-closed Unknown
+-- state until a fresh activation or in-place resurrection establishes a baseline.
+local rollDodgeLifecycleValid = false
 
 -- The six cooldown block markers (green channel), shared byte for byte with the
 -- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
@@ -640,11 +644,17 @@ local function setRollDodgeState(nextState)
 end
 
 local function invalidateRollDodgeState()
+    rollDodgeLifecycleValid = false
     rollDodgeDeadline = nil
     setRollDodgeState(ROLL_DODGE_UNKNOWN_RED)
 end
 
 local function onRollDodgeCombatEvent(_, result)
+    if not rollDodgeLifecycleValid
+        or worldState ~= WORLD_ACTIVE_RED
+        or lifeState ~= LIFE_ALIVE_RED then
+        return
+    end
     if result == ACTION_RESULT_EFFECT_GAINED then
         rollDodgeDeadline = GetGameTimeMilliseconds() + ROLL_DODGE_WATCHDOG_MS
         setRollDodgeState(ROLL_DODGE_ACTIVE_RED)
@@ -1235,8 +1245,13 @@ local function rebaselinePlayerState()
     renderQuickslot()
     computeLifeState()
     renderLifeState()
-    rollDodgeDeadline = nil
-    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    if lifeState == LIFE_ALIVE_RED then
+        rollDodgeLifecycleValid = true
+        rollDodgeDeadline = nil
+        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    else
+        invalidateRollDodgeState()
+    end
     onFishingTick()
 end
 
@@ -1257,6 +1272,10 @@ end
 
 local function onPlayerAlive()
     onLifeStateChanged()
+    if worldState ~= WORLD_ACTIVE_RED or lifeState ~= LIFE_ALIVE_RED then
+        return
+    end
+    rollDodgeLifecycleValid = true
     rollDodgeDeadline = nil
     setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
 end
