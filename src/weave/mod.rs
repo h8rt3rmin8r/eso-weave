@@ -8,17 +8,17 @@
 pub mod sequence;
 pub mod types;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
-use crate::input::{Action, InputBackend, InputEngine, Key};
+use crate::input::{Action, InputBackend, InputEngine, Key, LifeGate, MouseButton, Transition};
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, LayoutState, MenuSurface, MovementSignal, QuickslotState,
-    ResourceSet, WeaponBarSignal, WeaponClass,
+    ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
+    QuickslotState, ResourceSet, WeaponBarSignal, WeaponClass,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -124,6 +124,9 @@ impl WeaveConfig {
 
 /// The execution seam: synthesized operations, waits, and a monotonic clock.
 pub trait WeaveSink {
+    /// Starts one handed-off sequence. Production sinks use this boundary to
+    /// reset cancellation only after the worker has re-validated its gates.
+    fn begin_sequence(&mut self) {}
     /// Performs one synthesized operation.
     fn emit(&mut self, op: InputOp);
     /// Waits the given number of milliseconds.
@@ -177,31 +180,88 @@ impl WeaveSink for MockSink {
 pub struct RealSink<B> {
     backend: B,
     origin: Instant,
+    life_gate: LifeGate,
+    sequence_cancelled: bool,
+    pressed_keys: HashSet<Key>,
+    pressed_mouse: HashSet<MouseButton>,
 }
 
 impl<B: InputBackend> RealSink<B> {
     /// Creates a real sink over the given input backend.
-    pub fn new(backend: B) -> Self {
+    pub fn new(backend: B, life_gate: LifeGate) -> Self {
         Self {
             backend,
             origin: Instant::now(),
+            life_gate,
+            sequence_cancelled: false,
+            pressed_keys: HashSet::new(),
+            pressed_mouse: HashSet::new(),
         }
     }
 }
 
 impl<B: InputBackend> WeaveSink for RealSink<B> {
+    fn begin_sequence(&mut self) {
+        self.sequence_cancelled = self.life_gate.is_gated();
+    }
+
     fn emit(&mut self, op: InputOp) {
+        let (transition, was_pressed) = match op {
+            InputOp::Key(key, transition) => (transition, self.pressed_keys.contains(&key)),
+            InputOp::Mouse(button, transition) => {
+                (transition, self.pressed_mouse.contains(&button))
+            }
+        };
+        // Once life evidence closes the gate, start no new input. Releases still
+        // run so a key or mouse button pressed before the transition cannot be
+        // stranded logically down.
+        if self.life_gate.is_gated() {
+            self.sequence_cancelled = true;
+        }
+        if self.sequence_cancelled && transition == Transition::Down {
+            return;
+        }
+        if self.sequence_cancelled && transition == Transition::Up && !was_pressed {
+            return;
+        }
         let result = match op {
             InputOp::Key(key, transition) => self.backend.synthesize(key, transition),
             InputOp::Mouse(button, transition) => self.backend.synthesize_mouse(button, transition),
         };
-        if let Err(err) = result {
-            tracing::warn!(target: "eso_weave::weave", "synthesis failed: {err}");
+        match result {
+            Ok(()) => match op {
+                InputOp::Key(key, Transition::Down) => {
+                    self.pressed_keys.insert(key);
+                }
+                InputOp::Key(key, Transition::Up) => {
+                    self.pressed_keys.remove(&key);
+                }
+                InputOp::Mouse(button, Transition::Down) => {
+                    self.pressed_mouse.insert(button);
+                }
+                InputOp::Mouse(button, Transition::Up) => {
+                    self.pressed_mouse.remove(&button);
+                }
+            },
+            Err(err) => {
+                tracing::warn!(target: "eso_weave::weave", "synthesis failed: {err}");
+            }
         }
     }
 
     fn wait(&mut self, ms: u32) {
-        std::thread::sleep(Duration::from_millis(u64::from(ms)));
+        let deadline = Instant::now() + Duration::from_millis(u64::from(ms));
+        while !self.sequence_cancelled {
+            if self.life_gate.is_gated() {
+                self.sequence_cancelled = true;
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            std::thread::sleep(remaining.min(Duration::from_millis(10)));
+        }
     }
 
     fn now_ms(&self) -> u64 {
@@ -220,6 +280,7 @@ pub struct WeaveEngine {
     back_class: WeaponClass,
     combat: CombatSignal,
     movement: MovementSignal,
+    life: LifeState,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
     menu: MenuSurface,
@@ -241,6 +302,7 @@ impl WeaveEngine {
             back_class: WeaponClass::Unknown,
             combat: CombatSignal::Unknown,
             movement: MovementSignal::Unknown,
+            life: LifeState::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
@@ -281,6 +343,16 @@ impl WeaveEngine {
     /// The last decoded movement state.
     pub fn movement(&self) -> MovementSignal {
         self.movement
+    }
+
+    /// Records the authoritative player life state used by the worker-side gate.
+    pub fn set_life(&mut self, life: LifeState) {
+        self.life = life;
+    }
+
+    /// The last decoded player life state.
+    pub fn life(&self) -> LifeState {
+        self.life
     }
 
     /// Records the decoded slot cooldowns, for display only.
@@ -364,6 +436,7 @@ impl WeaveEngine {
         self.back_class = WeaponClass::Unknown;
         self.combat = CombatSignal::Unknown;
         self.movement = MovementSignal::Unknown;
+        self.life = LifeState::Unknown;
         self.cooldowns = CooldownSet::new_unknown();
         self.quickslot = QuickslotState::new_unknown();
         self.menu = MenuSurface::None;
@@ -451,6 +524,11 @@ impl WeaveEngine {
         if !slot.active {
             return;
         }
+        // Re-check after handoff. Death can arrive after the hook suppressed and
+        // queued a physical key but before this worker executes it.
+        if self.life.gates() {
+            return;
+        }
 
         let now = sink.now_ms();
         let timing = self.current_timing();
@@ -460,6 +538,7 @@ impl WeaveEngine {
             }
         }
         self.last_weave_ms = Some(now);
+        sink.begin_sequence();
 
         for step in sequence_for_adapted(&slot, &timing, self.current_latency, &self.latency) {
             match step {

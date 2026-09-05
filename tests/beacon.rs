@@ -64,18 +64,17 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_fourteen() {
-    // Slice 045 adds a negotiated geometry header and moves payload B0 past its
-    // three invariant cells. Version 13 remains readable through the companion's
-    // explicit legacy layout.
-    assert_eq!(embedded_version(), 14);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(14));
+fn embedded_manifest_version_is_fifteen() {
+    // Slice 048 adds B21 life state. Version 14 remains readable with Unknown
+    // life state and an explicit addon update affordance.
+    assert_eq!(embedded_version(), 15);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(15));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 14);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(14));
+    assert_eq!(embedded_version(), 15);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(15));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -631,6 +630,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
+    assert_eq!(NUM_BLOCKS, 22, "S048 adds exactly one B21 life block");
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
         beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
@@ -747,6 +747,38 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
             "the addon and the companion disagree on {name}"
         );
     }
+    for (name, expected) in [
+        ("LIFE_MARKER", 0x89),
+        ("LIFE_ALIVE_RED", 0x20),
+        ("LIFE_DEAD_RED", 0x80),
+        ("LIFE_REINCARNATING_RED", 0xE0),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            Some(expected),
+            "the addon and companion disagree on {name}"
+        );
+    }
+}
+
+#[test]
+fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
+    let lua = beacon::LUA;
+    for required in [
+        "IsUnitDead(\"player\")",
+        "IsUnitReincarnating(\"player\")",
+        "EVENT_PLAYER_DEAD",
+        "EVENT_PLAYER_ALIVE",
+        "EVENT_PLAYER_ACTIVATED",
+        "computeLifeState()",
+        "renderLifeState()",
+    ] {
+        assert!(
+            lua.contains(required),
+            "life-state pipeline is missing {required}"
+        );
+    }
+    assert!(beacon::embedded_version() >= 15);
 }
 
 #[test]

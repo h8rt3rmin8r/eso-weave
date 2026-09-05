@@ -6,11 +6,11 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
-    combat_view, dashboard_layout, default_delay_for, fishing_label, menu_view, modal_extent,
-    override_edit_for, quickslot_view, resource_view, resource_view_with_watch, route_reader_event,
-    skill_rows, status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled,
-    weapon_bar_view, AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout,
-    ResourcePresentation, SkillEdit, StatusRole, UiIntent,
+    combat_view, dashboard_layout, default_delay_for, fishing_label, life_state_view, menu_view,
+    modal_extent, override_edit_for, quickslot_view, resource_view, resource_view_with_watch,
+    route_reader_event, route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon,
+    status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition,
+    BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -21,7 +21,7 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, BusLayout, CombatSignal, LayoutState, MenuSurface, PixelBusEvent,
+    ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, PixelBusEvent,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal,
     WeaponClass,
@@ -36,6 +36,7 @@ fn active_fishing_controller() -> FishingController {
     let mut controller = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
     controller.set_game_environment(true, true, 0, &mut sink);
+    controller.set_life_state(LifeState::Alive);
     controller
 }
 
@@ -54,6 +55,24 @@ fn dashboard_breakpoint_is_exact_and_point_based() {
     assert_eq!(dashboard_layout(879.9), DashboardLayout::Narrow);
     assert_eq!(dashboard_layout(880.0), DashboardLayout::Wide);
     assert_eq!(dashboard_layout(f32::NAN), DashboardLayout::Narrow);
+}
+
+#[test]
+fn life_state_view_names_every_protocol_state() {
+    for (state, text, role) in [
+        (LifeState::Unknown, "Not detected", StatusRole::Muted),
+        (LifeState::Alive, "Alive", StatusRole::Healthy),
+        (LifeState::Dead, "Dead", StatusRole::Warning),
+        (
+            LifeState::Reincarnating,
+            "Reincarnating",
+            StatusRole::Warning,
+        ),
+    ] {
+        let view = life_state_view(state);
+        assert_eq!(view.state, text);
+        assert_eq!(view.role, role);
+    }
 }
 
 #[test]
@@ -390,6 +409,61 @@ fn routing_directs_events_to_the_right_subsystems() {
 }
 
 #[test]
+fn routing_life_state_updates_every_synthesis_consumer() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    route_reader_event(
+        PixelBusEvent::Life(LifeState::Alive),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert_eq!(weave.life(), LifeState::Alive);
+    assert!(!input.is_life_gated());
+    assert_eq!(potion.life_state(), LifeState::Alive);
+
+    fishing.set_enabled(true, 2, &mut sink);
+    assert_eq!(fishing.state(), FishingState::Armed);
+    route_reader_event(
+        PixelBusEvent::Life(LifeState::Dead),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        3,
+        &mut sink,
+    );
+    assert_eq!(weave.life(), LifeState::Dead);
+    assert!(input.is_life_gated());
+    assert_eq!(fishing.state(), FishingState::Disabled);
+    assert_eq!(fishing.stop_reason(), Some(StopReason::PlayerUnavailable));
+    assert_eq!(potion.life_state(), LifeState::Dead);
+}
+
+#[test]
+fn safety_preroute_closes_input_without_waiting_for_controller_access() {
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 4);
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    assert!(!input.is_life_gated());
+
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Dead), &input);
+    assert!(input.is_life_gated());
+
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    route_reader_safety_gate(PixelBusEvent::SignalLost, &input);
+    assert!(input.is_life_gated());
+}
+
+#[test]
 fn weapon_bar_view_shows_detected_and_unknown() {
     let detected = weapon_bar_view(
         ActiveBar::Back,
@@ -461,10 +535,14 @@ fn model_with_clock_and_potion(
 ) {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     engine.set_game_active(true);
-    let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
+    engine.set_life_gated(false);
+    let mut weave_engine = WeaveEngine::new(WeaveConfig::default());
+    weave_engine.set_life(LifeState::Alive);
+    let weave = Arc::new(Mutex::new(weave_engine));
     let mut fishing_controller = FishingController::new(FishingConfig::default());
     let mut init_sink = MockFishingSink::new();
     fishing_controller.set_game_environment(true, true, 0, &mut init_sink);
+    fishing_controller.set_life_state(LifeState::Alive);
     let fishing = Arc::new(Mutex::new(fishing_controller));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
 
@@ -477,9 +555,11 @@ fn model_with_clock_and_potion(
         ..Settings::default()
     };
 
-    let potion = Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+    let mut potion_controller = eso_weave::potion::AutoPotionController::new(
         eso_weave::potion::AutoPotionConfig::default(),
-    )));
+    );
+    potion_controller.set_life_state(LifeState::Alive);
+    let potion = Arc::new(Mutex::new(potion_controller));
     let model = AppModel::new(
         Arc::new(engine),
         weave,
@@ -565,6 +645,19 @@ fn toggle_suspend_intent_flips_input_engine() {
     assert_eq!(model.view().app_state.indicator, "Suspended");
     model.apply_intent(UiIntent::ToggleSuspend);
     assert_eq!(model.view().app_state.indicator, "Running");
+}
+
+#[test]
+fn system_state_disclosure_intent_updates_persisted_ui_preferences() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+    assert!(model.ui_prefs().system_state_expanded);
+
+    model.apply_intent(UiIntent::SetSystemStateExpanded(false));
+    assert!(!model.ui_prefs().system_state_expanded);
+
+    model.apply_intent(UiIntent::SetSystemStateExpanded(true));
+    assert!(model.ui_prefs().system_state_expanded);
 }
 
 #[test]
@@ -1132,8 +1225,30 @@ fn a_signal_lost_event_blocks_auto_potion_without_clearing_the_request() {
             3,
             &mut potion_sink,
         ),
+        AutoPotionState::Blocked(BlockReason::PlayerUnavailable(LifeState::Unknown)),
+        "gameplay-surface evidence cannot release the independent life-state gate"
+    );
+
+    route_reader_event(
+        PixelBusEvent::Life(LifeState::Alive),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        4,
+        &mut sink,
+    );
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                quickslot: QuickslotState::new_unknown(),
+            },
+            4,
+            &mut potion_sink,
+        ),
         AutoPotionState::Blocked(BlockReason::NoWatchedResource),
-        "only positive gameplay-surface evidence may release the context blocker"
+        "fresh gameplay-surface and life-state evidence may release both blockers"
     );
 }
 

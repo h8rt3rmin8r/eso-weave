@@ -175,6 +175,7 @@ pub struct EsoWeaveApp {
     applied_prefs: Option<(Theme, bool)>,
     log_height: f32,
     log_panel_open: bool,
+    system_state_expanded: bool,
     settings_open: bool,
     settings_draft: Option<SettingsForm>,
     settings_applied: Option<SettingsForm>,
@@ -253,6 +254,7 @@ impl EsoWeaveApp {
             applied_prefs: None,
             log_height,
             log_panel_open: false,
+            system_state_expanded: ui_prefs.system_state_expanded,
             settings_open: false,
             settings_draft: None,
             settings_applied: None,
@@ -297,6 +299,11 @@ impl EsoWeaveApp {
     /// (issue #14, contract C5).
     pub fn last_modal_size(&self) -> Option<egui::Vec2> {
         self.last_modal_size
+    }
+
+    /// Whether the System and State disclosure is currently expanded.
+    pub fn system_state_expanded(&self) -> bool {
+        self.system_state_expanded
     }
 
     /// The settings body's total laid-out height at the modal's inner width, from
@@ -440,7 +447,7 @@ impl EsoWeaveApp {
         self.last_dashboard_layout
     }
 
-    /// Live HUD and System and automation rectangles from the latest frame.
+    /// Live HUD and System and State rectangles from the latest frame.
     pub fn dashboard_rects(&self) -> Option<(egui::Rect, egui::Rect)> {
         self.dashboard_rects
     }
@@ -897,7 +904,7 @@ impl EsoWeaveApp {
             DashboardLayout::Narrow => {
                 let live = Self::live_hud(ui, &palette, &view);
                 ui.add_space(DASHBOARD_NARROW_GAP);
-                let system = self.system_and_automation(ui, &palette, &view, intents);
+                let system = self.system_and_state(ui, &palette, &view, intents);
                 (live, system)
             }
             DashboardLayout::Wide => {
@@ -919,7 +926,7 @@ impl EsoWeaveApp {
                         egui::vec2(system_width, 0.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            let system = self.system_and_automation(ui, &palette, &view, intents);
+                            let system = self.system_and_state(ui, &palette, &view, intents);
                             let live = rects.expect("Live HUD renders before operational state").0;
                             rects = Some((live, system));
                         },
@@ -1117,6 +1124,16 @@ impl EsoWeaveApp {
                         );
                         ui.end_row();
 
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::LIFE_TITLE,
+                            view.life.state,
+                            view.life.role,
+                            strings::LIFE_TOOLTIP,
+                        );
+                        ui.end_row();
+
                         let weapon = if view.weapon_bar.detected {
                             format!(
                                 "{} | front {} | back {}",
@@ -1162,7 +1179,7 @@ impl EsoWeaveApp {
             .rect
     }
 
-    fn system_and_automation(
+    fn system_and_state(
         &mut self,
         ui: &mut egui::Ui,
         palette: &crate::app::theme::Palette,
@@ -1180,110 +1197,137 @@ impl EsoWeaveApp {
                 bottom: 6,
             })
             .show(ui, |ui| {
-                widgets::heading(ui, strings::SYSTEM_AUTOMATION_TITLE);
-                egui::Grid::new("system_automation_facts")
-                    .num_columns(3)
-                    .spacing([12.0, 2.0])
-                    .min_col_width(100.0)
-                    .show(ui, |ui| {
-                        let game_summary = format!(
-                            "{} | {}",
-                            view.runtime_line.state_text, view.installation_line.state_text
-                        );
-                        let game_role = match view.installation_line.role {
-                            crate::app::StatusRole::Warning | crate::app::StatusRole::Error => {
-                                view.installation_line.role
-                            }
-                            _ => view.runtime_line.role,
-                        };
-                        metric_cells(
-                            ui,
-                            palette,
-                            strings::GAME_TITLE,
-                            &game_summary,
-                            game_role,
-                            strings::GAME_RUNTIME_TOOLTIP,
-                        );
-                        ui.label("");
-                        ui.end_row();
+                let disclosure = ui
+                    .scope(|ui| {
+                        ui.visuals_mut().collapsing_header_frame = true;
+                        egui::CollapsingHeader::new(
+                            egui::RichText::new(strings::SYSTEM_STATE_TITLE).heading(),
+                        )
+                        .id_salt("system_state_disclosure")
+                        .default_open(self.system_state_expanded)
+                        .show_background(true)
+                        .show(ui, |ui| {
+                            egui::Grid::new("system_state_facts")
+                                .num_columns(3)
+                                .spacing([12.0, 2.0])
+                                .min_col_width(100.0)
+                                .show(ui, |ui| {
+                                    let game_summary = format!(
+                                        "{} | {}",
+                                        view.runtime_line.state_text,
+                                        view.installation_line.state_text
+                                    );
+                                    let game_role = match view.installation_line.role {
+                                        crate::app::StatusRole::Warning
+                                        | crate::app::StatusRole::Error => {
+                                            view.installation_line.role
+                                        }
+                                        _ => view.runtime_line.role,
+                                    };
+                                    metric_cells(
+                                        ui,
+                                        palette,
+                                        strings::GAME_TITLE,
+                                        &game_summary,
+                                        game_role,
+                                        strings::GAME_RUNTIME_TOOLTIP,
+                                    );
+                                    ui.label("");
+                                    ui.end_row();
 
-                        status_cells(ui, palette, &view.status_line);
-                        let mut running = !view.suspended;
-                        if widgets::toggle_switch(ui, &mut running, palette)
-                            .on_hover_text(strings::SUSPEND_TOOLTIP)
-                            .clickable()
-                            .changed()
-                        {
-                            intents.push(UiIntent::ToggleSuspend);
-                        }
-                        ui.end_row();
+                                    status_cells(ui, palette, &view.status_line);
+                                    let mut running = !view.suspended;
+                                    if widgets::toggle_switch(ui, &mut running, palette)
+                                        .on_hover_text(strings::SUSPEND_TOOLTIP)
+                                        .clickable()
+                                        .changed()
+                                    {
+                                        intents.push(UiIntent::ToggleSuspend);
+                                    }
+                                    ui.end_row();
 
-                        status_cells(ui, palette, &view.beacon_line);
-                        ui.vertical(|ui| {
-                            let primary_intent = match beacon_primary_action(view.beacon_condition)
-                            {
-                                Some(BeaconPrimaryAction::Install) => {
-                                    primary_button(ui, palette, "Install")
-                                        .on_hover_text(strings::BEACON_INSTALL_TOOLTIP)
-                                        .clicked()
-                                        .then_some(UiIntent::InstallBeacon)
-                                }
-                                Some(BeaconPrimaryAction::Update) => {
-                                    primary_button(ui, palette, "Update")
-                                        .on_hover_text(strings::BEACON_UPDATE_TOOLTIP)
-                                        .clicked()
-                                        .then_some(UiIntent::UpdateBeacon)
-                                }
-                                None => None,
-                            };
-                            if let Some(intent) = primary_intent {
-                                intents.push(intent);
-                            }
-                            if view.uninstall_enabled
-                                && ui
-                                    .button("Uninstall")
-                                    .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
-                                    .clickable()
-                                    .clicked()
-                            {
-                                self.confirm_uninstall = true;
-                            }
-                        });
-                        ui.end_row();
+                                    status_cells(ui, palette, &view.beacon_line);
+                                    ui.vertical(|ui| {
+                                        let primary_intent =
+                                            match beacon_primary_action(view.beacon_condition) {
+                                                Some(BeaconPrimaryAction::Install) => {
+                                                    primary_button(ui, palette, "Install")
+                                                        .on_hover_text(
+                                                            strings::BEACON_INSTALL_TOOLTIP,
+                                                        )
+                                                        .clicked()
+                                                        .then_some(UiIntent::InstallBeacon)
+                                                }
+                                                Some(BeaconPrimaryAction::Update) => {
+                                                    primary_button(ui, palette, "Update")
+                                                        .on_hover_text(
+                                                            strings::BEACON_UPDATE_TOOLTIP,
+                                                        )
+                                                        .clicked()
+                                                        .then_some(UiIntent::UpdateBeacon)
+                                                }
+                                                None => None,
+                                            };
+                                        if let Some(intent) = primary_intent {
+                                            intents.push(intent);
+                                        }
+                                        if view.uninstall_enabled
+                                            && ui
+                                                .button("Uninstall")
+                                                .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
+                                                .clickable()
+                                                .clicked()
+                                        {
+                                            self.confirm_uninstall = true;
+                                        }
+                                    });
+                                    ui.end_row();
 
-                        status_cells(ui, palette, &view.beacon_signal_line);
-                        ui.label("");
-                        ui.end_row();
+                                    status_cells(ui, palette, &view.beacon_signal_line);
+                                    ui.label("");
+                                    ui.end_row();
 
-                        status_cells(ui, palette, &view.fishing_line);
-                        let mut fishing_on = view.fishing_active;
-                        if widgets::toggle_switch(ui, &mut fishing_on, palette)
-                            .on_hover_text(strings::FISHING_TOGGLE_TOOLTIP)
-                            .clickable()
-                            .changed()
-                        {
-                            intents.push(UiIntent::SetFishing(fishing_on));
-                        }
-                        ui.end_row();
+                                    status_cells(ui, palette, &view.fishing_line);
+                                    let mut fishing_on = view.fishing_active;
+                                    if widgets::toggle_switch(ui, &mut fishing_on, palette)
+                                        .on_hover_text(strings::FISHING_TOGGLE_TOOLTIP)
+                                        .clickable()
+                                        .changed()
+                                    {
+                                        intents.push(UiIntent::SetFishing(fishing_on));
+                                    }
+                                    ui.end_row();
 
-                        metric_cells(
-                            ui,
-                            palette,
-                            strings::AUTO_POTION_TITLE,
-                            &view.auto_potion.text,
-                            view.auto_potion.role,
-                            strings::AUTO_POTION_TOOLTIP,
-                        );
-                        let mut potion_on = view.auto_potion_requested;
-                        if widgets::toggle_switch(ui, &mut potion_on, palette)
-                            .on_hover_text(strings::AUTO_POTION_TOGGLE_TOOLTIP)
-                            .clickable()
-                            .changed()
-                        {
-                            intents.push(UiIntent::SetAutoPotion(potion_on));
-                        }
-                        ui.end_row();
-                    });
+                                    metric_cells(
+                                        ui,
+                                        palette,
+                                        strings::AUTO_POTION_TITLE,
+                                        &view.auto_potion.text,
+                                        view.auto_potion.role,
+                                        strings::AUTO_POTION_TOOLTIP,
+                                    );
+                                    let mut potion_on = view.auto_potion_requested;
+                                    if widgets::toggle_switch(ui, &mut potion_on, palette)
+                                        .on_hover_text(strings::AUTO_POTION_TOGGLE_TOOLTIP)
+                                        .clickable()
+                                        .changed()
+                                    {
+                                        intents.push(UiIntent::SetAutoPotion(potion_on));
+                                    }
+                                    ui.end_row();
+                                });
+                        })
+                    })
+                    .inner;
+                disclosure
+                    .header_response
+                    .clone()
+                    .on_hover_text(strings::SYSTEM_STATE_TOOLTIP)
+                    .clickable();
+                if disclosure.header_response.changed() {
+                    self.system_state_expanded = !self.system_state_expanded;
+                    intents.push(UiIntent::SetSystemStateExpanded(self.system_state_expanded));
+                }
             })
             .response
             .rect

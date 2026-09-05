@@ -50,10 +50,23 @@ fn ui_section_round_trips_and_defaults() {
         theme: Theme::Light,
         always_on_top: true,
         log_panel_height: 240,
+        system_state_expanded: false,
     };
     let (loaded, notices) = ui_from_value(&ui_to_value(&custom));
     assert_eq!(loaded, custom);
     assert!(notices.is_empty());
+}
+
+#[test]
+fn older_ui_settings_default_the_system_state_disclosure_open() {
+    let value = serde_json::json!({
+        "theme": "dark",
+        "always_on_top": false,
+        "log_panel_height": 180
+    });
+    let (prefs, notices) = ui_from_value(&value);
+    assert!(notices.is_empty());
+    assert!(prefs.system_state_expanded);
 }
 
 #[test]
@@ -144,7 +157,7 @@ fn the_footprint_caption_follows_the_block_size() {
     assert!(
         default.contains("120 columns")
             && default.contains("1 row")
-            && default.contains("384 by 16 pixels"),
+            && default.contains("400 by 16 pixels"),
         "the negotiated footprint should report the live shape: {default}"
     );
 

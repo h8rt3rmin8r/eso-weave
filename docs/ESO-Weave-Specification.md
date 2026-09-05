@@ -511,7 +511,7 @@ every frame.
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders a three-cell layout header followed by twenty-one signal
+PixelBeacon renders a three-cell layout header followed by twenty-two signal
 blocks anchored to the top-left of the game window's client area. Blocks are 16
 by 16 physical pixels by default, and the addon compensates for the interface
 scale so block geometry is constant in physical pixels. The game's UI lifecycle
@@ -528,9 +528,9 @@ positively identified pre-version-14 addons.
 The first three cells are always H0 through H2 at row zero, columns zero through
 two. Payload block `i` occupies logical cell `3 + i`, column `cell mod columns`,
 and row `cell div columns`. At all supported client widths and block sizes the
-current 24 total cells fit on one row. The occupied extent is `BLOCK_PX *
+current 25 total cells fit on one row. The occupied extent is `BLOCK_PX *
 min(3 + NUM_BLOCKS, columns)` wide by `BLOCK_PX * ceil((3 + NUM_BLOCKS) /
-columns)` tall, which is 384 by 16 physical pixels at the default block size.
+columns)` tall, which is 400 by 16 physical pixels at the default block size.
 Cells after the last payload block are neither drawn nor read.
 
 The overlay is not movable. Its anchor is part of the shared geometry contract, so
@@ -582,6 +582,7 @@ the default block size. Legacy addons retain the pre-version-14 positions.
 | B16 Quickslot cooldown | (304, 0) | (312, 8) | `G = 0x38`, `R` is the active quickslot's remaining cooldown in the same 50 ms steps, and `B = 255 - R`. This is an attached fact and never classifies the selected entry. |
 | B17 to B19 Quickslot item | (320, 0) to (352, 0) | (328, 8) to (360, 8) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
 | B20 Quickslot classification | (368, 0) | (376, 8) | `G = 0x76`, `B = 255 - R`, and spaced `R` codes distinguish unsupported API, invalid selection, inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion. Missing B20 with a valid legacy B16 reports an addon update requirement. Invalid or tolerance-ambiguous B20 reports a corrupt signal. Classification uses `GetCurrentQuickslot`, `GetSlotType`, `GetSlotBoundId`, `GetSlotItemLink`, `GetSlotItemCount`, `IsSlotUsable`, and `GetSlotCooldownInfo`. Events for selection, slot contents, slot state, cooldowns, inventory, and player activation converge through one change-detected path with a 1 Hz recovery backstop. |
+| B21 Life state | (384, 0) | (392, 8) | `G = 0x89`, `R` is `0x20` Alive, `0x80` Dead, or `0xE0` Reincarnating, and `B = 255 - R`. `IsUnitReincarnating("player")` takes precedence over `IsUnitDead("player")`; player dead, alive, and activation events plus a 1 Hz backstop converge through one computation. Missing or invalid evidence is Unknown and blocks synthesis. |
 
 No block is ever hidden to express a state. Absence means only that the addon is
 too old to draw it, which is what keeps an old addon from being read as a state.
@@ -603,6 +604,7 @@ nothing reads them. Two act:
 | B2 latency, B3 weapon bar | Weave timing |
 | B1 fishing | The fishing controller |
 | B5 menu | The interception decision, the fishing controller, and the auto-potion controller |
+| B21 life state | The interception decision, queued weave execution, the fishing controller, and the auto-potion controller |
 | B6 to B8 resources, B16 to B20 quickslot | Auto-potion ([section 11](#11-auto-potion)) |
 | B4 combat, B9 movement, B10 to B15 cooldowns | Nothing. Observable only. |
 
@@ -612,7 +614,7 @@ into a decision breaks a test rather than slipping through.
 
 ```mermaid
 flowchart LR
-    ADDON[PixelBeacon<br/>renders B0 to B20] --> SURF[Game window surface]
+    ADDON[PixelBeacon<br/>renders B0 to B21] --> SURF[Game window surface]
     SURF --> SMP[Sampler<br/>GDI or X11]
     SMP --> RDR[Reader: marker,<br/>checksum, tolerance]
     RDR --> ACT{{Acts on behavior}}
@@ -854,8 +856,8 @@ dashboard, a Skills region, and an optional live log panel.
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and a Live Log toggle |
-| Live HUD | Labeled Health, Stamina, and Magicka meters; Game Context; combat; movement; active and configured weapon bars; selected quickslot classification, potion availability, and cooldown |
-| System and automation | Game installation provider and runtime; ESO Weave Active or Suspended; PixelBeacon installation and independent live-signal state; fishing and auto-potion requested/effective state; the one appropriate primary Install or Update action plus secondary managed Uninstall |
+| Live HUD | Labeled Health, Stamina, and Magicka meters; Game Context; combat; movement; life state; active and configured weapon bars; selected quickslot classification, potion availability, and cooldown |
+| System and State | A persisted accessible disclosure containing game installation provider and runtime; ESO Weave Active or Suspended; PixelBeacon installation and independent live-signal state; fishing and auto-potion requested/effective state; the one appropriate primary Install or Update action plus secondary managed Uninstall |
 | Skills region | One row per slot: label, active toggle, weave type, override toggle, effective delay, and decoded cooldown |
 | Live log panel | Optional, attached at the bottom |
 
@@ -863,7 +865,7 @@ dashboard, a Skills region, and an optional live log panel.
 applied only until the content has been laid out and measured over two consecutive
 stable frames. From then on the enforced minimum uses the intrinsic content width
 and the height of the active responsive layout, plus panel padding. Live HUD and
-System and automation use two columns at 880 or more available logical points and
+System and State use two columns at 880 or more available logical points and
 stack in that reading order below 880. The intrinsic minimum width never follows
 an expanding dashboard container, so a continuous drag can cross the breakpoint
 without width ratcheting. The height may change only between the documented wide
@@ -880,6 +882,11 @@ identical text. While runtime is not Active, every Live HUD value uses the share
 **Game not active** presentation rather than retaining stale values. If the game
 is active but its signal is unavailable, the HUD says **Signal unavailable** and
 never presents an invented zero.
+
+System and State defaults expanded. Activating its full header by pointer,
+keyboard, or assistive technology hides or restores the complete body, persists
+the user preference, and recomputes intrinsic height without leaving blank space.
+The Skills region is never part of the disclosure.
 
 Resource meters are unanimated and reuse one component. Health, Stamina, and
 Magicka keep their familiar red, green, and blue associations, but every meter

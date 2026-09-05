@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S048 adds an authoritative PixelBeacon player life-state signal and displays
+  Alive, Dead, Reincarnating, or unavailable evidence in Live HUD. Only Alive
+  permits weave, fishing, or auto-potion synthesis, and recovery never replays
+  work that became due while blocked (issues #55 and #58).
+
+### Changed
+
+- S048 renames System and automation to System and State and turns the complete
+  panel into a keyboard-accessible, default-open disclosure whose preference is
+  saved and whose collapsed layout reclaims its height (issues #53 and #54).
+
+### Decisions
+
+- 2026-09-05: Treat every player life state except a freshly decoded Alive as a
+  hard input gate, enforced independently at physical interception, queued weave
+  execution, fishing timers, and auto-potion evaluation. Blocked work is dropped
+  instead of retained for replay.
+
 ## [0.12.0] - 2026-09-05
 
 ### Highlights

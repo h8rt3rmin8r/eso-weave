@@ -21,6 +21,8 @@ pub struct UiPrefs {
     pub always_on_top: bool,
     /// The persisted live-log panel height in points (a user layout preference).
     pub log_panel_height: u32,
+    /// Whether the System and State dashboard disclosure is expanded.
+    pub system_state_expanded: bool,
 }
 
 impl Default for UiPrefs {
@@ -29,6 +31,7 @@ impl Default for UiPrefs {
             theme: Theme::default(),
             always_on_top: false,
             log_panel_height: DEFAULT_LOG_HEIGHT,
+            system_state_expanded: true,
         }
     }
 }
@@ -62,11 +65,16 @@ pub fn ui_from_value(value: &serde_json::Value) -> (UiPrefs, Vec<Notice>) {
         .and_then(|v| v.as_u64())
         .map(|v| v as u32)
         .unwrap_or(defaults.log_panel_height);
+    let system_state_expanded = value
+        .get("system_state_expanded")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(defaults.system_state_expanded);
     (
         UiPrefs {
             theme,
             always_on_top,
             log_panel_height,
+            system_state_expanded,
         },
         notices,
     )
@@ -82,6 +90,7 @@ pub fn ui_to_value(prefs: &UiPrefs) -> serde_json::Value {
         "theme": theme,
         "always_on_top": prefs.always_on_top,
         "log_panel_height": prefs.log_panel_height,
+        "system_state_expanded": prefs.system_state_expanded,
     })
 }
 
