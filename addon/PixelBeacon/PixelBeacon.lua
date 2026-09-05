@@ -84,20 +84,24 @@ local inCombat = nil
 -- the grid, eleven times the reader's default tolerance, and the codes are 64
 -- apart.
 --
--- The code is two bits: bit 0 is mounted, bit 1 is sprint. Only the two codes
--- with the sprint bit clear are defined here, because the game exposes no sprint
--- observable to an addon and this addon therefore never emits one. The companion
--- reserves 0xA0 and 0xE0 for that axis and decodes them as unavailable. They are
--- deliberately absent from this file: a constant the addon never emits would have
--- no counterpart for the agreement check to compare against, and tests/beacon.rs
--- asserts their absence.
+-- The code is two bits: bit 0 is mounted and bit 1 is sprint. Sprint is a bounded
+-- keyboard-mode inference, not an authoritative ESO state. Mounted sprint remains
+-- reserved because there is no defensible signal for it.
 local MOVEMENT_MARKER = 0x43
 local MOVEMENT_ON_FOOT_RED = 0x20
 local MOVEMENT_MOUNTED_RED = 0x60
+local MOVEMENT_SPRINT_ON_FOOT_RED = 0xA0
+local SPRINT_ENTER_DEBOUNCE_MS = 200
+local SPRINT_EXIT_DEBOUNCE_MS = 200
+local SPRINT_WATCHDOG_MS = 1500
 
 -- The last rendered mounted state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
 local isMounted = nil
+local isSprinting = false
+local sprintCandidate = nil
+local sprintCandidateSince = nil
+local sprintLastQualified = nil
 
 -- The authoritative player life state. Red carries one of three discrete states,
 -- green identifies B21, and blue is the complement checksum. The marker is the
@@ -559,15 +563,19 @@ end
 -- complement checksum in blue. Follows B4 exactly, including never hiding to
 -- express a state, so absence means only an addon too old to draw it.
 --
--- Only the mounted axis is published. The sprint codes (bit 1 of the two-bit
--- code) are reserved on the companion side and never emitted here, because the
--- game exposes no sprint state to an addon.
 local function renderMovement()
     if blocks.status:IsHidden() then
         blocks.movement:SetHidden(true)
         return
     end
-    local red = isMounted and MOVEMENT_MOUNTED_RED or MOVEMENT_ON_FOOT_RED
+    local red
+    if isMounted then
+        red = MOVEMENT_MOUNTED_RED
+    elseif isSprinting then
+        red = MOVEMENT_SPRINT_ON_FOOT_RED
+    else
+        red = MOVEMENT_ON_FOOT_RED
+    end
     blocks.movement:SetCenterColor(channel(red), channel(MOVEMENT_MARKER), channel(255 - red), 1)
     blocks.movement:SetHidden(false)
 end
@@ -772,11 +780,98 @@ local function onJumpFailed()
     end
 end
 
+-- B9 Sprint inference -------------------------------------------------------
+
+-- ESO exposes no sprint-state API. In keyboard mode, sprint disables every
+-- active action slot with a non-cost failure while movement is still requested.
+-- This is the narrow signal used by LibSprint and is deliberately bounded by
+-- exclusions, debounce, and a watchdog here.
+local function allActiveSlotsHaveNonCostFailure()
+    local hotbarCategory = GetActiveHotbarCategory()
+    for slotIndex = ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 1,
+        ACTION_BAR_ULTIMATE_SLOT_INDEX + 1 do
+        if not ActionSlotHasNonCostStateFailure(slotIndex, hotbarCategory) then
+            return false
+        end
+    end
+    return true
+end
+
+local function sprintIsHardExcluded()
+    return worldState ~= WORLD_ACTIVE_RED
+        or lifeState ~= LIFE_ALIVE_RED
+        or IsInGamepadPreferredMode()
+        or IsMounted()
+        or not IsPlayerMoving()
+        or not IsPlayerTryingToMove()
+        or IsUnitSwimming("player")
+        or IsUnitFalling("player")
+        or IsUnitDeadOrReincarnating("player")
+        or rollDodgeState ~= ROLL_DODGE_INACTIVE_RED
+end
+
+local function setSprintState(nextState)
+    if nextState == isSprinting then
+        return false
+    end
+    isSprinting = nextState
+    sprintCandidate = nil
+    sprintCandidateSince = nil
+    renderMovement()
+    return true
+end
+
+local function invalidateSprintState()
+    sprintCandidate = nil
+    sprintCandidateSince = nil
+    sprintLastQualified = nil
+    setSprintState(false)
+end
+
+local function updateSprintState()
+    local now = GetGameTimeMilliseconds()
+    if sprintIsHardExcluded() then
+        invalidateSprintState()
+        return
+    end
+
+    local qualified = allActiveSlotsHaveNonCostFailure()
+    if qualified then
+        sprintLastQualified = now
+    end
+
+    if isSprinting and (sprintLastQualified == nil
+        or now - sprintLastQualified >= SPRINT_WATCHDOG_MS) then
+        setSprintState(false)
+    end
+
+    if qualified == isSprinting then
+        sprintCandidate = nil
+        sprintCandidateSince = nil
+        return
+    end
+    if sprintCandidate ~= qualified then
+        sprintCandidate = qualified
+        sprintCandidateSince = now
+        return
+    end
+
+    local debounce = qualified and SPRINT_ENTER_DEBOUNCE_MS or SPRINT_EXIT_DEBOUNCE_MS
+    if sprintCandidateSince ~= nil and now - sprintCandidateSince >= debounce then
+        setSprintState(qualified)
+    end
+end
+
+local function onSprintEvidenceChanged()
+    updateSprintState()
+end
+
 -- Reacts to the mounted state changing: re-render only on a real transition.
 local function onMountedStateChanged()
     if computeMovement() then
         renderMovement()
     end
+    updateSprintState()
 end
 
 -- B10 to B15 Skill cooldowns ---------------------------------------------------
@@ -1322,6 +1417,7 @@ local function onFastTick()
         rollDodgeDeadline = nil
         setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
     end
+    updateSprintState()
     updateTravelState()
     if updateMenu() then
         renderMenu()
@@ -1347,6 +1443,7 @@ local function rebaselinePlayerState()
     updateResources()
     renderResources()
     computeMovement()
+    invalidateSprintState()
     renderMovement()
     updateCooldowns()
     renderCooldowns()
@@ -1375,6 +1472,7 @@ local function rebaselinePlayerState()
 end
 
 local function onPlayerDeactivated()
+    invalidateSprintState()
     invalidateTravelState()
     invalidateRollDodgeState()
     setWorldState(WORLD_TRANSITIONING_RED)
@@ -1387,12 +1485,14 @@ end
 
 local function onPlayerDead()
     onLifeStateChanged()
+    invalidateSprintState()
     invalidateTravelState()
     invalidateRollDodgeState()
 end
 
 local function onPlayerAlive()
     onLifeStateChanged()
+    invalidateSprintState()
     if worldState ~= WORLD_ACTIVE_RED or lifeState ~= LIFE_ALIVE_RED then
         return
     end
@@ -1511,6 +1611,7 @@ local function buildBlocks()
     updateResources()
     renderResources()
     computeMovement()
+    invalidateSprintState()
     renderMovement()
     updateCooldowns()
     renderCooldowns()
@@ -1589,6 +1690,11 @@ local function onAddOnLoaded(_, name)
     -- and instant, and the re-baseline covers a state already true when the world
     -- finishes loading (zoning while mounted, most obviously).
     em:RegisterForEvent(ADDON_NAME .. "Mount", EVENT_MOUNTED_STATE_CHANGED, onMountedStateChanged)
+    em:RegisterForEvent(
+        ADDON_NAME .. "SprintSlots",
+        EVENT_ACTION_SLOT_STATE_UPDATED,
+        onSprintEvidenceChanged
+    )
 
     -- Resource tracking: react to the game's own power updates, filtered to the
     -- player so other units' pools never drive our blocks.

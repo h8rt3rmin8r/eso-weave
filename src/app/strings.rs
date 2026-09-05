@@ -83,7 +83,7 @@ pub const COMBAT_TOOLTIP: &str =
 // Movement-state section.
 pub const MOVEMENT_TITLE: &str = "Movement";
 pub const MOVEMENT_TOOLTIP: &str =
-    "Whether the character is mounted, read from the Pixel Beacon addon. Requires addon version 10 or later; shows Not detected without a signal. Sprinting is not shown because the game exposes no sprint state to an addon. Nothing in the application acts on this yet.";
+    "Whether the character is on foot, mounted, or inferred to be sprinting. Sprint detection requires Pixel Beacon version 19 and keyboard mode; unsupported modes remain truthful rather than guessed. Explicit sprinting defers auto-potion.";
 pub const LIFE_TOOLTIP: &str =
     "Whether the character is alive, dead, or reincarnating. Only a fresh Alive signal permits automated input; unavailable evidence blocks safely.";
 
@@ -118,6 +118,7 @@ pub const AUTO_POTION_DORMANT_UNFOCUSED: &str = "Dormant: game unfocused";
 pub const AUTO_POTION_BLOCKED_BEACON: &str = "Blocked: beacon unavailable";
 pub const AUTO_POTION_BLOCKED_SUSPENDED: &str = "Blocked: input suspended";
 pub const AUTO_POTION_BLOCKED_CONTEXT: &str = "Blocked: game context";
+pub const AUTO_POTION_BLOCKED_SPRINTING: &str = "Blocked: sprinting";
 pub const AUTO_POTION_BLOCKED_PLAYER_UNKNOWN: &str = "Blocked: life state unavailable";
 pub const AUTO_POTION_BLOCKED_PLAYER_DEAD: &str = "Blocked: player dead";
 pub const AUTO_POTION_BLOCKED_PLAYER_REINCARNATING: &str = "Blocked: reincarnating";
@@ -360,6 +361,7 @@ pub fn all_labels() -> Vec<&'static str> {
         AUTO_POTION_BLOCKED_BEACON,
         AUTO_POTION_BLOCKED_SUSPENDED,
         AUTO_POTION_BLOCKED_CONTEXT,
+        AUTO_POTION_BLOCKED_SPRINTING,
         AUTO_POTION_BLOCKED_NO_WATCH,
         AUTO_POTION_BLOCKED_RESOURCES,
         AUTO_POTION_BLOCKED_QUICKSLOT,

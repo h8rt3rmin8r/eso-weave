@@ -285,14 +285,9 @@ const RESOURCE_MAX_PERCENT: u8 = 100;
 
 /// The player's movement mode, decoded from the movement block.
 ///
-/// The sprint axis issue #11 proposed is absent on purpose. The game exposes no
-/// sprint observable to an addon: `IsUnitSprinting`, `IsPlayerSprinting`, and
-/// `EVENT_SPRINT_STATE_CHANGED` do not exist, and the only `Sprint` references in
-/// the interface source are a keybind action, a hold-versus-toggle preference,
-/// and a `sprintf`. The verification is recorded in
-/// `specs/036-movement-state-block/spec.md`. The wire encoding reserves two codes
-/// for it, so adding the axis later adds variants here without changing the
-/// meaning or the colour of either existing one.
+/// Sprinting is a bounded keyboard-mode inference supplied by addon version 19.
+/// Mounted sprint remains unavailable because ESO exposes no authoritative
+/// signal for it, so the corresponding wire value stays reserved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MovementSignal {
     /// The movement state could not be read.
@@ -302,6 +297,8 @@ pub enum MovementSignal {
     OnFoot,
     /// The player is mounted.
     Mounted,
+    /// The on-foot player satisfies the bounded keyboard-mode sprint inference.
+    Sprinting,
 }
 
 /// The player's authoritative life state.
@@ -445,15 +442,8 @@ const MOVEMENT_MARKER: u8 = 0x43;
 const MOVEMENT_ON_FOOT_RED: u8 = 0x20;
 /// The red channel encoding the mounted state. Code `0b01`.
 const MOVEMENT_MOUNTED_RED: u8 = 0x60;
-/// Reserved for the deferred sprint axis, on foot. Code `0b10`.
-///
-/// Never emitted by the addon, which defines no constant for it, and decoded as
-/// [`MovementSignal::Unknown`]. Bit 1 is the sprint bit, so a future feature that
-/// gains a sprint observable emits this and [`MOVEMENT_SPRINT_MOUNTED_RED`]
-/// without renumbering, recolouring, or reserving anything further.
+/// The red channel encoding on-foot keyboard-mode sprinting. Code `0b10`.
 const MOVEMENT_SPRINT_ON_FOOT_RED: u8 = 0xA0;
-/// Reserved for the deferred sprint axis, mounted. Code `0b11`.
-const MOVEMENT_SPRINT_MOUNTED_RED: u8 = 0xE0;
 
 /// One skill slot's cooldown, decoded from its block.
 ///
@@ -728,8 +718,8 @@ pub enum PixelBusEvent {
     /// which several move at once (the common case in combat) is one event rather
     /// than three.
     Resources(ResourceSet),
-    /// A change in the decoded movement state. Nothing acts on it; it is an
-    /// observable, like combat state.
+    /// A change in decoded movement. Explicit sprint is consumed by auto-potion;
+    /// all other values remain observational.
     Movement(MovementSignal),
     /// A change in any decoded slot cooldown. Carries all six, so a single weave
     /// that moves several slots is one event rather than six, following the
@@ -1645,11 +1635,8 @@ pub fn decode_combat(sample: Rgb, tolerance: u8) -> CombatSignal {
 /// version 10 (which draws no movement block) and any unrelated screen content
 /// behind that point can never be read as a state.
 ///
-/// The two reserved sprint codes are matched explicitly rather than left to the
-/// catch-all. The behavior is the same either way, but the explicit arm documents
-/// the deferred axis in executable form, and it means a future companion that
-/// gains sprint support changes this arm rather than discovering the reservation
-/// in a comment somewhere else.
+/// The on-foot sprint code is actionable. The reserved mounted code and every
+/// other unrecognized value remain Unknown rather than inventing a state.
 pub fn decode_movement(sample: Rgb, tolerance: u8) -> MovementSignal {
     let checksum = u16::from(sample.r) + u16::from(sample.b);
     if !within(sample.g, MOVEMENT_MARKER, tolerance)
@@ -1661,13 +1648,8 @@ pub fn decode_movement(sample: Rgb, tolerance: u8) -> MovementSignal {
         MovementSignal::OnFoot
     } else if within(sample.r, MOVEMENT_MOUNTED_RED, tolerance) {
         MovementSignal::Mounted
-    } else if within(sample.r, MOVEMENT_SPRINT_ON_FOOT_RED, tolerance)
-        || within(sample.r, MOVEMENT_SPRINT_MOUNTED_RED, tolerance)
-    {
-        // Reserved for the deferred sprint axis. No addon emits these, and until
-        // one does they are unavailable rather than a state, so no half-built
-        // sprint behavior is ever observable.
-        MovementSignal::Unknown
+    } else if within(sample.r, MOVEMENT_SPRINT_ON_FOOT_RED, tolerance) {
+        MovementSignal::Sprinting
     } else {
         MovementSignal::Unknown
     }

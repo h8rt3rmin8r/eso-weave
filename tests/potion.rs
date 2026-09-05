@@ -13,8 +13,9 @@
 
 use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{
-    LifeState, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
-    QuickslotState, ResourceLevel, ResourceSet, SlotCooldown, TravelState, WorldState,
+    LifeState, MovementSignal, QuickslotClassification, QuickslotNonPotionKind,
+    QuickslotPotionAvailability, QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
+    TravelState, WorldState,
 };
 use eso_weave::potion::{
     evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState,
@@ -76,7 +77,25 @@ fn eligible_inputs() -> PotionInputs {
         life: LifeState::Alive,
         world: WorldState::Active,
         travel: TravelState::Inactive,
+        movement: MovementSignal::OnFoot,
     }
+}
+
+#[test]
+fn explicit_sprint_blocks_while_unknown_movement_does_not_stall_forever() {
+    let config = config_all_watched();
+    let mut inputs = eligible_inputs();
+    inputs.movement = MovementSignal::Sprinting;
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Blocked(BlockReason::Sprinting)
+    );
+
+    inputs.movement = MovementSignal::Unknown;
+    assert!(matches!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(_)
+    ));
 }
 
 #[test]
@@ -623,8 +642,44 @@ fn armed_controller() -> AutoPotionController {
     controller.set_life_state(LifeState::Alive);
     controller.set_world_state(WorldState::Active);
     controller.set_travel_state(TravelState::Inactive);
+    controller.set_movement(MovementSignal::OnFoot);
     controller.set_enabled(true);
     controller
+}
+
+#[test]
+fn sprint_defers_without_queueing_then_fires_from_current_readings() {
+    let mut controller = armed_controller();
+    let mut sink = MockAutoPotionSink::new();
+
+    controller.set_movement(MovementSignal::Sprinting);
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::Sprinting)
+    );
+    assert!(sink.ops.is_empty());
+
+    controller.set_movement(MovementSignal::OnFoot);
+    assert!(matches!(
+        controller.tick(eligible_readings(), 10_100, &mut sink),
+        AutoPotionState::Triggered(_)
+    ));
+    assert_eq!(sink.ops.len(), 2);
+}
+
+#[test]
+fn sprint_exit_never_replays_through_a_stronger_current_gate() {
+    let mut controller = armed_controller();
+    let mut sink = MockAutoPotionSink::new();
+    controller.set_movement(MovementSignal::Sprinting);
+    controller.set_travel_state(TravelState::Pending);
+    controller.set_movement(MovementSignal::OnFoot);
+
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::TravelPending)
+    );
+    assert!(sink.ops.is_empty());
 }
 
 #[test]

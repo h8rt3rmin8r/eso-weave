@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S052 completes the reserved B9 sprint axis with a bounded keyboard-mode,
+  on-foot detector. Explicit sprint state is debounced, lifecycle scoped, and
+  watchdog bounded; mounted sprint and gamepad mode remain honestly unsupported.
+  Auto-potion now reports `Blocked: sprinting`, emits no rejected attempt while
+  sprinting, and re-evaluates current eligibility after sprint ends without a
+  queued replay (issues #17 and #61).
 - S051 adds bounded travel detection and a truthful Travel field. Recall cooldown
   edges and ESO jump events publish Pending before loading, with movement,
   failure, lifecycle, and watchdog recovery. World and travel evidence now form
@@ -37,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-05: Advance PixelBeacon to addon version 19 while retaining protocol
+  version 4 and its 25-block geometry. B9 code `0xA0` now means bounded on-foot
+  keyboard sprint; mounted code `0xE0` remains reserved and decodes Unknown.
+- 2026-09-05: Infer sprint only while movement is requested and every active-bar
+  slot reports a non-cost failure, with hard exclusions for gamepad, mounts,
+  swimming, falling, death, roll dodge, and inactive worlds. Entry and ambiguous
+  exit use 200 ms debounce and stale positive state has a 1500 ms watchdog.
+- 2026-09-05: Block auto-potion only on explicit Sprinting. Unknown movement is
+  non-blocking because valid unsupported modes would otherwise disable the
+  feature indefinitely; all stronger lifecycle and context gates retain priority.
 - 2026-09-05: Advance PixelBeacon to addon version 18 and protocol version 4.
   B24 publishes Unknown, Inactive, or Pending travel state. A recall-cooldown
   increase of at least 500 ms detects paid recall, jump preparation covers other
