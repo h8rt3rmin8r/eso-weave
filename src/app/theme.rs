@@ -45,6 +45,12 @@ pub struct Palette {
     pub warn: Color32,
     /// Status: error and signal lost.
     pub err: Color32,
+    /// Health meter fill.
+    pub health: Color32,
+    /// Stamina meter fill.
+    pub stamina: Color32,
+    /// Magicka meter fill.
+    pub magicka: Color32,
 }
 
 /// Returns the brand palette for a theme.
@@ -65,6 +71,9 @@ pub fn palette(theme: Theme) -> Palette {
             ok: rgb(0x34, 0xD3, 0x99),
             warn: rgb(0xFB, 0x9E, 0x3C),
             err: rgb(0xF8, 0x71, 0x71),
+            health: rgb(0xF8, 0x71, 0x71),
+            stamina: rgb(0x34, 0xD3, 0x99),
+            magicka: rgb(0x60, 0xA5, 0xFA),
         },
         Theme::Light => Palette {
             dark: false,
@@ -81,6 +90,9 @@ pub fn palette(theme: Theme) -> Palette {
             ok: rgb(0x05, 0x96, 0x69),
             warn: rgb(0xB4, 0x53, 0x09),
             err: rgb(0xDC, 0x26, 0x26),
+            health: rgb(0xB9, 0x1C, 0x1C),
+            stamina: rgb(0x04, 0x78, 0x57),
+            magicka: rgb(0x1D, 0x4E, 0xD8),
         },
     }
 }
@@ -278,6 +290,20 @@ mod tests {
             assert!(
                 contrast(p.gold_text, p.gold) >= 4.0,
                 "text on a gold button is not legible for {theme:?}"
+            );
+            for (name, fill) in [
+                ("health", p.health),
+                ("stamina", p.stamina),
+                ("magicka", p.magicka),
+            ] {
+                assert!(
+                    contrast(fill, p.panel) >= 3.0,
+                    "{name} fill does not meet non-text contrast for {theme:?}"
+                );
+            }
+            assert!(
+                contrast(p.muted, p.panel) >= 3.0,
+                "meter boundary does not meet non-text contrast for {theme:?}"
             );
         }
     }

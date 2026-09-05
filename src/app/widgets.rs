@@ -9,6 +9,98 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::app::theme::Palette;
+use crate::app::{ResourcePresentation, ResourceTheme, ResourceView};
+
+/// Renders one stable, accessible resource meter.
+///
+/// The resource name and exact value or state sit outside the fill, so text
+/// contrast never depends on how much of the bar is filled. The complete row is
+/// one progress indicator for assistive technology; non-numeric states omit the
+/// numeric value instead of presenting an invented zero.
+pub fn resource_meter(
+    ui: &mut egui::Ui,
+    palette: &Palette,
+    name: &str,
+    view: &ResourceView,
+    theme: ResourceTheme,
+) -> egui::Response {
+    const LABEL_WIDTH: f32 = 70.0;
+    const STATE_WIDTH: f32 = 118.0;
+    const MIN_TRACK_WIDTH: f32 = 96.0;
+    const GAP: f32 = 8.0;
+
+    let height = ui.spacing().interact_size.y.max(20.0);
+    let desired_width = ui
+        .available_width()
+        .max(LABEL_WIDTH + STATE_WIDTH + MIN_TRACK_WIDTH + 2.0 * GAP);
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(desired_width, height), egui::Sense::hover());
+
+    response.widget_info(|| {
+        let mut info = egui::WidgetInfo::labeled(
+            egui::WidgetType::ProgressIndicator,
+            ui.is_enabled(),
+            format!("{name}: {}", view.text),
+        );
+        info.value = view.percent().map(f64::from);
+        info
+    });
+
+    if ui.is_rect_visible(rect) {
+        let fill = match theme {
+            ResourceTheme::Health => palette.health,
+            ResourceTheme::Stamina => palette.stamina,
+            ResourceTheme::Magicka => palette.magicka,
+        };
+        let state_left = rect.right() - STATE_WIDTH;
+        let track = egui::Rect::from_min_max(
+            egui::pos2(rect.left() + LABEL_WIDTH + GAP, rect.top() + 3.0),
+            egui::pos2(state_left - GAP, rect.bottom() - 3.0),
+        );
+        let stroke = match view.presentation {
+            ResourcePresentation::Low(_) | ResourcePresentation::Unavailable => {
+                egui::Stroke::new(2.0, palette.warn)
+            }
+            ResourcePresentation::Observed(_) | ResourcePresentation::Dormant => {
+                egui::Stroke::new(1.0, palette.muted)
+            }
+        };
+        ui.painter().rect(
+            track,
+            egui::CornerRadius::same(4),
+            palette.panel,
+            stroke,
+            egui::StrokeKind::Inside,
+        );
+        if let Some(fraction) = view.fraction() {
+            let filled = egui::Rect::from_min_max(
+                track.min,
+                egui::pos2(track.left() + track.width() * fraction, track.bottom()),
+            );
+            if filled.width() > 0.0 {
+                ui.painter()
+                    .rect_filled(filled, egui::CornerRadius::same(4), fill);
+            }
+        }
+        let font = egui::FontId::proportional(ui.style().text_styles[&egui::TextStyle::Body].size);
+        ui.painter().text(
+            rect.left_center(),
+            egui::Align2::LEFT_CENTER,
+            name,
+            font.clone(),
+            palette.text,
+        );
+        ui.painter().text(
+            egui::pos2(state_left, rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            &view.text,
+            font,
+            crate::app::theme::status_color(palette, view.role),
+        );
+    }
+
+    response.on_hover_text(crate::app::strings::RESOURCE_TOOLTIP)
+}
 
 /// A colorized physical toggle switch. Renders a pill track (gold when on, muted
 /// when off) with a sliding knob. Returns the response so the caller can detect

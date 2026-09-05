@@ -7,9 +7,13 @@
 //! label contains an underscore).
 
 // Status region titles.
-pub const STATUS_TITLE: &str = "Status";
+pub const LIVE_HUD_TITLE: &str = "Live HUD";
+pub const SYSTEM_AUTOMATION_TITLE: &str = "System and automation";
+pub const STATUS_TITLE: &str = "ESO Weave";
 pub const FISHING_TITLE: &str = "Fishing";
-pub const BEACON_TITLE: &str = "Pixel Beacon (Addon)";
+pub const BEACON_TITLE: &str = "PixelBeacon installation";
+pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon signal";
+pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game installation";
 pub const GAME_RUNTIME_TITLE: &str = "Game state";
 
@@ -20,6 +24,8 @@ pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
     "Install state of the bundled PixelBeacon companion addon that renders the pixel signal.";
+pub const BEACON_SIGNAL_TOOLTIP: &str =
+    "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
 pub const GAME_INSTALLATION_TOOLTIP: &str =
     "Whether ESO is installed and which distribution platform supplied the authoritative evidence.";
 pub const GAME_RUNTIME_TOOLTIP: &str =
@@ -50,7 +56,7 @@ pub const BEACON_UNINSTALL_TOOLTIP: &str =
     "Remove the PixelBeacon addon. Only a folder marked as managed by ESO Weave is deleted.";
 
 // Weapon-bar section.
-pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
+pub const WEAPON_BAR_TITLE: &str = "Active weapon bar";
 pub const WEAPON_BAR_TOOLTIP: &str =
     "The active weapon bar and the weapon class detected on each bar. Requires the updated Pixel Beacon addon; shows Unknown without a signal.";
 

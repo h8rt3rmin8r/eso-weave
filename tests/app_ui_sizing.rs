@@ -11,11 +11,16 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use eframe::egui;
-use egui_kittest::Harness;
+use egui_kittest::{
+    kittest::{NodeT, Queryable},
+    Harness,
+};
 
 use eso_weave::app::ui::EsoWeaveApp;
-use eso_weave::app::AppModel;
-use eso_weave::config::{LoggingPrefs, Settings};
+use eso_weave::app::{
+    resource_view, widgets, AppModel, DashboardLayout, ResourceTheme, DASHBOARD_WIDE_MIN,
+};
+use eso_weave::config::{LoggingPrefs, Settings, Theme};
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
@@ -86,13 +91,135 @@ fn harness_at(size: egui::Vec2) -> Harness<'static, EsoWeaveApp> {
 /// Number of frames to settle the two-frame stability gate before reading state.
 const SETTLE: usize = 6;
 
-/// C1 (FR-001, FR-007): the intrinsic extent is a property of the content, so the
-/// same application state measures the same at any window size.
+#[test]
+fn dashboard_stacks_narrow_and_uses_columns_wide() {
+    let narrow = render_at(egui::vec2(760.0, 1200.0), SETTLE);
+    assert_eq!(
+        narrow.last_dashboard_layout(),
+        Some(DashboardLayout::Narrow)
+    );
+    let (narrow_live, narrow_system) = narrow.dashboard_rects().expect("dashboard geometry");
+    assert!(
+        narrow_live.bottom() <= narrow_system.top() + 0.5,
+        "narrow sections are not stacked in reading order: {narrow_live:?}, {narrow_system:?}"
+    );
+
+    let wide = render_at(egui::vec2(1200.0, 1000.0), SETTLE);
+    assert_eq!(wide.last_dashboard_layout(), Some(DashboardLayout::Wide));
+    let (wide_live, wide_system) = wide.dashboard_rects().expect("dashboard geometry");
+    assert!(
+        wide_live.right() <= wide_system.left() + 0.5,
+        "wide sections are not in separate columns: {wide_live:?}, {wide_system:?}"
+    );
+    assert!(
+        (wide_live.top() - wide_system.top()).abs() <= 0.5,
+        "wide section tops are not aligned: {wide_live:?}, {wide_system:?}"
+    );
+}
+
+#[test]
+fn dashboard_breakpoint_uses_available_point_width() {
+    assert_eq!(
+        eso_weave::app::dashboard_layout(DASHBOARD_WIDE_MIN - 0.1),
+        DashboardLayout::Narrow
+    );
+    assert_eq!(
+        eso_weave::app::dashboard_layout(DASHBOARD_WIDE_MIN),
+        DashboardLayout::Wide
+    );
+}
+
+#[test]
+fn resource_meter_exposes_name_state_and_numeric_value() {
+    let palette = eso_weave::app::theme::palette(Theme::Dark);
+    let observed = resource_view(eso_weave::pixelbus::ResourceLevel::Percent(50));
+    let mut harness = Harness::new_ui(|ui| {
+        widgets::resource_meter(ui, &palette, "Health", &observed, ResourceTheme::Health);
+    });
+    harness.step();
+
+    let meter =
+        harness.get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, "Health: 50%");
+    assert_eq!(meter.accesskit_node().numeric_value(), Some(50.0));
+}
+
+#[test]
+fn resource_meter_keeps_non_numeric_states_distinct() {
+    let palette = eso_weave::app::theme::palette(Theme::Dark);
+    let dormant = eso_weave::app::ResourceView::dormant();
+    let unavailable = resource_view(eso_weave::pixelbus::ResourceLevel::Unknown);
+    let mut harness = Harness::new_ui(|ui| {
+        widgets::resource_meter(ui, &palette, "Health", &dormant, ResourceTheme::Health);
+        widgets::resource_meter(
+            ui,
+            &palette,
+            "Magicka",
+            &unavailable,
+            ResourceTheme::Magicka,
+        );
+    });
+    harness.step();
+
+    let dormant_meter = harness.get_by_role_and_label(
+        egui::accesskit::Role::ProgressIndicator,
+        "Health: Game not active",
+    );
+    let unavailable_meter = harness.get_by_role_and_label(
+        egui::accesskit::Role::ProgressIndicator,
+        "Magicka: Signal unavailable",
+    );
+    assert_eq!(dormant_meter.accesskit_node().numeric_value(), None);
+    assert_eq!(unavailable_meter.accesskit_node().numeric_value(), None);
+    assert_ne!(dormant_meter.rect(), unavailable_meter.rect());
+}
+
+#[test]
+fn resource_meter_geometry_is_stable_across_boundary_values() {
+    fn meter_rect(percent: u8) -> egui::Rect {
+        let palette = eso_weave::app::theme::palette(Theme::Dark);
+        let view = resource_view(eso_weave::pixelbus::ResourceLevel::Percent(percent));
+        let label = format!("Health: {percent}%");
+        let mut harness = Harness::new_ui(|ui| {
+            widgets::resource_meter(ui, &palette, "Health", &view, ResourceTheme::Health);
+        });
+        harness.step();
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, &label)
+            .rect()
+    }
+
+    let baseline = meter_rect(0).size();
+    for percent in [1, 50, 99, 100] {
+        assert_eq!(meter_rect(percent).size(), baseline);
+    }
+}
+
+#[test]
+fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
+    let mut harness = harness_at(egui::vec2(760.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+
+    harness.get_by_label("Live HUD");
+    harness.get_by_label("System and automation");
+    for label in [
+        "Health: Game not active",
+        "Stamina: Game not active",
+        "Magicka: Game not active",
+    ] {
+        let meter = harness.get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, label);
+        assert_eq!(meter.accesskit_node().numeric_value(), None);
+    }
+}
+
+/// C1 (S046 FR-016/FR-017): intrinsic width is independent of the window while
+/// height follows one of the two explicit responsive arrangements.
 ///
 /// This is the assertion that fails on v0.8.0, where the measured extent is the
 /// window size less a constant on both axes (see research.md R1 confirmed).
 #[test]
-fn intrinsic_extent_is_independent_of_window_size() {
+fn intrinsic_width_is_stable_and_narrow_layout_is_taller() {
     let small = render_at(egui::vec2(700.0, 800.0), SETTLE).content_extent();
     let large = render_at(egui::vec2(1600.0, 1200.0), SETTLE).content_extent();
 
@@ -103,10 +230,8 @@ fn intrinsic_extent_is_independent_of_window_size() {
         large.x
     );
     assert!(
-        (small.y - large.y).abs() <= 0.5,
-        "intrinsic height tracks the window: {} at 800 tall, {} at 1200 tall",
-        small.y,
-        large.y
+        small.y > large.y,
+        "stacked layout should be taller: {small:?}, {large:?}"
     );
 }
 
@@ -148,23 +273,21 @@ fn enforced_minimum_adds_log_reserve_when_open() {
     );
 }
 
-/// C3 (FR-003, FR-019): the ratchet assertion. Across a monotonically shrinking
-/// sequence of window sizes rendered as consecutive frames, which is what a single
-/// continuous drag produces, the enforced minimum must never rise and must never
-/// exceed the intrinsic extent.
+/// C3 (S046 FR-017): across a monotonically shrinking gesture, the minimum width
+/// stays intrinsic and the height can take only the documented wide or narrow
+/// content extent. A continuously window-derived value would produce many heights.
 ///
 /// This is the defect no arithmetic-only test can express, and the reason three
 /// prior slices shipped green (see research.md R5).
 #[test]
-fn enforced_minimum_never_ratchets_during_a_shrink_gesture() {
+fn enforced_minimum_uses_only_responsive_extents_during_shrink() {
+    let wide_extent = render_at(egui::vec2(1600.0, 1200.0), SETTLE).content_extent();
+    let narrow_extent = render_at(egui::vec2(700.0, 1200.0), SETTLE).content_extent();
     let mut harness = harness_at(egui::vec2(1600.0, 1200.0));
     for _ in 0..SETTLE {
         harness.step();
     }
 
-    // The content does not change during the gesture, so the enforced minimum must
-    // not change either. Asserting only "never rises" would pass on the defect,
-    // because a window-derived minimum falls as the window falls.
     let baseline = harness
         .state()
         .last_min_sent()
@@ -188,9 +311,17 @@ fn enforced_minimum_never_ratchets_during_a_shrink_gesture() {
             .last_min_sent()
             .expect("a minimum should have been sent");
         assert!(
-            (sent.x - baseline.x).abs() <= 0.5 && (sent.y - baseline.y).abs() <= 0.5,
-            "at window {width}x{height} the minimum moved to {sent:?} from {baseline:?}; \
-             the content did not change, so the minimum tracks the window (the ratchet)"
+            (sent.x - baseline.x).abs() <= 0.5,
+            "at window {width}x{height} intrinsic width moved to {} from {}",
+            sent.x,
+            baseline.x
+        );
+        assert!(
+            (sent.y - wide_extent.y).abs() <= 0.5 || (sent.y - narrow_extent.y).abs() <= 0.5,
+            "at window {width}x{height} minimum height {} is neither wide {} nor narrow {}",
+            sent.y,
+            wide_extent.y,
+            narrow_extent.y
         );
     }
 }
@@ -396,7 +527,7 @@ fn committed_log_height_is_clamped_before_it_is_stored() {
     let content_h = app.content_extent().y;
     let stored = app.log_height();
     assert!(
-        stored <= 800.0 - content_h + 0.5,
+        stored <= (800.0 - content_h).max(0.0) + 0.5,
         "stored log height {stored} exceeds the boundary (window 800 - content {content_h})"
     );
 }
@@ -545,7 +676,8 @@ fn enforced_minimum_follows_a_control_row_in_and_out() {
     );
 }
 
-/// FR-005: a display scale change does not disturb the enforced minimum.
+/// S046 FR-016: a scale change is evaluated in logical points and may therefore
+/// cross the responsive breakpoint, while intrinsic width remains stable.
 ///
 /// The layout is expressed in points, and a scale change converts points to
 /// physical pixels at the platform boundary, so the intrinsic extent is
@@ -553,23 +685,30 @@ fn enforced_minimum_follows_a_control_row_in_and_out() {
 /// asserts that invariance rather than a change, because a minimum that moved with
 /// the scale would mean the measurement had leaked into pixel space.
 #[test]
-fn enforced_minimum_is_unchanged_by_a_scale_change() {
+fn scale_change_selects_layout_in_logical_points() {
     let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
     for _ in 0..SETTLE {
         harness.step();
     }
     let base = harness.state().content_extent();
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Wide)
+    );
 
     harness.ctx.set_pixels_per_point(1.5);
     for _ in 0..SETTLE {
         harness.step();
     }
     let scaled = harness.state().content_extent();
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Narrow)
+    );
 
     assert!(
-        (scaled.x - base.x).abs() <= 0.5 && (scaled.y - base.y).abs() <= 0.5,
-        "the minimum moved with the display scale, so the measurement is in pixel \
-         space rather than points: {base:?} -> {scaled:?}"
+        (scaled.x - base.x).abs() <= 0.5 && scaled.y > base.y,
+        "scale should preserve intrinsic width and select taller narrow layout: {base:?} -> {scaled:?}"
     );
 }
 // Temporary diagnostic, appended to tests/app_ui_sizing.rs, removed after use.
