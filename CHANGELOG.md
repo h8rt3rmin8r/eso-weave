@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S049 adds a PixelBeacon world-state signal and System and State field that
+  distinguish Unknown, Transitioning, and Active. Active is published only after
+  every player-derived payload has been freshly re-baselined for the current
+  world (issue #56).
 - S048 adds an authoritative PixelBeacon player life-state signal and displays
   Alive, Dead, Reincarnating, or unavailable evidence in Live HUD. Only Alive
   permits weave, fishing, or auto-potion synthesis, and recovery never replays
@@ -22,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-05: Model world transition as a dedicated B22 observable rather than
+  overloading heartbeat or life state. Player deactivation owns Transitioning,
+  and player activation owns Active only after one complete named baseline.
 - 2026-09-05: Treat every player life state except a freshly decoded Alive as a
   hard input gate, enforced independently at physical interception, queued weave
   execution, fishing timers, and auto-potion evaluation. Blocked work is dropped

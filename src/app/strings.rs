@@ -19,6 +19,7 @@ pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game installation";
 pub const GAME_RUNTIME_TITLE: &str = "Game state";
 pub const LIFE_TITLE: &str = "Life state";
+pub const WORLD_TITLE: &str = "World state";
 
 // Status region tooltips.
 pub const STATUS_TOOLTIP: &str =
@@ -33,6 +34,8 @@ pub const GAME_INSTALLATION_TOOLTIP: &str =
     "Whether ESO is installed and which distribution platform supplied the authoritative evidence.";
 pub const GAME_RUNTIME_TOOLTIP: &str =
     "Whether the ESO client is inactive, its launcher is open, or the game client is active.";
+pub const WORLD_TOOLTIP: &str =
+    "Whether ESO is loading or the current world has a complete fresh PixelBeacon baseline.";
 
 // Fishing status indicators: plain language for each fishing routine phase, and
 // for an idle state the reason the routine last stopped.

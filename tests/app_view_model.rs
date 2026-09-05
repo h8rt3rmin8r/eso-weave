@@ -8,9 +8,10 @@ use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
     combat_view, dashboard_layout, default_delay_for, fishing_label, life_state_view, menu_view,
     modal_extent, override_edit_for, quickslot_view, resource_view, resource_view_with_watch,
-    route_reader_event, route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon,
-    status_line_fishing, uninstall_enabled, weapon_bar_view, AppModel, BeaconCondition,
-    BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
+    route_game_observation, route_reader_event, route_reader_safety_gate, skill_rows,
+    status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view,
+    world_state_view, AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout,
+    ResourcePresentation, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -24,7 +25,7 @@ use eso_weave::pixelbus::{
     ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, PixelBusEvent,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal,
-    WeaponClass,
+    WeaponClass, WorldState,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -70,6 +71,23 @@ fn life_state_view_names_every_protocol_state() {
         ),
     ] {
         let view = life_state_view(state);
+        assert_eq!(view.state, text);
+        assert_eq!(view.role, role);
+    }
+}
+
+#[test]
+fn world_state_view_names_every_protocol_state() {
+    for (state, text, role) in [
+        (WorldState::Unknown, "Not detected", StatusRole::Muted),
+        (
+            WorldState::Transitioning,
+            "Transitioning",
+            StatusRole::Warning,
+        ),
+        (WorldState::Active, "Active", StatusRole::Healthy),
+    ] {
+        let view = world_state_view(state);
         assert_eq!(view.state, text);
         assert_eq!(view.role, role);
     }
@@ -450,6 +468,17 @@ fn routing_life_state_updates_every_synthesis_consumer() {
 }
 
 #[test]
+fn routing_world_state_updates_shared_game_observations_and_signal_loss_clears_it() {
+    let game = eso_weave::game::GameState::default();
+    route_game_observation(PixelBusEvent::World(WorldState::Transitioning), &game);
+    assert_eq!(game.snapshot().world, WorldState::Transitioning);
+    route_game_observation(PixelBusEvent::World(WorldState::Active), &game);
+    assert_eq!(game.snapshot().world, WorldState::Active);
+    route_game_observation(PixelBusEvent::SignalLost, &game);
+    assert_eq!(game.snapshot().world, WorldState::Unknown);
+}
+
+#[test]
 fn safety_preroute_closes_input_without_waiting_for_controller_access() {
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 4);
     route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
@@ -609,6 +638,7 @@ fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
     );
     assert_eq!(initial.beacon_signal_line.state_text, "Unknown");
     assert_eq!(initial.weapon_bar.active_bar, "Game not active");
+    assert_eq!(initial.world.state, "Game not active");
     assert!(initial
         .skills
         .iter()
@@ -628,12 +658,15 @@ fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
         ResourcePresentation::Unavailable
     );
     assert_eq!(unavailable.beacon_signal_line.state_text, "Not detected");
+    assert_eq!(unavailable.world.state, "Not detected");
     game.observe_heartbeat();
     game.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    game.observe_world(WorldState::Active);
     let active = model.view();
     assert_eq!(active.runtime_line.state_text, "Active");
     assert_eq!(active.menu.state, "Gameplay");
     assert_eq!(active.beacon_signal_line.state_text, "Signal detected");
+    assert_eq!(active.world.state, "Active");
 }
 
 #[test]

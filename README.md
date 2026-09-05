@@ -79,8 +79,9 @@ Input interception reads keyboard devices and synthesizes input through
 ## Game state and context
 
 The main window separates information by the question it answers. **Live HUD**
-shows resources, Game Context, combat, movement, life state, weapon setup, and the selected
-quickslot. **System and State** shows whether the game, ESO Weave,
+shows resources, Game Context, combat, movement, life state, weapon setup, and
+the selected quickslot. **System and State** shows world-transition state and
+whether the game, ESO Weave,
 PixelBeacon, fishing, and auto-potion are ready and why an action is blocked. The
 two sections sit side by side in a wide window and stack with Live HUD first in a
 narrow one. System and State can be collapsed from its full keyboard-accessible
@@ -92,6 +93,11 @@ Steam Proton, then checked against the expected launcher and client files. Runti
 reports **Inactive**, **Launcher open**, **Active**, or **Unknown**. The game client
 takes precedence, so closing the launcher after ESO starts does not make an active
 session disappear.
+
+**World state** reports **Active** only after ESO finishes player activation and
+PixelBeacon refreshes every player-derived payload for the current world. It
+reports **Transitioning** from player deactivation through the loading interval,
+and **Not detected** when current lifecycle evidence is unavailable.
 
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which
@@ -297,15 +303,15 @@ same thing: a small grid of colored squares that PixelBeacon draws in the
 That grid is the entire channel between the addon and the app. It has to be
 visible, because anything drawn over it reads as a missing signal.
 
-At the default square size it covers **400 by 16 physical pixels**: a three-cell
-layout header followed by twenty-two signal squares in one row. PixelBeacon uses
+At the default square size it covers **416 by 16 physical pixels**: a three-cell
+layout header followed by twenty-three signal squares in one row. PixelBeacon uses
 the current client width and wraps only when the complete next square would cross
 the right edge.
 
 **To make it smaller**, lower **Block size (px)** in Settings, under the beacon
 group. The app shows the running reader's detected footprint beside that setting
 and records layout transitions in the log. At the smallest supported size the
-current overlay is 50 by 2 pixels. A newly selected size is not mixed with the old
+current overlay is 52 by 2 pixels. A newly selected size is not mixed with the old
 live column count: it redeploys the addon and becomes the reported geometry after
 a `/reloadui` and an app restart.
 

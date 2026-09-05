@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders a three-cell negotiated layout header followed by twenty-two square
+-- It renders a three-cell negotiated layout header followed by twenty-three square
 -- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
 -- sets this value on deploy) anchored to the top-left of the client area. Signals
 -- encode load status (B0), fishing state (B1), server latency
@@ -10,7 +10,7 @@
 -- the remaining cooldown of each action slot the game exposes one for, the five
 -- skills and the ultimate (B10 to B15), and the active quickslot's remaining
 -- cooldown (B16), item identity (B17 to B19), explicit classification (B20),
--- and the player's life state (B21).
+-- the player's life state (B21), and world-transition state (B22).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -33,7 +33,7 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 22
+local NUM_BLOCKS = 23
 -- Version-1 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
@@ -108,6 +108,15 @@ local LIFE_REINCARNATING_RED = 0xE0
 
 -- Last rendered state, nil until the first render.
 local lifeState = nil
+
+-- The world lifecycle. Unknown is published from addon construction until the
+-- first complete player-activation baseline. Deactivation enters Transitioning,
+-- and only the activation callback may enter Active.
+local WORLD_MARKER = 0xCC
+local WORLD_UNKNOWN_RED = 0x20
+local WORLD_TRANSITIONING_RED = 0x80
+local WORLD_ACTIVE_RED = 0xE0
+local worldState = WORLD_UNKNOWN_RED
 
 -- The six cooldown block markers (green channel), shared byte for byte with the
 -- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
@@ -570,6 +579,26 @@ local function onLifeStateChanged()
     if computeLifeState() then
         renderLifeState()
     end
+end
+
+-- B22 World transition state -----------------------------------------------
+
+local function renderWorldState()
+    if blocks.status:IsHidden() then
+        blocks.world:SetHidden(true)
+        return
+    end
+    blocks.world:SetCenterColor(channel(worldState), channel(WORLD_MARKER), channel(255 - worldState), 1)
+    blocks.world:SetHidden(false)
+end
+
+local function setWorldState(nextState)
+    if nextState == worldState then
+        return false
+    end
+    worldState = nextState
+    renderWorldState()
+    return true
 end
 
 -- Reacts to the mounted state changing: re-render only on a real transition.
@@ -1129,6 +1158,38 @@ local function onFastTick()
     onFishingTick()
 end
 
+-- Recompute and render every player-derived payload before the world block can
+-- claim Active. Keep this as one named boundary so new payloads cannot be added
+-- after the Active write by accident.
+local function rebaselinePlayerState()
+    computeWeaponBar()
+    renderWeapon()
+    computeCombat()
+    renderCombat()
+    updateMenu()
+    renderMenu()
+    updateResources()
+    renderResources()
+    computeMovement()
+    renderMovement()
+    updateCooldowns()
+    renderCooldowns()
+    updateQuickslot()
+    renderQuickslot()
+    computeLifeState()
+    renderLifeState()
+    onFishingTick()
+end
+
+local function onPlayerDeactivated()
+    setWorldState(WORLD_TRANSITIONING_RED)
+end
+
+local function onPlayerActivated()
+    rebaselinePlayerState()
+    setWorldState(WORLD_ACTIVE_RED)
+end
+
 -- The sole bite signal: the equipped bait's stack decreases by one while a cast
 -- is active and no menu is open (the game consumes the bait when the fish takes
 -- it). The lure sound category scopes the decrease to bait, so unrelated
@@ -1189,6 +1250,7 @@ local function buildBlocks()
     blocks.quickslotIdLo = createBlock("QuickslotIdLo")
     blocks.quickslotState = createBlock("QuickslotState")
     blocks.life = createBlock("Life")
+    blocks.world = createBlock("World")
 
     -- Payload order is the wire contract. The layout owns positions, and adding a
     -- signal requires adding exactly one entry here beside its block creation.
@@ -1215,6 +1277,7 @@ local function buildBlocks()
         blocks.quickslotIdLo,
         blocks.quickslotState,
         blocks.life,
+        blocks.world,
     }
     refreshLayout(true)
 
@@ -1237,6 +1300,7 @@ local function buildBlocks()
     renderQuickslot()
     computeLifeState()
     renderLifeState()
+    renderWorldState()
 end
 
 local function onLatencyTick()
@@ -1320,27 +1384,10 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "QuickslotCooldown", EVENT_ACTION_UPDATE_COOLDOWNS, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onLifeStateChanged)
     em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onLifeStateChanged)
+    em:RegisterForEvent(ADDON_NAME .. "Deactivated", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
     SLASH_COMMANDS["/pbquickslot"] = onQuickslotCommand
 
-    em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, function()
-        computeWeaponBar()
-        renderWeapon()
-        computeCombat()
-        renderCombat()
-        updateResources()
-        renderResources()
-        computeMovement()
-        renderMovement()
-        updateCooldowns()
-        renderCooldowns()
-        -- The quickslot re-baseline after a loading screen, for the same reason
-        -- as every block above it: the change events do not fire for a state that
-        -- is already true when the world finishes loading.
-        updateQuickslot()
-        renderQuickslot()
-        computeLifeState()
-        renderLifeState()
-    end)
+    em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, onPlayerActivated)
 end
 
 em:RegisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED, onAddOnLoaded)

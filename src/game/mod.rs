@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use crate::pixelbus::MenuSurface;
+use crate::pixelbus::{MenuSurface, WorldState};
 
 /// Steam app id for The Elder Scrolls Online.
 pub const ESO_APP_ID: &str = "306130";
@@ -117,6 +117,7 @@ pub struct GameObservations {
     pub focus: FocusObservation,
     pub freshness: BeaconFreshness,
     pub surface: SurfaceObservation,
+    pub world: WorldState,
 }
 
 impl Default for GameObservations {
@@ -127,6 +128,7 @@ impl Default for GameObservations {
             focus: FocusObservation::Unknown,
             freshness: BeaconFreshness::NeverObserved,
             surface: SurfaceObservation::Unavailable,
+            world: WorldState::Unknown,
         }
     }
 }
@@ -177,6 +179,7 @@ impl GameState {
         if runtime != GameRuntime::Active {
             state.freshness = BeaconFreshness::NeverObserved;
             state.surface = SurfaceObservation::Unavailable;
+            state.world = WorldState::Unknown;
         }
         changed
     }
@@ -196,10 +199,15 @@ impl GameState {
         self.0.write().unwrap().surface = surface;
     }
 
+    pub fn observe_world(&self, world: WorldState) {
+        self.0.write().unwrap().world = world;
+    }
+
     pub fn signal_lost(&self) {
         let mut state = self.0.write().unwrap();
         state.freshness = BeaconFreshness::Lost;
         state.surface = SurfaceObservation::Unavailable;
+        state.world = WorldState::Unknown;
     }
 }
 

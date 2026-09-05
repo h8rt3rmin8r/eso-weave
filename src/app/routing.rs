@@ -149,6 +149,7 @@ pub fn route_game_observation(event: PixelBusEvent, game: &GameState) {
     match event {
         PixelBusEvent::Heartbeat => game.observe_heartbeat(),
         PixelBusEvent::SignalLost => game.signal_lost(),
+        PixelBusEvent::World(world) => game.observe_world(world),
         PixelBusEvent::MenuGate(surface) => game.observe_surface(match surface {
             Some(surface) => SurfaceObservation::Observed(surface),
             None => SurfaceObservation::Unavailable,

@@ -328,6 +328,22 @@ impl LifeState {
     }
 }
 
+/// Whether ESO has a fully re-baselined active world or is transitioning.
+///
+/// Unknown covers addon startup, an absent legacy block, invalid capture, signal
+/// loss, and inactive game runtime. This slice publishes the observation only;
+/// the travel safety issue consumes it later with pre-loading travel evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WorldState {
+    /// No trustworthy world-state evidence is available.
+    #[default]
+    Unknown,
+    /// ESO has deactivated the player for a loading or world transition.
+    Transitioning,
+    /// ESO has activated the player and PixelBeacon completed its fresh baseline.
+    Active,
+}
+
 /// The green marker identifying the B21 life-state sample.
 ///
 /// This is the midpoint of the widest remaining gap in
@@ -337,6 +353,16 @@ const LIFE_MARKER: u8 = 0x89;
 const LIFE_ALIVE_RED: u8 = 0x20;
 const LIFE_DEAD_RED: u8 = 0x80;
 const LIFE_REINCARNATING_RED: u8 = 0xE0;
+
+/// The green marker identifying the B22 world-state sample.
+///
+/// This is the midpoint of the widest useful remaining gap in
+/// [`BLOCK_CENTER_GREENS`], six channel values from both nearest neighbors and
+/// three times the default tolerance.
+const WORLD_MARKER: u8 = 0xCC;
+const WORLD_UNKNOWN_RED: u8 = 0x20;
+const WORLD_TRANSITIONING_RED: u8 = 0x80;
+const WORLD_ACTIVE_RED: u8 = 0xE0;
 
 /// The green marker that identifies a movement sample.
 ///
@@ -577,7 +603,7 @@ const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 26] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 27] = [
     ("H0 layout magic", LAYOUT_MAGIC_G),
     ("H1 layout high marker", LAYOUT_HIGH_MARKER),
     ("H2 layout low marker", LAYOUT_LOW_MARKER),
@@ -604,6 +630,7 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 26] = [
     ("B19 quickslot id low marker", QUICKSLOT_ID_LO_MARKER),
     ("B20 quickslot state marker", QUICKSLOT_STATE_MARKER),
     ("B21 life-state marker", LIFE_MARKER),
+    ("B22 world-state marker", WORLD_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -649,6 +676,9 @@ pub enum PixelBusEvent {
     /// A change in authoritative player life state. Unknown covers unavailable
     /// and invalid evidence and therefore keeps every synthesis path closed.
     Life(LifeState),
+    /// A change in the authoritative world lifecycle. Unknown covers startup,
+    /// unavailable, invalid, and lost evidence.
+    World(WorldState),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -706,6 +736,8 @@ pub struct BlockSamples {
     pub quickslot_state: Option<Rgb>,
     /// B21, the player life-state block.
     pub life: Option<Rgb>,
+    /// B22, the player world-state block.
+    pub world: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -816,8 +848,8 @@ impl SurfaceSampler for MockSampler {
 /// The number of beacon blocks on the bus: B0 status, B1 fishing, B2 latency,
 /// B3 weapon, B4 combat, B5 menu, B6 health, B7 stamina, B8 magicka,
 /// B9 movement, B10 to B15 skill cooldowns, B16 quickslot cooldown, B17 to B19
-/// the quickslot item identity, B20 its explicit classification, and B21 player
-/// life state.
+/// the quickslot item identity, B20 its explicit classification, B21 player
+/// life state, and B22 world state.
 ///
 /// This is the companion's single statement of the grid length; the drawn extent
 /// and the capture region both derive from it. The addon states the same number
@@ -826,11 +858,11 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In the version-15 addon, the 22 blocks follow three negotiated header cells
+/// In the version-16 addon, the 23 blocks follow three negotiated header cells
 /// and remain on one row at every supported client width and block size. In the
 /// explicit legacy layout they retain the two-row 16-column shape introduced by
 /// slices 038 and 042.
-pub const NUM_BLOCKS: u32 = 22;
+pub const NUM_BLOCKS: u32 = 23;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -1195,6 +1227,10 @@ impl ReaderConfig {
     pub fn life_point(&self) -> (u32, u32) {
         block_center(self.block_px, 21)
     }
+    /// The legacy player world-state block (B22) sample point.
+    pub fn world_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 22)
+    }
 }
 
 impl Default for ReaderConfig {
@@ -1526,6 +1562,26 @@ pub fn decode_life_state(sample: Rgb, tolerance: u8) -> LifeState {
     }
 }
 
+/// Decodes B22 into the authoritative world lifecycle state.
+///
+/// Marker, complement checksum, and the discrete payload are all validated.
+/// Unknown is both a valid startup wire value and the fallback for any failure.
+pub fn decode_world_state(sample: Rgb, tolerance: u8) -> WorldState {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, WORLD_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        return WorldState::Unknown;
+    }
+    if within(sample.r, WORLD_UNKNOWN_RED, tolerance) {
+        WorldState::Unknown
+    } else if within(sample.r, WORLD_TRANSITIONING_RED, tolerance) {
+        WorldState::Transitioning
+    } else if within(sample.r, WORLD_ACTIVE_RED, tolerance) {
+        WorldState::Active
+    } else {
+        WorldState::Unknown
+    }
+}
+
 /// Decodes the menu block into its surface.
 ///
 /// Validation mirrors the combat block: the green marker and the `red + blue`
@@ -1836,6 +1892,7 @@ pub struct PixelBusReader {
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
     life: LifeState,
+    world: WorldState,
     had_heartbeat: bool,
 }
 
@@ -1856,6 +1913,7 @@ impl PixelBusReader {
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
             life: LifeState::Unknown,
+            world: WorldState::Unknown,
             had_heartbeat: false,
         }
     }
@@ -1927,6 +1985,10 @@ impl PixelBusReader {
             self.life = LifeState::Unknown;
             events.push(PixelBusEvent::Life(LifeState::Unknown));
         }
+        if self.world != WorldState::Unknown {
+            self.world = WorldState::Unknown;
+            events.push(PixelBusEvent::World(WorldState::Unknown));
+        }
         events
     }
 
@@ -1956,6 +2018,7 @@ impl PixelBusReader {
             quickslot_id_lo: b19,
             quickslot_state: b20,
             life: b21,
+            world: b22,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -2006,6 +2069,20 @@ impl PixelBusReader {
             self.last_heartbeat_ms = Some(now_ms);
             self.signal_lost = false;
             events.push(PixelBusEvent::Heartbeat);
+
+            // B22 describes whether the rest of this captured payload belongs
+            // to a complete active-world baseline. Publish it before every
+            // dependent observation from the same batch.
+            let world = b22.map_or(WorldState::Unknown, |c| decode_world_state(c, tolerance));
+            if world != self.world {
+                self.world = world;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?world,
+                    "player world state detected"
+                );
+                events.push(PixelBusEvent::World(world));
+            }
 
             // B21 is safety-authoritative and therefore precedes every event
             // that can drive synthesized work from the same captured frame.
@@ -2267,6 +2344,7 @@ impl PixelBusReader {
             quickslot_id_lo: sample(19),
             quickslot_state: sample(20),
             life: sample(21),
+            world: sample(22),
         };
         events.extend(self.observe(samples, now_ms));
         events

@@ -64,17 +64,17 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_fifteen() {
-    // Slice 048 adds B21 life state. Version 14 remains readable with Unknown
-    // life state and an explicit addon update affordance.
-    assert_eq!(embedded_version(), 15);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(15));
+fn embedded_manifest_version_is_sixteen() {
+    // Slice 049 adds B22 world state. Version 15 remains readable with Unknown
+    // world state and an explicit addon update affordance.
+    assert_eq!(embedded_version(), 16);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(16));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 15);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(15));
+    assert_eq!(embedded_version(), 16);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(16));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -630,7 +630,10 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
-    assert_eq!(NUM_BLOCKS, 22, "S048 adds exactly one B21 life block");
+    assert_eq!(
+        NUM_BLOCKS, 23,
+        "S049 adds exactly one B22 world-state block"
+    );
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
         beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
@@ -759,6 +762,18 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
             "the addon and companion disagree on {name}"
         );
     }
+    for (name, expected) in [
+        ("WORLD_MARKER", 0xCC),
+        ("WORLD_UNKNOWN_RED", 0x20),
+        ("WORLD_TRANSITIONING_RED", 0x80),
+        ("WORLD_ACTIVE_RED", 0xE0),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            Some(expected),
+            "the addon and companion disagree on {name}"
+        );
+    }
 }
 
 #[test]
@@ -779,6 +794,60 @@ fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
         );
     }
     assert!(beacon::embedded_version() >= 15);
+}
+
+#[test]
+fn addon_world_state_uses_authoritative_events_and_a_complete_activation_baseline() {
+    let lua = beacon::LUA;
+    for required in [
+        "EVENT_PLAYER_DEACTIVATED",
+        "EVENT_PLAYER_ACTIVATED",
+        "local function rebaselinePlayerState()",
+        "setWorldState(WORLD_TRANSITIONING_RED)",
+        "setWorldState(WORLD_ACTIVE_RED)",
+        "renderWorldState()",
+    ] {
+        assert!(
+            lua.contains(required),
+            "world-state lifecycle is missing {required}"
+        );
+    }
+
+    let baseline = lua
+        .find("local function rebaselinePlayerState()")
+        .expect("baseline function");
+    let search_start = baseline + "local function rebaselinePlayerState()".len();
+    let activation = lua[search_start..]
+        .find("rebaselinePlayerState()")
+        .map(|index| search_start + index)
+        .expect("activation calls baseline");
+    let active = lua[activation..]
+        .find("setWorldState(WORLD_ACTIVE_RED)")
+        .map(|index| activation + index)
+        .expect("activation publishes Active");
+    assert!(
+        activation < active,
+        "Active must follow the complete baseline"
+    );
+
+    let baseline_body = &lua[baseline..activation];
+    for required in [
+        "computeWeaponBar()",
+        "computeCombat()",
+        "updateMenu()",
+        "updateResources()",
+        "computeMovement()",
+        "updateCooldowns()",
+        "updateQuickslot()",
+        "computeLifeState()",
+        "onFishingTick()",
+    ] {
+        assert!(
+            baseline_body.contains(required),
+            "activation baseline is missing {required}"
+        );
+    }
+    assert_eq!(beacon::embedded_version(), 16);
 }
 
 #[test]
