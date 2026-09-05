@@ -813,6 +813,11 @@ pub const LEGACY_COLUMNS: u32 = COLUMNS;
 pub const LAYOUT_PROTOCOL_VERSION: u8 = 1;
 /// Spaced blue-channel wire code representing protocol version 1.
 pub const LAYOUT_VERSION_CODE: u8 = 0x20;
+/// Maximum tolerance accepted for geometry metadata.
+///
+/// This remains below half the 0x20 version-code spacing so a caller's broad
+/// payload tolerance cannot turn a future version into version 1.
+pub const MAX_LAYOUT_TOLERANCE: u8 = 0x0F;
 /// Number of invariant cells preceding negotiated payload cells.
 pub const LAYOUT_HEADER_BLOCKS: u32 = 3;
 /// Smallest count that keeps the complete header on row zero.
@@ -1292,10 +1297,11 @@ pub fn decode_layout_header(
     let Some(h0) = samples.h0 else {
         return LayoutState::Unavailable(LayoutFailure::Missing);
     };
-    let magic_r = within(h0.r, LAYOUT_MAGIC_R, tolerance);
-    let magic_g = within(h0.g, LAYOUT_MAGIC_G, tolerance);
+    let layout_tolerance = tolerance.min(MAX_LAYOUT_TOLERANCE);
+    let magic_r = within(h0.r, LAYOUT_MAGIC_R, layout_tolerance);
+    let magic_g = within(h0.g, LAYOUT_MAGIC_G, layout_tolerance);
     if !(magic_r && magic_g) {
-        if status_present(h0, tolerance) {
+        if status_present(h0, layout_tolerance) {
             return LayoutState::Ready(BusLayout::legacy());
         }
         return LayoutState::Unavailable(if magic_r || magic_g {
@@ -1304,14 +1310,16 @@ pub fn decode_layout_header(
             LayoutFailure::Missing
         });
     }
-    if !within(h0.b, LAYOUT_VERSION_CODE, tolerance) {
+    if !within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
         return LayoutState::Unavailable(LayoutFailure::UnsupportedVersion { observed: h0.b });
     }
 
     let decode_byte = |sample: Option<Rgb>, marker: u8, failure: LayoutFailure| {
         let sample = sample.ok_or(failure)?;
         let checksum = u16::from(sample.r) + u16::from(sample.b);
-        if !within(sample.g, marker, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
+        if !within(sample.g, marker, layout_tolerance)
+            || checksum.abs_diff(255) > u16::from(layout_tolerance)
+        {
             return Err(failure);
         }
         Ok(sample.r)

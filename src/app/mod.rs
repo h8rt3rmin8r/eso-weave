@@ -1208,6 +1208,7 @@ pub struct AppModel {
     settings: Settings,
     config_dir: Option<PathBuf>,
     beacon_prefs: BeaconPrefs,
+    runtime_block_px: u32,
     log_panel_open: bool,
     log_filter: LevelName,
     scheduler: SaveScheduler,
@@ -1259,6 +1260,9 @@ impl AppModel {
     ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
         let log_filter = settings.logging.level;
+        let mut reader_notices = Vec::new();
+        let runtime_block_px =
+            crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices).block_px;
         Self {
             input,
             weave,
@@ -1271,6 +1275,7 @@ impl AppModel {
             settings,
             config_dir,
             beacon_prefs,
+            runtime_block_px,
             log_panel_open: false,
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
@@ -1302,6 +1307,11 @@ impl AppModel {
     /// Current runtime pixel-bus geometry for the settings footprint caption.
     pub fn layout_state(&self) -> crate::pixelbus::LayoutState {
         self.weave.lock().unwrap().layout()
+    }
+
+    /// Block size used by this process's reader until the next application start.
+    pub fn runtime_block_px(&self) -> u32 {
+        self.runtime_block_px
     }
 
     /// The current derived display state.

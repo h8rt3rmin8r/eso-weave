@@ -47,7 +47,9 @@ existing green-channel registry and are asserted against it by tests.
 All H0 channels use normal capture tolerance. Logical version 1 is represented
 by spaced wire code `0x20`, rather than the literal byte 1, so compositor drift
 cannot turn an adjacent future version into version 1. Future codes must remain
-farther apart than twice the maximum supported tolerance.
+farther apart than twice the maximum supported tolerance. Geometry decoding caps
+its effective tolerance at `0x0F`; a broader user payload tolerance cannot weaken
+version discrimination.
 
 **Decision**: Recognized magic plus any later failure is invalid, never legacy.
 Only a non-magic cell zero that independently decodes as the legacy heartbeat
@@ -80,6 +82,8 @@ a valid header and is rejected by the companion's surface plausibility check.
 
 **Lifecycle**: Recompute immediately on `EVENT_SCREEN_RESIZED` and once per
 existing one-second tick. The tick covers UI-scale changes and missed events.
+Reflow compares the applied scale as well as the derived columns, because the
+same column count at a new scale still requires new UI-unit dimensions.
 
 ## R6: How many captures are allowed?
 
@@ -106,4 +110,5 @@ managed deployment and manifest version 14 make that transition explicit.
 **Decision**: Add a typed `LayoutState` event to the reader's existing shared
 observation path. The weave model stores it for display only. Settings renders
 negotiated dimensions, legacy dimensions, or a truthful unavailable reason and
-does not persist the state.
+does not persist the state. The extent uses the reader's process-lifetime block
+size, never a draft setting paired with live columns from another geometry.

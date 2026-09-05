@@ -24,7 +24,9 @@ H2 = (columns_low,  0x9C, 255 - columns_low)
 The H0 channels, the two byte markers, and both complements are matched with the
 configured per-channel tolerance. Version 1 uses wire code `0x20`; future
 versions MUST use codes separated by more than twice the maximum supported
-tolerance. A complement passes when `abs((red + blue) - 255) <= tolerance`.
+tolerance. Geometry metadata caps effective tolerance at `0x0F`, independently
+of the payload setting. A complement passes when
+`abs((red + blue) - 255) <= effective_tolerance`.
 
 The column count is `(columns_high << 8) | columns_low` and MUST be between 3 and
 65535 inclusive.
@@ -75,8 +77,10 @@ zero through two.
 ## Lifecycle
 
 PixelBeacon recomputes capacity on `EVENT_SCREEN_RESIZED` and its one-second
-tick. The reader decodes H0 through H2 every batch. A state change is emitted
-once, and all payload points for that batch use the newly validated object.
+tick. Reflow change detection includes both the count and the applied UI scale,
+so a scale-only change updates physical block dimensions. The reader decodes H0
+through H2 every batch. A state change is emitted once, and all payload points
+for that batch use the newly validated object.
 
 ## Capture budget
 

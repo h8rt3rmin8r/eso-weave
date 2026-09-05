@@ -97,6 +97,7 @@ fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
     }
     assert!(beacon::LUA.contains("EVENT_SCREEN_RESIZED"));
     assert!(beacon::LUA.contains("math.floor(width * scale)"));
+    assert!(beacon::LUA.contains("nextScale == layoutScale"));
 }
 
 #[test]

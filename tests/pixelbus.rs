@@ -12,7 +12,8 @@ use eso_weave::pixelbus::{
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown,
     WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX,
-    LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX,
+    NUM_BLOCKS,
 };
 
 #[test]
@@ -84,6 +85,23 @@ fn recognized_header_corruption_never_falls_back_to_legacy() {
         ),
         LayoutState::Ready(BusLayout::negotiated(120).unwrap())
     );
+
+    let mut future = valid;
+    future[0].b = LAYOUT_VERSION_CODE + 0x20;
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(future),
+            u8::MAX,
+            DEFAULT_BLOCK_PX,
+            None
+        ),
+        LayoutState::Unavailable(LayoutFailure::UnsupportedVersion {
+            observed: LAYOUT_VERSION_CODE + 0x20,
+        })
+    );
+    const {
+        assert!(MAX_LAYOUT_TOLERANCE < 0x10);
+    }
 }
 
 #[test]

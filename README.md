@@ -286,10 +286,11 @@ the current client width and wraps only when the complete next square would cros
 the right edge.
 
 **To make it smaller**, lower **Block size (px)** in Settings, under the beacon
-group. The app shows the detected live footprint beside that setting and records
-layout transitions in the log. At the smallest supported size the current overlay
-is 48 by 2 pixels. Changing the size redeploys the addon and takes effect after a
-`/reloadui` and an app restart.
+group. The app shows the running reader's detected footprint beside that setting
+and records layout transitions in the log. At the smallest supported size the
+current overlay is 48 by 2 pixels. A newly selected size is not mixed with the old
+live column count: it redeploys the addon and becomes the reported geometry after
+a `/reloadui` and an app restart.
 
 ### Quickslot diagnostics
 

@@ -546,7 +546,8 @@ the configured capture tolerance. Recognized magic
 with any invalid field, unsupported version, impossible count, or surface-fit
 failure makes the layout unavailable and suppresses all payload decoding. A
 non-magic H0 selects the legacy 16-column, zero-offset layout only when it is a
-valid legacy magenta heartbeat.
+valid legacy magenta heartbeat. Geometry metadata caps effective tolerance at
+15, below half the version-code spacing, even when payload tolerance is broader.
 
 The addon and application each state the header constants once, and contract
 tests parse the embedded addon source to prevent byte-level drift. Capture extent

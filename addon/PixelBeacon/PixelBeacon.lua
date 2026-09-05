@@ -250,6 +250,7 @@ local root
 local blocks = {}
 local payloadBlocks = {}
 local layoutColumns = MIN_LAYOUT_COLUMNS
+local layoutScale = nil
 
 -- Converts an 8-bit channel to the 0 to 1 range the API expects.
 local function channel(value)
@@ -258,22 +259,22 @@ end
 
 -- Converts a physical-pixel measurement to UI units so block geometry is constant
 -- in physical pixels regardless of the user's UI scale.
-local function physicalToUi(px)
+local function currentScale()
     local scale = GetUIGlobalScale()
-    if scale == nil or scale == 0 then
+    if scale == nil or scale <= 0 then
         scale = 1
     end
+    return scale
+end
+
+local function physicalToUi(px, scale)
     return px / scale
 end
 
 -- Complete physical blocks that fit the live client width. PixelBeacon is the
 -- sole authority for this value; the companion validates the published count
 -- rather than deriving a competing one.
-local function computeLayoutColumns()
-    local scale = GetUIGlobalScale()
-    if scale == nil or scale <= 0 then
-        scale = 1
-    end
+local function computeLayoutColumns(scale)
     local width = GuiRoot:GetWidth()
     if width == nil or width <= 0 then
         return MIN_LAYOUT_COLUMNS
@@ -284,7 +285,7 @@ local function computeLayoutColumns()
 end
 
 -- Places one logical cell using the currently published column count.
-local function positionCell(control, cell)
+local function positionCell(control, cell, scale)
     local col = cell % layoutColumns
     local row = math.floor(cell / layoutColumns)
     control:ClearAnchors()
@@ -292,10 +293,10 @@ local function positionCell(control, cell)
         TOPLEFT,
         root,
         TOPLEFT,
-        physicalToUi(BLOCK_PX * col),
-        physicalToUi(BLOCK_PX * row)
+        physicalToUi(BLOCK_PX * col, scale),
+        physicalToUi(BLOCK_PX * row, scale)
     )
-    local dimension = physicalToUi(BLOCK_PX)
+    local dimension = physicalToUi(BLOCK_PX, scale)
     control:SetDimensions(dimension, dimension)
 end
 
@@ -326,23 +327,25 @@ end
 -- Recomputes, publishes, and applies one authoritative layout. Returns true only
 -- when the count changed or a caller explicitly requested a full reflow.
 local function refreshLayout(force)
-    local nextColumns = computeLayoutColumns()
-    if not force and nextColumns == layoutColumns then
+    local nextScale = currentScale()
+    local nextColumns = computeLayoutColumns(nextScale)
+    if not force and nextColumns == layoutColumns and nextScale == layoutScale then
         return false
     end
     layoutColumns = nextColumns
+    layoutScale = nextScale
     local totalCells = LAYOUT_HEADER_BLOCKS + NUM_BLOCKS
     local columnsUsed = math.min(totalCells, layoutColumns)
     local rows = math.ceil(totalCells / layoutColumns)
     root:SetDimensions(
-        physicalToUi(BLOCK_PX * columnsUsed),
-        physicalToUi(BLOCK_PX * rows)
+        physicalToUi(BLOCK_PX * columnsUsed, layoutScale),
+        physicalToUi(BLOCK_PX * rows, layoutScale)
     )
-    positionCell(blocks.layoutMagic, 0)
-    positionCell(blocks.layoutHigh, 1)
-    positionCell(blocks.layoutLow, 2)
+    positionCell(blocks.layoutMagic, 0, layoutScale)
+    positionCell(blocks.layoutHigh, 1, layoutScale)
+    positionCell(blocks.layoutLow, 2, layoutScale)
     for index, control in ipairs(payloadBlocks) do
-        positionCell(control, LAYOUT_HEADER_BLOCKS + index - 1)
+        positionCell(control, LAYOUT_HEADER_BLOCKS + index - 1, layoutScale)
     end
     renderLayoutHeader()
     return true

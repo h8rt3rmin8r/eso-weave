@@ -617,6 +617,20 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
 }
 
 #[test]
+fn drafted_block_size_does_not_relabel_the_running_reader_geometry() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+    assert_eq!(model.runtime_block_px(), 16);
+
+    let mut form = model.settings_form();
+    form.reader.block_px = 32;
+    model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+
+    assert_eq!(model.settings_form().reader.block_px, 32);
+    assert_eq!(model.runtime_block_px(), 16);
+}
+
+#[test]
 fn modal_extent_fits_small_grows_and_caps() {
     // A small window: the modal fits inside it (about max_frac of the window).
     let small = modal_extent(480.0, 440.0, 1000.0, 0.92);
