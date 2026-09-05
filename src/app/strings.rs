@@ -19,6 +19,7 @@ pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game installation";
 pub const GAME_RUNTIME_TITLE: &str = "Game state";
 pub const LIFE_TITLE: &str = "Life state";
+pub const ROLL_DODGE_TITLE: &str = "Roll dodge";
 pub const WORLD_TITLE: &str = "World state";
 
 // Status region tooltips.
@@ -36,6 +37,8 @@ pub const GAME_RUNTIME_TOOLTIP: &str =
     "Whether the ESO client is inactive, its launcher is open, or the game client is active.";
 pub const WORLD_TOOLTIP: &str =
     "Whether ESO is loading or the current world has a complete fresh PixelBeacon baseline.";
+pub const ROLL_DODGE_TOOLTIP: &str =
+    "Whether the player is currently roll dodging. Active or unavailable evidence blocks generated weave skills; physical input still passes through.";
 
 // Fishing status indicators: plain language for each fishing routine phase, and
 // for an idle state the reason the routine last stopped.
@@ -274,8 +277,8 @@ pub const SET_TOLERANCE: Setting = Setting {
     help: "How much a sampled pixel may differ from the expected color and still match.",
 };
 pub const SET_INTERVAL_FISHING: Setting = Setting {
-    label: "Sample interval while fishing (ms)",
-    help: "How often the pixel signal is read while a cast is active.",
+    label: "Fast sample interval (ms)",
+    help: "How often the pixel signal is read while fishing or input interception is active. Interception is safety-capped at 375 ms.",
 };
 pub const SET_INTERVAL_IDLE: Setting = Setting {
     label: "Sample interval while idle (ms)",

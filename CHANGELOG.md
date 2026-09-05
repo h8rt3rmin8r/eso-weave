@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S050 adds authoritative roll-dodge detection to PixelBeacon and Live HUD. The
+  generated-weave path now fails closed while a dodge is active or unavailable,
+  passes the player's physical skill input through, cancels remaining mid-sequence
+  synthesis safely, and never replays blocked work. Lifecycle-invalidated state
+  ignores late combat events, and interception sampling is capped at 375 ms so the
+  bounded Active signal cannot disappear between supported reads (issues #57 and #60).
 - S049 adds a PixelBeacon world-state signal and System and State field that
   distinguish Unknown, Transitioning, and Active. Active is published only after
   every player-derived payload has been freshly re-baselined for the current
@@ -26,6 +32,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-05: Decode the player's dodge-roll combat event for ability 28549 as a
+  dedicated B23 state and advance the negotiated header to protocol version 3.
+  A fixed 1500 ms watchdog clears the known gained-without-faded rejection path;
+  lifecycle loss and invalid evidence remain Unknown.
+- 2026-09-05: Gate generated weaves at physical interception, queued execution,
+  and the real synthesis sink. Active and Unknown roll state pass physical input
+  through, stop remaining generated input, release held buttons, and drop rather
+  than defer work. Unsafe transitions close before controller locks; recovery
+  opens only after worker state is synchronized so its first key is not swallowed.
+  In-place resurrection restores Inactive, and no-output cancellations consume no
+  global cooldown.
 - 2026-09-05: Model world transition as a dedicated B22 observable rather than
   overloading heartbeat or life state. Player deactivation owns Transitioning,
   and player activation owns Active only after one complete named baseline.

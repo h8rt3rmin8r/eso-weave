@@ -7,7 +7,7 @@
 
 use eso_weave::config::{NoticeKind, Settings};
 use eso_weave::input::{Action, Key};
-use eso_weave::pixelbus::LifeState;
+use eso_weave::pixelbus::{LifeState, RollDodgeState};
 use eso_weave::weave::types::{
     LatencyConfig, SkillSlot, SlotOverrides, TimingConfig, WeaveStep, WeaveType,
 };
@@ -203,6 +203,7 @@ fn invalid_k_falls_back_with_notice() {
 fn set_latency_scales_handled_weave_and_clearing_reverts() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     engine.set_life(LifeState::Alive);
+    engine.set_roll_dodge(RollDodgeState::Inactive);
     engine.set_latency_config(enabled(0.25));
 
     // With latency, slot 1 (light attack) d_weave 50 -> 80.

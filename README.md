@@ -79,8 +79,9 @@ Input interception reads keyboard devices and synthesizes input through
 ## Game state and context
 
 The main window separates information by the question it answers. **Live HUD**
-shows resources, Game Context, combat, movement, life state, weapon setup, and
-the selected quickslot. **System and State** shows world-transition state and
+shows resources, Game Context, combat, movement, roll-dodge state, life state,
+weapon setup, and the selected quickslot. **System and State** shows
+world-transition state and
 whether the game, ESO Weave,
 PixelBeacon, fishing, and auto-potion are ready and why an action is blocked. The
 two sections sit side by side in a wide window and stack with Live HUD first in a
@@ -100,6 +101,16 @@ reports **Transitioning** from player deactivation through the loading interval,
 and **Not detected** when current lifecycle evidence is unavailable. PixelBeacon
 version 16 advertises protocol version 2 for this field; older negotiated layouts
 remain readable but are never sampled beyond their last defined block.
+
+**Roll dodge** reports **Active** from the player's dodge-roll combat event until
+its matching effect fade. A 1500 ms watchdog clears a rejected dodge that emits a
+gain without a fade. Loading, death, or lost telemetry clears the observation to
+**Not detected**; late combat events cannot overwrite that invalidation, and
+resurrection in place establishes a fresh **Inactive** baseline. While interception
+is active, companion sampling is capped at 375 ms so every watchdog-bounded Active
+window contains multiple supported observations.
+PixelBeacon version 17 advertises protocol version 3 for this field; version 1 and
+2 layouts remain readable at their original extents.
 
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which
@@ -128,9 +139,11 @@ normal and the app supplies the weave.
 
 Press `F1` to suspend and resume at any time. While suspended, nothing is sent.
 
-Weaving requires the current PixelBeacon addon and a freshly detected Alive
-state. If either signal is unavailable, bound skill keys pass through to the game
-unchanged instead of starting a weave.
+Weaving requires the current PixelBeacon addon, a freshly detected Alive state,
+and an explicit Inactive roll-dodge state. While a roll dodge is active or its
+state is unavailable, bound skill keys pass through to the game unchanged instead
+of starting a weave. A roll that begins during an already queued sequence cancels
+remaining generated input and releases any held mouse buttons.
 
 ### Skill slots
 
@@ -305,8 +318,8 @@ same thing: a small grid of colored squares that PixelBeacon draws in the
 That grid is the entire channel between the addon and the app. It has to be
 visible, because anything drawn over it reads as a missing signal.
 
-At the default square size it covers **416 by 16 physical pixels**: a three-cell
-layout header followed by twenty-three signal squares in one row. PixelBeacon uses
+At the default square size it covers **432 by 16 physical pixels**: a three-cell
+layout header followed by twenty-four signal squares in one row. PixelBeacon uses
 the current client width and wraps only when the complete next square would cross
 the right edge.
 

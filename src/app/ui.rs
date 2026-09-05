@@ -1127,6 +1127,16 @@ impl EsoWeaveApp {
                         metric_cells(
                             ui,
                             palette,
+                            strings::ROLL_DODGE_TITLE,
+                            view.roll_dodge.state,
+                            view.roll_dodge.role,
+                            strings::ROLL_DODGE_TOOLTIP,
+                        );
+                        ui.end_row();
+
+                        metric_cells(
+                            ui,
+                            palette,
                             strings::LIFE_TITLE,
                             view.life.state,
                             view.life.role,

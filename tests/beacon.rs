@@ -64,17 +64,17 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_sixteen() {
-    // Slice 049 adds B22 world state. Version 15 remains readable with Unknown
-    // world state and an explicit addon update affordance.
-    assert_eq!(embedded_version(), 16);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(16));
+fn embedded_manifest_version_is_seventeen() {
+    // Slice 050 adds B23 roll dodge. Version 16 remains readable with Unknown
+    // roll state and an explicit addon update affordance.
+    assert_eq!(embedded_version(), 17);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(17));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 16);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(16));
+    assert_eq!(embedded_version(), 17);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(17));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -630,10 +630,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
-    assert_eq!(
-        NUM_BLOCKS, 23,
-        "S049 adds exactly one B22 world-state block"
-    );
+    assert_eq!(NUM_BLOCKS, 24, "S050 adds exactly one B23 roll-dodge block");
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
         beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
@@ -774,6 +771,20 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
             "the addon and companion disagree on {name}"
         );
     }
+    for (name, expected) in [
+        ("ROLL_DODGE_MARKER", 0xF9),
+        ("ROLL_DODGE_UNKNOWN_RED", 0x20),
+        ("ROLL_DODGE_INACTIVE_RED", 0x80),
+        ("ROLL_DODGE_ACTIVE_RED", 0xE0),
+        ("ROLL_DODGE_ABILITY_ID", 28549),
+        ("ROLL_DODGE_WATCHDOG_MS", 1500),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            Some(expected),
+            "the addon and companion disagree on {name}"
+        );
+    }
 }
 
 #[test]
@@ -847,7 +858,48 @@ fn addon_world_state_uses_authoritative_events_and_a_complete_activation_baselin
             "activation baseline is missing {required}"
         );
     }
-    assert_eq!(beacon::embedded_version(), 16);
+    assert!(beacon::embedded_version() >= 16);
+}
+
+#[test]
+fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalidation() {
+    let lua = beacon::LUA;
+    for required in [
+        "EVENT_COMBAT_EVENT",
+        "REGISTER_FILTER_TARGET_COMBAT_UNIT_TYPE",
+        "COMBAT_UNIT_TYPE_PLAYER",
+        "REGISTER_FILTER_ABILITY_ID",
+        "ROLL_DODGE_ABILITY_ID",
+        "ACTION_RESULT_EFFECT_GAINED",
+        "ACTION_RESULT_EFFECT_FADED",
+        "GetGameTimeMilliseconds() + ROLL_DODGE_WATCHDOG_MS",
+        "setRollDodgeState(ROLL_DODGE_INACTIVE_RED)",
+        "setRollDodgeState(ROLL_DODGE_UNKNOWN_RED)",
+        "EVENT_PLAYER_DEAD",
+        "EVENT_PLAYER_ALIVE, onPlayerAlive",
+        "EVENT_PLAYER_DEACTIVATED",
+        "rebaselinePlayerState()",
+        "rollDodgeLifecycleValid = false",
+        "if not rollDodgeLifecycleValid",
+        "worldState ~= WORLD_ACTIVE_RED",
+        "lifeState ~= LIFE_ALIVE_RED",
+    ] {
+        assert!(
+            lua.contains(required),
+            "roll-dodge pipeline is missing {required}"
+        );
+    }
+    let invalidation = lua
+        .find("local function invalidateRollDodgeState()")
+        .expect("roll lifecycle invalidation exists");
+    let late_event_guard = lua
+        .find("local function onRollDodgeCombatEvent")
+        .expect("roll combat event handler exists");
+    assert!(
+        invalidation < late_event_guard,
+        "lifecycle invalidation must be established before late combat events are handled"
+    );
+    assert_eq!(beacon::embedded_version(), 17);
 }
 
 #[test]

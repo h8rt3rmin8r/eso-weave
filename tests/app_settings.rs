@@ -159,7 +159,7 @@ fn the_footprint_caption_follows_the_block_size() {
     assert!(
         default.contains("120 columns")
             && default.contains("1 row")
-            && default.contains("416 by 16 pixels"),
+            && default.contains("432 by 16 pixels"),
         "the negotiated footprint should report the live shape: {default}"
     );
 

@@ -4,17 +4,18 @@ use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
     block_center, capture_dims, decode_combat, decode_cooldown, decode_latency,
     decode_layout_header, decode_life_state, decode_menu, decode_movement, decode_quickslot,
-    decode_resource, decode_resources, decode_weapon_bar, decode_world_state, fishing_signal,
-    grid_extent, grid_position, grid_rows, layout_header_colors, load_reader_config, poll_interval,
-    sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
-    BusLayout, CombatSignal, CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples,
-    LayoutMode, LayoutState, LifeState, MenuSurface, MockSampler, MovementSignal, PixelBusEvent,
-    PixelBusReader, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
-    QuickslotState, QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb,
+    decode_resource, decode_resources, decode_roll_dodge, decode_weapon_bar, decode_world_state,
+    fishing_signal, grid_extent, grid_position, grid_rows, layout_header_colors,
+    load_reader_config, poll_interval, sanitize_block_px, status_present, store_reader_config,
+    strip_pixel, ActiveBar, BlockSamples, BusLayout, CombatSignal, CooldownSet, FishingSignal,
+    LayoutFailure, LayoutHeaderSamples, LayoutMode, LayoutState, LifeState, MenuSurface,
+    MockSampler, MovementSignal, PixelBusEvent, PixelBusReader, QuickslotClassification,
+    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, RollDodgeState,
     Size, SlotCooldown, WeaponBarSignal, WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS,
     DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE,
-    LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE,
-    MIN_BLOCK_PX, NUM_BLOCKS,
+    LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE, LAYOUT_VERSION_TWO_BLOCKS,
+    LAYOUT_VERSION_TWO_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
 };
 
 #[test]
@@ -70,6 +71,28 @@ fn negotiated_version_one_geometry_remains_readable_without_b22_support() {
     assert!(BusLayout::negotiated(columns)
         .unwrap()
         .supports_world_state());
+}
+
+#[test]
+fn negotiated_version_two_geometry_remains_readable_without_b23_support() {
+    let columns = 120;
+    let mut colors = layout_header_colors(columns).unwrap();
+    colors[0].b = LAYOUT_VERSION_TWO_CODE;
+    let state = decode_layout_header(
+        LayoutHeaderSamples::from(colors),
+        ReaderConfig::default().tolerance,
+        DEFAULT_BLOCK_PX,
+        None,
+    );
+    let LayoutState::Ready(layout) = state else {
+        panic!("version 2 layout should remain readable");
+    };
+    assert_eq!(layout.payload_blocks(), LAYOUT_VERSION_TWO_BLOCKS);
+    assert!(layout.supports_world_state());
+    assert!(!layout.supports_roll_dodge());
+    assert!(BusLayout::negotiated(columns)
+        .unwrap()
+        .supports_roll_dodge());
 }
 
 #[test]
@@ -459,6 +482,25 @@ fn poll_interval_is_fast_whenever_the_gate_matters() {
     );
 }
 
+#[test]
+fn poll_interval_caps_interception_inside_the_roll_watchdog_window() {
+    use eso_weave::pixelbus::SAFETY_POLL_MAX_MS;
+
+    let cfg = ReaderConfig {
+        interval_fishing_ms: 60_000,
+        interval_idle_ms: 60_000,
+        ..ReaderConfig::default()
+    };
+
+    assert_eq!(
+        poll_interval(false, true, &cfg),
+        SAFETY_POLL_MAX_MS,
+        "every supported interception cadence must sample Active repeatedly before the watchdog clears it"
+    );
+    assert_eq!(poll_interval(true, false, &cfg), 60_000);
+    assert_eq!(poll_interval(false, false, &cfg), 60_000);
+}
+
 fn reader() -> PixelBusReader {
     PixelBusReader::new(ReaderConfig::default())
 }
@@ -480,6 +522,10 @@ fn life(red: u8) -> Rgb {
 
 fn world(red: u8) -> Rgb {
     Rgb::new(red, 0xCC, 255 - red)
+}
+
+fn roll_dodge(red: u8) -> Rgb {
+    Rgb::new(red, 0xF9, 255 - red)
 }
 
 /// The combat block color for a state, mirroring the addon's encoder: the state
@@ -922,7 +968,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 23);
+    assert_eq!(NUM_BLOCKS, 24);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -2361,6 +2407,85 @@ fn world_state_precedes_other_same_sample_transitions() {
 }
 
 #[test]
+fn roll_dodge_decodes_all_wire_values_and_rejects_invalid_evidence() {
+    let tolerance = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_roll_dodge(roll_dodge(0x20), tolerance),
+        RollDodgeState::Unknown
+    );
+    assert_eq!(
+        decode_roll_dodge(roll_dodge(0x80), tolerance),
+        RollDodgeState::Inactive
+    );
+    assert_eq!(
+        decode_roll_dodge(roll_dodge(0xE0), tolerance),
+        RollDodgeState::Active
+    );
+    assert_eq!(
+        decode_roll_dodge(Rgb::new(0xE0, 0x00, 0x1F), tolerance),
+        RollDodgeState::Unknown
+    );
+    assert_eq!(
+        decode_roll_dodge(Rgb::new(0xE0, 0xF9, 0x00), tolerance),
+        RollDodgeState::Unknown
+    );
+    assert_eq!(
+        decode_roll_dodge(roll_dodge(0x50), tolerance),
+        RollDodgeState::Unknown
+    );
+}
+
+#[test]
+fn roll_dodge_uses_b23_change_detection_and_signal_loss() {
+    let config = ReaderConfig::default();
+    assert_eq!(config.roll_dodge_point(), block_center(config.block_px, 23));
+    let mut reader = PixelBusReader::new(config);
+    let mut samples = alive();
+    samples.roll_dodge = Some(roll_dodge(0x80));
+    assert!(reader
+        .observe(samples, 0)
+        .contains(&PixelBusEvent::RollDodge(RollDodgeState::Inactive)));
+    samples.roll_dodge = Some(roll_dodge(0xE0));
+    assert!(reader
+        .observe(samples, 100)
+        .contains(&PixelBusEvent::RollDodge(RollDodgeState::Active)));
+    assert!(!reader
+        .observe(samples, 200)
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::RollDodge(_))));
+    let lost = reader.observe(BlockSamples::default(), config.heartbeat_timeout_ms + 500);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::RollDodge(RollDodgeState::Unknown)));
+}
+
+#[test]
+fn negotiated_version_two_never_samples_a_screen_pixel_as_b23() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    let current = BusLayout::negotiated(120).unwrap();
+    let mut header = layout_header_colors(120).unwrap();
+    header[0].b = LAYOUT_VERSION_TWO_CODE;
+    for (index, color) in header.into_iter().enumerate() {
+        let point = current.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = current.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, MAGENTA);
+    let ordinary_screen_pixel = current.payload_point(config.block_px, 23);
+    sampler.set(
+        ordinary_screen_pixel.0,
+        ordinary_screen_pixel.1,
+        roll_dodge(0xE0),
+    );
+    let events = reader.sample_and_observe(&sampler, 0);
+    assert!(events.contains(&PixelBusEvent::Heartbeat));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::RollDodge(_))));
+}
+
+#[test]
 fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.
@@ -2387,8 +2512,8 @@ fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     assert_eq!(grid_rows(NUM_BLOCKS, COLUMNS), 2);
     assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
 
-    // The shape in full: a full first row, six blocks on the second.
-    assert_eq!(NUM_BLOCKS - COLUMNS, 7, "row 1 should hold seven blocks");
+    // The shape in full: a full first row, eight blocks on the second.
+    assert_eq!(NUM_BLOCKS - COLUMNS, 8, "row 1 should hold eight blocks");
 }
 
 // Slice 037: the six skill-cooldown blocks (B10 to B15).

@@ -254,6 +254,7 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
     }
 
     harness.get_by_label("Live HUD");
+    harness.get_by_label("Roll dodge");
     harness.get_by_label("System and State");
     harness.get_by_label("World state");
     for label in [

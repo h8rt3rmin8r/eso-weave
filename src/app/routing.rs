@@ -11,12 +11,17 @@ use crate::weave::WeaveEngine;
 /// Publishes safety-authoritative reader evidence without taking a controller lock.
 ///
 /// The pixel worker calls this for the captured batch before it waits for the
-/// weave mutex. [`route_reader_event`] also calls it so all other callers retain
-/// the same behavior.
+/// weave mutex. Only gate-closing transitions are published here. A safe recovery
+/// opens its gate inside [`route_reader_event`] after the controller state is
+/// synchronized, so a newly intercepted key cannot race with stale worker state.
 pub fn route_reader_safety_gate(event: PixelBusEvent, input: &InputEngine) {
     match event {
-        PixelBusEvent::Life(life) => input.set_life_gated(life.gates()),
-        PixelBusEvent::SignalLost => input.set_life_gated(true),
+        PixelBusEvent::Life(life) if life.gates() => input.set_life_gated(true),
+        PixelBusEvent::RollDodge(roll_dodge) if roll_dodge.gates() => input.set_roll_gated(true),
+        PixelBusEvent::SignalLost => {
+            input.set_life_gated(true);
+            input.set_roll_gated(true);
+        }
         _ => {}
     }
 }
@@ -55,6 +60,7 @@ pub fn app_toggle_intent(
 /// - `Resources(set)` stores the decoded resource levels for the next auto-potion tick.
 /// - `Movement(signal)` stores the decoded movement state (nothing acts on it).
 /// - `Life(signal)` updates every synthesis boundary from one authority.
+/// - `RollDodge(signal)` updates the generated-weave hook and worker gates.
 /// - `Cooldowns(set)` stores the decoded slot cooldowns (nothing acts on them).
 /// - `Quickslot(state)` stores the decoded quickslot state for the next auto-potion tick.
 /// - `SignalLost` clears the weave latency, disables fishing, and marks the
@@ -104,6 +110,12 @@ pub fn route_reader_event(
             weave.set_life(life);
             fishing.set_life_state(life);
             potion.set_life_state(life);
+            input.set_life_gated(life.gates());
+            return;
+        }
+        PixelBusEvent::RollDodge(roll_dodge) => {
+            weave.set_roll_dodge(roll_dodge);
+            input.set_roll_gated(roll_dodge.gates());
             return;
         }
         PixelBusEvent::Cooldowns(set) => {
@@ -132,6 +144,7 @@ pub fn route_reader_event(
             weave.set_latency(None);
             let life = crate::pixelbus::LifeState::Unknown;
             weave.set_life(life);
+            weave.set_roll_dodge(crate::pixelbus::RollDodgeState::Unknown);
             fishing.set_life_state(life);
             potion.set_life_state(life);
             potion.on_signal_lost();

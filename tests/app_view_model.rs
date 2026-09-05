@@ -8,10 +8,10 @@ use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
     combat_view, dashboard_layout, default_delay_for, fishing_label, life_state_view, menu_view,
     modal_extent, override_edit_for, quickslot_view, resource_view, resource_view_with_watch,
-    route_game_observation, route_reader_event, route_reader_safety_gate, skill_rows,
-    status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled, weapon_bar_view,
-    world_state_view, AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout,
-    ResourcePresentation, SkillEdit, StatusRole, UiIntent,
+    roll_dodge_view, route_game_observation, route_reader_event, route_reader_safety_gate,
+    skill_rows, status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled,
+    weapon_bar_view, world_state_view, AppModel, BeaconCondition, BeaconPrimaryAction,
+    DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -24,8 +24,8 @@ use eso_weave::logging;
 use eso_weave::pixelbus::{
     ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, PixelBusEvent,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ResourceLevel, ResourceSet, SlotCooldown, WeaponBarSignal,
-    WeaponClass, WorldState,
+    QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState, SlotCooldown,
+    WeaponBarSignal, WeaponClass, WorldState,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -88,6 +88,19 @@ fn world_state_view_names_every_protocol_state() {
         (WorldState::Active, "Active", StatusRole::Healthy),
     ] {
         let view = world_state_view(state);
+        assert_eq!(view.state, text);
+        assert_eq!(view.role, role);
+    }
+}
+
+#[test]
+fn roll_dodge_view_names_every_protocol_state() {
+    for (state, text, role) in [
+        (RollDodgeState::Unknown, "Not detected", StatusRole::Warning),
+        (RollDodgeState::Inactive, "Inactive", StatusRole::Muted),
+        (RollDodgeState::Active, "Active", StatusRole::Warning),
+    ] {
+        let view = roll_dodge_view(state);
         assert_eq!(view.state, text);
         assert_eq!(view.role, role);
     }
@@ -481,15 +494,73 @@ fn routing_world_state_updates_shared_game_observations_and_signal_loss_clears_i
 #[test]
 fn safety_preroute_closes_input_without_waiting_for_controller_access() {
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 4);
-    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    input.set_life_gated(false);
     assert!(!input.is_life_gated());
 
     route_reader_safety_gate(PixelBusEvent::Life(LifeState::Dead), &input);
     assert!(input.is_life_gated());
 
     route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    assert!(input.is_life_gated());
     route_reader_safety_gate(PixelBusEvent::SignalLost, &input);
     assert!(input.is_life_gated());
+}
+
+#[test]
+fn safety_preroute_defers_recovery_until_worker_state_is_synchronized() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_life_gated(true);
+    input.set_roll_gated(true);
+
+    route_reader_safety_gate(PixelBusEvent::Life(LifeState::Alive), &input);
+    route_reader_safety_gate(PixelBusEvent::RollDodge(RollDodgeState::Inactive), &input);
+
+    assert!(input.is_life_gated());
+    assert!(input.is_roll_gated());
+}
+
+#[test]
+fn routing_roll_dodge_updates_hook_and_worker_and_signal_loss_closes_both() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(Default::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+
+    route_reader_event(
+        PixelBusEvent::RollDodge(RollDodgeState::Inactive),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        0,
+        &mut sink,
+    );
+    assert_eq!(weave.roll_dodge(), RollDodgeState::Inactive);
+    assert!(!input.is_roll_gated());
+
+    route_reader_event(
+        PixelBusEvent::RollDodge(RollDodgeState::Active),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert!(input.is_roll_gated());
+
+    route_reader_event(
+        PixelBusEvent::SignalLost,
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        2,
+        &mut sink,
+    );
+    assert_eq!(weave.roll_dodge(), RollDodgeState::Unknown);
+    assert!(input.is_roll_gated());
 }
 
 #[test]

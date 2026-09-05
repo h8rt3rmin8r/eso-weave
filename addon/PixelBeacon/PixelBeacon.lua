@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders a three-cell negotiated layout header followed by twenty-three square
+-- It renders a three-cell negotiated layout header followed by twenty-four square
 -- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
 -- sets this value on deploy) anchored to the top-left of the client area. Signals
 -- encode load status (B0), fishing state (B1), server latency
@@ -10,7 +10,8 @@
 -- the remaining cooldown of each action slot the game exposes one for, the five
 -- skills and the ultimate (B10 to B15), and the active quickslot's remaining
 -- cooldown (B16), item identity (B17 to B19), explicit classification (B20),
--- the player's life state (B21), and world-transition state (B22).
+-- the player's life state (B21), world-transition state (B22), and bounded
+-- roll-dodge state (B23).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -33,12 +34,12 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 23
--- Version-2 negotiated geometry header, shared byte for byte with the companion.
+local NUM_BLOCKS = 24
+-- Version-3 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
-local LAYOUT_PROTOCOL_VERSION = 2
-local LAYOUT_VERSION_CODE = 0x40
+local LAYOUT_PROTOCOL_VERSION = 3
+local LAYOUT_VERSION_CODE = 0x60
 local LAYOUT_HEADER_BLOCKS = 3
 local LAYOUT_MAGIC_R = 0x45
 local LAYOUT_MAGIC_G = 0x53
@@ -117,6 +118,22 @@ local WORLD_UNKNOWN_RED = 0x20
 local WORLD_TRANSITIONING_RED = 0x80
 local WORLD_ACTIVE_RED = 0xE0
 local worldState = WORLD_UNKNOWN_RED
+
+-- The bounded roll-dodge action. Ability 28549 emits effect gained at entry and
+-- effect faded at normal completion. A sprint-rejected attempt can omit faded,
+-- so the existing fast tick expires Active after a conservative fixed deadline.
+local ROLL_DODGE_MARKER = 0xF9
+local ROLL_DODGE_UNKNOWN_RED = 0x20
+local ROLL_DODGE_INACTIVE_RED = 0x80
+local ROLL_DODGE_ACTIVE_RED = 0xE0
+local ROLL_DODGE_ABILITY_ID = 28549
+local ROLL_DODGE_WATCHDOG_MS = 1500
+local rollDodgeState = ROLL_DODGE_UNKNOWN_RED
+local rollDodgeDeadline = nil
+-- Combat events can arrive after death or player deactivation. Keep an explicit
+-- lifecycle guard so those late events cannot replace the fail-closed Unknown
+-- state until a fresh activation or in-place resurrection establishes a baseline.
+local rollDodgeLifecycleValid = false
 
 -- The six cooldown block markers (green channel), shared byte for byte with the
 -- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
@@ -599,6 +616,52 @@ local function setWorldState(nextState)
     worldState = nextState
     renderWorldState()
     return true
+end
+
+-- B23 Roll-dodge state ------------------------------------------------------
+
+local function renderRollDodgeState()
+    if blocks.status:IsHidden() then
+        blocks.rollDodge:SetHidden(true)
+        return
+    end
+    blocks.rollDodge:SetCenterColor(
+        channel(rollDodgeState),
+        channel(ROLL_DODGE_MARKER),
+        channel(255 - rollDodgeState),
+        1
+    )
+    blocks.rollDodge:SetHidden(false)
+end
+
+local function setRollDodgeState(nextState)
+    if nextState == rollDodgeState then
+        return false
+    end
+    rollDodgeState = nextState
+    renderRollDodgeState()
+    return true
+end
+
+local function invalidateRollDodgeState()
+    rollDodgeLifecycleValid = false
+    rollDodgeDeadline = nil
+    setRollDodgeState(ROLL_DODGE_UNKNOWN_RED)
+end
+
+local function onRollDodgeCombatEvent(_, result)
+    if not rollDodgeLifecycleValid
+        or worldState ~= WORLD_ACTIVE_RED
+        or lifeState ~= LIFE_ALIVE_RED then
+        return
+    end
+    if result == ACTION_RESULT_EFFECT_GAINED then
+        rollDodgeDeadline = GetGameTimeMilliseconds() + ROLL_DODGE_WATCHDOG_MS
+        setRollDodgeState(ROLL_DODGE_ACTIVE_RED)
+    elseif result == ACTION_RESULT_EFFECT_FADED then
+        rollDodgeDeadline = nil
+        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    end
 end
 
 -- Reacts to the mounted state changing: re-render only on a real transition.
@@ -1147,6 +1210,10 @@ end
 -- would make the addon the dominant source of latency and the gate would engage
 -- long after the operator started typing.
 local function onFastTick()
+    if rollDodgeDeadline ~= nil and GetGameTimeMilliseconds() >= rollDodgeDeadline then
+        rollDodgeDeadline = nil
+        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    end
     if updateMenu() then
         renderMenu()
     end
@@ -1178,16 +1245,39 @@ local function rebaselinePlayerState()
     renderQuickslot()
     computeLifeState()
     renderLifeState()
+    if lifeState == LIFE_ALIVE_RED then
+        rollDodgeLifecycleValid = true
+        rollDodgeDeadline = nil
+        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    else
+        invalidateRollDodgeState()
+    end
     onFishingTick()
 end
 
 local function onPlayerDeactivated()
+    invalidateRollDodgeState()
     setWorldState(WORLD_TRANSITIONING_RED)
 end
 
 local function onPlayerActivated()
     rebaselinePlayerState()
     setWorldState(WORLD_ACTIVE_RED)
+end
+
+local function onPlayerDead()
+    onLifeStateChanged()
+    invalidateRollDodgeState()
+end
+
+local function onPlayerAlive()
+    onLifeStateChanged()
+    if worldState ~= WORLD_ACTIVE_RED or lifeState ~= LIFE_ALIVE_RED then
+        return
+    end
+    rollDodgeLifecycleValid = true
+    rollDodgeDeadline = nil
+    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
 end
 
 -- The sole bite signal: the equipped bait's stack decreases by one while a cast
@@ -1251,6 +1341,7 @@ local function buildBlocks()
     blocks.quickslotState = createBlock("QuickslotState")
     blocks.life = createBlock("Life")
     blocks.world = createBlock("World")
+    blocks.rollDodge = createBlock("RollDodge")
 
     -- Payload order is the wire contract. The layout owns positions, and adding a
     -- signal requires adding exactly one entry here beside its block creation.
@@ -1278,6 +1369,7 @@ local function buildBlocks()
         blocks.quickslotState,
         blocks.life,
         blocks.world,
+        blocks.rollDodge,
     }
     refreshLayout(true)
 
@@ -1301,6 +1393,7 @@ local function buildBlocks()
     computeLifeState()
     renderLifeState()
     renderWorldState()
+    renderRollDodgeState()
 end
 
 local function onLatencyTick()
@@ -1382,9 +1475,18 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlot", EVENT_ACTION_SLOT_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlotState", EVENT_ACTION_SLOT_STATE_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "QuickslotCooldown", EVENT_ACTION_UPDATE_COOLDOWNS, onQuickslotChanged)
-    em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onLifeStateChanged)
-    em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onLifeStateChanged)
+    em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onPlayerDead)
+    em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onPlayerAlive)
     em:RegisterForEvent(ADDON_NAME .. "Deactivated", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
+    em:RegisterForEvent(ADDON_NAME .. "RollDodge", EVENT_COMBAT_EVENT, onRollDodgeCombatEvent)
+    em:AddFilterForEvent(
+        ADDON_NAME .. "RollDodge",
+        EVENT_COMBAT_EVENT,
+        REGISTER_FILTER_TARGET_COMBAT_UNIT_TYPE,
+        COMBAT_UNIT_TYPE_PLAYER,
+        REGISTER_FILTER_ABILITY_ID,
+        ROLL_DODGE_ABILITY_ID
+    )
     SLASH_COMMANDS["/pbquickslot"] = onQuickslotCommand
 
     em:RegisterForEvent(ADDON_NAME .. "Activated", EVENT_PLAYER_ACTIVATED, onPlayerActivated)
