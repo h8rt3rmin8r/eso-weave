@@ -289,6 +289,7 @@ pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
                 }
                 BlockReason::WorldUnavailable => "Blocked (world unavailable)",
                 BlockReason::TravelPending => "Blocked (travel pending)",
+                BlockReason::Sprinting => strings::AUTO_POTION_BLOCKED_SPRINTING,
                 BlockReason::NoWatchedResource => strings::AUTO_POTION_BLOCKED_NO_WATCH,
                 BlockReason::ResourcesUnavailable => strings::AUTO_POTION_BLOCKED_RESOURCES,
                 BlockReason::QuickslotUnavailable => strings::AUTO_POTION_BLOCKED_QUICKSLOT,
@@ -431,12 +432,13 @@ pub fn movement_view(signal: MovementSignal) -> MovementView {
         state: match signal {
             MovementSignal::Mounted => "Mounted",
             MovementSignal::OnFoot => "On foot",
+            MovementSignal::Sprinting => "Sprinting",
             MovementSignal::Unknown => "Not detected",
         },
-        role: if detected {
-            StatusRole::Active
-        } else {
-            StatusRole::Muted
+        role: match signal {
+            MovementSignal::Sprinting => StatusRole::Warning,
+            MovementSignal::OnFoot | MovementSignal::Mounted => StatusRole::Active,
+            MovementSignal::Unknown => StatusRole::Muted,
         },
     }
 }

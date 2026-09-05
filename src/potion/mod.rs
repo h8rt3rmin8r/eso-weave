@@ -22,21 +22,23 @@
 //!    shown by the UI. Requested enablement remains separate, so temporary game,
 //!    focus, or beacon loss cannot silently rewrite the operator's choice.
 //!
-//! The single most important rule in the module is that **an unreadable value is
-//! never a permissive one**. An unknown resource is not low, an unknown quickslot
-//! is not a potion, and an unknown cooldown is not zero. The failure directions are
-//! not symmetric: treating unknown as permissive fires a potion on every beacon
-//! hiccup, addon reload, and loading screen, while treating it as blocking means
-//! the feature quietly does nothing during an outage. See
-//! `specs/039-auto-potion/research.md` R1.
+//! The single most important rule in the module is that **unreadable evidence
+//! never authorizes an action**. An unknown resource is not low, an unknown
+//! quickslot is not a potion, and an unknown cooldown is not zero. Movement is an
+//! inhibiting signal rather than authorization: explicit Sprinting blocks, while
+//! Unknown neither proves safety nor overrides the independent lifecycle, focus,
+//! context, resource, quickslot, and cooldown requirements. Blocking on Unknown
+//! movement would permanently disable valid gamepad and mounted play, where ESO
+//! exposes no sprint state. See `specs/039-auto-potion/research.md` R1 and
+//! `specs/052-sprint-safety/research.md` R3.
 
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
 use crate::input::{InputBackend, Key, Transition};
 use crate::pixelbus::{
-    LifeState, QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
-    ResourceSet, SlotCooldown, TravelState, WorldState,
+    LifeState, MovementSignal, QuickslotClassification, QuickslotPotionAvailability,
+    QuickslotState, ResourceLevel, ResourceSet, SlotCooldown, TravelState, WorldState,
 };
 
 /// The largest accepted retry interval, in milliseconds.
@@ -143,6 +145,8 @@ pub enum BlockReason {
     WorldUnavailable,
     /// A travel attempt is pending or cannot be ruled out.
     TravelPending,
+    /// The player is explicitly detected sprinting.
+    Sprinting,
     /// None of the three resource watches is enabled.
     NoWatchedResource,
     /// No enabled resource has a fresh percentage.
@@ -196,6 +200,7 @@ impl AutoPotionState {
             }
             Self::Blocked(BlockReason::WorldUnavailable) => "blocked_world_unavailable",
             Self::Blocked(BlockReason::TravelPending) => "blocked_travel_pending",
+            Self::Blocked(BlockReason::Sprinting) => "blocked_sprinting",
             Self::Blocked(BlockReason::NoWatchedResource) => "blocked_no_watched_resource",
             Self::Blocked(BlockReason::ResourcesUnavailable) => "blocked_resources_unavailable",
             Self::Blocked(BlockReason::QuickslotUnavailable) => "blocked_quickslot_unavailable",
@@ -261,6 +266,8 @@ pub struct PotionInputs {
     pub world: WorldState,
     /// Bounded travel state. Only Inactive permits synthesis.
     pub travel: TravelState,
+    /// Bounded movement state. Only explicit Sprinting blocks synthesis.
+    pub movement: MovementSignal,
 }
 
 fn low_resource(
@@ -344,6 +351,9 @@ pub fn evaluate(
     }
     if inputs.travel.gates() {
         return AutoPotionState::Blocked(BlockReason::TravelPending);
+    }
+    if inputs.movement == MovementSignal::Sprinting {
+        return AutoPotionState::Blocked(BlockReason::Sprinting);
     }
 
     let cause = match low_resource(config, inputs.readings.resources) {
@@ -447,6 +457,7 @@ pub struct AutoPotionController {
     life: LifeState,
     world: WorldState,
     travel: TravelState,
+    movement: MovementSignal,
     last_attempt_ms: Option<u64>,
     state: AutoPotionState,
 }
@@ -474,6 +485,7 @@ impl AutoPotionController {
             life: LifeState::Unknown,
             world: WorldState::Unknown,
             travel: TravelState::Unknown,
+            movement: MovementSignal::Unknown,
             last_attempt_ms: None,
             state: AutoPotionState::Off,
         }
@@ -512,6 +524,11 @@ impl AutoPotionController {
         self.life
     }
 
+    /// The latest bounded movement state used by the sprint gate.
+    pub fn movement(&self) -> MovementSignal {
+        self.movement
+    }
+
     fn set_state(&mut self, state: AutoPotionState) {
         if state == self.state {
             return;
@@ -546,6 +563,8 @@ impl AutoPotionController {
             Some(AutoPotionState::Blocked(BlockReason::WorldUnavailable))
         } else if self.travel.gates() {
             Some(AutoPotionState::Blocked(BlockReason::TravelPending))
+        } else if self.movement == MovementSignal::Sprinting {
+            Some(AutoPotionState::Blocked(BlockReason::Sprinting))
         } else {
             None
         };
@@ -578,6 +597,7 @@ impl AutoPotionController {
             self.life = LifeState::Unknown;
             self.world = WorldState::Unknown;
             self.travel = TravelState::Unknown;
+            self.movement = MovementSignal::Unknown;
         }
         self.apply_immediate_state();
     }
@@ -618,6 +638,13 @@ impl AutoPotionController {
         self.apply_immediate_state();
     }
 
+    /// Sets bounded movement state. Unknown stays non-blocking because the
+    /// inference is intentionally unsupported in several valid play modes.
+    pub fn set_movement(&mut self, movement: MovementSignal) {
+        self.movement = movement;
+        self.apply_immediate_state();
+    }
+
     /// Sets whether the application is suspended.
     ///
     /// Suspend is the operator saying "stop touching my game", so it is a checked
@@ -643,6 +670,7 @@ impl AutoPotionController {
         self.life = LifeState::Unknown;
         self.world = WorldState::Unknown;
         self.travel = TravelState::Unknown;
+        self.movement = MovementSignal::Unknown;
         self.apply_immediate_state();
     }
 
@@ -671,6 +699,7 @@ impl AutoPotionController {
             life: self.life,
             world: self.world,
             travel: self.travel,
+            movement: self.movement,
         };
         let outcome = evaluate(
             inputs,

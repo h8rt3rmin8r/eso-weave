@@ -64,17 +64,17 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_eighteen() {
-    // Slice 051 adds B24 travel. Version 17 remains readable with Unknown
-    // travel state and an explicit addon update affordance.
-    assert_eq!(embedded_version(), 18);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(18));
+fn embedded_manifest_version_is_nineteen() {
+    // Slice 052 completes bounded on-foot sprint. Version 18 remains readable
+    // with no explicit sprint signal and an addon update affordance.
+    assert_eq!(embedded_version(), 19);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(19));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 18);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(18));
+    assert_eq!(embedded_version(), 19);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(19));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -669,9 +669,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         beacon::parse_lua_constant(lua, "RESOURCE_MAX_PERCENT"),
         Some(100)
     );
-    // Slice 036: the movement block's constants. Only the two live codes are
-    // shared; the reserved sprint codes are companion-only by design, which
-    // `addon_defines_no_sprint_constant` below is what enforces.
+    // Slice 052: B9 adds bounded on-foot sprint while mounted sprint remains reserved.
     assert_eq!(
         beacon::parse_lua_constant(lua, "MOVEMENT_MARKER"),
         Some(0x43)
@@ -683,6 +681,10 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(
         beacon::parse_lua_constant(lua, "MOVEMENT_MOUNTED_RED"),
         Some(0x60)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "MOVEMENT_SPRINT_ON_FOOT_RED"),
+        Some(0xA0)
     );
     // Slice 037: the six cooldown marks and the quantization contract. The marks
     // are the midpoints of the six widest gaps left in the green registry; the
@@ -899,7 +901,7 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 18);
+    assert_eq!(beacon::embedded_version(), 19);
 }
 
 #[test]
@@ -935,7 +937,7 @@ fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
         baseline < active,
         "recall must be rebaselined before world activation"
     );
-    assert_eq!(beacon::embedded_version(), 18);
+    assert_eq!(beacon::embedded_version(), 19);
 }
 
 #[test]
@@ -1023,32 +1025,82 @@ fn the_manifest_retains_the_reconstructed_quickslot_contract() {
     );
 }
 
-/// Slice 036: the reserved sprint codes exist on the companion side only.
-///
-/// The sprint axis has no observable in the game API (see the verification
-/// recorded in `specs/036-movement-state-block/spec.md`), so the addon never
-/// emits it and defines no constant for it. Were the addon to define one, the
-/// agreement check above would need a special case for a value living on one
-/// side of the contract, which is exactly the kind of exception that makes a
-/// cross-language check stop being trustworthy. This asserts the absence so the
-/// design decision is enforced rather than assumed.
 #[test]
-fn addon_defines_no_sprint_constant() {
+fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
     let lua = beacon::LUA;
-    for name in [
+    for required in [
         "MOVEMENT_SPRINT_ON_FOOT_RED",
-        "MOVEMENT_SPRINT_MOUNTED_RED",
-        "SPRINT_MARKER",
+        "SPRINT_ENTER_DEBOUNCE_MS",
+        "SPRINT_EXIT_DEBOUNCE_MS",
+        "SPRINT_WATCHDOG_MS",
+        "IsInGamepadPreferredMode()",
+        "IsPlayerMoving()",
+        "IsPlayerTryingToMove()",
+        "IsUnitSwimming(\"player\")",
+        "IsUnitFalling(\"player\")",
+        "IsUnitDeadOrReincarnating(\"player\")",
+        "ActionSlotHasNonCostStateFailure",
+        "GetActiveHotbarCategory()",
+        "ACTION_BAR_FIRST_NORMAL_SLOT_INDEX",
+        "ACTION_BAR_ULTIMATE_SLOT_INDEX",
+        "EVENT_ACTION_SLOT_STATE_UPDATED",
+        "invalidateSprintState()",
     ] {
-        assert_eq!(
-            beacon::parse_lua_constant(lua, name),
-            None,
-            "the addon defines {name}, but the sprint axis is companion-side reserved only"
+        assert!(
+            lua.contains(required),
+            "bounded sprint detector is missing {required}"
         );
     }
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "SPRINT_ENTER_DEBOUNCE_MS"),
+        Some(200)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "SPRINT_EXIT_DEBOUNCE_MS"),
+        Some(200)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "SPRINT_WATCHDOG_MS"),
+        Some(1500)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "MOVEMENT_SPRINT_MOUNTED_RED"),
+        None
+    );
     assert!(
         !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
-        "the addon references a sprint API that the verification found does not exist"
+        "the addon references a sprint API that does not exist"
+    );
+    assert_eq!(beacon::embedded_version(), 19);
+
+    let detector = lua
+        .split("local function allActiveSlotsHaveNonCostFailure()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function sprintIsHardExcluded()").next())
+        .expect("sprint slot detector has a bounded source section");
+    assert!(
+        !detector.contains("GetActiveWeaponPairInfo"),
+        "temporary and special action bars must use the actual active hotbar"
+    );
+
+    let update = lua
+        .split("local function updateSprintState()")
+        .nth(1)
+        .and_then(|suffix| {
+            suffix
+                .split("local function onSprintEvidenceChanged()")
+                .next()
+        })
+        .expect("sprint update has a bounded source section");
+    let fresh_sample = update
+        .find("local qualified = allActiveSlotsHaveNonCostFailure()")
+        .expect("sprint update samples current slot evidence");
+    let watchdog = update
+        .find("now - sprintLastQualified >= SPRINT_WATCHDOG_MS")
+        .expect("sprint update applies the stale-state watchdog");
+    assert!(
+        fresh_sample < watchdog,
+        "fresh qualifying evidence must refresh state before watchdog expiry"
     );
 }
 

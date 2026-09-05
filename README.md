@@ -119,6 +119,14 @@ generated weave, fishing, and auto-potion input without swallowing physical
 keys or replaying deferred work. PixelBeacon version 18 advertises protocol
 version 4 for B24; versions 1 through 3 retain their original payload extents.
 
+**Movement** reports **On foot**, **Mounted**, or **Sprinting**. Sprinting is a
+bounded keyboard-mode inference from movement and active-bar state failures, with
+200 ms entry and exit debounce, lifecycle exclusions, and a 1500 ms watchdog.
+Gamepad mode and mounted gallop do not fabricate sprint. PixelBeacon version 19
+publishes explicit on-foot sprint through B9 without changing protocol geometry.
+Auto-potion waits while Sprinting is explicit, then evaluates the latest resource,
+quickslot, cooldown, and safety evidence after sprint ends. It never queues a drink.
+
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which
 in-game surface PixelBeacon reports. **Gameplay** appears only when all four are
