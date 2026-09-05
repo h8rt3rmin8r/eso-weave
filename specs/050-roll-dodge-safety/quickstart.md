@@ -9,7 +9,8 @@
    event occurs while generated input already held is released.
 7. Press a bound skill during Active and confirm the physical key is not swallowed
    and no delayed weave fires after recovery.
-8. Reload, zone, die, and stop ESO; confirm the observation never retains stale Active.
+8. Reload, zone, die, resurrect in place, and stop ESO; confirm death clears stale
+   Active and resurrection restores Inactive without requiring a zone.
 9. Temporarily use a version-16 addon and confirm earlier readings work while Roll
    dodge stays Not detected and generated weaves fail closed.
 

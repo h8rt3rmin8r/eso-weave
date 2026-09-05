@@ -876,6 +876,7 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         "setRollDodgeState(ROLL_DODGE_INACTIVE_RED)",
         "setRollDodgeState(ROLL_DODGE_UNKNOWN_RED)",
         "EVENT_PLAYER_DEAD",
+        "EVENT_PLAYER_ALIVE, onPlayerAlive",
         "EVENT_PLAYER_DEACTIVATED",
         "rebaselinePlayerState()",
     ] {

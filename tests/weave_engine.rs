@@ -126,6 +126,28 @@ fn real_sink_observes_roll_gate_closure_during_a_wait() {
 }
 
 #[test]
+fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    let backend = MockBackend::new();
+    let captured = backend.synthesized_mouse.clone();
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.set_life(LifeState::Alive);
+    engine.set_roll_dodge(RollDodgeState::Inactive);
+    input.set_life_gated(false);
+
+    engine.handle(Action::Skill1, &mut sink);
+    assert!(captured.lock().unwrap().is_empty());
+
+    input.set_roll_gated(false);
+    engine.handle(Action::Skill1, &mut sink);
+    assert!(
+        !captured.lock().unwrap().is_empty(),
+        "a cancelled no-output sequence must not reject the first recovered action"
+    );
+}
+
+#[test]
 fn clearing_game_observations_restores_every_dormant_value() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     engine.set_weapon_bar(WeaponBarSignal {

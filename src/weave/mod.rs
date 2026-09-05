@@ -133,6 +133,9 @@ pub trait WeaveSink {
     fn wait(&mut self, ms: u32);
     /// Returns a monotonic millisecond timestamp.
     fn now_ms(&self) -> u64;
+    /// Whether this sequence successfully emitted at least one generated down
+    /// event. Cooldown accounting begins only after this admission boundary.
+    fn sequence_emitted(&self) -> bool;
 }
 
 /// A test sink: records each operation and wait as an ordered [`WeaveStep`] log
@@ -142,6 +145,7 @@ pub struct MockSink {
     /// The ordered log of emitted operations and waits.
     pub log: Vec<WeaveStep>,
     clock_ms: u64,
+    sequence_emitted: bool,
 }
 
 impl MockSink {
@@ -162,7 +166,17 @@ impl MockSink {
 }
 
 impl WeaveSink for MockSink {
+    fn begin_sequence(&mut self) {
+        self.sequence_emitted = false;
+    }
+
     fn emit(&mut self, op: InputOp) {
+        if matches!(
+            op,
+            InputOp::Key(_, Transition::Down) | InputOp::Mouse(_, Transition::Down)
+        ) {
+            self.sequence_emitted = true;
+        }
         self.log.push(WeaveStep::Emit(op));
     }
 
@@ -174,6 +188,10 @@ impl WeaveSink for MockSink {
     fn now_ms(&self) -> u64 {
         self.clock_ms
     }
+
+    fn sequence_emitted(&self) -> bool {
+        self.sequence_emitted
+    }
 }
 
 /// A real sink: drives Input Engine synthesis and sleeps the worker thread.
@@ -182,6 +200,7 @@ pub struct RealSink<B> {
     origin: Instant,
     gates: WeaveGates,
     sequence_cancelled: bool,
+    sequence_emitted: bool,
     pressed_keys: HashSet<Key>,
     pressed_mouse: HashSet<MouseButton>,
 }
@@ -194,6 +213,7 @@ impl<B: InputBackend> RealSink<B> {
             origin: Instant::now(),
             gates,
             sequence_cancelled: false,
+            sequence_emitted: false,
             pressed_keys: HashSet::new(),
             pressed_mouse: HashSet::new(),
         }
@@ -203,6 +223,7 @@ impl<B: InputBackend> RealSink<B> {
 impl<B: InputBackend> WeaveSink for RealSink<B> {
     fn begin_sequence(&mut self) {
         self.sequence_cancelled = self.gates.is_gated();
+        self.sequence_emitted = false;
     }
 
     fn emit(&mut self, op: InputOp) {
@@ -232,12 +253,14 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
             Ok(()) => match op {
                 InputOp::Key(key, Transition::Down) => {
                     self.pressed_keys.insert(key);
+                    self.sequence_emitted = true;
                 }
                 InputOp::Key(key, Transition::Up) => {
                     self.pressed_keys.remove(&key);
                 }
                 InputOp::Mouse(button, Transition::Down) => {
                     self.pressed_mouse.insert(button);
+                    self.sequence_emitted = true;
                 }
                 InputOp::Mouse(button, Transition::Up) => {
                     self.pressed_mouse.remove(&button);
@@ -266,6 +289,10 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
 
     fn now_ms(&self) -> u64 {
         self.origin.elapsed().as_millis() as u64
+    }
+
+    fn sequence_emitted(&self) -> bool {
+        self.sequence_emitted
     }
 }
 
@@ -553,7 +580,6 @@ impl WeaveEngine {
                 return;
             }
         }
-        self.last_weave_ms = Some(now);
         sink.begin_sequence();
 
         for step in sequence_for_adapted(&slot, &timing, self.current_latency, &self.latency) {
@@ -561,6 +587,9 @@ impl WeaveEngine {
                 WeaveStep::Emit(op) => sink.emit(op),
                 WeaveStep::Wait(ms) => sink.wait(ms),
             }
+        }
+        if sink.sequence_emitted() {
+            self.last_weave_ms = Some(now);
         }
     }
 

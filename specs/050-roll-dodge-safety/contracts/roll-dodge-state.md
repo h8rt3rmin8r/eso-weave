@@ -8,7 +8,7 @@
 - Completion: `ACTION_RESULT_EFFECT_FADED`
 - Recovery: fixed 1,500 ms from the most recent gained event
 - Invalidation: player death and player deactivation
-- Baseline: Inactive after completed player activation rebaseline
+- Baseline: Inactive after completed player activation rebaseline or player alive
 
 ## Pixel bus
 
@@ -33,6 +33,7 @@
 - Unknown and Active cause bound physical skill keys to pass through.
 - Unknown and Active enqueue no new weave action.
 - The worker rechecks state before cooldown accounting and sequence start.
+- Cooldown accounting commits only after a generated down event succeeds.
 - A running sequence observes gate closure during waits and emissions.
 - Down events after closure are suppressed; releases for held generated inputs run.
 - No request is retained for replay after Inactive.

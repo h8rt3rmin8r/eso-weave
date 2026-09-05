@@ -104,9 +104,10 @@ remain readable but are never sampled beyond their last defined block.
 
 **Roll dodge** reports **Active** from the player's dodge-roll combat event until
 its matching effect fade. A 1500 ms watchdog clears a rejected dodge that emits a
-gain without a fade, and loading, death, or lost telemetry clears the observation
-to **Not detected**. PixelBeacon version 17 advertises protocol version 3 for this
-field; version 1 and 2 layouts remain readable at their original extents.
+gain without a fade. Loading, death, or lost telemetry clears the observation to
+**Not detected**; resurrection in place establishes a fresh **Inactive** baseline.
+PixelBeacon version 17 advertises protocol version 3 for this field; version 1 and
+2 layouts remain readable at their original extents.
 
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which

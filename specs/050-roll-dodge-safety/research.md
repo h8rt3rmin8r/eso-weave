@@ -40,13 +40,16 @@ Decision: normalize the current evidence as follows.
 | Sprint-rejected attempt | gained, no faded | Active, then watchdog Inactive |
 | Duplicate gained/faded | repeated same result | No duplicate reader transition |
 | Player death | `EVENT_PLAYER_DEAD` | Unknown |
+| In-place resurrection | `EVENT_PLAYER_ALIVE` | Inactive |
 | Zoning starts | `EVENT_PLAYER_DEACTIVATED` | Unknown |
 | Zoning completes | completed activation rebaseline | Inactive |
 | Beacon or game signal loss | reader/runtime authority | Unknown |
 
 Rationale: Unknown distinguishes invalidated evidence from a positive inactive
-observation. Activation is the only safe baseline because a roll cannot survive a
-completed world load. Death and zoning cancel any pending watchdog.
+observation. Activation is a safe baseline because a roll cannot survive a
+completed world load. Player alive is also required because an in-place
+resurrection need not emit player activation. Death and zoning cancel any pending
+watchdog.
 
 ## Missing-completion watchdog
 

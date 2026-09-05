@@ -17,7 +17,7 @@ at roll entry and effect faded at normal completion. A roll rejected while
 sprinting can report gained without faded. The addon therefore treats gained as
 Active, faded as Inactive, and expires a missing completion after a conservative
 1,500 ms watchdog. Death and player deactivation invalidate the observation;
-activation establishes a fresh Inactive baseline.
+activation and in-place resurrection establish a fresh Inactive baseline.
 
 All generated weave work fails closed while the value is Active or Unknown. A
 physical skill key passes through the established interception path during that
@@ -33,7 +33,7 @@ inactive state and unavailable evidence so dependent safety rules are grounded
 in the game event rather than movement guesses.
 
 **Independent Test**: Exercise the addon state machine with gained, faded,
-duplicate, missing-completion, death, deactivation, and activation events, then
+duplicate, missing-completion, death, resurrection, deactivation, and activation events, then
 round-trip all values through B23 and the companion UI.
 
 **Acceptance Scenarios**:
@@ -74,6 +74,7 @@ seams through Active, Unknown, and Inactive transitions and inspect emitted inpu
 - Duplicate faded is idempotent.
 - A faded event with no preceding gained establishes Inactive safely.
 - Death during a dodge publishes Unknown and cancels the watchdog.
+- In-place resurrection publishes Inactive even when no player activation follows.
 - Player deactivation publishes Unknown before loading; activation publishes
   Inactive only after the complete player baseline.
 - An older addon advertises protocol version 2 and only B0 through B22. The
@@ -98,7 +99,7 @@ seams through Active, Unknown, and Inactive transitions and inspect emitted inpu
 - **FR-005**: Active MUST recover to Inactive after 1,500 ms when no completion
   arrives, covering the observed sprint-rejection missing-end sequence.
 - **FR-006**: Death and player deactivation MUST cancel the watchdog and publish
-  Unknown; a completed activation baseline MUST publish Inactive.
+  Unknown; completed activation and in-place resurrection MUST publish Inactive.
 - **FR-007**: The companion MUST model Unknown, Inactive, and Active as one typed,
   runtime-only value and MUST fail invalid, absent, corrupt, or lost evidence to Unknown.
 - **FR-008**: The negotiated header MUST advance to protocol version 3 with 24
@@ -122,7 +123,7 @@ seams through Active, Unknown, and Inactive transitions and inspect emitted inpu
 - **FR-017**: The managed addon manifest MUST advance from version 16 to 17 and
   describe roll-dodge publication.
 - **FR-018**: Automated tests MUST cover normal completion, duplicate events,
-  missing completion, watchdog recovery, death, zoning, signal loss, protocol
+  missing completion, watchdog recovery, death, resurrection, zoning, signal loss, protocol
   compatibility, hook pass-through, worker drops, mid-sequence cancellation,
   non-replay, recovery, routing, process exit, and dormant presentation.
 - **FR-019**: S050 MUST NOT add sprint detection, auto-potion gating, effect

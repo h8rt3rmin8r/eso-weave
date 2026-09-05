@@ -31,7 +31,9 @@ No blocking inconsistency remains.
   available, does not advance cooldown for dropped work, and cancels a sequence
   that is already waiting while still releasing held generated input.
 - Death, zoning, process exit, invalid samples, and heartbeat loss clear state;
-  activation alone establishes an Inactive baseline.
+  activation and in-place resurrection establish an Inactive baseline.
+- Global cooldown is committed only after successful generated output, so a gate
+  transition between worker validation and sink admission cannot penalize recovery.
 - Sprint detection, auto-potion, fishing, effects, and remapping remain outside
   this slice.
 

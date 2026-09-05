@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through, stop remaining generated input, release held buttons, and drop rather
   than defer work. Unsafe transitions close before controller locks; recovery
   opens only after worker state is synchronized so its first key is not swallowed.
+  In-place resurrection restores Inactive, and no-output cancellations consume no
+  global cooldown.
 - 2026-09-05: Model world transition as a dedicated B22 observable rather than
   overloading heartbeat or life state. Player deactivation owns Transitioning,
   and player activation owns Active only after one complete named baseline.

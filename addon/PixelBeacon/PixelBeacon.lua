@@ -1255,6 +1255,12 @@ local function onPlayerDead()
     invalidateRollDodgeState()
 end
 
+local function onPlayerAlive()
+    onLifeStateChanged()
+    rollDodgeDeadline = nil
+    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+end
+
 -- The sole bite signal: the equipped bait's stack decreases by one while a cast
 -- is active and no menu is open (the game consumes the bait when the fish takes
 -- it). The lure sound category scopes the decrease to bait, so unrelated
@@ -1451,7 +1457,7 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlotState", EVENT_ACTION_SLOT_STATE_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "QuickslotCooldown", EVENT_ACTION_UPDATE_COOLDOWNS, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onPlayerDead)
-    em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onLifeStateChanged)
+    em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onPlayerAlive)
     em:RegisterForEvent(ADDON_NAME .. "Deactivated", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
     em:RegisterForEvent(ADDON_NAME .. "RollDodge", EVENT_COMBAT_EVENT, onRollDodgeCombatEvent)
     em:AddFilterForEvent(
