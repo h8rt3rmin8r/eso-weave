@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Detects Store, Steam, Epic, and Proton installations and truthfully tracks
+  inactive, launcher-open, active, focus, and telemetry states.
+- Rebuilds quickslot detection and auto-potion around explicit item readiness,
+  cooldown, safety gates, and visible blockers.
+- Stops PixelBeacon from wrapping early by negotiating and validating the live
+  game client's actual pixel capacity.
+- Replaces the flat status list with a responsive Live HUD, accessible resource
+  meters, and a separate system and automation dashboard.
+- Strengthens CI, dependency maintenance, issue closure, project tracking, and
+  technical documentation across the repository.
+
 ### Added
+
+- S047 generates compact GitHub release notes from an explicit changelog
+  Highlights section, enforces a six-item and 120-word budget, links the complete
+  tag-specific changelog, and tests the contract in pull-request and release CI
+  (issue #51).
 
 - S046 replaces the flat pre-Skills metric list with a responsive dashboard.
   Live HUD groups the three resource meters with game context, combat, movement,
@@ -115,6 +133,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-04: Keep `CHANGELOG.md` as the complete release record while using a
+  bounded Highlights subsection as the only prose embedded in GitHub releases.
+  Select highlights explicitly rather than heuristically, cap them at six
+  top-level bullets and 120 words, and link the full changelog at the immutable
+  release tag so downloadable assets remain easy to reach.
 
 - 2026-09-04: Use one 880-point responsive breakpoint and keep expanding
   dashboard containers out of intrinsic minimum-width measurement. Permit the

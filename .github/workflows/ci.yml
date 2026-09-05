@@ -30,6 +30,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Test release-note generator
+        if: runner.os == 'Linux'
+        run: bash scripts/release-notes.test.sh
+
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo scripts/linux-build-deps.sh
