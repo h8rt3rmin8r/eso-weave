@@ -26,7 +26,9 @@ use crate::beacon::{self, BeaconPrefs, BeaconStatus};
 use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
-use crate::game::{GameContext, GameRuntime, GameState, InstallationProvider, InstallationState};
+use crate::game::{
+    BeaconFreshness, GameContext, GameRuntime, GameState, InstallationProvider, InstallationState,
+};
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
@@ -36,7 +38,7 @@ use crate::pixelbus::{
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
-    DormantReason,
+    DormantReason, ResourceWatch,
 };
 use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 
@@ -123,6 +125,27 @@ pub enum StatusRole {
     Error,
 }
 
+/// The responsive arrangement used by the pre-Skills dashboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DashboardLayout {
+    /// Live HUD followed by System and automation in one vertical flow.
+    Narrow,
+    /// Live HUD and System and automation in side-by-side columns.
+    Wide,
+}
+
+/// Minimum available width in egui points for the two-column dashboard.
+pub const DASHBOARD_WIDE_MIN: f32 = 880.0;
+
+/// Selects the dashboard arrangement from logical point width.
+pub fn dashboard_layout(available_width: f32) -> DashboardLayout {
+    if available_width.is_finite() && available_width >= DASHBOARD_WIDE_MIN {
+        DashboardLayout::Wide
+    } else {
+        DashboardLayout::Narrow
+    }
+}
+
 /// A normalized status line for the top region: a title, a colorized state
 /// field, and a tooltip. Derived each frame from the subsystem state.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,7 +172,7 @@ pub fn status_line_app(suspended: bool) -> StatusLine {
     } else {
         StatusLine {
             title: strings::STATUS_TITLE,
-            state_text: "Running".to_string(),
+            state_text: "Active".to_string(),
             role: StatusRole::Healthy,
             tooltip: strings::STATUS_TOOLTIP,
         }
@@ -197,6 +220,26 @@ pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
         state_text,
         role,
         tooltip: strings::BEACON_TOOLTIP,
+    }
+}
+
+/// The one addon lifecycle action that deserves primary emphasis right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BeaconPrimaryAction {
+    /// Install the managed addon.
+    Install,
+    /// Replace an outdated managed addon.
+    Update,
+}
+
+/// Chooses the next useful addon action without promoting destructive removal.
+pub fn beacon_primary_action(condition: BeaconCondition) -> Option<BeaconPrimaryAction> {
+    match condition {
+        BeaconCondition::NotInstalled | BeaconCondition::AddonsNotFound => {
+            Some(BeaconPrimaryAction::Install)
+        }
+        BeaconCondition::InstalledOutdated => Some(BeaconPrimaryAction::Update),
+        BeaconCondition::InstalledCurrent => None,
     }
 }
 
@@ -477,29 +520,118 @@ fn runtime_line(runtime: GameRuntime) -> StatusLine {
     }
 }
 
+/// Derives live PixelBeacon signal health independently from addon installation.
+pub fn beacon_signal_line(runtime: GameRuntime, freshness: BeaconFreshness) -> StatusLine {
+    let (text, role) = match runtime {
+        GameRuntime::Inactive | GameRuntime::LauncherOpen => ("Game not active", StatusRole::Muted),
+        GameRuntime::Unknown => ("Unknown", StatusRole::Warning),
+        GameRuntime::Active => match freshness {
+            BeaconFreshness::NeverObserved => ("Not detected", StatusRole::Warning),
+            BeaconFreshness::Fresh => ("Signal detected", StatusRole::Healthy),
+            BeaconFreshness::Lost => ("Signal lost", StatusRole::Error),
+        },
+    };
+    StatusLine {
+        title: strings::BEACON_SIGNAL_TITLE,
+        state_text: text.to_string(),
+        role,
+        tooltip: strings::BEACON_SIGNAL_TOOLTIP,
+    }
+}
+
+/// Exhaustive presentation state for one resource meter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourcePresentation {
+    /// A fresh percentage that is above any enabled configured warning threshold.
+    Observed(u8),
+    /// A fresh percentage at or below an enabled configured warning threshold.
+    Low(u8),
+    /// ESO is not active, so no live observation is applicable.
+    Dormant,
+    /// ESO is active but the resource signal is unavailable.
+    Unavailable,
+}
+
+/// Semantic color family for a resource meter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceTheme {
+    /// Health, conventionally red.
+    Health,
+    /// Stamina, conventionally green.
+    Stamina,
+    /// Magicka, conventionally blue.
+    Magicka,
+}
+
 /// A normalized view of one resource pool for the status region.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceView {
-    /// Whether a reading was decoded.
-    pub detected: bool,
-    /// The percentage with a percent sign, or the not-detected text.
+    /// The typed state used by the meter renderer and accessibility metadata.
+    pub presentation: ResourcePresentation,
+    /// The exact percentage or explicit non-numeric state.
     pub text: String,
     /// The palette role for the state field.
     pub role: StatusRole,
 }
 
+impl ResourceView {
+    /// The fresh numeric percentage, absent for dormant or unavailable states.
+    pub fn percent(&self) -> Option<u8> {
+        match self.presentation {
+            ResourcePresentation::Observed(percent) | ResourcePresentation::Low(percent) => {
+                Some(percent)
+            }
+            ResourcePresentation::Dormant | ResourcePresentation::Unavailable => None,
+        }
+    }
+
+    /// The progress fraction used by the meter fill.
+    pub fn fraction(&self) -> Option<f32> {
+        self.percent().map(|percent| f32::from(percent) / 100.0)
+    }
+
+    /// A coherent non-numeric state for a game that is not active.
+    pub fn dormant() -> Self {
+        Self {
+            presentation: ResourcePresentation::Dormant,
+            text: "Game not active".to_string(),
+            role: StatusRole::Muted,
+        }
+    }
+}
+
 /// Derives one resource view from its decoded level.
 pub fn resource_view(level: ResourceLevel) -> ResourceView {
+    resource_view_with_watch(level, ResourceWatch::default())
+}
+
+/// Derives one resource view with an explicit user-configured warning threshold.
+pub fn resource_view_with_watch(level: ResourceLevel, watch: ResourceWatch) -> ResourceView {
     match level {
-        ResourceLevel::Percent(percent) => ResourceView {
-            detected: true,
-            text: format!("{percent}%"),
-            role: StatusRole::Active,
-        },
+        ResourceLevel::Percent(percent) => {
+            let low = watch.enabled && percent <= watch.threshold;
+            ResourceView {
+                presentation: if low {
+                    ResourcePresentation::Low(percent)
+                } else {
+                    ResourcePresentation::Observed(percent)
+                },
+                text: if low {
+                    format!("Low: {percent}%")
+                } else {
+                    format!("{percent}%")
+                },
+                role: if low {
+                    StatusRole::Warning
+                } else {
+                    StatusRole::Active
+                },
+            }
+        }
         ResourceLevel::Unknown => ResourceView {
-            detected: false,
-            text: "Not detected".to_string(),
-            role: StatusRole::Muted,
+            presentation: ResourcePresentation::Unavailable,
+            text: "Signal unavailable".to_string(),
+            role: StatusRole::Warning,
         },
     }
 }
@@ -521,6 +653,15 @@ pub fn resources_view(set: ResourceSet) -> ResourcesView {
         health: resource_view(set.health),
         stamina: resource_view(set.stamina),
         magicka: resource_view(set.magicka),
+    }
+}
+
+/// Derives all resource views with their corresponding configured watches.
+pub fn resources_view_with_config(set: ResourceSet, config: AutoPotionConfig) -> ResourcesView {
+    ResourcesView {
+        health: resource_view_with_watch(set.health, config.health),
+        stamina: resource_view_with_watch(set.stamina, config.stamina),
+        magicka: resource_view_with_watch(set.magicka, config.magicka),
     }
 }
 
@@ -1041,6 +1182,8 @@ pub struct AppView {
     pub fishing_line: StatusLine,
     /// The normalized Pixel Beacon line.
     pub beacon_line: StatusLine,
+    /// Live PixelBeacon freshness, independent from addon installation.
+    pub beacon_signal_line: StatusLine,
     /// Distribution-platform installation evidence.
     pub installation_line: StatusLine,
     /// Process-derived ESO lifecycle state.
@@ -1321,9 +1464,9 @@ impl AppModel {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason(), fishing.enabled())
         };
-        let (auto_potion_requested, auto_potion_state) = {
+        let (auto_potion_requested, auto_potion_state, auto_potion_config) = {
             let potion = self.potion.lock().unwrap();
-            (potion.enabled(), potion.state())
+            (potion.enabled(), potion.state(), *potion.config())
         };
         let (mut skills, active_bar, classes, combat, movement, resources, quickslot) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
@@ -1344,7 +1487,7 @@ impl AppModel {
         let mut weapon_bar = weapon_bar_view(active_bar, classes.0, classes.1);
         let mut combat = combat_view(combat);
         let mut movement = movement_view(movement);
-        let mut resources = resources_view(resources);
+        let mut resources = resources_view_with_config(resources, auto_potion_config);
         let mut quickslot = quickslot_view(quickslot);
         if !active {
             weapon_bar = WeaponBarView {
@@ -1369,9 +1512,7 @@ impl AppModel {
                 &mut resources.stamina,
                 &mut resources.magicka,
             ] {
-                value.detected = false;
-                value.text = "Game not active".to_string();
-                value.role = StatusRole::Muted;
+                *value = ResourceView::dormant();
             }
             for value in [
                 &mut quickslot.state,
@@ -1396,6 +1537,7 @@ impl AppModel {
             status_line: status_line_app(suspended),
             fishing_line: status_line_fishing(fishing_state, fishing_reason),
             beacon_line: status_line_beacon(condition),
+            beacon_signal_line: beacon_signal_line(game.runtime, game.freshness),
             installation_line: installation_line(&game.installation),
             runtime_line: runtime_line(game.runtime),
             suspended,

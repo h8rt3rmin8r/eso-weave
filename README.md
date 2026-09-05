@@ -78,12 +78,19 @@ Input interception reads keyboard devices and synthesizes input through
 
 ## Game state and context
 
-The main window reports game installation and game state separately. Installation
-is detected from provider-owned evidence for the ESO Store, Steam, Epic Games, or
-Steam Proton, then checked against the expected launcher and client files. Game
-state reports **Inactive**, **Launcher open**, **Active**, or **Unknown**. The game
-client takes precedence, so closing the launcher after ESO starts does not make an
-active session disappear.
+The main window separates information by the question it answers. **Live HUD**
+shows resources, Game Context, combat, movement, weapon setup, and the selected
+quickslot. **System and automation** shows whether the game, ESO Weave,
+PixelBeacon, fishing, and auto-potion are ready and why an action is blocked. The
+two sections sit side by side in a wide window and stack with Live HUD first in a
+narrow one. The Skills table remains below them.
+
+The Game row reports runtime and installation provider together. Installation is
+detected from provider-owned evidence for the ESO Store, Steam, Epic Games, or
+Steam Proton, then checked against the expected launcher and client files. Runtime
+reports **Inactive**, **Launcher open**, **Active**, or **Unknown**. The game client
+takes precedence, so closing the launcher after ESO starts does not make an active
+session disappear.
 
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which
@@ -96,6 +103,12 @@ fishing, or auto-potion input is sent. ESO Weave resumes observation automatical
 when the client starts again and regains focus. Requested fishing and auto-potion
 toggles are preserved across game inactivity and focus loss, while their existing
 signal-loss rules still switch them off.
+
+Health, Stamina, and Magicka use labeled bars with exact percentages. Observed
+0% is a real empty value. **Game not active** and **Signal unavailable** are
+separate non-numeric states, so missing telemetry never looks like an empty
+resource. A bar says **Low** only when that resource is enabled in auto-potion
+settings and has reached its configured threshold.
 
 ## Weaving
 
@@ -228,7 +241,7 @@ Auto-potion drinks the potion in your active quickslot when a resource you are
 watching runs low. It is the one part of ESO Weave that acts on what the addon
 reports rather than just showing it to you, so it is deliberately cautious.
 
-The status row separates the request switch from the effective result. It shows
+The System and automation row separates the request switch from the effective result. It shows
 Off, a dormant game condition, the current safety or observation blocker, Ready,
 or the resource that just triggered an attempt.
 

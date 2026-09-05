@@ -27,8 +27,9 @@ use eframe::egui;
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
 use crate::app::{
-    app_toggle_intent, modal_extent, override_edit_for, strings, widgets, AppModel, SkillEdit,
-    StatusLine, UiIntent,
+    app_toggle_intent, beacon_primary_action, dashboard_layout, modal_extent, override_edit_for,
+    strings, widgets, AppModel, AppView, BeaconPrimaryAction, DashboardLayout, ResourceTheme,
+    SkillEdit, StatusLine, UiIntent,
 };
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::config::state::WindowGeometry;
@@ -115,6 +116,11 @@ const LOG_WIDTH_BONUS: f32 = 100.0;
 /// rather than inherited, so the modal's outer rendered rectangle can be made to
 /// equal its computed extent exactly (issue #14, FR-014).
 const MODAL_FRAME_MARGIN: f32 = 8.0;
+
+/// Reserved width for dashboard state text. Controls therefore do not shift when
+/// a runtime value changes, and all blocker strings remain visible at rest.
+const DASHBOARD_STATE_WIDTH: f32 = 230.0;
+const DASHBOARD_NARROW_GAP: f32 = 4.0;
 
 /// The log text row height (points) used to size the six-line log minimum. Read
 /// from the monospace text style (its size is the same in either theme), falling
@@ -218,6 +224,14 @@ pub struct EsoWeaveApp {
     last_settings_body_height: Option<f32>,
     /// The height of the settings body actually visible without scrolling.
     last_settings_body_visible: Option<f32>,
+    /// Responsive dashboard mode and section rectangles from the latest frame.
+    last_dashboard_layout: Option<DashboardLayout>,
+    dashboard_rects: Option<(egui::Rect, egui::Rect)>,
+    /// Width inputs needed to project a pending responsive transition before the
+    /// bottom log panel consumes space on the next frame.
+    last_dashboard_available_width: Option<f32>,
+    previous_frame_available_width: Option<f32>,
+    pending_responsive_content_height: Option<f32>,
 }
 
 impl EsoWeaveApp {
@@ -258,6 +272,11 @@ impl EsoWeaveApp {
             last_modal_target: None,
             last_settings_body_height: None,
             last_settings_body_visible: None,
+            last_dashboard_layout: None,
+            dashboard_rects: None,
+            last_dashboard_available_width: None,
+            previous_frame_available_width: None,
+            pending_responsive_content_height: None,
         }
     }
 
@@ -416,6 +435,45 @@ impl EsoWeaveApp {
         self.log_height
     }
 
+    /// Responsive dashboard mode selected for the latest rendered frame.
+    pub fn last_dashboard_layout(&self) -> Option<DashboardLayout> {
+        self.last_dashboard_layout
+    }
+
+    /// Live HUD and System and automation rectangles from the latest frame.
+    pub fn dashboard_rects(&self) -> Option<(egui::Rect, egui::Rect)> {
+        self.dashboard_rects
+    }
+
+    /// Projects the content height for an imminent wide-to-narrow transition.
+    ///
+    /// The bottom panel is allocated before the central panel, so it cannot use
+    /// the current frame's measurement. Window-width delta is sufficient to
+    /// project the dashboard's available width because the surrounding margins
+    /// are stable. The stacked dashboard adds the shorter section's height plus
+    /// its inter-section gap to the previous wide measurement.
+    fn projected_content_height(&self, frame_available_width: f32) -> f32 {
+        let projected_dashboard_width = match (
+            self.last_dashboard_available_width,
+            self.previous_frame_available_width,
+        ) {
+            (Some(dashboard_width), Some(previous_frame_width)) => {
+                dashboard_width + frame_available_width - previous_frame_width
+            }
+            _ => return self.content_extent.y,
+        };
+        if self.last_dashboard_layout == Some(DashboardLayout::Wide)
+            && dashboard_layout(projected_dashboard_width) == DashboardLayout::Narrow
+        {
+            if let Some((live, system)) = self.dashboard_rects {
+                return self.content_extent.y
+                    + live.height().min(system.height())
+                    + DASHBOARD_NARROW_GAP;
+            }
+        }
+        self.content_extent.y
+    }
+
     /// Opens or closes the live-log pane directly, bypassing the menu. Exposed so
     /// the rendered-frame sizing tests can reach the log-open cases.
     pub fn set_log_panel_open(&mut self, open: bool) {
@@ -465,10 +523,31 @@ impl EsoWeaveApp {
         // cursor come for free), added before the central panel. It is clamped so
         // it never overlaps the interactive area or shrinks away, and its height is
         // persisted as a layout preference.
-        if self.log_panel_open {
-            let window_h = ctx.content_rect().height();
+        let frame_available_width = ui.available_width();
+        let window_rect = ctx.content_rect();
+        let window_h = window_rect.height();
+        let frame_overhead = 2.0 * crate::app::LOG_FRAME_MARGIN + log_panel_separator(&ctx);
+        let projected_content_h = self.projected_content_height(frame_available_width);
+        if projected_content_h > self.content_extent.y + 0.5 {
+            self.pending_responsive_content_height = Some(
+                self.pending_responsive_content_height
+                    .unwrap_or_default()
+                    .max(projected_content_h),
+            );
+        }
+        let projected_content_h = self
+            .pending_responsive_content_height
+            .unwrap_or(projected_content_h)
+            .max(projected_content_h);
+        // If a responsive transition makes the content taller than the current
+        // frame, preserve the open preference but defer the log for this frame.
+        // The minimum-size update below grows the window before the pane returns;
+        // drawing it now would cover the newly stacked dashboard or Skills.
+        let render_log_panel =
+            self.log_panel_open && window_h + 0.5 >= projected_content_h + frame_overhead;
+        if render_log_panel {
             let row_h = log_row_height(&ctx);
-            let content_h = self.content_extent.y;
+            let content_h = projected_content_h;
             // Minimum shows six lines of log; maximum stops before the interactive
             // (Skills) area, computed against the true measured content height so no
             // phantom band is reserved (issue #8). Both bounds are shared helpers.
@@ -489,7 +568,6 @@ impl EsoWeaveApp {
             // until four quickslot blocks added two status rows the content never
             // did. Derived from the margin constant and the style rather than
             // written as a number, so a theme change cannot silently reintroduce it.
-            let frame_overhead = 2.0 * crate::app::LOG_FRAME_MARGIN + log_panel_separator(&ctx);
             let no_overlap = (crate::app::log_max_height_no_overlap(window_h, content_h)
                 - frame_overhead)
                 .max(0.0);
@@ -502,6 +580,17 @@ impl EsoWeaveApp {
             // height and the user can drag it freely.
             let forced = if self.log_reseed {
                 self.log_reseed = false;
+                Some(crate::app::clamp_log_height(
+                    self.log_height,
+                    window_h,
+                    row_h,
+                    content_h,
+                ))
+            } else if content_h > self.content_extent.y + 0.5 {
+                // A width-only resize can switch the dashboard to its taller
+                // stacked layout without entering the window-height branch.
+                // Force the projected bound now; egui otherwise retains the
+                // previous panel size until after it has covered content.
                 Some(crate::app::clamp_log_height(
                     self.log_height,
                     window_h,
@@ -655,7 +744,7 @@ impl EsoWeaveApp {
             let extent =
                 crate::app::intrinsic_extent(self.content_width, scope.response.rect.height());
             measured = egui::vec2(extent.0, extent.1);
-            if self.log_panel_open {
+            if render_log_panel {
                 self.last_content_bottom = Some(scope.response.rect.bottom());
             }
         });
@@ -679,6 +768,12 @@ impl EsoWeaveApp {
             stable,
         );
         self.content_extent = egui::vec2(extent.0, extent.1);
+        if self
+            .pending_responsive_content_height
+            .is_some_and(|pending| self.content_extent.y + 0.5 >= pending)
+        {
+            self.pending_responsive_content_height = None;
+        }
         self.prev_measured = Some(measured);
         let target_min = if self.log_panel_open {
             egui::vec2(
@@ -719,6 +814,7 @@ impl EsoWeaveApp {
         }
         // Record this frame's window height for the next frame's proportional split.
         self.prev_window_h = Some(ctx.content_rect().height());
+        self.previous_frame_available_width = Some(frame_available_width);
 
         if self.settings_open {
             self.settings_modal(&ctx, &mut intents);
@@ -793,175 +889,49 @@ impl EsoWeaveApp {
             ui.separator();
         }
 
-        // Status region: title, colorized state, and control, aligned in a grid
-        // that spans the same width as the Skills grid below.
-        let status = egui::Grid::new("status")
-            .num_columns(3)
-            .spacing([12.0, 8.0])
-            .min_col_width(110.0)
-            .show(ui, |ui| {
-                status_cells(ui, &palette, &view.status_line);
-                let mut running = !view.suspended;
-                if widgets::toggle_switch(ui, &mut running, &palette)
-                    .on_hover_text(strings::SUSPEND_TOOLTIP)
-                    .clickable()
-                    .changed()
-                {
-                    intents.push(UiIntent::ToggleSuspend);
-                }
-                ui.end_row();
-
-                status_cells(ui, &palette, &view.fishing_line);
-                let mut fishing_on = view.fishing_active;
-                if widgets::toggle_switch(ui, &mut fishing_on, &palette)
-                    .on_hover_text(strings::FISHING_TOGGLE_TOOLTIP)
-                    .clickable()
-                    .changed()
-                {
-                    intents.push(UiIntent::SetFishing(fishing_on));
-                }
-                ui.end_row();
-
-                status_cells(ui, &palette, &view.beacon_line);
-                ui.horizontal(|ui| {
-                    if primary_button(ui, &palette, "Install")
-                        .on_hover_text(strings::BEACON_INSTALL_TOOLTIP)
-                        .clicked()
-                    {
-                        intents.push(UiIntent::InstallBeacon);
-                    }
-                    if ui
-                        .add_enabled(view.uninstall_enabled, egui::Button::new("Update"))
-                        .on_hover_text(strings::BEACON_UPDATE_TOOLTIP)
-                        .clickable()
-                        .clicked()
-                    {
-                        intents.push(UiIntent::UpdateBeacon);
-                    }
-                    if ui
-                        .add_enabled(view.uninstall_enabled, egui::Button::new("Uninstall"))
-                        .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
-                        .clickable()
-                        .clicked()
-                    {
-                        self.confirm_uninstall = true;
-                    }
+        let dashboard_width = ui.available_width();
+        self.last_dashboard_available_width = Some(dashboard_width);
+        let layout = dashboard_layout(dashboard_width);
+        self.last_dashboard_layout = Some(layout);
+        let (live_rect, system_rect) = match layout {
+            DashboardLayout::Narrow => {
+                let live = Self::live_hud(ui, &palette, &view);
+                ui.add_space(DASHBOARD_NARROW_GAP);
+                let system = self.system_and_automation(ui, &palette, &view, intents);
+                (live, system)
+            }
+            DashboardLayout::Wide => {
+                let mut rects = None;
+                let gap = ui.spacing().item_spacing.x;
+                let usable_width = ui.available_width() - gap;
+                let live_width = (usable_width * 0.46).clamp(380.0, 520.0);
+                let system_width = usable_width - live_width;
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(live_width, 0.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            let live = Self::live_hud(ui, &palette, &view);
+                            rects = Some((live, egui::Rect::NOTHING));
+                        },
+                    );
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(system_width, 0.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            let system = self.system_and_automation(ui, &palette, &view, intents);
+                            let live = rects.expect("Live HUD renders before operational state").0;
+                            rects = Some((live, system));
+                        },
+                    );
                 });
-                ui.end_row();
-
-                status_cells(ui, &palette, &view.installation_line);
-                ui.end_row();
-
-                status_cells(ui, &palette, &view.runtime_line);
-                ui.end_row();
-
-                // Weapon bar (from the updated Pixel Beacon addon), rendered as a
-                // grid row so its title and state align with the rows above.
-                widgets::label_strong(ui, &palette, strings::WEAPON_BAR_TITLE)
-                    .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
-                let wb = &view.weapon_bar;
-                let color = crate::app::theme::status_color(&palette, wb.role);
-                let text = if wb.detected {
-                    format!("{} (front {}, back {})", wb.active_bar, wb.front, wb.back)
-                } else {
-                    wb.active_bar.to_string()
-                };
-                ui.label(egui::RichText::new(text).color(color))
-                    .on_hover_text(strings::WEAPON_BAR_TOOLTIP);
-                ui.end_row();
-
-                // Combat state (from the updated Pixel Beacon addon), rendered as
-                // a grid row so it aligns with the weapon-bar row above it.
-                widgets::label_strong(ui, &palette, strings::COMBAT_TITLE)
-                    .on_hover_text(strings::COMBAT_TOOLTIP);
-                let cb = &view.combat;
-                let combat_color = crate::app::theme::status_color(&palette, cb.role);
-                ui.label(egui::RichText::new(cb.state).color(combat_color))
-                    .on_hover_text(strings::COMBAT_TOOLTIP);
-                ui.end_row();
-
-                // Movement state, beside combat: the same kind of decoded
-                // player-state observable, read the same way.
-                widgets::label_strong(ui, &palette, strings::MOVEMENT_TITLE)
-                    .on_hover_text(strings::MOVEMENT_TOOLTIP);
-                let mo = &view.movement;
-                let movement_color = crate::app::theme::status_color(&palette, mo.role);
-                ui.label(egui::RichText::new(mo.state).color(movement_color))
-                    .on_hover_text(strings::MOVEMENT_TOOLTIP);
-                ui.end_row();
-
-                // Game menu gate: when this is active the application is
-                // deliberately not intercepting, so the operator can see why
-                // their weaves are not firing.
-                let mv = &view.menu;
-                game_context_cells(ui, &palette, mv);
-                ui.end_row();
-
-                // Resource pools, one grid row each so they align with the rows
-                // above. Display only; nothing in the application reads them.
-                for (title, view) in [
-                    (strings::HEALTH_TITLE, &view.resources.health),
-                    (strings::STAMINA_TITLE, &view.resources.stamina),
-                    (strings::MAGICKA_TITLE, &view.resources.magicka),
-                ] {
-                    widgets::label_strong(ui, &palette, title)
-                        .on_hover_text(strings::RESOURCE_TOOLTIP);
-                    let color = crate::app::theme::status_color(&palette, view.role);
-                    ui.label(egui::RichText::new(view.text.clone()).color(color))
-                        .on_hover_text(strings::RESOURCE_TOOLTIP);
-                    ui.end_row();
-                }
-
-                // Auto-potion: the one row in this region that describes
-                // something the application *does* rather than something it
-                // reads, which is why it is worth showing at all.
-                widgets::label_strong(ui, &palette, strings::AUTO_POTION_TITLE)
-                    .on_hover_text(strings::AUTO_POTION_TOOLTIP);
-                let potion_color = crate::app::theme::status_color(&palette, view.auto_potion.role);
-                ui.label(egui::RichText::new(&view.auto_potion.text).color(potion_color))
-                    .on_hover_text(strings::AUTO_POTION_TOOLTIP);
-                // The control sits in the third column, like suspend and fishing,
-                // so the hotkey and the switch reach the same state by the same
-                // intent path.
-                let mut potion_on = view.auto_potion_requested;
-                if widgets::toggle_switch(ui, &mut potion_on, &palette)
-                    .on_hover_text(strings::AUTO_POTION_TOGGLE_TOOLTIP)
-                    .clickable()
-                    .changed()
-                {
-                    intents.push(UiIntent::SetAutoPotion(potion_on));
-                }
-                ui.end_row();
-
-                // Classification is independent from availability and cooldown.
-                // That keeps an apparently ready cooldown from claiming that an
-                // empty or unreadable slot contains a potion.
-                for (title, tooltip, field) in [
-                    (
-                        strings::QUICKSLOT_TITLE,
-                        strings::QUICKSLOT_TOOLTIP,
-                        &view.quickslot.state,
-                    ),
-                    (
-                        strings::QUICKSLOT_AVAILABILITY_TITLE,
-                        strings::QUICKSLOT_AVAILABILITY_TOOLTIP,
-                        &view.quickslot.availability,
-                    ),
-                    (
-                        strings::QUICKSLOT_COOLDOWN_TITLE,
-                        strings::QUICKSLOT_COOLDOWN_TOOLTIP,
-                        &view.quickslot.cooldown,
-                    ),
-                ] {
-                    widgets::label_strong(ui, &palette, title).on_hover_text(tooltip);
-                    let color = crate::app::theme::status_color(&palette, field.role);
-                    ui.label(egui::RichText::new(field.text.clone()).color(color))
-                        .on_hover_text(tooltip);
-                    ui.end_row();
-                }
-            });
-
-        self.note_content_width(status.response.rect.width());
+                rects.expect("dashboard columns render both sections")
+            }
+        };
+        self.dashboard_rects = Some((live_rect, system_rect));
+        // This is the compact layout's intrinsic width. The wide containers
+        // expand with the window and must never feed the enforced minimum.
+        self.note_content_width(520.0);
         ui.separator();
         let skills_title =
             widgets::heading(ui, strings::SKILLS_TITLE).on_hover_text(strings::SKILLS_TOOLTIP);
@@ -1081,6 +1051,242 @@ impl EsoWeaveApp {
                 }
             });
         self.note_content_width(skills.response.rect.width());
+    }
+
+    fn live_hud(
+        ui: &mut egui::Ui,
+        palette: &crate::app::theme::Palette,
+        view: &AppView,
+    ) -> egui::Rect {
+        egui::Frame::new()
+            .fill(palette.panel)
+            .stroke(egui::Stroke::new(1.0, palette.stroke))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin {
+                left: 10,
+                right: 10,
+                top: 6,
+                bottom: 6,
+            })
+            .show(ui, |ui| {
+                widgets::heading(ui, strings::LIVE_HUD_TITLE);
+                for (title, resource, theme) in [
+                    (
+                        strings::HEALTH_TITLE,
+                        &view.resources.health,
+                        ResourceTheme::Health,
+                    ),
+                    (
+                        strings::STAMINA_TITLE,
+                        &view.resources.stamina,
+                        ResourceTheme::Stamina,
+                    ),
+                    (
+                        strings::MAGICKA_TITLE,
+                        &view.resources.magicka,
+                        ResourceTheme::Magicka,
+                    ),
+                ] {
+                    widgets::resource_meter(ui, palette, title, resource, theme);
+                }
+                egui::Grid::new("live_hud_facts")
+                    .num_columns(2)
+                    .spacing([12.0, 2.0])
+                    .min_col_width(118.0)
+                    .show(ui, |ui| {
+                        game_context_cells(ui, palette, &view.menu);
+                        ui.end_row();
+
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::COMBAT_TITLE,
+                            view.combat.state,
+                            view.combat.role,
+                            strings::COMBAT_TOOLTIP,
+                        );
+                        ui.end_row();
+
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::MOVEMENT_TITLE,
+                            view.movement.state,
+                            view.movement.role,
+                            strings::MOVEMENT_TOOLTIP,
+                        );
+                        ui.end_row();
+
+                        let weapon = if view.weapon_bar.detected {
+                            format!(
+                                "{} | front {} | back {}",
+                                view.weapon_bar.active_bar,
+                                view.weapon_bar.front,
+                                view.weapon_bar.back
+                            )
+                        } else {
+                            view.weapon_bar.active_bar.to_string()
+                        };
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::WEAPON_BAR_TITLE,
+                            &weapon,
+                            view.weapon_bar.role,
+                            strings::WEAPON_BAR_TOOLTIP,
+                        );
+                        ui.end_row();
+
+                        let quickslot = if view.quickslot.state.text == "Game not active" {
+                            view.quickslot.state.text.clone()
+                        } else {
+                            format!(
+                                "{} | {} | {}",
+                                view.quickslot.state.text,
+                                view.quickslot.availability.text,
+                                view.quickslot.cooldown.text
+                            )
+                        };
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::QUICKSLOT_TITLE,
+                            &quickslot,
+                            view.quickslot.state.role,
+                            strings::QUICKSLOT_TOOLTIP,
+                        );
+                        ui.end_row();
+                    });
+            })
+            .response
+            .rect
+    }
+
+    fn system_and_automation(
+        &mut self,
+        ui: &mut egui::Ui,
+        palette: &crate::app::theme::Palette,
+        view: &AppView,
+        intents: &mut Vec<UiIntent>,
+    ) -> egui::Rect {
+        egui::Frame::new()
+            .fill(palette.panel)
+            .stroke(egui::Stroke::new(1.0, palette.stroke))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin {
+                left: 10,
+                right: 10,
+                top: 6,
+                bottom: 6,
+            })
+            .show(ui, |ui| {
+                widgets::heading(ui, strings::SYSTEM_AUTOMATION_TITLE);
+                egui::Grid::new("system_automation_facts")
+                    .num_columns(3)
+                    .spacing([12.0, 2.0])
+                    .min_col_width(100.0)
+                    .show(ui, |ui| {
+                        let game_summary = format!(
+                            "{} | {}",
+                            view.runtime_line.state_text, view.installation_line.state_text
+                        );
+                        let game_role = match view.installation_line.role {
+                            crate::app::StatusRole::Warning | crate::app::StatusRole::Error => {
+                                view.installation_line.role
+                            }
+                            _ => view.runtime_line.role,
+                        };
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::GAME_TITLE,
+                            &game_summary,
+                            game_role,
+                            strings::GAME_RUNTIME_TOOLTIP,
+                        );
+                        ui.label("");
+                        ui.end_row();
+
+                        status_cells(ui, palette, &view.status_line);
+                        let mut running = !view.suspended;
+                        if widgets::toggle_switch(ui, &mut running, palette)
+                            .on_hover_text(strings::SUSPEND_TOOLTIP)
+                            .clickable()
+                            .changed()
+                        {
+                            intents.push(UiIntent::ToggleSuspend);
+                        }
+                        ui.end_row();
+
+                        status_cells(ui, palette, &view.beacon_line);
+                        ui.vertical(|ui| {
+                            let primary_intent = match beacon_primary_action(view.beacon_condition)
+                            {
+                                Some(BeaconPrimaryAction::Install) => {
+                                    primary_button(ui, palette, "Install")
+                                        .on_hover_text(strings::BEACON_INSTALL_TOOLTIP)
+                                        .clicked()
+                                        .then_some(UiIntent::InstallBeacon)
+                                }
+                                Some(BeaconPrimaryAction::Update) => {
+                                    primary_button(ui, palette, "Update")
+                                        .on_hover_text(strings::BEACON_UPDATE_TOOLTIP)
+                                        .clicked()
+                                        .then_some(UiIntent::UpdateBeacon)
+                                }
+                                None => None,
+                            };
+                            if let Some(intent) = primary_intent {
+                                intents.push(intent);
+                            }
+                            if view.uninstall_enabled
+                                && ui
+                                    .button("Uninstall")
+                                    .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
+                                    .clickable()
+                                    .clicked()
+                            {
+                                self.confirm_uninstall = true;
+                            }
+                        });
+                        ui.end_row();
+
+                        status_cells(ui, palette, &view.beacon_signal_line);
+                        ui.label("");
+                        ui.end_row();
+
+                        status_cells(ui, palette, &view.fishing_line);
+                        let mut fishing_on = view.fishing_active;
+                        if widgets::toggle_switch(ui, &mut fishing_on, palette)
+                            .on_hover_text(strings::FISHING_TOGGLE_TOOLTIP)
+                            .clickable()
+                            .changed()
+                        {
+                            intents.push(UiIntent::SetFishing(fishing_on));
+                        }
+                        ui.end_row();
+
+                        metric_cells(
+                            ui,
+                            palette,
+                            strings::AUTO_POTION_TITLE,
+                            &view.auto_potion.text,
+                            view.auto_potion.role,
+                            strings::AUTO_POTION_TOOLTIP,
+                        );
+                        let mut potion_on = view.auto_potion_requested;
+                        if widgets::toggle_switch(ui, &mut potion_on, palette)
+                            .on_hover_text(strings::AUTO_POTION_TOGGLE_TOOLTIP)
+                            .clickable()
+                            .changed()
+                        {
+                            intents.push(UiIntent::SetAutoPotion(potion_on));
+                        }
+                        ui.end_row();
+                    });
+            })
+            .response
+            .rect
     }
 
     fn log_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
@@ -1499,8 +1705,39 @@ fn env_name(env: crate::beacon::Environment) -> &'static str {
 fn status_cells(ui: &mut egui::Ui, palette: &crate::app::theme::Palette, line: &StatusLine) {
     widgets::label_strong(ui, palette, line.title).on_hover_text(line.tooltip);
     let color = crate::app::theme::status_color(palette, line.role);
-    ui.label(egui::RichText::new(&line.state_text).color(color))
-        .on_hover_text(line.tooltip);
+    ui.allocate_ui_with_layout(
+        egui::vec2(DASHBOARD_STATE_WIDTH, ui.spacing().interact_size.y),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.label(egui::RichText::new("●").color(color));
+            ui.add(egui::Label::new(egui::RichText::new(&line.state_text).color(color)).truncate())
+                .on_hover_text(&line.state_text)
+                .on_hover_text(line.tooltip);
+        },
+    );
+}
+
+/// Renders one labeled state with a redundant status glyph and visible text.
+fn metric_cells(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    title: &str,
+    state: &str,
+    role: crate::app::StatusRole,
+    tooltip: &str,
+) {
+    widgets::label_strong(ui, palette, title).on_hover_text(tooltip);
+    let color = crate::app::theme::status_color(palette, role);
+    ui.allocate_ui_with_layout(
+        egui::vec2(DASHBOARD_STATE_WIDTH, ui.spacing().interact_size.y),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.label(egui::RichText::new("●").color(color));
+            ui.add(egui::Label::new(egui::RichText::new(state).color(color)).truncate())
+                .on_hover_text(state)
+                .on_hover_text(tooltip);
+        },
+    );
 }
 
 /// Renders focusable Game Context cells. Hover uses the ordinary delayed
@@ -1524,15 +1761,22 @@ fn game_context_cells(
         title.show_tooltip_text(strings::MENU_TOOLTIP);
     }
     let color = crate::app::theme::status_color(palette, view.role);
-    let state = ui
-        .add(
-            egui::Label::new(egui::RichText::new(view.state).color(color))
-                .sense(egui::Sense::focusable_noninteractive()),
-        )
-        .on_hover_text(strings::MENU_TOOLTIP);
-    if state.has_focus() {
-        state.show_tooltip_text(strings::MENU_TOOLTIP);
-    }
+    ui.allocate_ui_with_layout(
+        egui::vec2(DASHBOARD_STATE_WIDTH, ui.spacing().interact_size.y),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            let state = ui
+                .add(
+                    egui::Label::new(egui::RichText::new(view.state).color(color))
+                        .truncate()
+                        .sense(egui::Sense::focusable_noninteractive()),
+                )
+                .on_hover_text(strings::MENU_TOOLTIP);
+            if state.has_focus() {
+                state.show_tooltip_text(strings::MENU_TOOLTIP);
+            }
+        },
+    );
 }
 
 fn weave_type_name(weave_type: WeaveType) -> &'static str {

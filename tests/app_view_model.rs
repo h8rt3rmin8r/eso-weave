@@ -5,10 +5,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{
-    app_state_label, auto_potion_view, beacon_light, combat_view, default_delay_for, fishing_label,
-    menu_view, modal_extent, override_edit_for, quickslot_view, resource_view, route_reader_event,
+    app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
+    combat_view, dashboard_layout, default_delay_for, fishing_label, menu_view, modal_extent,
+    override_edit_for, quickslot_view, resource_view, resource_view_with_watch, route_reader_event,
     skill_rows, status_line_app, status_line_beacon, status_line_fishing, uninstall_enabled,
-    weapon_bar_view, AppModel, BeaconCondition, SkillEdit, StatusRole, UiIntent,
+    weapon_bar_view, AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout,
+    ResourcePresentation, SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -27,7 +29,7 @@ use eso_weave::pixelbus::{
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
 use eso_weave::potion::{
-    AutoPotionResource, AutoPotionState, BlockReason, DormantReason, TriggerCause,
+    AutoPotionResource, AutoPotionState, BlockReason, DormantReason, ResourceWatch, TriggerCause,
 };
 
 fn active_fishing_controller() -> FishingController {
@@ -45,6 +47,13 @@ fn app_state_label_reflects_suspend() {
     assert_eq!(app_state_label(false).button, "Suspend");
     assert_eq!(app_state_label(true).indicator, "Suspended");
     assert_eq!(app_state_label(true).button, "Resume");
+}
+
+#[test]
+fn dashboard_breakpoint_is_exact_and_point_based() {
+    assert_eq!(dashboard_layout(879.9), DashboardLayout::Narrow);
+    assert_eq!(dashboard_layout(880.0), DashboardLayout::Wide);
+    assert_eq!(dashboard_layout(f32::NAN), DashboardLayout::Narrow);
 }
 
 #[test]
@@ -147,13 +156,35 @@ fn skill_rows_label_ultimate_and_synergy() {
 #[test]
 fn status_line_app_reflects_suspend() {
     let running = status_line_app(false);
-    assert_eq!(running.title, "Status");
-    assert_eq!(running.state_text, "Running");
+    assert_eq!(running.title, "ESO Weave");
+    assert_eq!(running.state_text, "Active");
     assert_eq!(running.role, StatusRole::Healthy);
 
     let suspended = status_line_app(true);
     assert_eq!(suspended.state_text, "Suspended");
     assert_eq!(suspended.role, StatusRole::Warning);
+}
+
+#[test]
+fn beacon_signal_is_independent_from_addon_installation() {
+    use eso_weave::game::{BeaconFreshness, GameRuntime};
+
+    let inactive = beacon_signal_line(GameRuntime::Inactive, BeaconFreshness::NeverObserved);
+    assert_eq!(inactive.title, "PixelBeacon signal");
+    assert_eq!(inactive.state_text, "Game not active");
+    assert_eq!(inactive.role, StatusRole::Muted);
+
+    let waiting = beacon_signal_line(GameRuntime::Active, BeaconFreshness::NeverObserved);
+    assert_eq!(waiting.state_text, "Not detected");
+    assert_eq!(waiting.role, StatusRole::Warning);
+
+    let fresh = beacon_signal_line(GameRuntime::Active, BeaconFreshness::Fresh);
+    assert_eq!(fresh.state_text, "Signal detected");
+    assert_eq!(fresh.role, StatusRole::Healthy);
+
+    let lost = beacon_signal_line(GameRuntime::Active, BeaconFreshness::Lost);
+    assert_eq!(lost.state_text, "Signal lost");
+    assert_eq!(lost.role, StatusRole::Error);
 }
 
 #[test]
@@ -200,7 +231,27 @@ fn status_line_beacon_maps_conditions() {
     );
     assert_eq!(
         status_line_beacon(BeaconCondition::InstalledCurrent).title,
-        "Pixel Beacon (Addon)"
+        "PixelBeacon installation"
+    );
+}
+
+#[test]
+fn beacon_primary_action_matches_the_current_installation_need() {
+    assert_eq!(
+        beacon_primary_action(BeaconCondition::NotInstalled),
+        Some(BeaconPrimaryAction::Install)
+    );
+    assert_eq!(
+        beacon_primary_action(BeaconCondition::AddonsNotFound),
+        Some(BeaconPrimaryAction::Install)
+    );
+    assert_eq!(
+        beacon_primary_action(BeaconCondition::InstalledOutdated),
+        Some(BeaconPrimaryAction::Update)
+    );
+    assert_eq!(
+        beacon_primary_action(BeaconCondition::InstalledCurrent),
+        None
     );
 }
 
@@ -472,6 +523,11 @@ fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
     assert_eq!(initial.menu.state, "Unknown");
     assert_eq!(initial.combat.state, "Game not active");
     assert_eq!(initial.resources.health.text, "Game not active");
+    assert_eq!(
+        initial.resources.health.presentation,
+        ResourcePresentation::Dormant
+    );
+    assert_eq!(initial.beacon_signal_line.state_text, "Unknown");
     assert_eq!(initial.weapon_bar.active_bar, "Game not active");
     assert!(initial
         .skills
@@ -485,12 +541,19 @@ fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
         focus: FocusObservation::Focused,
     });
     assert_eq!(game.snapshot().runtime, GameRuntime::Active);
-    assert_eq!(model.view().menu.state, "Signal unavailable");
+    let unavailable = model.view();
+    assert_eq!(unavailable.menu.state, "Signal unavailable");
+    assert_eq!(
+        unavailable.resources.health.presentation,
+        ResourcePresentation::Unavailable
+    );
+    assert_eq!(unavailable.beacon_signal_line.state_text, "Not detected");
     game.observe_heartbeat();
     game.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
     let active = model.view();
     assert_eq!(active.runtime_line.state_text, "Active");
     assert_eq!(active.menu.state, "Gameplay");
+    assert_eq!(active.beacon_signal_line.state_text, "Signal detected");
 }
 
 #[test]
@@ -848,23 +911,61 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
 // Slice 033: the resource readouts and routing.
 
 #[test]
-fn resource_view_renders_a_percentage_or_not_detected() {
+fn resource_view_distinguishes_observed_empty_from_unavailable() {
     let full = resource_view(ResourceLevel::Percent(100));
-    assert!(full.detected);
+    assert_eq!(full.presentation, ResourcePresentation::Observed(100));
+    assert_eq!(full.percent(), Some(100));
+    assert_eq!(full.fraction(), Some(1.0));
     assert_eq!(full.text, "100%");
     assert_eq!(full.role, StatusRole::Active);
 
     // Zero is a real reading, not an absent one. It must render as a number and
     // stay in the detected role, or an empty pool would look like a missing addon.
     let empty = resource_view(ResourceLevel::Percent(0));
-    assert!(empty.detected);
+    assert_eq!(empty.presentation, ResourcePresentation::Observed(0));
+    assert_eq!(empty.percent(), Some(0));
+    assert_eq!(empty.fraction(), Some(0.0));
     assert_eq!(empty.text, "0%");
     assert_eq!(empty.role, StatusRole::Active);
 
     let unknown = resource_view(ResourceLevel::Unknown);
-    assert!(!unknown.detected);
-    assert_eq!(unknown.text, "Not detected");
-    assert_eq!(unknown.role, StatusRole::Muted);
+    assert_eq!(unknown.presentation, ResourcePresentation::Unavailable);
+    assert_eq!(unknown.percent(), None);
+    assert_eq!(unknown.text, "Signal unavailable");
+    assert_eq!(unknown.role, StatusRole::Warning);
+}
+
+#[test]
+fn resource_low_state_comes_only_from_an_enabled_watch() {
+    let enabled = ResourceWatch {
+        enabled: true,
+        threshold: 35,
+    };
+    let disabled = ResourceWatch {
+        enabled: false,
+        threshold: 35,
+    };
+
+    let low = resource_view_with_watch(ResourceLevel::Percent(35), enabled);
+    assert_eq!(low.presentation, ResourcePresentation::Low(35));
+    assert_eq!(low.text, "Low: 35%");
+    assert_eq!(low.role, StatusRole::Warning);
+
+    let above = resource_view_with_watch(ResourceLevel::Percent(36), enabled);
+    assert_eq!(above.presentation, ResourcePresentation::Observed(36));
+
+    let unwatched = resource_view_with_watch(ResourceLevel::Percent(1), disabled);
+    assert_eq!(unwatched.presentation, ResourcePresentation::Observed(1));
+}
+
+#[test]
+fn resource_boundary_fractions_are_exact() {
+    for (percent, fraction) in [(0, 0.0), (1, 0.01), (50, 0.5), (99, 0.99), (100, 1.0)] {
+        let view = resource_view(ResourceLevel::Percent(percent));
+        assert_eq!(view.percent(), Some(percent));
+        assert_eq!(view.fraction(), Some(fraction));
+        assert_eq!(view.text, format!("{percent}%"));
+    }
 }
 
 #[test]

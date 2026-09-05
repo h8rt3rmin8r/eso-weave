@@ -3,8 +3,8 @@
 **Project:** ESO Weave \
 **Repository:** `github.com/h8rt3rmin8r/eso-weave` \
 **Document:** `docs/ESO-Weave-Specification.md` \
-**Version:** 1.1.0 \
-**Date:** 2026-09-03 \
+**Version:** 1.2.0 \
+**Date:** 2026-09-04 \
 **Audience:** Human-facing, and consumed by AI coding agents through spec-kit \
 **Author:** h8rt3rmin8r \
 **License:** Apache-2.0
@@ -848,34 +848,47 @@ not do.
 
 ### 12.1 Main window
 
-A single resizable window, default 600 by 720, with a menu bar, a status region, a
-skills region, and an optional live log panel.
+A single resizable window, default 600 by 720, with a menu bar, a task-oriented
+dashboard, a Skills region, and an optional live log panel.
 
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and a Live Log toggle |
-| Status region | Application state and Suspend; fishing state and its toggle; the PixelBeacon status light with Install, Update, and Uninstall; game installation and runtime; weapon bar; combat; movement; Game Context; health, stamina, and magicka; auto-potion and its toggle; quickslot classification, potion availability, and cooldown |
+| Live HUD | Labeled Health, Stamina, and Magicka meters; Game Context; combat; movement; active and configured weapon bars; selected quickslot classification, potion availability, and cooldown |
+| System and automation | Game installation provider and runtime; ESO Weave Active or Suspended; PixelBeacon installation and independent live-signal state; fishing and auto-potion requested/effective state; the one appropriate primary Install or Update action plus secondary managed Uninstall |
 | Skills region | One row per slot: label, active toggle, weave type, override toggle, effective delay, and decoded cooldown |
 | Live log panel | Optional, attached at the bottom |
 
 **Window minimum.** The minimum is not a fixed size. 480 by 420 is a boot floor
 applied only until the content has been laid out and measured over two consecutive
-stable frames. From then on the enforced minimum is the intrinsic content extent:
-the widest content-sized block and the height the laid-out content occupies, plus
-panel padding. It is a function of the controls, the theme, and the display scale
-alone and never of the current window size, so a single continuous drag shrinks the
-window to the content minimum on either axis. It follows the content down when a
-row disappears, grows the window to fit when the content no longer fits without
-shrinking a window the operator chose, and is capped at the display work area. With
-the live log open it adds a width bonus and the open-log reserve.
+stable frames. From then on the enforced minimum uses the intrinsic content width
+and the height of the active responsive layout, plus panel padding. Live HUD and
+System and automation use two columns at 880 or more available logical points and
+stack in that reading order below 880. The intrinsic minimum width never follows
+an expanding dashboard container, so a continuous drag can cross the breakpoint
+without width ratcheting. The height may change only between the documented wide
+and narrow arrangements. The minimum follows content down when a row disappears,
+grows the window to fit when content no longer fits without shrinking a size the
+operator chose, and is capped at the display work area. With the live log open it
+adds a width bonus and the open-log reserve.
 
 Hovering an interactive control changes its color, never its size, so the layout
 never reflows on hover.
 
 Game Context help is available from pointer hover and keyboard focus with
-identical text. While runtime is not Active, every live game metric above Skills
-uses the shared **Game not active** presentation rather than retaining stale
-values.
+identical text. While runtime is not Active, every Live HUD value uses the shared
+**Game not active** presentation rather than retaining stale values. If the game
+is active but its signal is unavailable, the HUD says **Signal unavailable** and
+never presents an invented zero.
+
+Resource meters are unanimated and reuse one component. Health, Stamina, and
+Magicka keep their familiar red, green, and blue associations, but every meter
+also carries a visible name, exact integer percentage, proportional fill, and a
+programmatic progress value. Observed zero remains a numeric empty bar. Dormant
+and unavailable states have no numeric value. A meter says **Low** only when its
+auto-potion watch is enabled and the observed percentage is at or below that
+configured threshold. Text and meaningful graphical boundaries meet WCAG 2.2 AA
+contrast, and color is never the only state cue.
 
 ### 12.2 Live log viewer
 

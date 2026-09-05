@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S046 replaces the flat pre-Skills metric list with a responsive dashboard.
+  Live HUD groups the three resource meters with game context, combat, movement,
+  weapon, and quickslot observations. System and automation separately groups
+  game, application, PixelBeacon installation and signal, fishing, and
+  auto-potion readiness (issues #28 and #29).
+
 - S045 adds a three-cell, versioned PixelBeacon layout header carrying the
   addon's authoritative 16-bit column capacity. The reader validates magic,
   version, byte markers, checksums, numeric bounds, and measured surface fit
@@ -63,6 +69,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Health, Stamina, and Magicka now use accessible, unanimated percentage meters
+  whose observed, low, dormant, and unavailable states remain distinct without
+  relying on color. The dashboard uses two columns at 880 or more logical points
+  and stacks Live HUD first below that breakpoint while leaving Skills intact.
+
 - PixelBeacon now uses the complete physical width of the live game client and
   keeps all current header and payload cells on one row at every supported width
   and block size. It reflows on resize and periodic scale checks. Screen capture
@@ -104,6 +115,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-04: Use one 880-point responsive breakpoint and keep expanding
+  dashboard containers out of intrinsic minimum-width measurement. Permit the
+  intrinsic height to switch between the documented wide and narrow layouts.
+- 2026-09-04: Treat resource values as observed, low, dormant, or unavailable;
+  derive Low only from an enabled configured auto-potion watch; and expose a
+  numeric accessibility value only for observed telemetry.
+- 2026-09-04: Keep PixelBeacon installation and live signal as independent
+  operational facts, and expose only the applicable Install or Update action as
+  primary while preserving guarded Uninstall.
 
 - 2026-09-04: Supersede slice 035's fixed shipping column count without
   reintroducing its rejected dual-derivation failure. PixelBeacon alone derives
