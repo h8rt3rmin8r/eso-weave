@@ -16,7 +16,7 @@ pub use detector::{map_event, BiteDetector, PixelBusDetector, StubDetector};
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
-use crate::input::{InputBackend, Key, LifeGate, Transition};
+use crate::input::{InputBackend, Key, LifeGate, Transition, WorldTravelGate};
 use crate::pixelbus::{LifeState, TravelState, WorldState};
 
 /// The maximum accepted value for a fishing timing parameter, in milliseconds.
@@ -267,6 +267,7 @@ pub struct FishingController {
     life_gate: LifeGate,
     world: WorldState,
     travel: TravelState,
+    world_travel_gate: Option<WorldTravelGate>,
 }
 
 /// How long an interact deferred by the menu gate waits before trying again.
@@ -295,7 +296,19 @@ impl FishingController {
             life_gate,
             world: WorldState::Unknown,
             travel: TravelState::Unknown,
+            world_travel_gate: None,
         }
+    }
+
+    /// Creates a controller attached to all independently updated safety gates.
+    pub fn with_safety_gates(
+        config: FishingConfig,
+        life_gate: LifeGate,
+        world_travel_gate: WorldTravelGate,
+    ) -> Self {
+        let mut controller = Self::with_life_gate(config, life_gate);
+        controller.world_travel_gate = Some(world_travel_gate);
+        controller
     }
 
     /// Whether the operator has requested fishing. Runtime and focus can pause
@@ -605,11 +618,19 @@ impl FishingController {
     }
 
     fn block_for_safety(&mut self) -> bool {
+        let shared_world_gated = self
+            .world_travel_gate
+            .as_ref()
+            .is_some_and(WorldTravelGate::world_is_gated);
+        let shared_travel_gated = self
+            .world_travel_gate
+            .as_ref()
+            .is_some_and(WorldTravelGate::travel_is_gated);
         let reason = if self.life_gate.is_gated() {
             Some(StopReason::PlayerUnavailable)
-        } else if self.world.gates() {
+        } else if shared_world_gated || self.world.gates() {
             Some(StopReason::WorldUnavailable)
-        } else if self.travel.gates() {
+        } else if shared_travel_gated || self.travel.gates() {
             Some(StopReason::TravelPending)
         } else {
             None

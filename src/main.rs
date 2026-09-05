@@ -85,9 +85,10 @@ fn main() {
     for notice in &fishing_notices {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
-    let fishing = Arc::new(Mutex::new(FishingController::with_life_gate(
+    let fishing = Arc::new(Mutex::new(FishingController::with_safety_gates(
         fishing_config,
         input.life_gate(),
+        input.world_travel_gate(),
     )));
 
     // Auto-potion controller. Always starts switched off, deliberately, even

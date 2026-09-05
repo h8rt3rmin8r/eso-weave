@@ -84,6 +84,30 @@ impl RollGate {
     }
 }
 
+/// Shared world and travel authorities for autonomous synthesis controllers.
+#[derive(Debug, Clone)]
+pub struct WorldTravelGate {
+    world: AtomicGate,
+    travel: AtomicGate,
+}
+
+impl WorldTravelGate {
+    /// Whether world lifecycle evidence currently forbids synthesis.
+    pub fn world_is_gated(&self) -> bool {
+        self.world.is_gated()
+    }
+
+    /// Whether travel evidence currently forbids synthesis.
+    pub fn travel_is_gated(&self) -> bool {
+        self.travel.is_gated()
+    }
+
+    /// Whether either authority currently forbids synthesis.
+    pub fn is_gated(&self) -> bool {
+        self.world_is_gated() || self.travel_is_gated()
+    }
+}
+
 /// The independently updated safety gates observed by a running weave sequence.
 #[derive(Debug, Clone)]
 pub struct WeaveGates {
@@ -322,6 +346,14 @@ impl InputEngine {
         WeaveGates {
             life: self.life_gate.clone(),
             roll: self.roll_gate.clone(),
+            world: self.world_gate.clone(),
+            travel: self.travel_gate.clone(),
+        }
+    }
+
+    /// Shared pre-lock world and travel authorities for autonomous controllers.
+    pub fn world_travel_gate(&self) -> WorldTravelGate {
+        WorldTravelGate {
             world: self.world_gate.clone(),
             travel: self.travel_gate.clone(),
         }

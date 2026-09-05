@@ -92,6 +92,31 @@ fn shared_life_gate_blocks_enable_before_controller_routing_catches_up() {
     assert!(sink.ops.is_empty());
 }
 
+#[test]
+fn shared_travel_gate_blocks_enable_before_controller_routing_catches_up() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+    let mut c = FishingController::with_safety_gates(
+        FishingConfig::default(),
+        input.life_gate(),
+        input.world_travel_gate(),
+    );
+    let mut sink = MockFishingSink::new();
+    c.set_game_environment(true, true, 0, &mut sink);
+    c.set_life_state(LifeState::Alive);
+    c.set_world_state(WorldState::Active);
+    c.set_travel_state(TravelState::Inactive);
+
+    input.set_travel_gated(true);
+    c.set_enabled(true, 10, &mut sink);
+
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::TravelPending));
+    assert!(sink.ops.is_empty());
+}
+
 fn press_release(key: Key) -> Vec<(Key, Transition)> {
     vec![(key, Transition::Down), (key, Transition::Up)]
 }
