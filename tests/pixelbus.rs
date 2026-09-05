@@ -2,16 +2,315 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_combat, decode_cooldown, decode_latency, decode_menu,
-    decode_movement, decode_quickslot, decode_resource, decode_resources, decode_weapon_bar,
-    fishing_signal, grid_extent, grid_position, grid_rows, load_reader_config, poll_interval,
-    sanitize_block_px, status_present, store_reader_config, strip_pixel, ActiveBar, BlockSamples,
-    CombatSignal, CooldownSet, FishingSignal, MenuSurface, MockSampler, MovementSignal,
-    PixelBusEvent, PixelBusReader, QuickslotClassification, QuickslotNonPotionKind,
-    QuickslotPotionAvailability, QuickslotState, QuickslotUnavailableReason, ReaderConfig,
-    ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown, WeaponBarSignal, WeaponClass,
-    BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
+    block_center, capture_dims, decode_combat, decode_cooldown, decode_latency,
+    decode_layout_header, decode_menu, decode_movement, decode_quickslot, decode_resource,
+    decode_resources, decode_weapon_bar, fishing_signal, grid_extent, grid_position, grid_rows,
+    layout_header_colors, load_reader_config, poll_interval, sanitize_block_px, status_present,
+    store_reader_config, strip_pixel, ActiveBar, BlockSamples, BusLayout, CombatSignal,
+    CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples, LayoutMode, LayoutState,
+    MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
+    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, Size, SlotCooldown,
+    WeaponBarSignal, WeaponClass, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX,
+    LAYOUT_HEADER_BLOCKS, LAYOUT_VERSION_CODE, MAX_BLOCK_PX, MIN_BLOCK_PX, NUM_BLOCKS,
 };
+
+#[test]
+fn negotiated_header_round_trips_boundaries_and_checksums() {
+    for columns in [3u32, 24, 32, 120, 255, 256, 3840, 65_535] {
+        let colors = layout_header_colors(columns).expect("valid column count");
+        assert_eq!(colors[0], Rgb::new(0x45, 0x53, LAYOUT_VERSION_CODE));
+        let state = decode_layout_header(
+            LayoutHeaderSamples::from(colors),
+            ReaderConfig::default().tolerance,
+            DEFAULT_BLOCK_PX,
+            None,
+        );
+        assert_eq!(
+            state,
+            LayoutState::Ready(BusLayout::negotiated(columns).unwrap())
+        );
+    }
+}
+
+#[test]
+fn recognized_header_corruption_never_falls_back_to_legacy() {
+    let tolerance = ReaderConfig::default().tolerance;
+    let valid = layout_header_colors(120).unwrap();
+    for (index, damaged) in [
+        Rgb::new(valid[1].r, 0x00, valid[1].b),
+        Rgb::new(valid[1].r, valid[1].g, 0x00),
+        Rgb::new(valid[2].r, 0x00, valid[2].b),
+        Rgb::new(valid[2].r, valid[2].g, 0x00),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut colors = valid;
+        colors[1 + index / 2] = damaged;
+        assert!(matches!(
+            decode_layout_header(
+                LayoutHeaderSamples::from(colors),
+                tolerance,
+                DEFAULT_BLOCK_PX,
+                None
+            ),
+            LayoutState::Unavailable(_)
+        ));
+    }
+
+    let mut unsupported = valid;
+    unsupported[0].b = LAYOUT_VERSION_CODE + 0x20;
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(unsupported),
+            tolerance,
+            DEFAULT_BLOCK_PX,
+            None
+        ),
+        LayoutState::Unavailable(LayoutFailure::UnsupportedVersion {
+            observed: LAYOUT_VERSION_CODE + 0x20,
+        })
+    );
+
+    let mut drifted = valid;
+    drifted[0].b = LAYOUT_VERSION_CODE + tolerance;
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(drifted),
+            tolerance,
+            DEFAULT_BLOCK_PX,
+            None
+        ),
+        LayoutState::Ready(BusLayout::negotiated(120).unwrap())
+    );
+}
+
+#[test]
+fn legacy_requires_a_real_heartbeat_and_missing_is_unavailable() {
+    let tolerance = ReaderConfig::default().tolerance;
+    let legacy = decode_layout_header(
+        LayoutHeaderSamples {
+            h0: Some(Rgb::new(0xFF, 0x00, 0xFF)),
+            h1: None,
+            h2: None,
+        },
+        tolerance,
+        DEFAULT_BLOCK_PX,
+        None,
+    );
+    assert_eq!(legacy, LayoutState::Ready(BusLayout::legacy()));
+    assert_eq!(BusLayout::legacy().mode, LayoutMode::Legacy);
+
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::default(),
+            tolerance,
+            DEFAULT_BLOCK_PX,
+            None
+        ),
+        LayoutState::Unavailable(LayoutFailure::Missing)
+    );
+}
+
+#[test]
+fn negotiated_geometry_uses_capacity_and_wraps_at_the_exact_boundary() {
+    let block_px = 16;
+    let one_row = BusLayout::negotiated(LAYOUT_HEADER_BLOCKS + NUM_BLOCKS).unwrap();
+    assert_eq!(one_row.rows(), 1);
+    assert_eq!(one_row.extent(block_px), Size::new(24 * block_px, block_px));
+    for index in 0..NUM_BLOCKS {
+        let (x, y) = one_row.payload_point(block_px, index);
+        assert_eq!(y, block_px / 2);
+        assert!(x < one_row.extent(block_px).width);
+    }
+
+    let wrapped = BusLayout::negotiated(LAYOUT_HEADER_BLOCKS + NUM_BLOCKS - 1).unwrap();
+    assert_eq!(wrapped.rows(), 2);
+    assert_eq!(
+        wrapped.payload_point(block_px, NUM_BLOCKS - 1),
+        (block_px / 2, block_px + block_px / 2)
+    );
+}
+
+#[test]
+fn negotiated_payload_points_are_unique_and_inside_every_tested_extent() {
+    for columns in [3, 4, 8, 20, 23, 24, 120, 65_535] {
+        let layout = BusLayout::negotiated(columns).unwrap();
+        for block_px in [MIN_BLOCK_PX, DEFAULT_BLOCK_PX, MAX_BLOCK_PX] {
+            let extent = layout.extent(block_px);
+            let mut points = std::collections::HashSet::new();
+            for index in 0..NUM_BLOCKS {
+                let point = layout.payload_point(block_px, index);
+                assert!(
+                    points.insert(point),
+                    "duplicate point for column count {columns}"
+                );
+                assert!(point.0 < extent.width && point.1 < extent.height);
+            }
+        }
+    }
+}
+
+#[test]
+fn every_supported_size_keeps_current_payload_on_one_row_at_minimum_width() {
+    for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 24, MAX_BLOCK_PX] {
+        let columns = NARROWEST_CLIENT_WIDTH / block_px;
+        let layout = BusLayout::negotiated(columns).unwrap();
+        assert!(columns >= LAYOUT_HEADER_BLOCKS + NUM_BLOCKS);
+        assert_eq!(layout.rows(), 1);
+    }
+}
+
+#[test]
+fn published_columns_cannot_exceed_the_measured_surface() {
+    let colors = layout_header_colors(65).unwrap();
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(colors),
+            2,
+            16,
+            Some(Size::new(1024, 768))
+        ),
+        LayoutState::Unavailable(LayoutFailure::ExceedsSurface {
+            columns: 65,
+            capacity: 64,
+        })
+    );
+}
+
+#[test]
+fn invalid_block_size_and_short_surface_are_rejected() {
+    let colors = layout_header_colors(3).unwrap();
+    assert_eq!(
+        decode_layout_header(LayoutHeaderSamples::from(colors), 2, 0, None),
+        LayoutState::Unavailable(LayoutFailure::InvalidBlockSize)
+    );
+    assert_eq!(
+        decode_layout_header(
+            LayoutHeaderSamples::from(colors),
+            2,
+            16,
+            Some(Size::new(48, 127))
+        ),
+        LayoutState::Unavailable(LayoutFailure::ExtentExceedsSurface {
+            extent: Size::new(48, 128),
+            surface: Size::new(48, 127),
+        })
+    );
+}
+
+#[test]
+fn reader_prepares_twice_on_acquisition_then_once_when_steady() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    sampler.set_display(Some(eso_weave::pixelbus::MeasuredDisplay {
+        surface: Size::new(1920, 1080),
+        surface_origin: eso_weave::pixelbus::Point::new(0, 0),
+        display_origin: None,
+        display_size: None,
+        dpi: None,
+    }));
+    for (index, color) in layout_header_colors(120).unwrap().into_iter().enumerate() {
+        let point = BusLayout::negotiated(120)
+            .unwrap()
+            .cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = BusLayout::negotiated(120)
+        .unwrap()
+        .payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, Rgb::new(0xFF, 0x00, 0xFF));
+
+    let first = reader.sample_and_observe(&sampler, 0);
+    assert!(first.contains(&PixelBusEvent::Layout(LayoutState::Ready(
+        BusLayout::negotiated(120).unwrap()
+    ))));
+    assert_eq!(sampler.prepared_extents().len(), 2);
+
+    sampler.clear_prepared_extents();
+    reader.sample_and_observe(&sampler, 100);
+    assert_eq!(sampler.prepared_extents().len(), 1);
+}
+
+#[test]
+fn reader_recaptures_only_when_changed_geometry_escapes_the_prepared_frame() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    sampler.set_display(Some(eso_weave::pixelbus::MeasuredDisplay {
+        surface: Size::new(1920, 1080),
+        surface_origin: eso_weave::pixelbus::Point::new(0, 0),
+        display_origin: None,
+        display_size: None,
+        dpi: None,
+    }));
+    let header_points = [
+        (config.block_px / 2, config.block_px / 2),
+        (config.block_px + config.block_px / 2, config.block_px / 2),
+        (
+            config.block_px * 2 + config.block_px / 2,
+            config.block_px / 2,
+        ),
+    ];
+    let set_header = |sampler: &mut MockSampler, columns| {
+        for (point, color) in header_points
+            .into_iter()
+            .zip(layout_header_colors(columns).unwrap())
+        {
+            sampler.set(point.0, point.1, color);
+        }
+    };
+
+    set_header(&mut sampler, 120);
+    reader.sample_and_observe(&sampler, 0);
+    sampler.clear_prepared_extents();
+
+    // Twenty columns makes the occupied grid taller than the cached 120-column
+    // frame, so the reader captures the new complete extent once more.
+    set_header(&mut sampler, 20);
+    let events = reader.sample_and_observe(&sampler, 100);
+    assert!(events.contains(&PixelBusEvent::Layout(LayoutState::Ready(
+        BusLayout::negotiated(20).unwrap()
+    ))));
+    assert_eq!(sampler.prepared_extents().len(), 2);
+
+    sampler.clear_prepared_extents();
+    reader.sample_and_observe(&sampler, 200);
+    assert_eq!(sampler.prepared_extents().len(), 1);
+}
+
+#[test]
+fn invalid_recognized_header_suppresses_payload_sampling() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    let layout = BusLayout::negotiated(120).unwrap();
+    let colors = layout_header_colors(120).unwrap();
+    for (index, color) in colors.into_iter().enumerate() {
+        let point = layout.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = layout.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, Rgb::new(0xFF, 0x00, 0xFF));
+    assert!(reader
+        .sample_and_observe(&sampler, 0)
+        .contains(&PixelBusEvent::Heartbeat));
+
+    // Keep valid magic but destroy H1. A still-present payload heartbeat cannot
+    // be observed through a corrupt geometry authority.
+    let h1 = layout.cell_point(config.block_px, 1);
+    sampler.set(h1.0, h1.1, Rgb::new(0x00, 0x00, 0x00));
+    let events = reader.sample_and_observe(&sampler, 100);
+    assert!(
+        events.contains(&PixelBusEvent::Layout(LayoutState::Unavailable(
+            LayoutFailure::CorruptHighByte
+        )))
+    );
+    assert!(events.contains(&PixelBusEvent::SignalLost));
+    assert!(!events.contains(&PixelBusEvent::Heartbeat));
+}
 
 // Pixel extraction from a captured BGRA strip (the Windows screen-composited
 // capture path). The bytes are blue, green, red, alpha per pixel.
@@ -771,7 +1070,7 @@ fn sanitize_block_px_corrects_and_notices() {
 }
 
 #[test]
-fn reader_config_default_geometry_matches_release() {
+fn reader_config_default_legacy_geometry_matches_release() {
     let cfg = ReaderConfig::default();
     assert_eq!(cfg.block_px, 16);
     assert_eq!(cfg.status_point(), (8, 8));
@@ -781,7 +1080,7 @@ fn reader_config_default_geometry_matches_release() {
 }
 
 #[test]
-fn reader_config_points_track_block_px() {
+fn reader_config_legacy_points_track_block_px() {
     for block_px in [2u32, 4, 8, 16, 32] {
         let cfg = ReaderConfig {
             block_px,
@@ -795,7 +1094,7 @@ fn reader_config_points_track_block_px() {
 }
 
 #[test]
-fn sample_and_observe_reads_derived_points() {
+fn sample_and_observe_reads_legacy_points_after_heartbeat_detection() {
     // At block_px = 8 the status center is (4, 4); a heartbeat seeded there is
     // read, proving the runtime path samples the derived points.
     let cfg = ReaderConfig {
@@ -1411,7 +1710,7 @@ fn the_column_count_satisfies_both_bounds_that_governed_its_choice() {
 // cannot drift together into agreeing on something wrong.
 
 #[test]
-fn every_row_zero_block_sits_exactly_where_the_strip_put_it() {
+fn every_legacy_row_zero_block_sits_exactly_where_the_strip_put_it() {
     // The no-change obligation, now stated on the blocks it can apply to. Row 0
     // is every block the strip ever held, and each is still at the strip's
     // arithmetic. The blocks past it never had a strip position to keep, so the
@@ -1440,7 +1739,7 @@ fn every_row_zero_block_sits_exactly_where_the_strip_put_it() {
 }
 
 #[test]
-fn the_captured_region_is_one_full_row_wide_and_two_rows_tall() {
+fn the_legacy_captured_region_is_one_full_row_wide_and_two_rows_tall() {
     // Slice 038 crossed the boundary, so the region is no longer the strip's.
     // Spelled out as arithmetic rather than as a call to capture_dims's own
     // helper, so the test and the code cannot drift together.
@@ -1455,7 +1754,7 @@ fn the_captured_region_is_one_full_row_wide_and_two_rows_tall() {
 }
 
 #[test]
-fn the_heartbeat_block_is_the_grid_origin_at_any_column_count() {
+fn the_legacy_heartbeat_block_is_the_grid_origin_at_any_column_count() {
     // Signal-loss detection anchors on B0, so its position must not depend on
     // the layout.
     for columns in [1u32, 2, 9, 16, 32, 64] {
@@ -1482,14 +1781,13 @@ fn sampled_centres_stay_whole_pixels_on_both_axes() {
 }
 
 #[test]
-fn the_shipped_column_count_is_pinned() {
-    // Changing this is a breaking change to the contract shared with the addon,
-    // so it fails here first and names itself.
+fn the_legacy_column_count_is_pinned() {
+    // Changing this would break compatibility with pre-version-14 addons.
     assert_eq!(COLUMNS, 16);
 }
 
 #[test]
-fn block_center_wraps_past_the_first_row() {
+fn legacy_block_center_wraps_past_the_first_row() {
     // The public entry point, at indices no block has reached yet. Row 1 starts
     // back at x = block_px / 2 and drops one block height.
     let px = 16;
@@ -1729,7 +2027,7 @@ fn movement_clears_to_unknown_on_signal_loss() {
 }
 
 #[test]
-fn the_capture_region_is_two_rows_now_that_the_count_has_crossed() {
+fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.
     // That was the general statement before any count reached it.
@@ -1872,7 +2170,7 @@ fn no_arbitrary_color_decodes_as_a_cooldown() {
 }
 
 #[test]
-fn cooldown_points_are_the_eleventh_through_sixteenth_block_centers() {
+fn legacy_cooldown_points_are_the_eleventh_through_sixteenth_block_centers() {
     for block_px in [MIN_BLOCK_PX, DEFAULT_BLOCK_PX, 24, MAX_BLOCK_PX] {
         let config = ReaderConfig {
             block_px,
@@ -2409,7 +2707,7 @@ fn no_arbitrary_color_decodes_as_a_quickslot_cooldown() {
 }
 
 #[test]
-fn quickslot_points_are_the_first_five_blocks_of_row_one() {
+fn legacy_quickslot_points_are_the_first_five_blocks_of_row_one() {
     // FR-021: derived from the shared rule with no special case for the second
     // row. These are the first sample points in the project whose y is not
     // block_px / 2.

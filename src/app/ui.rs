@@ -1123,6 +1123,7 @@ impl EsoWeaveApp {
     /// The modal closes on an outside click, on Escape, or on the close control.
     fn settings_modal(&mut self, ctx: &egui::Context, intents: &mut Vec<UiIntent>) {
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
+        let layout = self.model.layout_state();
         let mut draft = match self.settings_draft.take() {
             Some(draft) => draft,
             None => {
@@ -1198,7 +1199,7 @@ impl EsoWeaveApp {
                     .min_scrolled_height(body_max_h)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        settings_body(ui, &palette, &mut draft);
+                        settings_body(ui, &palette, &mut draft, layout);
                     });
                 (body.content_size.y, body_max_h)
             });
@@ -1233,6 +1234,7 @@ fn settings_body(
     ui: &mut egui::Ui,
     palette: &crate::app::theme::Palette,
     draft: &mut SettingsForm,
+    layout: crate::pixelbus::LayoutState,
 ) {
     widgets::heading(ui, strings::CLUSTER_APPEARANCE);
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -1362,7 +1364,7 @@ fn settings_body(
         widgets::muted_help(
             ui,
             palette,
-            &crate::app::grid_footprint_caption(draft.reader.block_px),
+            &crate::app::grid_footprint_caption(draft.reader.block_px, layout),
         );
         setting(ui, palette, &strings::SET_TOLERANCE, |ui| {
             ui.add(egui::DragValue::new(&mut draft.reader.tolerance));

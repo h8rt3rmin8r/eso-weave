@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S045 adds a three-cell, versioned PixelBeacon layout header carrying the
+  addon's authoritative 16-bit column capacity. The reader validates magic,
+  version, byte markers, checksums, numeric bounds, and measured surface fit
+  before locating any of the 21 payload signals. Legacy version-13 layouts remain
+  readable only after a positive heartbeat match (issues #42 and #43).
+
 - S044 adds a tested issue-link policy for pull requests targeting `main`,
   atomic issue and release-verification guidance, and a public ESO Weave Delivery
   Project containing every repository issue. Its table is grouped by milestone,
@@ -57,6 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- PixelBeacon now uses the complete physical width of the live game client and
+  keeps all current header and payload cells on one row at every supported width
+  and block size. It reflows on resize and periodic scale checks. Screen capture
+  follows the validated occupied extent, and Settings reports the actual live,
+  legacy, waiting, or unavailable layout instead of a fixed estimate.
+
 - Auto-potion now requires positive game, focus, beacon, suspension, context,
   resource, explicit usable-potion, cooldown, and retry evidence before submitting
   one complete quickslot down/up attempt. Signal loss blocks the feature without
@@ -92,6 +104,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-04: Supersede slice 035's fixed shipping column count without
+  reintroducing its rejected dual-derivation failure. PixelBeacon alone derives
+  live physical capacity and publishes it through three invariant cells; the
+  reader validates and consumes that value without computing a competing count.
+  Give protocol versions tolerance-safe spaced wire codes, fail closed after
+  recognized corruption, and keep 16 columns only as heartbeat-gated legacy
+  compatibility.
 
 - 2026-09-03: Treat one actionable issue as one independently closeable outcome
   and lifecycle. Separate merged implementation from later release or field

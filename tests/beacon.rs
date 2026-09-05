@@ -14,6 +14,10 @@ use eso_weave::beacon::{
     BeaconStatus, DiscoveryError, Environment, LifecycleError, RunningState, DEFAULT_API_VERSION,
     LUA_FILE, MANAGED_MARKER, MANIFEST, MANIFEST_FILE, SUBFOLDER,
 };
+use eso_weave::pixelbus::{
+    LAYOUT_HEADER_BLOCKS, LAYOUT_HIGH_MARKER, LAYOUT_LOW_MARKER, LAYOUT_MAGIC_G, LAYOUT_MAGIC_R,
+    LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE, LEGACY_COLUMNS,
+};
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().unwrap()
@@ -60,11 +64,39 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_thirteen() {
-    // Slice 042 adds the explicit B20 classification. Version 12 remains a
-    // deliberately non-actionable legacy observation until the addon updates.
-    assert_eq!(embedded_version(), 13);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(13));
+fn embedded_manifest_version_is_fourteen() {
+    // Slice 045 adds a negotiated geometry header and moves payload B0 past its
+    // three invariant cells. Version 13 remains readable through the companion's
+    // explicit legacy layout.
+    assert_eq!(embedded_version(), 14);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(14));
+}
+
+#[test]
+fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
+    assert_eq!(embedded_version(), 14);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(14));
+    for (name, expected) in [
+        (
+            "LAYOUT_PROTOCOL_VERSION",
+            u32::from(LAYOUT_PROTOCOL_VERSION),
+        ),
+        ("LAYOUT_VERSION_CODE", u32::from(LAYOUT_VERSION_CODE)),
+        ("LAYOUT_HEADER_BLOCKS", LAYOUT_HEADER_BLOCKS),
+        ("LAYOUT_MAGIC_R", u32::from(LAYOUT_MAGIC_R)),
+        ("LAYOUT_MAGIC_G", u32::from(LAYOUT_MAGIC_G)),
+        ("LAYOUT_HIGH_MARKER", u32::from(LAYOUT_HIGH_MARKER)),
+        ("LAYOUT_LOW_MARKER", u32::from(LAYOUT_LOW_MARKER)),
+        ("LEGACY_COLUMNS", LEGACY_COLUMNS),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(beacon::LUA, name),
+            Some(expected),
+            "addon constant {name} drifted"
+        );
+    }
+    assert!(beacon::LUA.contains("EVENT_SCREEN_RESIZED"));
+    assert!(beacon::LUA.contains("math.floor(width * scale)"));
 }
 
 #[test]
@@ -598,14 +630,11 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
-    // Slice 035: the column count the grid wraps at. A disagreement here would
-    // not degrade, it would shift every block from row 1 onward and the
-    // companion would read valid, checksum-passing colours from the wrong
-    // blocks, so the build refuses to ship one.
+    // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
-        beacon::parse_lua_constant(lua, "COLUMNS"),
-        Some(eso_weave::pixelbus::COLUMNS),
-        "the addon and the companion disagree on the grid column count"
+        beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
+        Some(eso_weave::pixelbus::LEGACY_COLUMNS),
+        "the addon and the companion disagree on legacy columns"
     );
     // The combat block colors, shared byte for byte. The companion keeps these
     // private, so the expected values are the contract in
@@ -792,15 +821,11 @@ fn quickslot_classification_requires_a_stable_double_read() {
 /// does not draw, which is exactly the User Story 2 case: correct, but permanently
 /// unknown, with nothing telling the operator why.
 #[test]
-fn the_manifest_advances_for_the_reconstructed_quickslot_contract() {
+fn the_manifest_retains_the_reconstructed_quickslot_contract() {
     let manifest = beacon::MANIFEST;
     assert!(
-        manifest.contains("## Version: 13"),
-        "the manifest version should have advanced to 13"
-    );
-    assert!(
-        manifest.contains("## AddOnVersion: 13"),
-        "the addon version should have advanced to 13"
+        beacon::embedded_version() >= 13,
+        "the manifest must remain at or beyond the quickslot protocol"
     );
     assert!(
         manifest.contains("quickslot"),

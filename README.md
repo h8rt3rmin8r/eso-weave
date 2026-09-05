@@ -280,14 +280,16 @@ same thing: a small grid of colored squares that PixelBeacon draws in the
 That grid is the entire channel between the addon and the app. It has to be
 visible, because anything drawn over it reads as a missing signal.
 
-At the default square size it covers **256 by 32 physical pixels**: twenty-one squares
-in two rows.
+At the default square size it covers **384 by 16 physical pixels**: a three-cell
+layout header followed by twenty-one signal squares in one row. PixelBeacon uses
+the current client width and wraps only when the complete next square would cross
+the right edge.
 
 **To make it smaller**, lower **Block size (px)** in Settings, under the beacon
-group. The app shows the resulting footprint beside that setting as you change it,
-and records it in the log at startup. At the smallest supported size the overlay is
-32 by 4 pixels. Changing the size redeploys the addon so both sides stay in
-agreement, and takes effect after a `/reloadui` and an app restart.
+group. The app shows the detected live footprint beside that setting and records
+layout transitions in the log. At the smallest supported size the current overlay
+is 48 by 2 pixels. Changing the size redeploys the addon and takes effect after a
+`/reloadui` and an app restart.
 
 ### Quickslot diagnostics
 
