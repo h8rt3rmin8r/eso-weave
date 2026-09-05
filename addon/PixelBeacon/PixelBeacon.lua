@@ -787,8 +787,7 @@ end
 -- This is the narrow signal used by LibSprint and is deliberately bounded by
 -- exclusions, debounce, and a watchdog here.
 local function allActiveSlotsHaveNonCostFailure()
-    local hotbarCategory = (GetActiveWeaponPairInfo() == ACTIVE_WEAPON_PAIR_MAIN
-        and HOTBAR_CATEGORY_PRIMARY) or HOTBAR_CATEGORY_BACKUP
+    local hotbarCategory = GetActiveHotbarCategory()
     for slotIndex = ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 1,
         ACTION_BAR_ULTIMATE_SLOT_INDEX + 1 do
         if not ActionSlotHasNonCostStateFailure(slotIndex, hotbarCategory) then

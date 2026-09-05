@@ -1040,8 +1040,7 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         "IsUnitFalling(\"player\")",
         "IsUnitDeadOrReincarnating(\"player\")",
         "ActionSlotHasNonCostStateFailure",
-        "HOTBAR_CATEGORY_PRIMARY",
-        "HOTBAR_CATEGORY_BACKUP",
+        "GetActiveHotbarCategory()",
         "ACTION_BAR_FIRST_NORMAL_SLOT_INDEX",
         "ACTION_BAR_ULTIMATE_SLOT_INDEX",
         "EVENT_ACTION_SLOT_STATE_UPDATED",
@@ -1073,6 +1072,16 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         "the addon references a sprint API that does not exist"
     );
     assert_eq!(beacon::embedded_version(), 19);
+
+    let detector = lua
+        .split("local function allActiveSlotsHaveNonCostFailure()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function sprintIsHardExcluded()").next())
+        .expect("sprint slot detector has a bounded source section");
+    assert!(
+        !detector.contains("GetActiveWeaponPairInfo"),
+        "temporary and special action bars must use the actual active hotbar"
+    );
 }
 
 /// Slice 034: the settings file the display detector reads sits beside the
