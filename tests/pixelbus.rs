@@ -2231,6 +2231,34 @@ fn world_state_decodes_all_wire_values_and_rejects_invalid_evidence() {
 }
 
 #[test]
+fn ambiguous_world_state_payloads_fail_closed_at_any_tolerance() {
+    let codes = [
+        (0x20u8, WorldState::Unknown),
+        (0x80, WorldState::Transitioning),
+        (0xE0, WorldState::Active),
+    ];
+    for tolerance in 0..=u8::MAX {
+        for red in 0..=u8::MAX {
+            let matching: Vec<_> = codes
+                .iter()
+                .filter(|(code, _)| red.abs_diff(*code) <= tolerance)
+                .collect();
+            let expected = if matching.len() == 1 {
+                matching[0].1
+            } else {
+                WorldState::Unknown
+            };
+            assert_eq!(
+                decode_world_state(Rgb::new(red, 0xCC, 255 - red), tolerance),
+                expected,
+                "red {red:#04X} with tolerance {tolerance} matched {} codes",
+                matching.len()
+            );
+        }
+    }
+}
+
+#[test]
 fn world_state_uses_b22_change_detection_and_signal_loss() {
     let config = ReaderConfig::default();
     assert_eq!(config.world_point(), block_center(config.block_px, 22));

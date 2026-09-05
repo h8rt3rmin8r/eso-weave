@@ -1595,15 +1595,20 @@ pub fn decode_world_state(sample: Rgb, tolerance: u8) -> WorldState {
     if !within(sample.g, WORLD_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
         return WorldState::Unknown;
     }
-    if within(sample.r, WORLD_UNKNOWN_RED, tolerance) {
-        WorldState::Unknown
-    } else if within(sample.r, WORLD_TRANSITIONING_RED, tolerance) {
-        WorldState::Transitioning
-    } else if within(sample.r, WORLD_ACTIVE_RED, tolerance) {
-        WorldState::Active
-    } else {
-        WorldState::Unknown
+    let mut matches = [
+        (WORLD_UNKNOWN_RED, WorldState::Unknown),
+        (WORLD_TRANSITIONING_RED, WorldState::Transitioning),
+        (WORLD_ACTIVE_RED, WorldState::Active),
+    ]
+    .into_iter()
+    .filter(|(code, _)| within(sample.r, *code, tolerance));
+    let Some((_, state)) = matches.next() else {
+        return WorldState::Unknown;
+    };
+    if matches.next().is_some() {
+        return WorldState::Unknown;
     }
+    state
 }
 
 /// Decodes the menu block into its surface.

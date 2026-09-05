@@ -784,7 +784,7 @@ pub fn grid_footprint_caption(block_px: u32, state: crate::pixelbus::LayoutState
             let row_label = if rows == 1 { "row" } else { "rows" };
             format!(
                 "{mode}: {} data cells, {} columns, {} {row_label}, {} by {} pixels.",
-                crate::pixelbus::NUM_BLOCKS,
+                layout.payload_blocks(),
                 layout.columns,
                 rows,
                 extent.width,
