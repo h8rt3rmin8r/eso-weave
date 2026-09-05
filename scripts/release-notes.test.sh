@@ -75,6 +75,21 @@ expected="$(printf '%s\n' \
 actual="$($generator 1.2.3 example/project "$valid")"
 assert_equals "$expected" "$actual" "valid extraction"
 
+level_two_boundary="$tmp_dir/level-two-boundary.md"
+printf '%s\n' \
+  '# Changelog' \
+  '## [1.2.3]' \
+  '### Highlights' \
+  '- Included.' \
+  '## Metadata' \
+  'This level-two section is outside the release excerpt.' > "$level_two_boundary"
+actual="$($generator 1.2.3 example/project "$level_two_boundary")"
+expected="$(printf '%s\n' \
+  '- Included.' \
+  '' \
+  '[Read the full changelog for v1.2.3](https://github.com/example/project/blob/v1.2.3/CHANGELOG.md)')"
+assert_equals "$expected" "$actual" "unbracketed level-two boundary"
+
 six_items="$tmp_dir/six-items.md"
 {
   printf '%s\n' '# Changelog' '## [1.2.3]' '### Highlights'
@@ -126,6 +141,10 @@ assert_fails_with "has no Highlights subsection" 1.2.3 example/project "$missing
 empty_highlights="$tmp_dir/empty-highlights.md"
 printf '%s\n' '# Changelog' '## [1.2.3]' '### Highlights' '' '### Added' '- Detail.' > "$empty_highlights"
 assert_fails_with "Highlights subsection is empty" 1.2.3 example/project "$empty_highlights"
+
+empty_bullet="$tmp_dir/empty-bullet.md"
+printf '%s\n' '# Changelog' '## [1.2.3]' '### Highlights' '- ' > "$empty_bullet"
+assert_fails_with "contains no words" 1.2.3 example/project "$empty_bullet"
 
 duplicate_highlights="$tmp_dir/duplicate-highlights.md"
 printf '%s\n' \

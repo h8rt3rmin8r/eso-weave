@@ -51,9 +51,12 @@ highlight_heading_count="$(awk -v want="$heading" '
     line = $0
     sub(/\r$/, "", line)
   }
-  line ~ /^## \[/ {
+  line ~ /^## / {
     if (in_version) {
       exit
+    }
+    if (line !~ /^## \[/) {
+      next
     }
     key = line
     sub(/^## \[/, "", key)
@@ -79,9 +82,12 @@ highlights="$(awk -v want="$heading" '
     line = $0
     sub(/\r$/, "", line)
   }
-  line ~ /^## \[/ {
+  line ~ /^## / {
     if (in_version) {
       exit
+    }
+    if (line !~ /^## \[/) {
+      next
     }
     key = line
     sub(/^## \[/, "", key)
@@ -138,6 +144,10 @@ if [[ "$bullet_count" -gt 6 ]]; then
 fi
 
 word_count="$(printf '%s\n' "$highlights" | sed -E 's/^[[:space:]]*-[[:space:]]+//' | wc -w | tr -d '[:space:]')"
+if [[ "$word_count" -eq 0 ]]; then
+  echo "release-notes: Highlights contains no words" >&2
+  exit 5
+fi
 if [[ "$word_count" -gt 120 ]]; then
   echo "release-notes: Highlights contains $word_count words; maximum is 120" >&2
   exit 6
