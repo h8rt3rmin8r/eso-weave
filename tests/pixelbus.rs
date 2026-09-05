@@ -2056,13 +2056,22 @@ fn decode_movement_rejects_a_failed_checksum() {
 }
 
 #[test]
-fn decode_movement_rejects_the_reserved_sprint_codes() {
-    // US3: the sprint axis is reserved, not implemented. Its two codes read as
-    // unavailable so no half-built state is reachable by an operator, and so a
-    // future addon that emits them against an older companion degrades safely.
+fn decode_movement_accepts_on_foot_sprint_and_rejects_mounted_sprint() {
     let t = ReaderConfig::default().tolerance;
-    assert_eq!(decode_movement(movement(0xA0), t), MovementSignal::Unknown);
+    assert_eq!(
+        decode_movement(movement(0xA0), t),
+        MovementSignal::Sprinting
+    );
     assert_eq!(decode_movement(movement(0xE0), t), MovementSignal::Unknown);
+}
+
+#[test]
+fn decode_sprint_survives_capture_drift_within_tolerance() {
+    let t = ReaderConfig::default().tolerance;
+    assert_eq!(
+        decode_movement(Rgb::new(0xA0 - 2, 0x43 + 2, 0x5F + 2), t),
+        MovementSignal::Sprinting
+    );
 }
 
 #[test]

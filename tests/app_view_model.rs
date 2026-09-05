@@ -7,11 +7,12 @@ use std::time::{Duration, Instant};
 use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
     combat_view, dashboard_layout, default_delay_for, fishing_label, life_state_view, menu_view,
-    modal_extent, override_edit_for, quickslot_view, resource_view, resource_view_with_watch,
-    roll_dodge_view, route_game_observation, route_reader_event, route_reader_safety_gate,
-    skill_rows, status_line_app, status_line_beacon, status_line_fishing, travel_state_view,
-    uninstall_enabled, weapon_bar_view, world_state_view, AppModel, BeaconCondition,
-    BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
+    modal_extent, movement_view, override_edit_for, quickslot_view, resource_view,
+    resource_view_with_watch, roll_dodge_view, route_game_observation, route_reader_event,
+    route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon, status_line_fishing,
+    travel_state_view, uninstall_enabled, weapon_bar_view, world_state_view, AppModel,
+    BeaconCondition, BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit,
+    StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -22,10 +23,10 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, PixelBusEvent,
-    QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState, SlotCooldown,
-    TravelState, WeaponBarSignal, WeaponClass, WorldState,
+    ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, MovementSignal,
+    PixelBusEvent, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
+    QuickslotState, QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState,
+    SlotCooldown, TravelState, WeaponBarSignal, WeaponClass, WorldState,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -637,6 +638,39 @@ fn routing_travel_updates_every_consumer_and_recovery_opens_hook_last() {
     );
     assert_eq!(weave.travel(), TravelState::Inactive);
     assert!(!input.is_travel_gated());
+}
+
+#[test]
+fn routing_movement_updates_display_and_auto_potion_from_one_signal() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(Default::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+
+    route_reader_event(
+        PixelBusEvent::Movement(MovementSignal::Sprinting),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert_eq!(weave.movement(), MovementSignal::Sprinting);
+    assert_eq!(potion.movement(), MovementSignal::Sprinting);
+
+    route_reader_event(
+        PixelBusEvent::SignalLost,
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        2,
+        &mut sink,
+    );
+    assert_eq!(weave.movement(), MovementSignal::Unknown);
+    assert_eq!(potion.movement(), MovementSignal::Unknown);
 }
 
 #[test]
@@ -1488,6 +1522,11 @@ fn s043_auto_potion_view_names_every_effective_family() {
             StatusRole::Warning,
         ),
         (
+            AutoPotionState::Blocked(BlockReason::Sprinting),
+            "Blocked: sprinting",
+            StatusRole::Warning,
+        ),
+        (
             AutoPotionState::Blocked(BlockReason::NoWatchedResource),
             "Blocked: no watched resource",
             StatusRole::Warning,
@@ -1537,6 +1576,14 @@ fn s043_auto_potion_view_names_every_effective_family() {
     }));
     assert_eq!(triggered.text, "Triggered: Health at 20% (threshold 35%)");
     assert_eq!(triggered.role, StatusRole::Active);
+}
+
+#[test]
+fn sprinting_has_a_truthful_warning_movement_view() {
+    let view = movement_view(MovementSignal::Sprinting);
+    assert!(view.detected);
+    assert_eq!(view.state, "Sprinting");
+    assert_eq!(view.role, StatusRole::Warning);
 }
 
 // Slice 042: the explicitly classified quickslot readout.

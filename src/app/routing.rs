@@ -62,7 +62,7 @@ pub fn app_toggle_intent(
 ///   controller, and the auto-potion controller, so none starts new work while a
 ///   game UI surface is up.
 /// - `Resources(set)` stores the decoded resource levels for the next auto-potion tick.
-/// - `Movement(signal)` stores the decoded movement state (nothing acts on it).
+/// - `Movement(signal)` stores movement and updates the auto-potion sprint gate.
 /// - `Life(signal)` updates every synthesis boundary from one authority.
 /// - `RollDodge(signal)` updates the generated-weave hook and worker gates.
 /// - `Cooldowns(set)` stores the decoded slot cooldowns (nothing acts on them).
@@ -108,6 +108,7 @@ pub fn route_reader_event(
         }
         PixelBusEvent::Movement(signal) => {
             weave.set_movement(signal);
+            potion.set_movement(signal);
             return;
         }
         PixelBusEvent::Life(life) => {
@@ -165,12 +166,14 @@ pub fn route_reader_event(
             weave.set_roll_dodge(crate::pixelbus::RollDodgeState::Unknown);
             weave.set_world(crate::pixelbus::WorldState::Unknown);
             weave.set_travel(crate::pixelbus::TravelState::Unknown);
+            weave.set_movement(crate::pixelbus::MovementSignal::Unknown);
             fishing.set_life_state(life);
             fishing.set_world_state(crate::pixelbus::WorldState::Unknown);
             fishing.set_travel_state(crate::pixelbus::TravelState::Unknown);
             potion.set_life_state(life);
             potion.set_world_state(crate::pixelbus::WorldState::Unknown);
             potion.set_travel_state(crate::pixelbus::TravelState::Unknown);
+            potion.set_movement(crate::pixelbus::MovementSignal::Unknown);
             potion.on_signal_lost();
         }
         PixelBusEvent::Heartbeat => potion.on_heartbeat(),

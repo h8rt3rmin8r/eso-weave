@@ -593,7 +593,7 @@ the default block size. Legacy addons retain the pre-version-14 positions.
 | B6 Health | (144, 0) | (152, 8) | `G = 0x16`, `R` is the percentage of the current maximum (0 to 100, or `0xFF` unavailable), `B = 255 - R`. |
 | B7 Stamina | (160, 0) | (168, 8) | As B6 with `G = 0x6D`. |
 | B8 Magicka | (176, 0) | (184, 8) | As B6 with `G = 0xBB`. |
-| B9 Movement | (192, 0) | (200, 8) | `G = 0x43`, `R` is a two-bit code (bit 0 mounted, bit 1 sprint) scaled to `0x20` on foot or `0x60` mounted, `B = 255 - R`. Driven by `EVENT_MOUNTED_STATE_CHANGED`, re-baselined from `IsMounted()`, with a 1 Hz backstop. The two sprint codes `0xA0` and `0xE0` are reserved and never emitted, because the game exposes no sprint state to an addon; the reader decodes them as unavailable. |
+| B9 Movement | (192, 0) | (200, 8) | `G = 0x43`, `R` is `0x20` on foot, `0x60` mounted, or `0xA0` bounded keyboard-mode on-foot sprint, and `B = 255 - R`. Mounted state comes from `IsMounted()`. Sprint requires moving and trying to move while every active-bar slot reports `ActionSlotHasNonCostStateFailure`, with gamepad, mounted, swimming, falling, death, roll dodge, and inactive-world exclusions. Entry and ambiguous exit debounce for 200 ms and a stale positive expires after 1500 ms. `EVENT_ACTION_SLOT_STATE_UPDATED` and the 100 ms tick converge through one detector. Mounted sprint code `0xE0` remains reserved and decodes Unknown. |
 | B10 to B15 Cooldowns | (208, 0) to (288, 0) | (216, 8) to (296, 8) | One block per action slot the game exposes a cooldown for: skills 1 to 5, then the ultimate. `G` is a per-slot marker (`0x0B`, `0x21`, `0x4E`, `0x92`, `0xC6`, `0xE8`), `R` is the remaining time in 50 ms steps (`0` ready, `1` to `254` a duration saturating at 12700 ms, `0xFF` unavailable), `B = 255 - R`. Polled on the 1 Hz tick with change detection and re-baselined on `EVENT_PLAYER_ACTIVATED`, because the game fires no per-slot cooldown event. Synergy has no block: it is a contextual prompt rather than an action slot, so the game exposes no cooldown for it. |
 | B16 Quickslot cooldown | (304, 0) | (312, 8) | `G = 0x38`, `R` is the active quickslot's remaining cooldown in the same 50 ms steps, and `B = 255 - R`. This is an attached fact and never classifies the selected entry. |
 | B17 to B19 Quickslot item | (320, 0) to (352, 0) | (328, 8) to (360, 8) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
@@ -625,7 +625,8 @@ nothing reads them. The following signals act:
 | B5 menu | The interception decision, the fishing controller, and the auto-potion controller |
 | B21 life state | The interception decision, queued weave execution, the fishing controller, and the auto-potion controller |
 | B6 to B8 resources, B16 to B20 quickslot | Auto-potion ([section 11](#11-auto-potion)) |
-| B4 combat, B9 movement, B10 to B15 cooldowns | Nothing. Observable only. |
+| B4 combat, B10 to B15 cooldowns | Nothing. Observable only. |
+| B9 movement | Display, plus auto-potion blocking only for explicit on-foot Sprinting. Unknown remains non-blocking because gamepad and mounted sprint are unsupported. |
 | B23 roll dodge | The interception decision, queued weave execution, and the real synthesis sink. Active and Unknown block generated weaving while physical skill input passes through. |
 | B22 world state, B24 travel | Every synthesis boundary. Input is permitted only while world is Active and travel is Inactive; physical input passes through and blocked automation is discarded. |
 
