@@ -89,12 +89,17 @@ impl RollGate {
 pub struct WeaveGates {
     life: LifeGate,
     roll: RollGate,
+    world: AtomicGate,
+    travel: AtomicGate,
 }
 
 impl WeaveGates {
     /// Whether any safety authority currently blocks generated weave work.
     pub fn is_gated(&self) -> bool {
-        self.life.is_gated() || self.roll.is_gated()
+        self.life.is_gated()
+            || self.roll.is_gated()
+            || self.world.is_gated()
+            || self.travel.is_gated()
     }
 }
 
@@ -169,6 +174,8 @@ pub struct InputEngine {
     menu_gated: AtomicBool,
     life_gate: LifeGate,
     roll_gate: RollGate,
+    world_gate: AtomicGate,
+    travel_gate: AtomicGate,
     held: Mutex<HashSet<Key>>,
     passed_through: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
@@ -188,6 +195,8 @@ impl InputEngine {
             menu_gated: AtomicBool::new(false),
             life_gate: LifeGate::default(),
             roll_gate: RollGate::default(),
+            world_gate: AtomicGate::default(),
+            travel_gate: AtomicGate::default(),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
@@ -212,6 +221,8 @@ impl InputEngine {
             self.menu_gated.store(false, Ordering::Relaxed);
             self.life_gate.set(true);
             self.roll_gate.set(true);
+            self.world_gate.set(true);
+            self.travel_gate.set(true);
             self.held.lock().unwrap().clear();
         }
     }
@@ -286,11 +297,33 @@ impl InputEngine {
         self.roll_gate.is_gated()
     }
 
+    /// Sets whether world lifecycle evidence blocks synthesized work.
+    pub fn set_world_gated(&self, gated: bool) {
+        self.world_gate.set(gated);
+    }
+
+    /// Whether world lifecycle evidence currently blocks synthesized work.
+    pub fn is_world_gated(&self) -> bool {
+        self.world_gate.is_gated()
+    }
+
+    /// Sets whether bounded travel evidence blocks synthesized work.
+    pub fn set_travel_gated(&self, gated: bool) {
+        self.travel_gate.set(gated);
+    }
+
+    /// Whether bounded travel evidence currently blocks synthesized work.
+    pub fn is_travel_gated(&self) -> bool {
+        self.travel_gate.is_gated()
+    }
+
     /// Shared safety handles for the running weave sink.
     pub fn weave_gates(&self) -> WeaveGates {
         WeaveGates {
             life: self.life_gate.clone(),
             roll: self.roll_gate.clone(),
+            world: self.world_gate.clone(),
+            travel: self.travel_gate.clone(),
         }
     }
 
@@ -351,6 +384,12 @@ impl InputEngine {
             return self.pass_physical(event);
         }
         if self.roll_gate.is_gated() && !suspend_exempt {
+            return self.pass_physical(event);
+        }
+        if self.world_gate.is_gated() && !suspend_exempt {
+            return self.pass_physical(event);
+        }
+        if self.travel_gate.is_gated() && !suspend_exempt {
             return self.pass_physical(event);
         }
 

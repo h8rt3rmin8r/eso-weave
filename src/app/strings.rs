@@ -21,6 +21,7 @@ pub const GAME_RUNTIME_TITLE: &str = "Game state";
 pub const LIFE_TITLE: &str = "Life state";
 pub const ROLL_DODGE_TITLE: &str = "Roll dodge";
 pub const WORLD_TITLE: &str = "World state";
+pub const TRAVEL_TITLE: &str = "Travel";
 
 // Status region tooltips.
 pub const STATUS_TOOLTIP: &str =
@@ -37,6 +38,8 @@ pub const GAME_RUNTIME_TOOLTIP: &str =
     "Whether the ESO client is inactive, its launcher is open, or the game client is active.";
 pub const WORLD_TOOLTIP: &str =
     "Whether ESO is loading or the current world has a complete fresh PixelBeacon baseline.";
+pub const TRAVEL_TOOLTIP: &str =
+    "Whether a recall or jump attempt is pending. Pending or unavailable evidence blocks all generated input.";
 pub const ROLL_DODGE_TOOLTIP: &str =
     "Whether the player is currently roll dodging. Active or unavailable evidence blocks generated weave skills; physical input still passes through.";
 
@@ -52,6 +55,8 @@ pub const FISHING_IDLE_SIGNAL_LOST: &str = "Idle (signal lost)";
 pub const FISHING_IDLE_GAME_INACTIVE: &str = "Idle (game not active)";
 pub const FISHING_IDLE_UNFOCUSED: &str = "Idle (game not focused)";
 pub const FISHING_IDLE_PLAYER_UNAVAILABLE: &str = "Idle (player unavailable)";
+pub const FISHING_IDLE_WORLD_UNAVAILABLE: &str = "Idle (world unavailable)";
+pub const FISHING_IDLE_TRAVEL_PENDING: &str = "Idle (travel pending)";
 
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";

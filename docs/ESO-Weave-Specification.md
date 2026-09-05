@@ -538,9 +538,9 @@ positively identified pre-version-14 addons.
 The first three cells are always H0 through H2 at row zero, columns zero through
 two. Payload block `i` occupies logical cell `3 + i`, column `cell mod columns`,
 and row `cell div columns`. At all supported client widths and block sizes the
-current 27 total cells fit on one row. The occupied extent is `BLOCK_PX *
+current 28 total cells fit on one row. The occupied extent is `BLOCK_PX *
 min(3 + NUM_BLOCKS, columns)` wide by `BLOCK_PX * ceil((3 + NUM_BLOCKS) /
-columns)` tall, which is 432 by 16 physical pixels at the default block size.
+columns)` tall, which is 448 by 16 physical pixels at the default block size.
 Cells after the last payload block are neither drawn nor read.
 
 The overlay is not movable. Its anchor is part of the shared geometry contract, so
@@ -549,8 +549,8 @@ undetectable failure mode as a column-count disagreement. The block size setting
 the supported way to reduce the footprint, and the application reports the current
 footprint beside that setting and in its log.
 
-**Negotiation.** H0 is `(0x45, 0x53, 0x60)`: two magic channels and the spaced
-wire code for protocol version 3. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
+**Negotiation.** H0 is `(0x45, 0x53, 0x80)`: two magic channels and the spaced
+wire code for protocol version 4. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
 `(columns_low, 0x9C, 255 - columns_low)`. Magic, markers, and complements honor
 the configured capture tolerance. Recognized magic
 with any invalid field, unsupported version, impossible count, or surface-fit
@@ -559,8 +559,10 @@ non-magic H0 selects the legacy 16-column, zero-offset layout only when it is a
 valid legacy magenta heartbeat. Geometry metadata caps effective tolerance at
 15, below half the version-code spacing, even when payload tolerance is broader.
 Protocol version 1 (`0x20`) remains readable with its 22-cell payload extent and
-version 2 (`0x40`) remains readable with its 23-cell extent. The reader samples
-B22 only for version 2 or newer and B23 only for version 3. Ordinary screen pixels
+version 2 (`0x40`) remains readable with its 23-cell extent, and version 3
+(`0x60`) remains readable with its 24-cell extent. The reader samples B22 only
+for version 2 or newer, B23 only for version 3 or newer, and B24 only for version
+4. Ordinary screen pixels
 beyond an older overlay therefore cannot impersonate a newer state.
 
 The addon and application each state the header constants once, and contract
@@ -573,7 +575,7 @@ initial negotiation or growth beyond the prepared frame.
 
 | Cell | Position | Sample | Encoding |
 | --- | --- | --- | --- |
-| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0x60)`, where `0x60` is logical version 3; versions 1 (`0x20`) and 2 (`0x40`) remain geometry-readable at their original payload extents |
+| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0x80)`, where `0x80` is logical version 4; versions 1 (`0x20`), 2 (`0x40`), and 3 (`0x60`) remain geometry-readable at their original payload extents |
 | H1 Column high byte | (16, 0) | (24, 8) | `(high, 0x64, 255 - high)` |
 | H2 Column low byte | (32, 0) | (40, 8) | `(low, 0x9C, 255 - low)` |
 
@@ -597,8 +599,9 @@ the default block size. Legacy addons retain the pre-version-14 positions.
 | B17 to B19 Quickslot item | (320, 0) to (352, 0) | (328, 8) to (360, 8) | The selected potion's optional 24-bit `GetItemLinkItemId`, one byte per block, most significant first. `G` is a per-byte marker (`0xB0`, `0xDD`, `0xF3`), `R` is the byte, and `B = 255 - R`. All three bytes must decode and B20 must explicitly classify a potion before the identity is retained. The number is diagnostic context only. |
 | B20 Quickslot classification | (368, 0) | (376, 8) | `G = 0x76`, `B = 255 - R`, and spaced `R` codes distinguish unsupported API, invalid selection, inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion. Missing B20 with a valid legacy B16 reports an addon update requirement. Invalid or tolerance-ambiguous B20 reports a corrupt signal. Classification uses `GetCurrentQuickslot`, `GetSlotType`, `GetSlotBoundId`, `GetSlotItemLink`, `GetSlotItemCount`, `IsSlotUsable`, and `GetSlotCooldownInfo`. Events for selection, slot contents, slot state, cooldowns, inventory, and player activation converge through one change-detected path with a 1 Hz recovery backstop. |
 | B21 Life state | (384, 0) | (392, 8) | `G = 0x89`, `R` is `0x20` Alive, `0x80` Dead, or `0xE0` Reincarnating, and `B = 255 - R`. `IsUnitReincarnating("player")` takes precedence over `IsUnitDead("player")`; player dead, alive, and activation events plus a 1 Hz backstop converge through one computation. Missing or invalid evidence is Unknown and blocks synthesis. |
-| B22 World state | (400, 0) | (408, 8) | Protocol version 2 only. `G = 0xCC`, `R` is `0x20` Unknown, `0x80` Transitioning, or `0xE0` Active, and `B = 255 - R`. `EVENT_PLAYER_DEACTIVATED` publishes Transitioning immediately. `EVENT_PLAYER_ACTIVATED` refreshes weapon, combat, menu, resources, movement, cooldowns, quickslot, life, and fishing payloads before publishing Active. No timer infers Active. Missing, invalid, or lost evidence is Unknown. |
-| B23 Roll dodge | (416, 0) | (424, 8) | Protocol version 3 only. `G = 0xF9`, `R` is `0x20` Unknown, `0x80` Inactive, or `0xE0` Active, and `B = 255 - R`. `EVENT_COMBAT_EVENT` is filtered to the player and ability 28549; effect gained publishes Active and effect faded publishes Inactive. A 1500 ms watchdog clears the known rejected-dodge gain without a matching fade. Death, deactivation, invalid data, and signal loss publish Unknown and disable combat-event handling until player activation or an in-place resurrection establishes an Inactive baseline. While interception is active, the companion caps its configured sample interval at 375 ms so multiple reads fit inside the bounded Active window. |
+| B22 World state | (400, 0) | (408, 8) | Protocol version 2 or newer. `G = 0xCC`, `R` is `0x20` Unknown, `0x80` Transitioning, or `0xE0` Active, and `B = 255 - R`. `EVENT_PLAYER_DEACTIVATED` publishes Transitioning immediately. `EVENT_PLAYER_ACTIVATED` refreshes every player-derived payload before publishing Active. No timer infers Active. Missing, invalid, or lost evidence is Unknown. |
+| B23 Roll dodge | (416, 0) | (424, 8) | Protocol version 3 or newer. `G = 0xF9`, `R` is `0x20` Unknown, `0x80` Inactive, or `0xE0` Active, and `B = 255 - R`. `EVENT_COMBAT_EVENT` is filtered to the player and ability 28549; effect gained publishes Active and effect faded publishes Inactive. A 1500 ms watchdog clears the known rejected-dodge gain without a matching fade. Death, deactivation, invalid data, and signal loss publish Unknown and disable combat-event handling until player activation or an in-place resurrection establishes an Inactive baseline. While interception is active, the companion caps its configured sample interval at 375 ms so multiple reads fit inside the bounded Active window. |
+| B24 Travel | (432, 0) | (440, 8) | Protocol version 4 only. `G = 0x13`, `R` is `0x20` Unknown, `0x80` Inactive, or `0xE0` Pending, and `B = 255 - R`. A recall-cooldown increase of at least 500 ms or `EVENT_PREPARE_FOR_JUMP` publishes Pending. Resumed movement after a 250 ms recall grace, `EVENT_JUMP_FAILED`, or a 15 second watchdog clears Pending. Death and deactivation publish Unknown; activation rebaselines recall cooldown before publishing Inactive. |
 
 No block is ever hidden to express a state. Absence means only that the addon is
 too old to draw it, which is what keeps an old addon from being read as a state.
@@ -613,7 +616,7 @@ remaining gap, which is what keeps the minimum separation high as the registry
 grows.
 
 **What acts, and what does not.** Most decoded signals are stored and displayed and
-nothing reads them. Two act:
+nothing reads them. The following signals act:
 
 | Signal | Consumer |
 | --- | --- |
@@ -623,8 +626,8 @@ nothing reads them. Two act:
 | B21 life state | The interception decision, queued weave execution, the fishing controller, and the auto-potion controller |
 | B6 to B8 resources, B16 to B20 quickslot | Auto-potion ([section 11](#11-auto-potion)) |
 | B4 combat, B9 movement, B10 to B15 cooldowns | Nothing. Observable only. |
-| B22 world state | Nothing in slice 049. Observable only until the travel-safety consumer is implemented. |
 | B23 roll dodge | The interception decision, queued weave execution, and the real synthesis sink. Active and Unknown block generated weaving while physical skill input passes through. |
+| B22 world state, B24 travel | Every synthesis boundary. Input is permitted only while world is Active and travel is Inactive; physical input passes through and blocked automation is discarded. |
 
 That distinction is deliberate and is enforced by tests asserting the engine
 behaves identically for every value of an observable-only signal, so wiring one
@@ -632,7 +635,7 @@ into a decision breaks a test rather than slipping through.
 
 ```mermaid
 flowchart LR
-    ADDON[PixelBeacon<br/>renders B0 to B23] --> SURF[Game window surface]
+    ADDON[PixelBeacon<br/>renders B0 to B24] --> SURF[Game window surface]
     SURF --> SMP[Sampler<br/>GDI or X11]
     SMP --> RDR[Reader: marker,<br/>checksum, tolerance]
     RDR --> ACT{{Acts on behavior}}

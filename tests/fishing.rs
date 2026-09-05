@@ -12,13 +12,17 @@ use eso_weave::fishing::{
 };
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{BindingTable, InputEngine, Key, Transition};
-use eso_weave::pixelbus::{LifeState, MockSampler, PixelBusReader, ReaderConfig, Rgb};
+use eso_weave::pixelbus::{
+    LifeState, MockSampler, PixelBusReader, ReaderConfig, Rgb, TravelState, WorldState,
+};
 
 fn controller() -> FishingController {
     let mut controller = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
     controller.set_game_environment(true, true, 0, &mut sink);
     controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
     controller
 }
 
@@ -46,6 +50,27 @@ fn non_alive_cancels_pending_fishing_without_replay_and_keeps_request() {
     assert!(
         sink.ops.is_empty(),
         "a manual fresh cast is observed, not synthesized"
+    );
+}
+
+#[test]
+fn pending_travel_cancels_fishing_without_replay_and_names_the_reason() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    sink.clear();
+
+    c.set_travel_state(TravelState::Pending);
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::TravelPending));
+    c.tick(10_000, &mut sink);
+    c.set_travel_state(TravelState::Inactive);
+    assert!(
+        sink.ops.is_empty(),
+        "travel recovery must not replay the reel"
     );
 }
 
@@ -563,7 +588,7 @@ fn inactive_game_refuses_the_initial_cast() {
 }
 
 #[test]
-fn game_return_waits_for_fresh_alive_and_manual_cast_evidence() {
+fn game_return_waits_for_fresh_safety_and_manual_cast_evidence() {
     let cfg = FishingConfig::default();
     let mut c = FishingController::new(cfg);
     let mut sink = MockFishingSink::new();
@@ -580,6 +605,12 @@ fn game_return_waits_for_fresh_alive_and_manual_cast_evidence() {
     assert!(
         sink.ops.is_empty(),
         "Alive alone must not replay the old cast"
+    );
+    c.set_world_state(WorldState::Active);
+    c.set_travel_state(TravelState::Inactive);
+    assert!(
+        sink.ops.is_empty(),
+        "safe telemetry must not replay the old cast"
     );
 
     c.on_event(DetectorEvent::FishingStarted, 1100, &mut sink);

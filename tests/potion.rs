@@ -14,7 +14,7 @@
 use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{
     LifeState, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
-    QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
+    QuickslotState, ResourceLevel, ResourceSet, SlotCooldown, TravelState, WorldState,
 };
 use eso_weave::potion::{
     evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState,
@@ -74,6 +74,8 @@ fn eligible_inputs() -> PotionInputs {
         suspended: false,
         gated: false,
         life: LifeState::Alive,
+        world: WorldState::Active,
+        travel: TravelState::Inactive,
     }
 }
 
@@ -90,6 +92,27 @@ fn every_non_alive_state_blocks_auto_potion_without_replay() {
         assert_eq!(
             evaluate(inputs, &config, true, None, 10_000),
             AutoPotionState::Blocked(BlockReason::PlayerUnavailable(life))
+        );
+    }
+}
+
+#[test]
+fn unsafe_world_and_travel_each_block_auto_potion_with_distinct_reasons() {
+    let config = config_all_watched();
+    let mut inputs = eligible_inputs();
+    for world in [WorldState::Unknown, WorldState::Transitioning] {
+        inputs.world = world;
+        assert_eq!(
+            evaluate(inputs, &config, true, None, 10_000),
+            AutoPotionState::Blocked(BlockReason::WorldUnavailable)
+        );
+    }
+    inputs.world = WorldState::Active;
+    for travel in [TravelState::Unknown, TravelState::Pending] {
+        inputs.travel = travel;
+        assert_eq!(
+            evaluate(inputs, &config, true, None, 10_000),
+            AutoPotionState::Blocked(BlockReason::TravelPending)
         );
     }
 }
@@ -238,6 +261,8 @@ fn s043_signal_loss_preserves_the_request_and_heartbeat_recovers() {
     assert!(sink.ops.is_empty());
 
     controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
     assert!(matches!(
         controller.tick(eligible_readings(), 30_000, &mut sink),
         AutoPotionState::Triggered(_)
@@ -596,6 +621,8 @@ fn armed_controller() -> AutoPotionController {
     // A positive gameplay-surface observation is required before synthesis.
     controller.set_gated(false);
     controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
     controller.set_enabled(true);
     controller
 }
@@ -618,6 +645,8 @@ fn startup_stays_gated_until_gameplay_surface_is_observed() {
 
     controller.set_gated(false);
     controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
     assert!(matches!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
         AutoPotionState::Triggered(_)
@@ -653,6 +682,8 @@ fn game_exit_requires_a_fresh_gameplay_surface_before_restart() {
 
     controller.set_gated(false);
     controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
     assert_eq!(
         controller.tick(eligible_readings(), 20_000, &mut sink),
         AutoPotionState::Triggered(TriggerCause {

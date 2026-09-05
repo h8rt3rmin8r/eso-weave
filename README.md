@@ -112,6 +112,13 @@ window contains multiple supported observations.
 PixelBeacon version 17 advertises protocol version 3 for this field; version 1 and
 2 layouts remain readable at their original extents.
 
+**Travel** reports **Pending** from the earliest bounded evidence of recall or
+jump travel until cancellation, failure, loading, or watchdog recovery. Pending
+or unavailable travel evidence, and any world state other than Active, blocks
+generated weave, fishing, and auto-potion input without swallowing physical
+keys or replaying deferred work. PixelBeacon version 18 advertises protocol
+version 4 for B24; versions 1 through 3 retain their original payload extents.
+
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which
 in-game surface PixelBeacon reports. **Gameplay** appears only when all four are

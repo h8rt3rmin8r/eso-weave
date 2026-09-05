@@ -1248,6 +1248,17 @@ impl EsoWeaveApp {
                                     metric_cells(
                                         ui,
                                         palette,
+                                        strings::TRAVEL_TITLE,
+                                        view.travel.state,
+                                        view.travel.role,
+                                        strings::TRAVEL_TOOLTIP,
+                                    );
+                                    ui.label("");
+                                    ui.end_row();
+
+                                    metric_cells(
+                                        ui,
+                                        palette,
                                         strings::WORLD_TITLE,
                                         view.world.state,
                                         view.world.role,

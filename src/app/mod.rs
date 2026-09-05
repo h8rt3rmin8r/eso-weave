@@ -35,7 +35,7 @@ use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState, SlotCooldown,
-    WeaponClass, WorldState,
+    TravelState, WeaponClass, WorldState,
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
@@ -97,6 +97,8 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
             Some(StopReason::GameInactive) => strings::FISHING_IDLE_GAME_INACTIVE,
             Some(StopReason::Unfocused) => strings::FISHING_IDLE_UNFOCUSED,
             Some(StopReason::PlayerUnavailable) => strings::FISHING_IDLE_PLAYER_UNAVAILABLE,
+            Some(StopReason::WorldUnavailable) => strings::FISHING_IDLE_WORLD_UNAVAILABLE,
+            Some(StopReason::TravelPending) => strings::FISHING_IDLE_TRAVEL_PENDING,
             None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
     }
@@ -194,6 +196,7 @@ pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> S
             | Some(StopReason::GameInactive)
             | Some(StopReason::Unfocused)
             | Some(StopReason::PlayerUnavailable) => StatusRole::Warning,
+            Some(StopReason::WorldUnavailable | StopReason::TravelPending) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
         },
         _ => StatusRole::Active,
@@ -284,6 +287,8 @@ pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
                 BlockReason::PlayerUnavailable(LifeState::Reincarnating) => {
                     strings::AUTO_POTION_BLOCKED_PLAYER_REINCARNATING
                 }
+                BlockReason::WorldUnavailable => "Blocked (world unavailable)",
+                BlockReason::TravelPending => "Blocked (travel pending)",
                 BlockReason::NoWatchedResource => strings::AUTO_POTION_BLOCKED_NO_WATCH,
                 BlockReason::ResourcesUnavailable => strings::AUTO_POTION_BLOCKED_RESOURCES,
                 BlockReason::QuickslotUnavailable => strings::AUTO_POTION_BLOCKED_QUICKSLOT,
@@ -498,6 +503,27 @@ pub fn world_state_view(state: WorldState) -> WorldStateView {
             WorldState::Active => StatusRole::Healthy,
             WorldState::Transitioning => StatusRole::Warning,
             WorldState::Unknown => StatusRole::Muted,
+        },
+    }
+}
+
+/// A normalized bounded travel view for System and State.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TravelStateView {
+    pub state: &'static str,
+    pub role: StatusRole,
+}
+
+pub fn travel_state_view(state: TravelState) -> TravelStateView {
+    TravelStateView {
+        state: match state {
+            TravelState::Unknown => "Not detected",
+            TravelState::Inactive => "Inactive",
+            TravelState::Pending => "Pending",
+        },
+        role: match state {
+            TravelState::Inactive => StatusRole::Muted,
+            TravelState::Unknown | TravelState::Pending => StatusRole::Warning,
         },
     }
 }
@@ -1294,6 +1320,8 @@ pub struct AppView {
     pub roll_dodge: RollDodgeView,
     /// Whether the current world is active after a fresh addon baseline.
     pub world: WorldStateView,
+    /// Whether a cancellable travel attempt is pending.
+    pub travel: TravelStateView,
     /// The detected game UI surface, and whether it is gating input.
     pub menu: MenuView,
     /// The detected resource levels.
@@ -1564,6 +1592,7 @@ impl AppModel {
             movement,
             life,
             roll_dodge,
+            travel,
             resources,
             quickslot,
         ) = {
@@ -1577,6 +1606,7 @@ impl AppModel {
                 weave.movement(),
                 weave.life(),
                 weave.roll_dodge(),
+                weave.travel(),
                 weave.resources(),
                 weave.quickslot(),
             )
@@ -1590,6 +1620,7 @@ impl AppModel {
         let mut life = life_state_view(life);
         let mut roll_dodge = roll_dodge_view(roll_dodge);
         let mut world = world_state_view(game.world);
+        let mut travel = travel_state_view(travel);
         let mut resources = resources_view_with_config(resources, auto_potion_config);
         let mut quickslot = quickslot_view(quickslot);
         if !active {
@@ -1619,6 +1650,10 @@ impl AppModel {
                 role: StatusRole::Muted,
             };
             world = WorldStateView {
+                state: "Game not active",
+                role: StatusRole::Muted,
+            };
+            travel = TravelStateView {
                 state: "Game not active",
                 role: StatusRole::Muted,
             };
@@ -1667,6 +1702,7 @@ impl AppModel {
             life,
             roll_dodge,
             world,
+            travel,
             menu: game_context_view(game.context()),
             resources,
             quickslot,

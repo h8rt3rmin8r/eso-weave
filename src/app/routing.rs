@@ -18,9 +18,13 @@ pub fn route_reader_safety_gate(event: PixelBusEvent, input: &InputEngine) {
     match event {
         PixelBusEvent::Life(life) if life.gates() => input.set_life_gated(true),
         PixelBusEvent::RollDodge(roll_dodge) if roll_dodge.gates() => input.set_roll_gated(true),
+        PixelBusEvent::World(world) if world.gates() => input.set_world_gated(true),
+        PixelBusEvent::Travel(travel) if travel.gates() => input.set_travel_gated(true),
         PixelBusEvent::SignalLost => {
             input.set_life_gated(true);
             input.set_roll_gated(true);
+            input.set_world_gated(true);
+            input.set_travel_gated(true);
         }
         _ => {}
     }
@@ -118,6 +122,20 @@ pub fn route_reader_event(
             input.set_roll_gated(roll_dodge.gates());
             return;
         }
+        PixelBusEvent::World(world) => {
+            weave.set_world(world);
+            fishing.set_world_state(world);
+            potion.set_world_state(world);
+            input.set_world_gated(world.gates());
+            return;
+        }
+        PixelBusEvent::Travel(travel) => {
+            weave.set_travel(travel);
+            fishing.set_travel_state(travel);
+            potion.set_travel_state(travel);
+            input.set_travel_gated(travel.gates());
+            return;
+        }
         PixelBusEvent::Cooldowns(set) => {
             weave.set_cooldowns(set);
             return;
@@ -145,8 +163,14 @@ pub fn route_reader_event(
             let life = crate::pixelbus::LifeState::Unknown;
             weave.set_life(life);
             weave.set_roll_dodge(crate::pixelbus::RollDodgeState::Unknown);
+            weave.set_world(crate::pixelbus::WorldState::Unknown);
+            weave.set_travel(crate::pixelbus::TravelState::Unknown);
             fishing.set_life_state(life);
+            fishing.set_world_state(crate::pixelbus::WorldState::Unknown);
+            fishing.set_travel_state(crate::pixelbus::TravelState::Unknown);
             potion.set_life_state(life);
+            potion.set_world_state(crate::pixelbus::WorldState::Unknown);
+            potion.set_travel_state(crate::pixelbus::TravelState::Unknown);
             potion.on_signal_lost();
         }
         PixelBusEvent::Heartbeat => potion.on_heartbeat(),

@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders a three-cell negotiated layout header followed by twenty-four square
+-- It renders a three-cell negotiated layout header followed by twenty-five square
 -- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
 -- sets this value on deploy) anchored to the top-left of the client area. Signals
 -- encode load status (B0), fishing state (B1), server latency
@@ -11,7 +11,7 @@
 -- skills and the ultimate (B10 to B15), and the active quickslot's remaining
 -- cooldown (B16), item identity (B17 to B19), explicit classification (B20),
 -- the player's life state (B21), world-transition state (B22), and bounded
--- roll-dodge state (B23).
+-- roll-dodge state (B23), and bounded travel state (B24).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -34,12 +34,12 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 24
--- Version-3 negotiated geometry header, shared byte for byte with the companion.
+local NUM_BLOCKS = 25
+-- Version-4 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
-local LAYOUT_PROTOCOL_VERSION = 3
-local LAYOUT_VERSION_CODE = 0x60
+local LAYOUT_PROTOCOL_VERSION = 4
+local LAYOUT_VERSION_CODE = 0x80
 local LAYOUT_HEADER_BLOCKS = 3
 local LAYOUT_MAGIC_R = 0x45
 local LAYOUT_MAGIC_G = 0x53
@@ -134,6 +134,23 @@ local rollDodgeDeadline = nil
 -- lifecycle guard so those late events cannot replace the fail-closed Unknown
 -- state until a fresh activation or in-place resurrection establishes a baseline.
 local rollDodgeLifecycleValid = false
+
+-- B24 travel state. Recall initiation is observed as a material upward edge in
+-- the documented recall cooldown. Jump-style travel is reinforced by the
+-- prepare and failure events. Every attempt is bounded and lifecycle-scoped.
+local TRAVEL_MARKER = 0x13
+local TRAVEL_UNKNOWN_RED = 0x20
+local TRAVEL_INACTIVE_RED = 0x80
+local TRAVEL_PENDING_RED = 0xE0
+local TRAVEL_RECALL_EDGE_MS = 500
+local TRAVEL_CANCEL_GRACE_MS = 250
+local TRAVEL_WATCHDOG_MS = 15000
+local travelState = TRAVEL_UNKNOWN_RED
+local travelSource = nil
+local travelStartedAt = nil
+local travelDeadline = nil
+local lastRecallRemaining = nil
+local travelLifecycleValid = false
 
 -- The six cooldown block markers (green channel), shared byte for byte with the
 -- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
@@ -661,6 +678,97 @@ local function onRollDodgeCombatEvent(_, result)
     elseif result == ACTION_RESULT_EFFECT_FADED then
         rollDodgeDeadline = nil
         setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    end
+end
+
+-- B24 Travel state ----------------------------------------------------------
+
+local function renderTravelState()
+    if blocks.status:IsHidden() then
+        blocks.travel:SetHidden(true)
+        return
+    end
+    blocks.travel:SetCenterColor(
+        channel(travelState), channel(TRAVEL_MARKER), channel(255 - travelState), 1
+    )
+    blocks.travel:SetHidden(false)
+end
+
+local function setTravelState(nextState)
+    if nextState == travelState then
+        return false
+    end
+    travelState = nextState
+    renderTravelState()
+    return true
+end
+
+local function invalidateTravelState()
+    travelLifecycleValid = false
+    travelSource = nil
+    travelStartedAt = nil
+    travelDeadline = nil
+    lastRecallRemaining = nil
+    setTravelState(TRAVEL_UNKNOWN_RED)
+end
+
+local function beginTravel(source)
+    if not travelLifecycleValid
+        or worldState ~= WORLD_ACTIVE_RED
+        or lifeState ~= LIFE_ALIVE_RED then
+        return
+    end
+    local now = GetGameTimeMilliseconds()
+    travelSource = source
+    travelStartedAt = now
+    travelDeadline = now + TRAVEL_WATCHDOG_MS
+    setTravelState(TRAVEL_PENDING_RED)
+end
+
+local function clearTravelState()
+    travelSource = nil
+    travelStartedAt = nil
+    travelDeadline = nil
+    if travelLifecycleValid
+        and worldState == WORLD_ACTIVE_RED
+        and lifeState == LIFE_ALIVE_RED then
+        setTravelState(TRAVEL_INACTIVE_RED)
+    else
+        setTravelState(TRAVEL_UNKNOWN_RED)
+    end
+end
+
+local function updateTravelState()
+    if not travelLifecycleValid then
+        return
+    end
+    local now = GetGameTimeMilliseconds()
+    local recallRemaining = GetRecallCooldown()
+    if lastRecallRemaining ~= nil
+        and recallRemaining >= lastRecallRemaining + TRAVEL_RECALL_EDGE_MS then
+        beginTravel("recall")
+    end
+    lastRecallRemaining = recallRemaining
+    if travelState ~= TRAVEL_PENDING_RED then
+        return
+    end
+    if travelDeadline ~= nil and now >= travelDeadline then
+        clearTravelState()
+    elseif travelSource == "recall"
+        and travelStartedAt ~= nil
+        and now >= travelStartedAt + TRAVEL_CANCEL_GRACE_MS
+        and (IsPlayerMoving() or IsPlayerTryingToMove()) then
+        clearTravelState()
+    end
+end
+
+local function onPrepareForJump()
+    beginTravel("jump")
+end
+
+local function onJumpFailed()
+    if travelState == TRAVEL_PENDING_RED and travelSource == "jump" then
+        clearTravelState()
     end
 end
 
@@ -1214,6 +1322,7 @@ local function onFastTick()
         rollDodgeDeadline = nil
         setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
     end
+    updateTravelState()
     if updateMenu() then
         renderMenu()
     end
@@ -1252,10 +1361,21 @@ local function rebaselinePlayerState()
     else
         invalidateRollDodgeState()
     end
+    if lifeState == LIFE_ALIVE_RED then
+        travelLifecycleValid = true
+        lastRecallRemaining = GetRecallCooldown()
+        travelSource = nil
+        travelStartedAt = nil
+        travelDeadline = nil
+        setTravelState(TRAVEL_INACTIVE_RED)
+    else
+        invalidateTravelState()
+    end
     onFishingTick()
 end
 
 local function onPlayerDeactivated()
+    invalidateTravelState()
     invalidateRollDodgeState()
     setWorldState(WORLD_TRANSITIONING_RED)
 end
@@ -1267,6 +1387,7 @@ end
 
 local function onPlayerDead()
     onLifeStateChanged()
+    invalidateTravelState()
     invalidateRollDodgeState()
 end
 
@@ -1278,6 +1399,9 @@ local function onPlayerAlive()
     rollDodgeLifecycleValid = true
     rollDodgeDeadline = nil
     setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    travelLifecycleValid = true
+    lastRecallRemaining = GetRecallCooldown()
+    clearTravelState()
 end
 
 -- The sole bite signal: the equipped bait's stack decreases by one while a cast
@@ -1342,6 +1466,7 @@ local function buildBlocks()
     blocks.life = createBlock("Life")
     blocks.world = createBlock("World")
     blocks.rollDodge = createBlock("RollDodge")
+    blocks.travel = createBlock("Travel")
 
     -- Payload order is the wire contract. The layout owns positions, and adding a
     -- signal requires adding exactly one entry here beside its block creation.
@@ -1370,6 +1495,7 @@ local function buildBlocks()
         blocks.life,
         blocks.world,
         blocks.rollDodge,
+        blocks.travel,
     }
     refreshLayout(true)
 
@@ -1394,6 +1520,7 @@ local function buildBlocks()
     renderLifeState()
     renderWorldState()
     renderRollDodgeState()
+    renderTravelState()
 end
 
 local function onLatencyTick()
@@ -1478,6 +1605,8 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onPlayerDead)
     em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onPlayerAlive)
     em:RegisterForEvent(ADDON_NAME .. "Deactivated", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
+    em:RegisterForEvent(ADDON_NAME .. "PrepareForJump", EVENT_PREPARE_FOR_JUMP, onPrepareForJump)
+    em:RegisterForEvent(ADDON_NAME .. "JumpFailed", EVENT_JUMP_FAILED, onJumpFailed)
     em:RegisterForEvent(ADDON_NAME .. "RollDodge", EVENT_COMBAT_EVENT, onRollDodgeCombatEvent)
     em:AddFilterForEvent(
         ADDON_NAME .. "RollDodge",
