@@ -824,11 +824,28 @@ impl EsoWeaveApp {
             }
             DashboardLayout::Wide => {
                 let mut rects = None;
-                ui.columns(2, |columns| {
-                    let live = Self::live_hud(&mut columns[0], &palette, &view);
-                    let system =
-                        self.system_and_automation(&mut columns[1], &palette, &view, intents);
-                    rects = Some((live, system));
+                let gap = ui.spacing().item_spacing.x;
+                let usable_width = ui.available_width() - gap;
+                let live_width = (usable_width * 0.46).clamp(380.0, 520.0);
+                let system_width = usable_width - live_width;
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(live_width, 0.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            let live = Self::live_hud(ui, &palette, &view);
+                            rects = Some((live, egui::Rect::NOTHING));
+                        },
+                    );
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(system_width, 0.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            let system = self.system_and_automation(ui, &palette, &view, intents);
+                            let live = rects.expect("Live HUD renders before operational state").0;
+                            rects = Some((live, system));
+                        },
+                    );
                 });
                 rects.expect("dashboard columns render both sections")
             }
@@ -1124,7 +1141,7 @@ impl EsoWeaveApp {
                         ui.end_row();
 
                         status_cells(ui, palette, &view.beacon_line);
-                        ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
                             let primary_intent = match beacon_primary_action(view.beacon_condition)
                             {
                                 Some(BeaconPrimaryAction::Install) => {

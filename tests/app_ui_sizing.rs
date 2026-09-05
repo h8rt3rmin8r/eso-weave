@@ -20,6 +20,7 @@ use eso_weave::app::ui::EsoWeaveApp;
 use eso_weave::app::{
     resource_view, widgets, AppModel, DashboardLayout, ResourceTheme, DASHBOARD_WIDE_MIN,
 };
+use eso_weave::beacon::{self, BeaconPrefs, Environment, MANAGED_MARKER};
 use eso_weave::config::{LoggingPrefs, Settings, Theme};
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
@@ -30,6 +31,10 @@ use eso_weave::weave::{WeaveConfig, WeaveEngine};
 /// Builds an app over a default model. The channel senders are leaked into the
 /// returned tuple so the receivers stay connected for the app's lifetime.
 fn test_app() -> EsoWeaveApp {
+    test_app_with_settings(Settings::default())
+}
+
+fn test_app_with_settings(settings: Settings) -> EsoWeaveApp {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
     let fishing = Arc::new(Mutex::new(FishingController::new(FishingConfig::default())));
@@ -43,7 +48,7 @@ fn test_app() -> EsoWeaveApp {
             eso_weave::potion::AutoPotionConfig::default(),
         ))),
         log,
-        Settings::default(),
+        settings,
         None,
         std::time::Instant::now(),
     );
@@ -60,7 +65,11 @@ fn test_app() -> EsoWeaveApp {
 /// recorded sizing state can be asserted. Several frames are needed because the
 /// content measurement is gated on two consecutive stable frames.
 fn render_at(size: egui::Vec2, frames: usize) -> EsoWeaveApp {
-    let mut harness = harness_at(size);
+    render_app_at(test_app(), size, frames)
+}
+
+fn render_app_at(app: EsoWeaveApp, size: egui::Vec2, frames: usize) -> EsoWeaveApp {
+    let mut harness = harness_for_app(app, size);
     for _ in 0..frames {
         harness.step();
     }
@@ -71,6 +80,10 @@ fn render_at(size: egui::Vec2, frames: usize) -> EsoWeaveApp {
 /// `main.rs` does at startup (the layout depends on them, so a bare harness would
 /// measure the wrong text metrics).
 fn harness_at(size: egui::Vec2) -> Harness<'static, EsoWeaveApp> {
+    harness_for_app(test_app(), size)
+}
+
+fn harness_for_app(app: EsoWeaveApp, size: egui::Vec2) -> Harness<'static, EsoWeaveApp> {
     let mut fonts_installed = false;
     Harness::builder().with_size(size).build_ui_state(
         move |ui, app: &mut EsoWeaveApp| {
@@ -84,7 +97,7 @@ fn harness_at(size: egui::Vec2) -> Harness<'static, EsoWeaveApp> {
             }
             app.frame_ui(ui);
         },
-        test_app(),
+        app,
     )
 }
 
@@ -115,6 +128,45 @@ fn dashboard_stacks_narrow_and_uses_columns_wide() {
         (wide_live.top() - wide_system.top()).abs() <= 0.5,
         "wide section tops are not aligned: {wide_live:?}, {wide_system:?}"
     );
+}
+
+#[test]
+fn outdated_addon_actions_fit_narrow_and_at_the_wide_breakpoint() {
+    let root = tempfile::tempdir().unwrap();
+    let addon = root.path().join("PixelBeacon");
+    std::fs::create_dir_all(&addon).unwrap();
+    std::fs::write(
+        addon.join("PixelBeacon.txt"),
+        format!("## Title: PixelBeacon\n{MANAGED_MARKER}\n## Version: 1\n"),
+    )
+    .unwrap();
+    let settings = Settings {
+        beacon: beacon::prefs_to_value(&BeaconPrefs {
+            path_override: Some(root.path().to_path_buf()),
+            environment: Environment::Live,
+        }),
+        ..Settings::default()
+    };
+
+    for width in [560.0, DASHBOARD_WIDE_MIN + 32.0] {
+        let app = render_app_at(
+            test_app_with_settings(settings.clone()),
+            egui::vec2(width, 1200.0),
+            SETTLE,
+        );
+        let (live, system) = app.dashboard_rects().expect("dashboard geometry");
+        assert!(
+            system.right() <= width + 0.5,
+            "operational actions escape the {width}-point viewport: {system:?}"
+        );
+        if width > 560.0 {
+            assert_eq!(app.last_dashboard_layout(), Some(DashboardLayout::Wide));
+            assert!(
+                live.right() <= system.left() + 0.5,
+                "outdated addon actions overlap Live HUD: {live:?}, {system:?}"
+            );
+        }
+    }
 }
 
 #[test]
