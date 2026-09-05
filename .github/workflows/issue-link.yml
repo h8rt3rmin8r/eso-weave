@@ -1,0 +1,65 @@
+name: Issue linkage
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  policy-tests:
+    name: Test proposed policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out proposed policy
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Test proposed issue-link policy
+        run: node --test .github/scripts/issue-link-policy.test.mjs
+
+  closing-issue:
+    name: Check closing issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted base policy
+        uses: actions/checkout@v7
+        with:
+          path: trusted
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Check out bootstrap policy
+        if: ${{ hashFiles('trusted/.github/scripts/issue-link-policy.mjs') == '' }}
+        uses: actions/checkout@v7
+        with:
+          path: proposed
+          persist-credentials: false
+
+      - name: Enforce issue-link policy
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if [ -f trusted/.github/scripts/issue-link-policy.mjs ]; then
+            node trusted/.github/scripts/issue-link-policy.mjs
+          else
+            echo "::notice::Bootstrapping the issue-link policy from this pull request."
+            node proposed/.github/scripts/issue-link-policy.mjs
+          fi

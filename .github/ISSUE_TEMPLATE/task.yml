@@ -7,7 +7,7 @@ body:
     id: outcome
     attributes:
       label: Outcome
-      description: What durable result should this task produce?
+      description: What one independently closeable result should this task produce?
     validations:
       required: true
   - type: dropdown
@@ -44,6 +44,17 @@ body:
       placeholder: |
         - [ ] First verifiable result
         - [ ] Second verifiable result
+    validations:
+      required: true
+  - type: dropdown
+    id: verification
+    attributes:
+      label: Verification lifecycle
+      description: Can this task close when its repository change merges, or does later release or field evidence need a separate issue?
+      options:
+        - Closes with repository evidence
+        - Requires a separate release-verification issue
+        - Not sure, triage should decide
     validations:
       required: true
   - type: input

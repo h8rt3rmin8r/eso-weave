@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S044 adds a tested issue-link policy for pull requests targeting `main`,
+  atomic issue and release-verification guidance, and a public ESO Weave Delivery
+  Project containing every repository issue. Its table is grouped by milestone,
+  its board is grouped by delivery Stage, and known spec-kit slice identifiers
+  preserve the implementation trail (issues #45, #46, and #47).
+
 - S043 restores production auto-potion triggering through the explicit S042
   quickslot contract. The controller now reports Off, dormant, blocked, Ready,
   and bounded Triggered states, identifies the current blocker in the main view,
@@ -86,6 +92,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undocumented: per-bar timing profiles ship and apply on bar swap.
 
 ### Decisions
+
+- 2026-09-03: Treat one actionable issue as one independently closeable outcome
+  and lifecycle. Separate merged implementation from later release or field
+  verification, require one complete GitHub closing reference per issue, and
+  reserve `skip: issue-link` for visible maintainer-approved exceptions. The new
+  workflow remains read-only, dependency-free, and based on `pull_request`, not
+  `pull_request_target`. It tests proposed policy changes in an isolated job and
+  enforces the policy copy from the trusted base commit in a separate job after
+  its one-time bootstrap.
+
+- 2026-09-03: Keep the GitHub Project minimal. Add only Stage and Slice, reuse
+  native issue labels and milestones for all other planning dimensions, and
+  leave GitHub's undeletable default Status field unused. Historical metadata is
+  corrected only from merge, tag, release, issue-state, or field evidence; this
+  audit removed one stale verification label from closed issue #22 and changed
+  no milestones.
 
 - 2026-09-03: Separate requested auto-potion enablement from effective runtime
   state. Temporary game, focus, beacon, suspension, and context conditions block

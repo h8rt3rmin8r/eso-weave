@@ -2,6 +2,16 @@
 
 <!-- Describe the user or maintainer outcome and why this change belongs here. -->
 
+<!--
+Every issue requires its own complete GitHub closing reference. Example:
+Closes #123
+Closes #124
+
+Do not use "Closes #123, #124" because the second number will not close.
+For an exceptional issue-free administration change, explain why and ask a
+maintainer to apply the skip: issue-link label.
+-->
+
 Closes #
 
 ## Slice and documentation
