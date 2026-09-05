@@ -36,7 +36,7 @@ use crate::config::{Notice, NoticeKind};
 use crate::input::{InputBackend, Key, Transition};
 use crate::pixelbus::{
     LifeState, QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
-    ResourceSet, SlotCooldown,
+    ResourceSet, SlotCooldown, TravelState, WorldState,
 };
 
 /// The largest accepted retry interval, in milliseconds.
@@ -139,6 +139,10 @@ pub enum BlockReason {
     GameContext,
     /// The player is not authoritatively alive.
     PlayerUnavailable(LifeState),
+    /// The world is loading or lacks an authoritative active baseline.
+    WorldUnavailable,
+    /// A travel attempt is pending or cannot be ruled out.
+    TravelPending,
     /// None of the three resource watches is enabled.
     NoWatchedResource,
     /// No enabled resource has a fresh percentage.
@@ -190,6 +194,8 @@ impl AutoPotionState {
             Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Alive)) => {
                 "blocked_player_alive_invalid"
             }
+            Self::Blocked(BlockReason::WorldUnavailable) => "blocked_world_unavailable",
+            Self::Blocked(BlockReason::TravelPending) => "blocked_travel_pending",
             Self::Blocked(BlockReason::NoWatchedResource) => "blocked_no_watched_resource",
             Self::Blocked(BlockReason::ResourcesUnavailable) => "blocked_resources_unavailable",
             Self::Blocked(BlockReason::QuickslotUnavailable) => "blocked_quickslot_unavailable",
@@ -251,6 +257,10 @@ pub struct PotionInputs {
     pub gated: bool,
     /// The authoritative player life state. Only Alive permits synthesis.
     pub life: LifeState,
+    /// Authoritative world lifecycle state. Only Active permits synthesis.
+    pub world: WorldState,
+    /// Bounded travel state. Only Inactive permits synthesis.
+    pub travel: TravelState,
 }
 
 fn low_resource(
@@ -328,6 +338,12 @@ pub fn evaluate(
     }
     if inputs.life.gates() {
         return AutoPotionState::Blocked(BlockReason::PlayerUnavailable(inputs.life));
+    }
+    if inputs.world.gates() {
+        return AutoPotionState::Blocked(BlockReason::WorldUnavailable);
+    }
+    if inputs.travel.gates() {
+        return AutoPotionState::Blocked(BlockReason::TravelPending);
     }
 
     let cause = match low_resource(config, inputs.readings.resources) {
@@ -429,6 +445,8 @@ pub struct AutoPotionController {
     gated: bool,
     suspended: bool,
     life: LifeState,
+    world: WorldState,
+    travel: TravelState,
     last_attempt_ms: Option<u64>,
     state: AutoPotionState,
 }
@@ -454,6 +472,8 @@ impl AutoPotionController {
             gated: true,
             suspended: false,
             life: LifeState::Unknown,
+            world: WorldState::Unknown,
+            travel: TravelState::Unknown,
             last_attempt_ms: None,
             state: AutoPotionState::Off,
         }
@@ -522,6 +542,10 @@ impl AutoPotionController {
             Some(AutoPotionState::Blocked(BlockReason::PlayerUnavailable(
                 self.life,
             )))
+        } else if self.world.gates() {
+            Some(AutoPotionState::Blocked(BlockReason::WorldUnavailable))
+        } else if self.travel.gates() {
+            Some(AutoPotionState::Blocked(BlockReason::TravelPending))
         } else {
             None
         };
@@ -552,6 +576,8 @@ impl AutoPotionController {
             // positive gameplay observation after the process returns.
             self.gated = true;
             self.life = LifeState::Unknown;
+            self.world = WorldState::Unknown;
+            self.travel = TravelState::Unknown;
         }
         self.apply_immediate_state();
     }
@@ -580,6 +606,18 @@ impl AutoPotionController {
         self.apply_immediate_state();
     }
 
+    /// Sets authoritative world lifecycle state.
+    pub fn set_world_state(&mut self, world: WorldState) {
+        self.world = world;
+        self.apply_immediate_state();
+    }
+
+    /// Sets bounded travel state.
+    pub fn set_travel_state(&mut self, travel: TravelState) {
+        self.travel = travel;
+        self.apply_immediate_state();
+    }
+
     /// Sets whether the application is suspended.
     ///
     /// Suspend is the operator saying "stop touching my game", so it is a checked
@@ -603,6 +641,8 @@ impl AutoPotionController {
         // recovered heartbeat can precede a decodable surface block.
         self.gated = true;
         self.life = LifeState::Unknown;
+        self.world = WorldState::Unknown;
+        self.travel = TravelState::Unknown;
         self.apply_immediate_state();
     }
 
@@ -629,6 +669,8 @@ impl AutoPotionController {
             suspended: self.suspended,
             gated: self.gated,
             life: self.life,
+            world: self.world,
+            travel: self.travel,
         };
         let outcome = evaluate(
             inputs,

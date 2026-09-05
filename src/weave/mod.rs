@@ -18,7 +18,8 @@ use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key, MouseButton, Transition, WeaveGates};
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
-    QuickslotState, ResourceSet, RollDodgeState, WeaponBarSignal, WeaponClass,
+    QuickslotState, ResourceSet, RollDodgeState, TravelState, WeaponBarSignal, WeaponClass,
+    WorldState,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -309,6 +310,8 @@ pub struct WeaveEngine {
     movement: MovementSignal,
     life: LifeState,
     roll_dodge: RollDodgeState,
+    world: WorldState,
+    travel: TravelState,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
     menu: MenuSurface,
@@ -332,6 +335,8 @@ impl WeaveEngine {
             movement: MovementSignal::Unknown,
             life: LifeState::Unknown,
             roll_dodge: RollDodgeState::Unknown,
+            world: WorldState::Unknown,
+            travel: TravelState::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
@@ -392,6 +397,26 @@ impl WeaveEngine {
     /// The last decoded roll-dodge state.
     pub fn roll_dodge(&self) -> RollDodgeState {
         self.roll_dodge
+    }
+
+    /// Records authoritative world lifecycle state.
+    pub fn set_world(&mut self, world: WorldState) {
+        self.world = world;
+    }
+
+    /// The last decoded world lifecycle state.
+    pub fn world(&self) -> WorldState {
+        self.world
+    }
+
+    /// Records bounded travel state.
+    pub fn set_travel(&mut self, travel: TravelState) {
+        self.travel = travel;
+    }
+
+    /// The last decoded bounded travel state.
+    pub fn travel(&self) -> TravelState {
+        self.travel
     }
 
     /// Records the decoded slot cooldowns, for display only.
@@ -477,6 +502,8 @@ impl WeaveEngine {
         self.movement = MovementSignal::Unknown;
         self.life = LifeState::Unknown;
         self.roll_dodge = RollDodgeState::Unknown;
+        self.world = WorldState::Unknown;
+        self.travel = TravelState::Unknown;
         self.cooldowns = CooldownSet::new_unknown();
         self.quickslot = QuickslotState::new_unknown();
         self.menu = MenuSurface::None;
@@ -570,6 +597,9 @@ impl WeaveEngine {
             return;
         }
         if self.roll_dodge.gates() {
+            return;
+        }
+        if self.world.gates() || self.travel.gates() {
             return;
         }
 

@@ -344,6 +344,32 @@ pub enum WorldState {
     Active,
 }
 
+impl WorldState {
+    /// Whether this lifecycle observation forbids synthesized input.
+    pub fn gates(self) -> bool {
+        self != Self::Active
+    }
+}
+
+/// Whether ESO is inside the cancellable interval of a travel attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TravelState {
+    /// No trustworthy current travel evidence is available.
+    #[default]
+    Unknown,
+    /// Valid lifecycle data reports no pending travel.
+    Inactive,
+    /// A recall or jump attempt is pending.
+    Pending,
+}
+
+impl TravelState {
+    /// Whether this observation forbids synthesized input.
+    pub fn gates(self) -> bool {
+        self != Self::Inactive
+    }
+}
+
 /// Whether the player is inside the bounded roll-dodge action window.
 ///
 /// Unknown and Active both gate generated weave work. Only a positively decoded
@@ -395,6 +421,12 @@ const ROLL_DODGE_MARKER: u8 = 0xF9;
 const ROLL_DODGE_UNKNOWN_RED: u8 = 0x20;
 const ROLL_DODGE_INACTIVE_RED: u8 = 0x80;
 const ROLL_DODGE_ACTIVE_RED: u8 = 0xE0;
+
+/// The green marker identifying the B24 travel-state sample.
+const TRAVEL_MARKER: u8 = 0x13;
+const TRAVEL_UNKNOWN_RED: u8 = 0x20;
+const TRAVEL_INACTIVE_RED: u8 = 0x80;
+const TRAVEL_PENDING_RED: u8 = 0xE0;
 
 /// The green marker that identifies a movement sample.
 ///
@@ -635,7 +667,7 @@ const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 28] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 29] = [
     ("H0 layout magic", LAYOUT_MAGIC_G),
     ("H1 layout high marker", LAYOUT_HIGH_MARKER),
     ("H2 layout low marker", LAYOUT_LOW_MARKER),
@@ -664,6 +696,7 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 28] = [
     ("B21 life-state marker", LIFE_MARKER),
     ("B22 world-state marker", WORLD_MARKER),
     ("B23 roll-dodge marker", ROLL_DODGE_MARKER),
+    ("B24 travel-state marker", TRAVEL_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -715,6 +748,8 @@ pub enum PixelBusEvent {
     /// A change in the bounded player roll-dodge state. Unknown and Active gate
     /// generated weave work.
     RollDodge(RollDodgeState),
+    /// A change in bounded travel state. Unknown and Pending gate all synthesis.
+    Travel(TravelState),
 }
 
 /// The raw samples taken from one strip read, one field per block.
@@ -776,6 +811,8 @@ pub struct BlockSamples {
     pub world: Option<Rgb>,
     /// B23, the player roll-dodge block.
     pub roll_dodge: Option<Rgb>,
+    /// B24, the bounded travel-state block.
+    pub travel: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -896,11 +933,11 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In the version-17 addon, the 24 blocks follow three negotiated header cells
+/// In the version-18 addon, the 25 blocks follow three negotiated header cells
 /// and remain on one row at every supported client width and block size. In the
 /// explicit legacy layout they retain the two-row 16-column shape introduced by
 /// slices 038 and 042.
-pub const NUM_BLOCKS: u32 = 24;
+pub const NUM_BLOCKS: u32 = 25;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -920,11 +957,11 @@ pub const COLUMNS: u32 = 16;
 /// identified by its legacy heartbeat at cell zero.
 pub const LEGACY_COLUMNS: u32 = COLUMNS;
 
-/// Current negotiated geometry header version. Version 3 identifies the B23
-/// roll-dodge payload introduced by addon version 17.
-pub const LAYOUT_PROTOCOL_VERSION: u8 = 3;
-/// Spaced blue-channel wire code representing current protocol version 3.
-pub const LAYOUT_VERSION_CODE: u8 = 0x60;
+/// Current negotiated geometry header version. Version 4 identifies the B24
+/// travel payload introduced by addon version 18.
+pub const LAYOUT_PROTOCOL_VERSION: u8 = 4;
+/// Spaced blue-channel wire code representing current protocol version 4.
+pub const LAYOUT_VERSION_CODE: u8 = 0x80;
 /// Frozen blue-channel wire code for negotiated protocol version 1.
 pub const LAYOUT_VERSION_ONE_CODE: u8 = 0x20;
 /// Payload count of negotiated protocol version 1 (addon versions 14 and 15).
@@ -933,6 +970,10 @@ pub const LAYOUT_VERSION_ONE_BLOCKS: u32 = 22;
 pub const LAYOUT_VERSION_TWO_CODE: u8 = 0x40;
 /// Payload count of negotiated protocol version 2 (addon version 16).
 pub const LAYOUT_VERSION_TWO_BLOCKS: u32 = 23;
+/// Frozen blue-channel wire code for negotiated protocol version 3.
+pub const LAYOUT_VERSION_THREE_CODE: u8 = 0x60;
+/// Payload count of negotiated protocol version 3 (addon version 17).
+pub const LAYOUT_VERSION_THREE_BLOCKS: u32 = 24;
 /// Maximum tolerance accepted for geometry metadata.
 ///
 /// This remains below half the 0x20 version-code spacing so a caller's broad
@@ -1004,6 +1045,7 @@ impl BusLayout {
         match self.mode {
             LayoutMode::Negotiated { version: 1 } => LAYOUT_VERSION_ONE_BLOCKS,
             LayoutMode::Negotiated { version: 2 } => LAYOUT_VERSION_TWO_BLOCKS,
+            LayoutMode::Negotiated { version: 3 } => LAYOUT_VERSION_THREE_BLOCKS,
             LayoutMode::Legacy | LayoutMode::Negotiated { .. } => NUM_BLOCKS,
         }
     }
@@ -1016,6 +1058,11 @@ impl BusLayout {
     /// Whether this geometry generation positively identifies B23.
     pub const fn supports_roll_dodge(self) -> bool {
         matches!(self.mode, LayoutMode::Negotiated { version } if version >= 3)
+    }
+
+    /// Whether this geometry generation positively identifies B24.
+    pub const fn supports_travel(self) -> bool {
+        matches!(self.mode, LayoutMode::Negotiated { version } if version >= 4)
     }
 
     /// Total occupied cells, including the negotiated header when present.
@@ -1303,6 +1350,10 @@ impl ReaderConfig {
     pub fn roll_dodge_point(&self) -> (u32, u32) {
         block_center(self.block_px, 23)
     }
+    /// The legacy-grid bounded travel-state block (B24) sample point.
+    pub fn travel_point(&self) -> (u32, u32) {
+        block_center(self.block_px, 24)
+    }
 }
 
 impl Default for ReaderConfig {
@@ -1468,6 +1519,8 @@ pub fn decode_layout_header(
         LAYOUT_PROTOCOL_VERSION
     } else if within(h0.b, LAYOUT_VERSION_TWO_CODE, layout_tolerance) {
         2
+    } else if within(h0.b, LAYOUT_VERSION_THREE_CODE, layout_tolerance) {
+        3
     } else if within(h0.b, LAYOUT_VERSION_ONE_CODE, layout_tolerance) {
         1
     } else {
@@ -1689,6 +1742,29 @@ pub fn decode_roll_dodge(sample: Rgb, tolerance: u8) -> RollDodgeState {
     };
     if matches.next().is_some() {
         return RollDodgeState::Unknown;
+    }
+    state
+}
+
+/// Decodes B24 into bounded travel state. Every failure is fail-safe Unknown.
+pub fn decode_travel_state(sample: Rgb, tolerance: u8) -> TravelState {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if !within(sample.g, TRAVEL_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance)
+    {
+        return TravelState::Unknown;
+    }
+    let mut matches = [
+        (TRAVEL_UNKNOWN_RED, TravelState::Unknown),
+        (TRAVEL_INACTIVE_RED, TravelState::Inactive),
+        (TRAVEL_PENDING_RED, TravelState::Pending),
+    ]
+    .into_iter()
+    .filter(|(code, _)| within(sample.r, *code, tolerance));
+    let Some((_, state)) = matches.next() else {
+        return TravelState::Unknown;
+    };
+    if matches.next().is_some() {
+        return TravelState::Unknown;
     }
     state
 }
@@ -2005,6 +2081,7 @@ pub struct PixelBusReader {
     life: LifeState,
     world: WorldState,
     roll_dodge: RollDodgeState,
+    travel: TravelState,
     had_heartbeat: bool,
 }
 
@@ -2027,6 +2104,7 @@ impl PixelBusReader {
             life: LifeState::Unknown,
             world: WorldState::Unknown,
             roll_dodge: RollDodgeState::Unknown,
+            travel: TravelState::Unknown,
             had_heartbeat: false,
         }
     }
@@ -2045,6 +2123,20 @@ impl PixelBusReader {
     pub fn reset(&mut self) {
         let config = self.config;
         *self = Self::new(config);
+    }
+
+    /// Invalidates cached world and travel evidence before input resumes.
+    ///
+    /// The returned fail-closed events synchronize every controller immediately.
+    /// The next valid sample then republishes both values even when their encoded
+    /// states are unchanged from the observations made before suspension.
+    pub fn invalidate_safety_observations(&mut self) -> [PixelBusEvent; 2] {
+        self.world = WorldState::Unknown;
+        self.travel = TravelState::Unknown;
+        [
+            PixelBusEvent::World(WorldState::Unknown),
+            PixelBusEvent::Travel(TravelState::Unknown),
+        ]
     }
 
     /// Clears every payload-derived observation exactly once. This is used both
@@ -2106,6 +2198,10 @@ impl PixelBusReader {
             self.roll_dodge = RollDodgeState::Unknown;
             events.push(PixelBusEvent::RollDodge(RollDodgeState::Unknown));
         }
+        if self.travel != TravelState::Unknown {
+            self.travel = TravelState::Unknown;
+            events.push(PixelBusEvent::Travel(TravelState::Unknown));
+        }
         events
     }
 
@@ -2137,6 +2233,7 @@ impl PixelBusReader {
             life: b21,
             world: b22,
             roll_dodge: b23,
+            travel: b24,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -2229,6 +2326,14 @@ impl PixelBusReader {
                     "player roll-dodge state detected"
                 );
                 events.push(PixelBusEvent::RollDodge(roll_dodge));
+            }
+
+            // B24 is authoritative for every synthesis path and precedes work.
+            let travel = b24.map_or(TravelState::Unknown, |c| decode_travel_state(c, tolerance));
+            if travel != self.travel {
+                self.travel = travel;
+                tracing::debug!(target: "eso_weave::pixelbus", signal = ?travel, "player travel state detected");
+                events.push(PixelBusEvent::Travel(travel));
             }
 
             let signal = b1.map_or(FishingSignal::None, |c| fishing_signal(c, tolerance));
@@ -2483,6 +2588,11 @@ impl PixelBusReader {
             },
             roll_dodge: if layout.supports_roll_dodge() {
                 sample(23)
+            } else {
+                None
+            },
+            travel: if layout.supports_travel() {
+                sample(24)
             } else {
                 None
             },

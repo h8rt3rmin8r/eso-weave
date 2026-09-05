@@ -16,8 +16,8 @@ pub use detector::{map_event, BiteDetector, PixelBusDetector, StubDetector};
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
-use crate::input::{InputBackend, Key, LifeGate, Transition};
-use crate::pixelbus::LifeState;
+use crate::input::{InputBackend, Key, LifeGate, Transition, WorldTravelGate};
+use crate::pixelbus::{LifeState, TravelState, WorldState};
 
 /// The maximum accepted value for a fishing timing parameter, in milliseconds.
 const MAX_TIMING_MS: u32 = 60_000;
@@ -70,6 +70,10 @@ pub enum StopReason {
     Unfocused,
     /// The player is dead, reincarnating, or not authoritatively known alive.
     PlayerUnavailable,
+    /// The world is loading or has no authoritative active baseline.
+    WorldUnavailable,
+    /// A cancellable travel attempt is pending or cannot be ruled out.
+    TravelPending,
 }
 
 /// The kind of the controller's single pending deadline.
@@ -261,6 +265,9 @@ pub struct FishingController {
     focused: bool,
     life: LifeState,
     life_gate: LifeGate,
+    world: WorldState,
+    travel: TravelState,
+    world_travel_gate: Option<WorldTravelGate>,
 }
 
 /// How long an interact deferred by the menu gate waits before trying again.
@@ -287,7 +294,21 @@ impl FishingController {
             focused: false,
             life: LifeState::Unknown,
             life_gate,
+            world: WorldState::Unknown,
+            travel: TravelState::Unknown,
+            world_travel_gate: None,
         }
+    }
+
+    /// Creates a controller attached to all independently updated safety gates.
+    pub fn with_safety_gates(
+        config: FishingConfig,
+        life_gate: LifeGate,
+        world_travel_gate: WorldTravelGate,
+    ) -> Self {
+        let mut controller = Self::with_life_gate(config, life_gate);
+        controller.world_travel_gate = Some(world_travel_gate);
+        controller
     }
 
     /// Whether the operator has requested fishing. Runtime and focus can pause
@@ -329,7 +350,7 @@ impl FishingController {
                     self.stop_reason = Some(StopReason::Unfocused);
                     return;
                 }
-                if self.block_for_life() {
+                if self.block_for_safety() {
                     return;
                 }
                 tracing::debug!(target: "eso_weave::fishing", "fishing enabled");
@@ -347,7 +368,7 @@ impl FishingController {
     /// Handles a detector event.
     pub fn on_event(&mut self, event: DetectorEvent, now_ms: u64, sink: &mut dyn FishingSink) {
         if !matches!(event, DetectorEvent::SignalLost | DetectorEvent::Heartbeat)
-            && self.block_for_life()
+            && self.block_for_safety()
         {
             return;
         }
@@ -369,6 +390,8 @@ impl FishingController {
                     && self.game_active
                     && self.focused
                     && !self.life_gate.is_gated()
+                    && !self.world.gates()
+                    && !self.travel.gates()
                 {
                     tracing::debug!(target: "eso_weave::fishing", "fresh manual cast detected after life-state recovery");
                     self.state = FishingState::Waiting;
@@ -417,7 +440,7 @@ impl FishingController {
 
     /// Fires the pending deadline if it is due at `now_ms`.
     pub fn tick(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
-        if self.block_for_life() {
+        if self.block_for_safety() {
             return;
         }
         let Some((at_ms, kind)) = self.deadline else {
@@ -501,7 +524,19 @@ impl FishingController {
     pub fn set_life_state(&mut self, life: LifeState) {
         self.life = life;
         self.life_gate.set(life.gates());
-        self.block_for_life();
+        self.block_for_safety();
+    }
+
+    /// Applies authoritative world lifecycle state.
+    pub fn set_world_state(&mut self, world: WorldState) {
+        self.world = world;
+        self.block_for_safety();
+    }
+
+    /// Applies bounded travel state.
+    pub fn set_travel_state(&mut self, travel: TravelState) {
+        self.travel = travel;
+        self.block_for_safety();
     }
 
     /// Updates the process and focus gates together. Losing either gate pauses an
@@ -520,6 +555,8 @@ impl FishingController {
             self.gated = false;
             self.life = LifeState::Unknown;
             self.life_gate.set(true);
+            self.world = WorldState::Unknown;
+            self.travel = TravelState::Unknown;
             self.on_game_inactive();
         } else if !focused {
             if self.state != FishingState::Disabled {
@@ -530,6 +567,8 @@ impl FishingController {
         } else if self.requested_enabled
             && self.state == FishingState::Disabled
             && !self.life_gate.is_gated()
+            && !self.world.gates()
+            && !self.travel.gates()
             && matches!(
                 self.stop_reason,
                 Some(StopReason::GameInactive | StopReason::Unfocused)
@@ -552,7 +591,7 @@ impl FishingController {
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and
     /// clears any prior stop reason now that a fresh session is starting.
     fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
-        if self.block_for_life() {
+        if self.block_for_safety() {
             return;
         }
         tracing::debug!(
@@ -578,15 +617,32 @@ impl FishingController {
         self.stop_reason = Some(reason);
     }
 
-    fn block_for_life(&mut self) -> bool {
-        if !self.life_gate.is_gated() {
+    fn block_for_safety(&mut self) -> bool {
+        let shared_world_gated = self
+            .world_travel_gate
+            .as_ref()
+            .is_some_and(WorldTravelGate::world_is_gated);
+        let shared_travel_gated = self
+            .world_travel_gate
+            .as_ref()
+            .is_some_and(WorldTravelGate::travel_is_gated);
+        let reason = if self.life_gate.is_gated() {
+            Some(StopReason::PlayerUnavailable)
+        } else if shared_world_gated || self.world.gates() {
+            Some(StopReason::WorldUnavailable)
+        } else if shared_travel_gated || self.travel.gates() {
+            Some(StopReason::TravelPending)
+        } else {
+            None
+        };
+        let Some(reason) = reason else {
             return false;
-        }
+        };
         if self.requested_enabled || self.state != FishingState::Disabled {
             if self.state != FishingState::Disabled {
-                self.disable(StopReason::PlayerUnavailable);
+                self.disable(reason);
             } else {
-                self.stop_reason = Some(StopReason::PlayerUnavailable);
+                self.stop_reason = Some(reason);
                 self.deadline = None;
             }
         }

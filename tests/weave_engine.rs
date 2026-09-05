@@ -9,7 +9,8 @@ use eso_weave::input::{
 use eso_weave::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
-    ResourceSet, RollDodgeState, SlotCooldown, WeaponBarSignal, WeaponClass,
+    ResourceSet, RollDodgeState, SlotCooldown, TravelState, WeaponBarSignal, WeaponClass,
+    WorldState,
 };
 use eso_weave::weave::types::{InputOp, TimingConfig, WeaveType};
 use eso_weave::weave::{
@@ -26,6 +27,20 @@ fn down(key: Key) -> KeyEvent {
     }
 }
 
+fn open_input_safety(input: &InputEngine) {
+    input.set_life_gated(false);
+    input.set_roll_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+}
+
+fn open_weave_safety(engine: &mut WeaveEngine) {
+    engine.set_life(LifeState::Alive);
+    engine.set_roll_dodge(RollDodgeState::Inactive);
+    engine.set_world(WorldState::Active);
+    engine.set_travel(TravelState::Inactive);
+}
+
 #[test]
 fn real_sink_stops_new_presses_but_releases_held_input_when_life_gate_closes() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
@@ -35,6 +50,8 @@ fn real_sink_stops_new_presses_but_releases_held_input_when_life_gate_closes() {
 
     input.set_life_gated(false);
     input.set_roll_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
     sink.begin_sequence();
     sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
     input.set_life_gated(true);
@@ -69,9 +86,32 @@ fn real_sink_stops_new_presses_but_releases_held_input_when_roll_gate_closes() {
     let mut sink = RealSink::new(backend, input.weave_gates());
     input.set_life_gated(false);
     input.set_roll_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
     sink.begin_sequence();
     sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
     input.set_roll_gated(true);
+    sink.emit(InputOp::Key(Key::Digit2, Transition::Down));
+    sink.emit(InputOp::Key(Key::Digit1, Transition::Up));
+    assert_eq!(
+        *captured.lock().unwrap(),
+        vec![
+            (Key::Digit1, Transition::Down),
+            (Key::Digit1, Transition::Up)
+        ]
+    );
+}
+
+#[test]
+fn real_sink_releases_held_input_when_travel_gate_closes() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    open_input_safety(&input);
+    let backend = MockBackend::new();
+    let captured = backend.synthesized.clone();
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    sink.begin_sequence();
+    sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
+    input.set_travel_gated(true);
     sink.emit(InputOp::Key(Key::Digit2, Transition::Down));
     sink.emit(InputOp::Key(Key::Digit1, Transition::Up));
     assert_eq!(
@@ -93,6 +133,8 @@ fn real_sink_observes_roll_gate_closure_during_a_wait() {
     let mut sink = RealSink::new(backend, input.weave_gates());
     input.set_life_gated(false);
     input.set_roll_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
     sink.begin_sequence();
     sink.emit(InputOp::Mouse(
         eso_weave::input::MouseButton::Primary,
@@ -135,6 +177,10 @@ fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
     engine.set_life(LifeState::Alive);
     engine.set_roll_dodge(RollDodgeState::Inactive);
     input.set_life_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+    engine.set_world(WorldState::Active);
+    engine.set_travel(TravelState::Inactive);
 
     engine.handle(Action::Skill1, &mut sink);
     assert!(captured.lock().unwrap().is_empty());
@@ -187,8 +233,7 @@ fn clearing_game_observations_restores_every_dormant_value() {
 #[test]
 fn cooldown_gates_repeated_weaves() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
-    engine.set_life(LifeState::Alive);
-    engine.set_roll_dodge(RollDodgeState::Inactive);
+    open_weave_safety(&mut engine);
     let mut sink = MockSink::new();
 
     sink.set_now(0);
@@ -214,6 +259,9 @@ fn cooldown_gates_repeated_weaves() {
 #[test]
 fn queued_weave_requires_alive_and_is_not_replayed_after_recovery() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.set_world(WorldState::Active);
+    engine.set_travel(TravelState::Inactive);
+    engine.set_roll_dodge(RollDodgeState::Inactive);
     let mut sink = MockSink::new();
     for state in [
         LifeState::Unknown,
@@ -239,6 +287,8 @@ fn queued_weave_requires_alive_and_is_not_replayed_after_recovery() {
 fn queued_weave_requires_inactive_roll_and_is_not_replayed_after_recovery() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     engine.set_life(LifeState::Alive);
+    engine.set_world(WorldState::Active);
+    engine.set_travel(TravelState::Inactive);
     let mut sink = MockSink::new();
     for state in [RollDodgeState::Unknown, RollDodgeState::Active] {
         engine.set_roll_dodge(state);
@@ -247,6 +297,32 @@ fn queued_weave_requires_inactive_roll_and_is_not_replayed_after_recovery() {
     assert!(sink.log.is_empty());
     engine.set_roll_dodge(RollDodgeState::Inactive);
     assert!(sink.log.is_empty(), "recovery must not replay requests");
+    engine.handle(Action::Skill1, &mut sink);
+    assert!(!sink.log.is_empty());
+}
+
+#[test]
+fn queued_weave_requires_safe_world_and_inactive_travel_without_replay() {
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.set_life(LifeState::Alive);
+    engine.set_roll_dodge(RollDodgeState::Inactive);
+    let mut sink = MockSink::new();
+    for world in [WorldState::Unknown, WorldState::Transitioning] {
+        engine.set_world(world);
+        engine.set_travel(TravelState::Inactive);
+        engine.handle(Action::Skill1, &mut sink);
+    }
+    engine.set_world(WorldState::Active);
+    for travel in [TravelState::Unknown, TravelState::Pending] {
+        engine.set_travel(travel);
+        engine.handle(Action::Skill1, &mut sink);
+    }
+    assert!(sink.log.is_empty());
+    engine.set_travel(TravelState::Inactive);
+    assert!(
+        sink.log.is_empty(),
+        "safe recovery must not replay requests"
+    );
     engine.handle(Action::Skill1, &mut sink);
     assert!(!sink.log.is_empty());
 }
@@ -286,8 +362,7 @@ fn inactive_slot_key_passes_through() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 16);
     input.set_game_active(true);
     input.set_focused(true);
-    input.set_life_gated(false);
-    input.set_roll_gated(false);
+    open_input_safety(&input);
 
     // Default config: Ultimate (slot 6, key R) is inactive; Skill1 is active.
     let weave = WeaveEngine::new(WeaveConfig::default());
@@ -302,8 +377,7 @@ fn activating_slot_restores_interception() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 16);
     input.set_game_active(true);
     input.set_focused(true);
-    input.set_life_gated(false);
-    input.set_roll_gated(false);
+    open_input_safety(&input);
 
     let mut config = WeaveConfig::default();
     config.slots[5].active = true; // slot index 6 (Ultimate)
@@ -555,8 +629,7 @@ fn combat_state_changes_no_engine_behavior() {
     // rather than accidental.
     fn run(combat: CombatSignal) -> Vec<String> {
         let mut engine = WeaveEngine::new(WeaveConfig::default());
-        engine.set_life(LifeState::Alive);
-        engine.set_roll_dodge(RollDodgeState::Inactive);
+        open_weave_safety(&mut engine);
         let mut sink = MockSink::new();
         engine.set_combat(combat);
         engine.set_weapon_bar(WeaponBarSignal {
@@ -597,8 +670,7 @@ fn combat_state_round_trips_through_the_engine() {
 fn resource_levels_change_no_engine_behavior() {
     fn run(resources: ResourceSet) -> Vec<String> {
         let mut engine = WeaveEngine::new(WeaveConfig::default());
-        engine.set_life(LifeState::Alive);
-        engine.set_roll_dodge(RollDodgeState::Inactive);
+        open_weave_safety(&mut engine);
         let mut sink = MockSink::new();
         engine.set_resources(resources);
 
@@ -642,8 +714,7 @@ fn resource_levels_change_no_engine_behavior() {
 fn quickslot_state_changes_no_engine_behavior() {
     fn run(quickslot: QuickslotState) -> Vec<String> {
         let mut engine = WeaveEngine::new(WeaveConfig::default());
-        engine.set_life(LifeState::Alive);
-        engine.set_roll_dodge(RollDodgeState::Inactive);
+        open_weave_safety(&mut engine);
         let mut sink = MockSink::new();
         engine.set_quickslot(quickslot);
 

@@ -15,6 +15,8 @@ fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
     pair.0.set_game_active(true);
     pair.0.set_life_gated(false);
     pair.0.set_roll_gated(false);
+    pair.0.set_world_gated(false);
+    pair.0.set_travel_gated(false);
     pair
 }
 
@@ -97,6 +99,8 @@ fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
     engine.set_life_gated(false);
     assert!(engine.is_roll_gated());
     engine.set_roll_gated(false);
+    engine.set_world_gated(false);
+    engine.set_travel_gated(false);
     assert_eq!(
         engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
         Decision::Suppress
@@ -162,6 +166,8 @@ fn full_channel_drops_without_blocking() {
     engine.set_game_active(true);
     engine.set_life_gated(false);
     engine.set_roll_gated(false);
+    engine.set_world_gated(false);
+    engine.set_travel_gated(false);
     engine.set_focused(true);
 
     // First press fills the capacity-1 channel; further distinct presses must not
@@ -232,8 +238,20 @@ fn resume_restores_interception() {
     engine.set_suspended(false);
 
     let decision = engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
+    assert_eq!(decision, Decision::Pass);
+    assert!(rx.try_recv().is_err());
+    assert!(engine.is_world_gated());
+    assert!(engine.is_travel_gated());
+    assert_eq!(engine.safety_refresh_generation(), 1);
+
+    engine.set_world_gated(false);
+    engine.set_travel_gated(false);
+    let decision = engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
     assert_eq!(decision, Decision::Suppress);
     assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+
+    engine.set_suspended(false);
+    assert_eq!(engine.safety_refresh_generation(), 1);
 }
 
 // US4: bindings.
@@ -455,6 +473,8 @@ fn roll_gate_defaults_closed_passes_physical_weaves_and_exempts_toggles() {
     engine.set_game_active(true);
     engine.set_focused(true);
     engine.set_life_gated(false);
+    engine.set_world_gated(false);
+    engine.set_travel_gated(false);
     assert!(engine.is_roll_gated());
 
     let skill = engine.bindings().key_for(Action::Skill1);
@@ -505,6 +525,38 @@ fn life_gated_press_keeps_its_release_passed_after_recovery() {
         engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
         Decision::Suppress,
         "the next complete press may be intercepted after recovery"
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
+}
+
+#[test]
+fn travel_gate_passes_physical_skills_exempts_toggles_and_does_not_replay() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.set_travel_gated(true);
+    let skill = engine.bindings().key_for(Action::Skill1);
+    assert_eq!(
+        engine.classify(ev(skill, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+
+    let toggle = engine.bindings().key_for(Action::ToggleSuspend);
+    assert_eq!(
+        engine.classify(ev(toggle, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().ok(), Some(Action::ToggleSuspend));
+
+    engine.set_travel_gated(false);
+    assert!(rx.try_recv().is_err(), "recovery must not replay the skill");
+    assert_eq!(
+        engine.classify(ev(skill, Transition::Up, Origin::Real)),
+        Decision::Pass
+    );
+    assert_eq!(
+        engine.classify(ev(skill, Transition::Down, Origin::Real)),
+        Decision::Suppress
     );
     assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
 }

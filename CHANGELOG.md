@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S051 adds bounded travel detection and a truthful Travel field. Recall cooldown
+  edges and ESO jump events publish Pending before loading, with movement,
+  failure, lifecycle, and watchdog recovery. World and travel evidence now form
+  one fail-safe gate across weaving, fishing, and auto-potion, while physical
+  input passes through and suppressed work is never replayed (issue #59).
 - S050 adds authoritative roll-dodge detection to PixelBeacon and Live HUD. The
   generated-weave path now fails closed while a dodge is active or unavailable,
   passes the player's physical skill input through, cancels remaining mid-sequence
@@ -32,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-05: Advance PixelBeacon to addon version 18 and protocol version 4.
+  B24 publishes Unknown, Inactive, or Pending travel state. A recall-cooldown
+  increase of at least 500 ms detects paid recall, jump preparation covers other
+  travel, resumed movement after 250 ms detects recall cancellation, and a 15
+  second watchdog bounds missing completion or failure events.
+- 2026-09-05: Permit synthesized input only while world state is Active and
+  travel state is Inactive. Gate-closing evidence reaches the hook before locks,
+  recovery updates controllers before reopening interception, held synthesized
+  input is released, and blocked work is discarded instead of replayed.
 - 2026-09-05: Decode the player's dodge-roll combat event for ability 28549 as a
   dedicated B23 state and advance the negotiated header to protocol version 3.
   A fixed 1500 ms watchdog clears the known gained-without-faded rejection path;

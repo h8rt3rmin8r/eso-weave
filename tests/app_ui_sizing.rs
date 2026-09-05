@@ -257,6 +257,7 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
     harness.get_by_label("Roll dodge");
     harness.get_by_label("System and State");
     harness.get_by_label("World state");
+    harness.get_by_label("Travel");
     for label in [
         "Health: Game not active",
         "Stamina: Game not active",

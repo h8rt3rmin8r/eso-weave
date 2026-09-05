@@ -64,17 +64,17 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_seventeen() {
-    // Slice 050 adds B23 roll dodge. Version 16 remains readable with Unknown
-    // roll state and an explicit addon update affordance.
-    assert_eq!(embedded_version(), 17);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(17));
+fn embedded_manifest_version_is_eighteen() {
+    // Slice 051 adds B24 travel. Version 17 remains readable with Unknown
+    // travel state and an explicit addon update affordance.
+    assert_eq!(embedded_version(), 18);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(18));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 17);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(17));
+    assert_eq!(embedded_version(), 18);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(18));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -630,7 +630,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
-    assert_eq!(NUM_BLOCKS, 24, "S050 adds exactly one B23 roll-dodge block");
+    assert_eq!(NUM_BLOCKS, 25, "S051 adds exactly one B24 travel block");
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
         beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
@@ -899,7 +899,43 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 17);
+    assert_eq!(beacon::embedded_version(), 18);
+}
+
+#[test]
+fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
+    let lua = beacon::LUA;
+    for required in [
+        "GetRecallCooldown()",
+        "TRAVEL_RECALL_EDGE_MS",
+        "TRAVEL_CANCEL_GRACE_MS",
+        "TRAVEL_WATCHDOG_MS",
+        "EVENT_PREPARE_FOR_JUMP",
+        "EVENT_JUMP_FAILED",
+        "beginTravel(\"recall\")",
+        "beginTravel(\"jump\")",
+        "IsPlayerMoving() or IsPlayerTryingToMove()",
+        "invalidateTravelState()",
+        "setTravelState(TRAVEL_UNKNOWN_RED)",
+        "setTravelState(TRAVEL_INACTIVE_RED)",
+        "setTravelState(TRAVEL_PENDING_RED)",
+    ] {
+        assert!(
+            lua.contains(required),
+            "travel pipeline is missing {required}"
+        );
+    }
+    let baseline = lua
+        .find("lastRecallRemaining = GetRecallCooldown()")
+        .expect("activation rebaseline samples recall cooldown");
+    let active = lua
+        .find("setWorldState(WORLD_ACTIVE_RED)")
+        .expect("world activation exists");
+    assert!(
+        baseline < active,
+        "recall must be rebaselined before world activation"
+    );
+    assert_eq!(beacon::embedded_version(), 18);
 }
 
 #[test]
