@@ -12,9 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adds truthful life and world-state telemetry, including Alive, Dead,
   Reincarnating, Transitioning, and Active, and blocks generated input whenever
   safety is uncertain.
-- Detects roll dodge and pending travel, immediately suppressing weaving,
-  fishing, and auto-potion without swallowing physical input or replaying
-  blocked work.
+- Detects roll dodge to suppress generated weaving, and pending travel to
+  suppress weaving, fishing, and auto-potion, without swallowing physical input
+  or replaying blocked work.
 - Detects bounded keyboard-mode on-foot sprinting and defers auto-potion until
   sprint ends; unsupported movement modes remain explicitly unavailable.
 - Renames and collapses the System and State panel so expanding safety telemetry
