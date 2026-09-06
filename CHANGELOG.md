@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Adds truthful life and world-state telemetry, including Alive, Dead,
+  Reincarnating, Transitioning, and Active, and blocks generated input whenever
+  safety is uncertain.
+- Detects roll dodge and pending travel, immediately suppressing weaving,
+  fishing, and auto-potion without swallowing physical input or replaying
+  blocked work.
+- Detects bounded keyboard-mode on-foot sprinting and defers auto-potion until
+  sprint ends; unsupported movement modes remain explicitly unavailable.
+- Renames and collapses the System and State panel so expanding safety telemetry
+  remains organized, accessible, and compact.
+
 ### Added
 
 - S052 completes the reserved B9 sprint axis with a bounded keyboard-mode,
@@ -37,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S053 prepares the concise v0.13.0 release candidate from the complete S048
+  through S052 record while leaving version rollover, publication, and live
+  verification to their post-merge stages (issue #68).
 - S048 renames System and automation to System and State and turns the complete
   panel into a keyboard-accessible, default-open disclosure whose preference is
   saved and whose collapsed layout reclaims its height (issues #53 and #54).
