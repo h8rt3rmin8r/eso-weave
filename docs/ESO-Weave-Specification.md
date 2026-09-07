@@ -521,7 +521,7 @@ every frame.
 
 ### 10.3 Pixel bus protocol
 
-PixelBeacon renders a three-cell layout header followed by twenty-four signal
+PixelBeacon renders a three-cell layout header followed by twenty-nine signal
 blocks anchored to the top-left of the game window's client area. Blocks are 16
 by 16 physical pixels by default, and the addon compensates for the interface
 scale so block geometry is constant in physical pixels. The game's UI lifecycle
@@ -538,9 +538,9 @@ positively identified pre-version-14 addons.
 The first three cells are always H0 through H2 at row zero, columns zero through
 two. Payload block `i` occupies logical cell `3 + i`, column `cell mod columns`,
 and row `cell div columns`. At all supported client widths and block sizes the
-current 28 total cells fit on one row. The occupied extent is `BLOCK_PX *
+current 32 total cells fit on one row. The occupied extent is `BLOCK_PX *
 min(3 + NUM_BLOCKS, columns)` wide by `BLOCK_PX * ceil((3 + NUM_BLOCKS) /
-columns)` tall, which is 448 by 16 physical pixels at the default block size.
+columns)` tall, which is 512 by 16 physical pixels at the default block size.
 Cells after the last payload block are neither drawn nor read.
 
 The overlay is not movable. Its anchor is part of the shared geometry contract, so
@@ -549,8 +549,8 @@ undetectable failure mode as a column-count disagreement. The block size setting
 the supported way to reduce the footprint, and the application reports the current
 footprint beside that setting and in its log.
 
-**Negotiation.** H0 is `(0x45, 0x53, 0x80)`: two magic channels and the spaced
-wire code for protocol version 4. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
+**Negotiation.** H0 is `(0x45, 0x53, 0xA0)`: two magic channels and the spaced
+wire code for protocol version 5. H1 is `(columns_high, 0x64, 255 - columns_high)` and H2 is
 `(columns_low, 0x9C, 255 - columns_low)`. Magic, markers, and complements honor
 the configured capture tolerance. Recognized magic
 with any invalid field, unsupported version, impossible count, or surface-fit
@@ -560,9 +560,10 @@ valid legacy magenta heartbeat. Geometry metadata caps effective tolerance at
 15, below half the version-code spacing, even when payload tolerance is broader.
 Protocol version 1 (`0x20`) remains readable with its 22-cell payload extent and
 version 2 (`0x40`) remains readable with its 23-cell extent, and version 3
-(`0x60`) remains readable with its 24-cell extent. The reader samples B22 only
-for version 2 or newer, B23 only for version 3 or newer, and B24 only for version
-4. Ordinary screen pixels
+(`0x60`) remains readable with its 24-cell extent, and version 4 (`0x80`) remains
+readable with its 25-cell extent. The reader samples B22 only
+for version 2 or newer, B23 only for version 3 or newer, B24 only for version
+4 or newer, and B25 through B28 only for version 5. Ordinary screen pixels
 beyond an older overlay therefore cannot impersonate a newer state.
 
 The addon and application each state the header constants once, and contract
@@ -575,7 +576,7 @@ initial negotiation or growth beyond the prepared frame.
 
 | Cell | Position | Sample | Encoding |
 | --- | --- | --- | --- |
-| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0x80)`, where `0x80` is logical version 4; versions 1 (`0x20`), 2 (`0x40`), and 3 (`0x60`) remain geometry-readable at their original payload extents |
+| H0 Magic and version | (0, 0) | (8, 8) | `(0x45, 0x53, 0xA0)`, where `0xA0` is logical version 5; versions 1 (`0x20`), 2 (`0x40`), 3 (`0x60`), and 4 (`0x80`) remain geometry-readable at their original payload extents |
 | H1 Column high byte | (16, 0) | (24, 8) | `(high, 0x64, 255 - high)` |
 | H2 Column low byte | (32, 0) | (40, 8) | `(low, 0x9C, 255 - low)` |
 
@@ -601,7 +602,11 @@ the default block size. Legacy addons retain the pre-version-14 positions.
 | B21 Life state | (384, 0) | (392, 8) | `G = 0x89`, `R` is `0x20` Alive, `0x80` Dead, or `0xE0` Reincarnating, and `B = 255 - R`. `IsUnitReincarnating("player")` takes precedence over `IsUnitDead("player")`; player dead, alive, and activation events plus a 1 Hz backstop converge through one computation. Missing or invalid evidence is Unknown and blocks synthesis. |
 | B22 World state | (400, 0) | (408, 8) | Protocol version 2 or newer. `G = 0xCC`, `R` is `0x20` Unknown, `0x80` Transitioning, or `0xE0` Active, and `B = 255 - R`. `EVENT_PLAYER_DEACTIVATED` publishes Transitioning immediately. `EVENT_PLAYER_ACTIVATED` refreshes every player-derived payload before publishing Active. No timer infers Active. Missing, invalid, or lost evidence is Unknown. |
 | B23 Roll dodge | (416, 0) | (424, 8) | Protocol version 3 or newer. `G = 0xF9`, `R` is `0x20` Unknown, `0x80` Inactive, or `0xE0` Active, and `B = 255 - R`. `EVENT_COMBAT_EVENT` is filtered to the player and ability 28549; effect gained publishes Active and effect faded publishes Inactive. A 1500 ms watchdog clears the known rejected-dodge gain without a matching fade. Death, deactivation, invalid data, and signal loss publish Unknown and disable combat-event handling until player activation or an in-place resurrection establishes an Inactive baseline. While interception is active, the companion caps its configured sample interval at 375 ms so multiple reads fit inside the bounded Active window. |
-| B24 Travel | (432, 0) | (440, 8) | Protocol version 4 only. `G = 0x13`, `R` is `0x20` Unknown, `0x80` Inactive, or `0xE0` Pending, and `B = 255 - R`. A recall-cooldown increase of at least 500 ms or `EVENT_PREPARE_FOR_JUMP` publishes Pending. Resumed movement after a 250 ms recall grace, `EVENT_JUMP_FAILED`, or a 15 second watchdog clears Pending. Death and deactivation publish Unknown; activation rebaselines recall cooldown before publishing Inactive. |
+| B24 Travel | (432, 0) | (440, 8) | Protocol version 4 or newer. `G = 0x13`, `R` is `0x20` Unknown, `0x80` Inactive, or `0xE0` Pending, and `B = 255 - R`. A recall-cooldown increase of at least 500 ms or `EVENT_PREPARE_FOR_JUMP` publishes Pending. Resumed movement after a 250 ms recall grace, `EVENT_JUMP_FAILED`, or a 15 second watchdog clears Pending. Death and deactivation publish Unknown; activation rebaselines recall cooldown before publishing Inactive. |
+| B25 Ultimate current | (448, 0) | (456, 8) | Protocol version 5. Exact 9-bit stored Ultimate. `R` carries bits 0 through 7, `G` is `0x05` for bit 8 clear or `0x7B` for bit 8 set, and `B = 255 - R`. Value 511 is unavailable. |
+| B26 Ultimate maximum | (464, 0) | (472, 8) | As B25 with markers `0x1B` and `0x5F`. Zero and 511 are unavailable. Current and maximum come from one `GetUnitPower("player", COMBAT_MECHANIC_FLAGS_ULTIMATE)` call. |
+| B27 Front Ultimate cost | (480, 0) | (488, 8) | Exact primary-hotbar cost from `GetSlotAbilityCost`, with markers `0x27` and `0x48`. An unused slot, zero, out-of-range value, or API failure publishes 511. |
+| B28 Back Ultimate cost | (496, 0) | (504, 8) | As B27 for the backup hotbar, with markers `0x32` and `0x3D`. Both costs are published together so a normal bar swap selects cached data immediately; both become unavailable while a special hotbar is active. |
 
 No block is ever hidden to express a state. Absence means only that the addon is
 too old to draw it, which is what keeps an old addon from being read as a state.
@@ -625,7 +630,7 @@ nothing reads them. The following signals act:
 | B5 menu | The interception decision, the fishing controller, and the auto-potion controller |
 | B21 life state | The interception decision, queued weave execution, the fishing controller, and the auto-potion controller |
 | B6 to B8 resources, B16 to B20 quickslot | Auto-potion ([section 11](#11-auto-potion)) |
-| B4 combat, B10 to B15 cooldowns | Nothing. Observable only. |
+| B4 combat, B10 to B15 cooldowns, B25 to B28 Ultimate | Nothing. Observable only. |
 | B9 movement | Display, plus auto-potion blocking only for explicit on-foot Sprinting. Unknown remains non-blocking because gamepad and mounted sprint are unsupported. |
 | B23 roll dodge | The interception decision, queued weave execution, and the real synthesis sink. Active and Unknown block generated weaving while physical skill input passes through. |
 | B22 world state, B24 travel | Every synthesis boundary. Input is permitted only while world is Active and travel is Inactive; physical input passes through and blocked automation is discarded. |
@@ -636,7 +641,7 @@ into a decision breaks a test rather than slipping through.
 
 ```mermaid
 flowchart LR
-    ADDON[PixelBeacon<br/>renders B0 to B24] --> SURF[Game window surface]
+    ADDON[PixelBeacon<br/>renders B0 to B28] --> SURF[Game window surface]
     SURF --> SMP[Sampler<br/>GDI or X11]
     SMP --> RDR[Reader: marker,<br/>checksum, tolerance]
     RDR --> ACT{{Acts on behavior}}
@@ -878,7 +883,7 @@ dashboard, a Skills region, and an optional live log panel.
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and a Live Log toggle |
-| Live HUD | Labeled Health, Stamina, and Magicka meters; Game Context; Combat; Movement; Roll Dodge; Life State; Weapon Bar; selected Quickslot classification, Potion Availability, and Potion Cooldown |
+| Live HUD | Labeled Health, Stamina, Magicka, and Ultimate meters; Game Context; Combat; Movement; Roll Dodge; Life State; Weapon Bar; selected Quickslot classification, Potion Availability, and Potion Cooldown |
 | System and State | A persisted accessible disclosure containing game installation provider and runtime; World State; ESO Weave Active or Suspended; PixelBeacon Status and independent PixelBeacon Signal; Fishing and Auto Potion requested/effective state; the one appropriate primary Install or Update action plus secondary managed Uninstall |
 | Skills region | One row per slot: label, active toggle, weave type, override toggle, effective delay, and decoded cooldown |
 | Live log panel | Optional, attached at the bottom |
@@ -921,15 +926,19 @@ available lifecycle actions render in one primary-then-secondary horizontal row;
 the managed-marker uninstall guard and confirmation remain unchanged.
 
 Resource meters are unanimated and reuse one component. Health, Stamina, and
-Magicka keep their familiar red, green, and blue associations, but every meter
-also carries a visible name, exact integer percentage, proportional fill, and a
-programmatic progress value. Observed zero remains a numeric empty bar. Dormant
-and unavailable states have no numeric value. A meter says **Low** only when its
-auto-potion watch is enabled and the observed percentage is at or below that
-configured threshold. Text and meaningful graphical boundaries meet WCAG 2.2 AA
-contrast, and color is never the only state cue.
-One compact group boundary follows the final resource meter before Game Context;
-it is independent of whether the group contains three meters or a later fourth.
+Magicka keep their familiar red, green, and blue associations; each carries a
+visible name, exact integer percentage, proportional fill, and programmatic
+progress value. Ultimate follows them in purple with exact current/maximum points,
+a selected primary-or-backup bar cost threshold, and a fixed trailing green
+**Ready** region when current points meet that exact cost. Special hotbars and
+unavailable costs hide the threshold and Ready state without changing weaving.
+Every track has subtle unlabeled 25, 50, and 75 percent landmarks. Observed zero
+remains a numeric empty bar. Dormant and unavailable states have no numeric value.
+The three auto-potion resources say **Low** only when their watch is enabled and
+the observed percentage is at or below that configured threshold; Ultimate is
+display-only. Text and meaningful graphical boundaries meet WCAG 2.2 AA contrast,
+and color is never the only state cue. One compact group boundary follows
+Ultimate before Game Context.
 
 ### 12.2 Live log viewer
 

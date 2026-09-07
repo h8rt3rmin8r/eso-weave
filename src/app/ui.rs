@@ -1153,8 +1153,10 @@ impl EsoWeaveApp {
                             ResourceTheme::Magicka,
                         ),
                     ],
-                    DASHBOARD_RESOURCE_GAP,
+                    0.0,
                 );
+                widgets::ultimate_meter(ui, palette, strings::ULTIMATE_TITLE, &view.ultimate);
+                ui.add_space(DASHBOARD_RESOURCE_GAP);
                 ui.spacing_mut().item_spacing.y = 2.0;
                 game_context_row(ui, palette, &view.menu);
                 dashboard_metric_row(

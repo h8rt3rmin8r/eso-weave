@@ -9,8 +9,8 @@ use eso_weave::input::{
 use eso_weave::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotPotionAvailability, QuickslotState, ResourceLevel,
-    ResourceSet, RollDodgeState, SlotCooldown, TravelState, WeaponBarSignal, WeaponClass,
-    WorldState,
+    ResourceSet, RollDodgeState, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue,
+    WeaponBarSignal, WeaponClass, WorldState,
 };
 use eso_weave::weave::types::{InputOp, TimingConfig, WeaveType};
 use eso_weave::weave::{
@@ -209,6 +209,12 @@ fn clearing_game_observations_restores_every_dormant_value() {
         stamina: ResourceLevel::Percent(40),
         magicka: ResourceLevel::Percent(30),
     });
+    engine.set_ultimate(UltimateTelemetry {
+        current: UltimateValue::Points(500),
+        maximum: UltimateValue::Points(500),
+        front_cost: UltimateValue::Points(200),
+        back_cost: UltimateValue::Points(125),
+    });
     engine.set_quickslot(QuickslotState {
         classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
         cooldown: SlotCooldown::Ready,
@@ -224,6 +230,7 @@ fn clearing_game_observations_restores_every_dormant_value() {
     assert_eq!(engine.movement(), MovementSignal::Unknown);
     assert_eq!(engine.menu(), MenuSurface::None);
     assert_eq!(engine.resources(), ResourceSet::new_unknown());
+    assert_eq!(engine.ultimate(), UltimateTelemetry::new_unknown());
     assert_eq!(engine.cooldowns(), CooldownSet::new_unknown());
     assert_eq!(engine.quickslot(), QuickslotState::new_unknown());
 }
@@ -699,6 +706,30 @@ fn resource_levels_change_no_engine_behavior() {
         magicka: ResourceLevel::Percent(100),
     };
     assert_eq!(run(full), unknown);
+}
+
+#[test]
+fn ultimate_values_change_no_engine_behavior() {
+    fn run(ultimate: UltimateTelemetry) -> Vec<String> {
+        let mut engine = WeaveEngine::new(WeaveConfig::default());
+        open_weave_safety(&mut engine);
+        engine.set_ultimate(ultimate);
+        let mut sink = MockSink::new();
+        sink.set_now(0);
+        engine.handle(Action::Skill1, &mut sink);
+        sink.log.iter().map(|op| format!("{op:?}")).collect()
+    }
+    let baseline = run(UltimateTelemetry::new_unknown());
+    assert!(!baseline.is_empty());
+    assert_eq!(
+        run(UltimateTelemetry {
+            current: UltimateValue::Points(500),
+            maximum: UltimateValue::Points(500),
+            front_cost: UltimateValue::Points(1),
+            back_cost: UltimateValue::Points(500),
+        }),
+        baseline
+    );
 }
 
 // Slice 038 (FR-024): the quickslot observable is stored on the engine and read by

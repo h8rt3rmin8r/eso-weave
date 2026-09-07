@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S055 adds exact Ultimate charge and front/back slotted costs through PixelBeacon
+  protocol v5, then renders a purple fourth Live HUD meter with shared quarter
+  landmarks, an active-bar cast threshold, and a fixed green Ready state (#71).
+
 ### Changed
 
 - S054 keeps expanded Live HUD and System and State cards equal in width and
@@ -16,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   truncating, and field labels use concise title case (issues #72, #73, #74, #75).
 
 ### Decisions
+
+- 2026-09-07: Advance PixelBeacon to addon version 20 and protocol version 5 with
+  four exact 9-bit values in B25 through B28. The ninth bit uses a field-specific
+  marker variant while blue retains the complement checksum. This replaces the
+  issue's three rounded percentages because rounding cannot support exact numbers
+  or exact readiness, and it keeps the 32-cell overlay on one maximum-size row.
+- 2026-09-07: Keep Ultimate structurally separate from the three auto-potion
+  resources. Select front or back cost from the typed active bar, hide the marker
+  for unknown or special hotbars, and reserve Ready geometry in every state.
 
 - 2026-09-07: Treat disclosure state as a responsive-layout input while retaining
   the 880-point breakpoint for expanded cards. Use Live HUD as the shared expanded

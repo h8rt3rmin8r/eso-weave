@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders a three-cell negotiated layout header followed by twenty-five square
+-- It renders a three-cell negotiated layout header followed by twenty-nine square
 -- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
 -- sets this value on deploy) anchored to the top-left of the client area. Signals
 -- encode load status (B0), fishing state (B1), server latency
@@ -11,7 +11,8 @@
 -- skills and the ultimate (B10 to B15), and the active quickslot's remaining
 -- cooldown (B16), item identity (B17 to B19), explicit classification (B20),
 -- the player's life state (B21), world-transition state (B22), and bounded
--- roll-dodge state (B23), and bounded travel state (B24).
+-- roll-dodge state (B23), bounded travel state (B24), and exact Ultimate current,
+-- maximum, front cost, and back cost (B25 to B28).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -34,12 +35,12 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 25
--- Version-4 negotiated geometry header, shared byte for byte with the companion.
+local NUM_BLOCKS = 29
+-- Version-5 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
-local LAYOUT_PROTOCOL_VERSION = 4
-local LAYOUT_VERSION_CODE = 0x80
+local LAYOUT_PROTOCOL_VERSION = 5
+local LAYOUT_VERSION_CODE = 0xA0
 local LAYOUT_HEADER_BLOCKS = 3
 local LAYOUT_MAGIC_R = 0x45
 local LAYOUT_MAGIC_G = 0x53
@@ -295,8 +296,22 @@ local RESOURCE_MAX_PERCENT = 100
 -- change. nil until the first render.
 local resourcePercents = { health = nil, stamina = nil, magicka = nil }
 
+-- B25 to B28 exact Ultimate values. Red carries the low byte, green selects the
+-- field and ninth bit, and blue remains the red complement checksum.
+local ULTIMATE_CURRENT_LOW_MARKER = 0x05
+local ULTIMATE_CURRENT_HIGH_MARKER = 0x7B
+local ULTIMATE_MAX_LOW_MARKER = 0x1B
+local ULTIMATE_MAX_HIGH_MARKER = 0x5F
+local ULTIMATE_FRONT_LOW_MARKER = 0x27
+local ULTIMATE_FRONT_HIGH_MARKER = 0x48
+local ULTIMATE_BACK_LOW_MARKER = 0x32
+local ULTIMATE_BACK_HIGH_MARKER = 0x3D
+local ULTIMATE_UNAVAILABLE = 0x1FF
+local ULTIMATE_MAX_VALUE = 0x1FE
+local ultimateValues = { current = nil, maximum = nil, front = nil, back = nil }
+
 -- The decoded weapon-bar state: active bar code (0 unknown, 1 front, 2 back) and
--- each bar's class code. Held across indeterminate reads (locked or none pair).
+-- each bar's class code. Special and indeterminate hotbars publish unknown.
 local weaponBar = { bar = 0, front = CLASS_NONE, back = CLASS_NONE }
 
 local wm = WINDOW_MANAGER
@@ -479,7 +494,8 @@ local function classifyWeaponPair(mainType, offType)
 end
 
 -- Recomputes the weapon-bar state from the game, holding the last good bar when
--- the pair is locked or none. Returns true when the stored state changed.
+-- the pair is locked or none. Ultimate handles special hotbars independently so
+-- this established timing signal does not change semantics.
 local function computeWeaponBar()
     local pair, locked = GetActiveWeaponPairInfo()
     local bar = weaponBar.bar
@@ -1341,10 +1357,142 @@ local function renderResources()
     renderResource(blocks.magicka, MAGICKA_MARKER, resourcePercents.magicka or RESOURCE_UNAVAILABLE)
 end
 
+-- B25 to B28 Ultimate --------------------------------------------------------
+
+local function boundedUltimate(value, zeroUnavailable)
+    if value == nil or value < 0 or value > ULTIMATE_MAX_VALUE then
+        return ULTIMATE_UNAVAILABLE
+    end
+    value = zo_floor(value + 0.5)
+    if zeroUnavailable and value == 0 then
+        return ULTIMATE_UNAVAILABLE
+    end
+    return value
+end
+
+local function ultimateCost(hotbarCategory)
+    local slot = ACTION_BAR_ULTIMATE_SLOT_INDEX + 1
+    if not IsSlotUsed(slot, hotbarCategory) then
+        return ULTIMATE_UNAVAILABLE
+    end
+    return boundedUltimate(
+        GetSlotAbilityCost(slot, COMBAT_MECHANIC_FLAGS_ULTIMATE, hotbarCategory),
+        true
+    )
+end
+
+local function updateUltimatePool()
+    local current, maximum = GetUnitPower("player", COMBAT_MECHANIC_FLAGS_ULTIMATE)
+    maximum = boundedUltimate(maximum, true)
+    if maximum == ULTIMATE_UNAVAILABLE then
+        current = ULTIMATE_UNAVAILABLE
+    else
+        current = boundedUltimate(current, false)
+    end
+    if current == ultimateValues.current
+        and maximum == ultimateValues.maximum then
+        return false
+    end
+    ultimateValues.current = current
+    ultimateValues.maximum = maximum
+    return true
+end
+
+local function updateUltimateCosts()
+    local category = GetActiveHotbarCategory()
+    local front = ULTIMATE_UNAVAILABLE
+    local back = ULTIMATE_UNAVAILABLE
+    if category == HOTBAR_CATEGORY_PRIMARY or category == HOTBAR_CATEGORY_BACKUP then
+        front = ultimateCost(HOTBAR_CATEGORY_PRIMARY)
+        back = ultimateCost(HOTBAR_CATEGORY_BACKUP)
+    end
+    if front == ultimateValues.front and back == ultimateValues.back then
+        return false
+    end
+    ultimateValues.front = front
+    ultimateValues.back = back
+    return true
+end
+
+local function updateUltimate()
+    local poolChanged = updateUltimatePool()
+    local costsChanged = updateUltimateCosts()
+    return poolChanged or costsChanged
+end
+
+local function renderUltimateValue(block, lowMarker, highMarker, value)
+    if blocks.status:IsHidden() then
+        block:SetHidden(true)
+        return
+    end
+    local red = value % 256
+    local marker = value >= 256 and highMarker or lowMarker
+    block:SetCenterColor(channel(red), channel(marker), channel(255 - red), 1)
+    block:SetHidden(false)
+end
+
+local function renderUltimate()
+    renderUltimateValue(
+        blocks.ultimateCurrent,
+        ULTIMATE_CURRENT_LOW_MARKER,
+        ULTIMATE_CURRENT_HIGH_MARKER,
+        ultimateValues.current or ULTIMATE_UNAVAILABLE
+    )
+    renderUltimateValue(
+        blocks.ultimateMax,
+        ULTIMATE_MAX_LOW_MARKER,
+        ULTIMATE_MAX_HIGH_MARKER,
+        ultimateValues.maximum or ULTIMATE_UNAVAILABLE
+    )
+    renderUltimateValue(
+        blocks.ultimateFrontCost,
+        ULTIMATE_FRONT_LOW_MARKER,
+        ULTIMATE_FRONT_HIGH_MARKER,
+        ultimateValues.front or ULTIMATE_UNAVAILABLE
+    )
+    renderUltimateValue(
+        blocks.ultimateBackCost,
+        ULTIMATE_BACK_LOW_MARKER,
+        ULTIMATE_BACK_HIGH_MARKER,
+        ultimateValues.back or ULTIMATE_UNAVAILABLE
+    )
+end
+
+local function invalidateUltimate()
+    ultimateValues.current = ULTIMATE_UNAVAILABLE
+    ultimateValues.maximum = ULTIMATE_UNAVAILABLE
+    ultimateValues.front = ULTIMATE_UNAVAILABLE
+    ultimateValues.back = ULTIMATE_UNAVAILABLE
+    renderUltimate()
+end
+
+local function onUltimateSlotChanged(_, actionSlotIndex, hotbarCategory)
+    local ultimateSlot = ACTION_BAR_ULTIMATE_SLOT_INDEX + 1
+    if actionSlotIndex ~= ultimateSlot then
+        return
+    end
+    if hotbarCategory ~= HOTBAR_CATEGORY_PRIMARY
+        and hotbarCategory ~= HOTBAR_CATEGORY_BACKUP then
+        return
+    end
+    if updateUltimateCosts() then
+        renderUltimate()
+    end
+end
+
+local function onUltimateHotbarsChanged()
+    if updateUltimateCosts() then
+        renderUltimate()
+    end
+end
+
 -- Reacts to a power update: re-render only on a real change.
 local function onPowerUpdate()
     if updateResources() then
         renderResources()
+    end
+    if updateUltimatePool() then
+        renderUltimate()
     end
 end
 
@@ -1354,6 +1502,7 @@ local function onWeaponPairChanged()
     if computeWeaponBar() then
         renderWeapon()
     end
+    onUltimateHotbarsChanged()
 end
 
 local function setFishingState(state)
@@ -1427,6 +1576,9 @@ local function onFastTick()
     if updateResources() then
         renderResources()
     end
+    if updateUltimatePool() then
+        renderUltimate()
+    end
     onFishingTick()
 end
 
@@ -1442,6 +1594,8 @@ local function rebaselinePlayerState()
     renderMenu()
     updateResources()
     renderResources()
+    updateUltimate()
+    renderUltimate()
     computeMovement()
     invalidateSprintState()
     renderMovement()
@@ -1475,6 +1629,7 @@ local function onPlayerDeactivated()
     invalidateSprintState()
     invalidateTravelState()
     invalidateRollDodgeState()
+    invalidateUltimate()
     setWorldState(WORLD_TRANSITIONING_RED)
 end
 
@@ -1567,6 +1722,10 @@ local function buildBlocks()
     blocks.world = createBlock("World")
     blocks.rollDodge = createBlock("RollDodge")
     blocks.travel = createBlock("Travel")
+    blocks.ultimateCurrent = createBlock("UltimateCurrent")
+    blocks.ultimateMax = createBlock("UltimateMax")
+    blocks.ultimateFrontCost = createBlock("UltimateFrontCost")
+    blocks.ultimateBackCost = createBlock("UltimateBackCost")
 
     -- Payload order is the wire contract. The layout owns positions, and adding a
     -- signal requires adding exactly one entry here beside its block creation.
@@ -1596,6 +1755,10 @@ local function buildBlocks()
         blocks.world,
         blocks.rollDodge,
         blocks.travel,
+        blocks.ultimateCurrent,
+        blocks.ultimateMax,
+        blocks.ultimateFrontCost,
+        blocks.ultimateBackCost,
     }
     refreshLayout(true)
 
@@ -1610,6 +1773,8 @@ local function buildBlocks()
     renderMenu()
     updateResources()
     renderResources()
+    updateUltimate()
+    renderUltimate()
     computeMovement()
     invalidateSprintState()
     renderMovement()
@@ -1655,6 +1820,11 @@ local function onLatencyTick()
     end
     if computeLifeState() then
         renderLifeState()
+    end
+    -- A low-frequency full Ultimate refresh is the stale-data backstop for both
+    -- charge and slotted costs. The fast tick samples charge only.
+    if updateUltimate() then
+        renderUltimate()
     end
 end
 
@@ -1708,6 +1878,27 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlot", EVENT_ACTION_SLOT_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "ActionSlotState", EVENT_ACTION_SLOT_STATE_UPDATED, onQuickslotChanged)
     em:RegisterForEvent(ADDON_NAME .. "QuickslotCooldown", EVENT_ACTION_UPDATE_COOLDOWNS, onQuickslotChanged)
+    em:RegisterForEvent(ADDON_NAME .. "UltimateSlot", EVENT_HOTBAR_SLOT_UPDATED, onUltimateSlotChanged)
+    em:RegisterForEvent(
+        ADDON_NAME .. "UltimateSlotState",
+        EVENT_HOTBAR_SLOT_STATE_UPDATED,
+        onUltimateSlotChanged
+    )
+    em:RegisterForEvent(
+        ADDON_NAME .. "UltimateActiveHotbar",
+        EVENT_ACTION_SLOTS_ACTIVE_HOTBAR_UPDATED,
+        onUltimateHotbarsChanged
+    )
+    em:RegisterForEvent(
+        ADDON_NAME .. "UltimateAllHotbars",
+        EVENT_ACTION_SLOTS_ALL_HOTBARS_UPDATED,
+        onUltimateHotbarsChanged
+    )
+    em:RegisterForEvent(
+        ADDON_NAME .. "UltimateCost",
+        EVENT_ULTIMATE_ABILITY_COST_CHANGED,
+        onUltimateHotbarsChanged
+    )
     em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onPlayerDead)
     em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onPlayerAlive)
     em:RegisterForEvent(ADDON_NAME .. "Deactivated", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)

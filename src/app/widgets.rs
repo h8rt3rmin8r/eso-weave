@@ -9,7 +9,120 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::app::theme::Palette;
-use crate::app::{ResourcePresentation, ResourceTheme, ResourceView};
+use crate::app::{
+    ResourcePresentation, ResourceTheme, ResourceView, UltimatePresentation, UltimateView,
+};
+
+const RESOURCE_LABEL_WIDTH: f32 = 70.0;
+const RESOURCE_STATE_WIDTH: f32 = 118.0;
+const RESOURCE_READY_WIDTH: f32 = 48.0;
+const RESOURCE_MIN_TRACK_WIDTH: f32 = 96.0;
+const RESOURCE_GAP: f32 = 8.0;
+
+/// Stable geometry shared by ordinary and Ultimate resource meters.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResourceMeterGeometry {
+    pub row: egui::Rect,
+    pub label: egui::Rect,
+    pub track: egui::Rect,
+    pub numeric: egui::Rect,
+    pub ready: egui::Rect,
+    pub quarters: [[egui::Pos2; 2]; 3],
+    pub threshold: Option<[egui::Pos2; 2]>,
+}
+
+/// Computes meter adornments without consulting dynamic readiness.
+pub fn resource_meter_geometry(
+    rect: egui::Rect,
+    threshold_fraction: Option<f32>,
+) -> ResourceMeterGeometry {
+    let state_left = rect.right() - RESOURCE_STATE_WIDTH;
+    let label = egui::Rect::from_min_max(
+        rect.left_top(),
+        egui::pos2(rect.left() + RESOURCE_LABEL_WIDTH, rect.bottom()),
+    );
+    let track = egui::Rect::from_min_max(
+        egui::pos2(
+            rect.left() + RESOURCE_LABEL_WIDTH + RESOURCE_GAP,
+            rect.top() + 3.0,
+        ),
+        egui::pos2(state_left - RESOURCE_GAP, rect.bottom() - 3.0),
+    );
+    let ready = egui::Rect::from_min_max(
+        egui::pos2(rect.right() - RESOURCE_READY_WIDTH, rect.top()),
+        rect.right_bottom(),
+    );
+    let numeric = egui::Rect::from_min_max(
+        egui::pos2(state_left, rect.top()),
+        egui::pos2(ready.left(), rect.bottom()),
+    );
+    let quarter = |fraction: f32| {
+        let x = track.left() + track.width() * fraction;
+        [
+            egui::pos2(x, track.top() + 2.0),
+            egui::pos2(x, track.bottom() - 2.0),
+        ]
+    };
+    let threshold = threshold_fraction.map(|fraction| {
+        let x = track.left() + track.width() * fraction.clamp(0.0, 1.0);
+        [
+            egui::pos2(x, track.bottom() - 4.0),
+            egui::pos2(x, rect.bottom()),
+        ]
+    });
+    ResourceMeterGeometry {
+        row: rect,
+        label,
+        track,
+        numeric,
+        ready,
+        quarters: [quarter(0.25), quarter(0.5), quarter(0.75)],
+        threshold,
+    }
+}
+
+fn meter_size(ui: &egui::Ui) -> egui::Vec2 {
+    let height = ui.spacing().interact_size.y.max(20.0);
+    let width = ui.available_width().max(
+        RESOURCE_LABEL_WIDTH + RESOURCE_STATE_WIDTH + RESOURCE_MIN_TRACK_WIDTH + 2.0 * RESOURCE_GAP,
+    );
+    egui::vec2(width, height)
+}
+
+fn paint_meter_track(
+    ui: &egui::Ui,
+    palette: &Palette,
+    geometry: ResourceMeterGeometry,
+    fill: egui::Color32,
+    fraction: Option<f32>,
+    stroke: egui::Stroke,
+) {
+    let radius = egui::CornerRadius::same(4);
+    ui.painter()
+        .rect_filled(geometry.track, radius, palette.panel);
+    if let Some(fraction) = fraction {
+        let filled = egui::Rect::from_min_max(
+            geometry.track.min,
+            egui::pos2(
+                geometry.track.left() + geometry.track.width() * fraction.clamp(0.0, 1.0),
+                geometry.track.bottom(),
+            ),
+        );
+        if filled.width() > 0.0 {
+            ui.painter().rect_filled(filled, radius, fill);
+        }
+    }
+    for segment in geometry.quarters {
+        ui.painter()
+            .line_segment(segment, egui::Stroke::new(1.0, palette.stroke));
+    }
+    ui.painter()
+        .rect_stroke(geometry.track, radius, stroke, egui::StrokeKind::Inside);
+    if let Some(segment) = geometry.threshold {
+        ui.painter()
+            .line_segment(segment, egui::Stroke::new(2.0, palette.text));
+    }
+}
 
 /// Renders one stable, accessible resource meter.
 ///
@@ -24,17 +137,7 @@ pub fn resource_meter(
     view: &ResourceView,
     theme: ResourceTheme,
 ) -> egui::Response {
-    const LABEL_WIDTH: f32 = 70.0;
-    const STATE_WIDTH: f32 = 118.0;
-    const MIN_TRACK_WIDTH: f32 = 96.0;
-    const GAP: f32 = 8.0;
-
-    let height = ui.spacing().interact_size.y.max(20.0);
-    let desired_width = ui
-        .available_width()
-        .max(LABEL_WIDTH + STATE_WIDTH + MIN_TRACK_WIDTH + 2.0 * GAP);
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(desired_width, height), egui::Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(meter_size(ui), egui::Sense::hover());
 
     response.widget_info(|| {
         let mut info = egui::WidgetInfo::labeled(
@@ -51,12 +154,9 @@ pub fn resource_meter(
             ResourceTheme::Health => palette.health,
             ResourceTheme::Stamina => palette.stamina,
             ResourceTheme::Magicka => palette.magicka,
+            ResourceTheme::Ultimate => palette.ultimate,
         };
-        let state_left = rect.right() - STATE_WIDTH;
-        let track = egui::Rect::from_min_max(
-            egui::pos2(rect.left() + LABEL_WIDTH + GAP, rect.top() + 3.0),
-            egui::pos2(state_left - GAP, rect.bottom() - 3.0),
-        );
+        let geometry = resource_meter_geometry(rect, None);
         let stroke = match view.presentation {
             ResourcePresentation::Low(_) | ResourcePresentation::Unavailable => {
                 egui::Stroke::new(2.0, palette.warn)
@@ -65,23 +165,7 @@ pub fn resource_meter(
                 egui::Stroke::new(1.0, palette.muted)
             }
         };
-        ui.painter().rect(
-            track,
-            egui::CornerRadius::same(4),
-            palette.panel,
-            stroke,
-            egui::StrokeKind::Inside,
-        );
-        if let Some(fraction) = view.fraction() {
-            let filled = egui::Rect::from_min_max(
-                track.min,
-                egui::pos2(track.left() + track.width() * fraction, track.bottom()),
-            );
-            if filled.width() > 0.0 {
-                ui.painter()
-                    .rect_filled(filled, egui::CornerRadius::same(4), fill);
-            }
-        }
+        paint_meter_track(ui, palette, geometry, fill, view.fraction(), stroke);
         let font = egui::FontId::proportional(ui.style().text_styles[&egui::TextStyle::Body].size);
         ui.painter().text(
             rect.left_center(),
@@ -91,7 +175,7 @@ pub fn resource_meter(
             palette.text,
         );
         ui.painter().text(
-            egui::pos2(state_left, rect.center().y),
+            geometry.numeric.left_center(),
             egui::Align2::LEFT_CENTER,
             &view.text,
             font,
@@ -100,6 +184,68 @@ pub fn resource_meter(
     }
 
     response.on_hover_text(crate::app::strings::RESOURCE_TOOLTIP)
+}
+
+/// Renders the exact Ultimate value, active-bar threshold, and fixed Ready slot.
+pub fn ultimate_meter(
+    ui: &mut egui::Ui,
+    palette: &Palette,
+    name: &str,
+    view: &UltimateView,
+) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(meter_size(ui), egui::Sense::hover());
+    response.widget_info(|| {
+        let mut info = egui::WidgetInfo::labeled(
+            egui::WidgetType::ProgressIndicator,
+            ui.is_enabled(),
+            &view.accessibility,
+        );
+        info.value = view
+            .current
+            .zip(view.maximum)
+            .map(|(current, maximum)| f64::from(current) / f64::from(maximum) * 100.0);
+        info
+    });
+    if ui.is_rect_visible(rect) {
+        let geometry = resource_meter_geometry(rect, view.threshold_fraction());
+        let stroke = match view.presentation {
+            UltimatePresentation::Unavailable => egui::Stroke::new(2.0, palette.warn),
+            _ => egui::Stroke::new(1.0, palette.muted),
+        };
+        paint_meter_track(
+            ui,
+            palette,
+            geometry,
+            palette.ultimate,
+            view.fraction(),
+            stroke,
+        );
+        let font = egui::FontId::proportional(ui.style().text_styles[&egui::TextStyle::Body].size);
+        ui.painter().text(
+            rect.left_center(),
+            egui::Align2::LEFT_CENTER,
+            name,
+            font.clone(),
+            palette.text,
+        );
+        ui.painter().text(
+            geometry.numeric.left_center(),
+            egui::Align2::LEFT_CENTER,
+            &view.text,
+            font.clone(),
+            palette.text,
+        );
+        if view.ready == Some(true) {
+            ui.painter().text(
+                geometry.ready.left_center(),
+                egui::Align2::LEFT_CENTER,
+                "Ready",
+                font,
+                palette.ready,
+            );
+        }
+    }
+    response.on_hover_text(crate::app::strings::ULTIMATE_TOOLTIP)
 }
 
 /// A colorized physical toggle switch. Renders a pill track (gold when on, muted

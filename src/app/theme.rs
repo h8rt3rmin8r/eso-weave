@@ -41,6 +41,8 @@ pub struct Palette {
     pub muted: Color32,
     /// Status: running and healthy.
     pub ok: Color32,
+    /// Accessible green used for compact Ready text.
+    pub ready: Color32,
     /// Status: warning.
     pub warn: Color32,
     /// Status: error and signal lost.
@@ -51,6 +53,8 @@ pub struct Palette {
     pub stamina: Color32,
     /// Magicka meter fill.
     pub magicka: Color32,
+    /// Ultimate meter fill.
+    pub ultimate: Color32,
 }
 
 /// Returns the brand palette for a theme.
@@ -69,11 +73,13 @@ pub fn palette(theme: Theme) -> Palette {
             text: rgb(0xE6, 0xED, 0xF3),
             muted: rgb(0x8B, 0x97, 0xA7),
             ok: rgb(0x34, 0xD3, 0x99),
+            ready: rgb(0x34, 0xD3, 0x99),
             warn: rgb(0xFB, 0x9E, 0x3C),
             err: rgb(0xF8, 0x71, 0x71),
             health: rgb(0xF8, 0x71, 0x71),
             stamina: rgb(0x34, 0xD3, 0x99),
             magicka: rgb(0x60, 0xA5, 0xFA),
+            ultimate: rgb(0xA7, 0x8B, 0xFA),
         },
         Theme::Light => Palette {
             dark: false,
@@ -88,11 +94,13 @@ pub fn palette(theme: Theme) -> Palette {
             text: rgb(0x14, 0x11, 0x0B),
             muted: rgb(0x6B, 0x64, 0x55),
             ok: rgb(0x05, 0x96, 0x69),
+            ready: rgb(0x04, 0x78, 0x57),
             warn: rgb(0xB4, 0x53, 0x09),
             err: rgb(0xDC, 0x26, 0x26),
             health: rgb(0xB9, 0x1C, 0x1C),
             stamina: rgb(0x04, 0x78, 0x57),
             magicka: rgb(0x1D, 0x4E, 0xD8),
+            ultimate: rgb(0x6D, 0x28, 0xD9),
         },
     }
 }
@@ -299,6 +307,7 @@ mod tests {
                 ("health", p.health),
                 ("stamina", p.stamina),
                 ("magicka", p.magicka),
+                ("ultimate", p.ultimate),
             ] {
                 assert!(
                     contrast(fill, p.panel) >= 3.0,
@@ -308,6 +317,10 @@ mod tests {
             assert!(
                 contrast(p.muted, p.panel) >= 3.0,
                 "meter boundary does not meet non-text contrast for {theme:?}"
+            );
+            assert!(
+                contrast(p.ready, p.panel) >= 4.5,
+                "Ready text does not meet normal-text contrast for {theme:?}"
             );
         }
     }

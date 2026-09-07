@@ -22,7 +22,7 @@ pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
         PixelBusEvent::WeaponBar(_) => None,
         PixelBusEvent::Combat(_) => None,
         PixelBusEvent::MenuGate(_) => None,
-        PixelBusEvent::Resources(_) => None,
+        PixelBusEvent::Resources(_) | PixelBusEvent::Ultimate(_) => None,
         PixelBusEvent::Movement(_) => None,
         PixelBusEvent::Life(_) => None,
         PixelBusEvent::World(_) => None,
