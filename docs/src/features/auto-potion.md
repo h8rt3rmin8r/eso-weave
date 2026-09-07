@@ -27,11 +27,15 @@ Every condition must hold in this order:
 4. ESO Weave is not suspended.
 5. Game Context is positively observed as Gameplay.
 6. Life State is positively observed as Alive.
-7. At least one resource watch is enabled and a watched reading is fresh.
-8. The active quickslot explicitly contains a usable potion.
-9. Its cooldown is ready.
-10. The minimum retry interval since the last attempt has elapsed.
-11. At least one fresh watched resource is at or below its threshold.
+7. World State is positively observed as Active.
+8. Travel is positively observed as Inactive.
+9. Explicit Sprinting is not present. Unknown movement does not block.
+10. At least one resource watch is enabled and at least one enabled watch has a
+    fresh reading.
+11. The active quickslot explicitly contains a usable potion.
+12. Its cooldown is ready.
+13. The minimum retry interval since the last attempt has elapsed.
+14. At least one fresh watched resource is at or below its threshold.
 
 An unreadable resource is not low, an unreadable quickslot is not a potion, and
 an unreadable cooldown is not ready. Loading, addon reload, or signal loss
@@ -54,19 +58,23 @@ quickslot item.
 - **Off:** The feature was not requested.
 - **Dormant:** ESO is inactive or unfocused.
 - **Blocked:** The first current failure is beacon availability, suspension,
-  Game Context, watched-resource configuration or freshness, quickslot
-  availability, potion classification or usability, cooldown, or retry interval.
+  Game Context, Life State, World State, travel, explicit Sprinting,
+  watched-resource configuration or freshness, quickslot availability, potion
+  classification or usability, cooldown, or retry interval.
 - **Ready:** All prerequisites hold, but no watched resource is low.
 - **Triggered:** Until the next evaluation, an attempt was submitted for a named
   resource, observed percentage, and threshold.
 
-Generated input uses the shared input engine, including focus scoping and
-injected-input recursion protection. Menu, suspension, life, world, travel, and
-roll-dodge gates are checked at the action boundary. The controller checks menu
-and suspension directly because its timers do not pass through the interception
-decision. Losing the game, focus, or beacon blocks action without clearing the
-requested setting. Requested enablement is not restored across application
-restarts, unlike suspend and fishing intent. The controller ticks on the
-pixel-bus worker, adds no thread or timer, and never reaches the hook thread.
-Normal logging records categorical effective-state changes rather than every
-evaluation.
+Generated input uses the established platform input backend, including
+injected-input recursion tagging.
+The controller checks menu and suspension directly. It also checks focus, life,
+world, travel, and explicit Sprinting because its timers do not pass through the
+interception decision.
+Roll Dodge is not an Auto Potion prerequisite.
+It gates weaving and physical-input interception, not the controller's quickslot
+attempt. Losing the game, focus, or
+beacon blocks action without clearing the requested setting. Requested
+enablement is not restored across application restarts, unlike suspend and
+fishing intent. The controller ticks on the pixel-bus worker, adds no thread or
+timer, and never reaches the hook thread. Normal logging records categorical
+effective-state changes rather than every evaluation.

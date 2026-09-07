@@ -109,7 +109,7 @@ const NON_PUBLISHED_SEARCH_SENTINELS = [
   "Current Build Plans",
   "Archived Build Plans",
 ];
-const PRESERVATION_MANIFEST_SHA256 = "57f8c747dc1e334850fb11ccdf2ce2ccc5efd5023510e6b122f4faa62a07b7b6";
+const PRESERVATION_MANIFEST_SHA256 = "4452074c6c3e45122b4c51030805677aed8d232523b77ef933e2c80b18256341";
 const DELIVERY_EVIDENCE = /(?:\bPR #\d+\b|\bcommit [0-9a-f]{7,40}\b|\bv\d+\.\d+\.\d+ release\b|\bissue #\d+ closed\b)/iu;
 
 async function walk(root, suffix = "") {

@@ -20,10 +20,12 @@ outside the focused ESO window is unreachable by construction.
 
 The menu gate can only relax interception. It is an additional early pass, so
 for every combination of inputs the gated result is either identical to the
-ungated result or more permissive. An addon too old to publish the gate, a sample
-that fails validation, and a lost beacon signal all resolve to **no menu** for
-interception, matching behavior when no menu gate exists. Autonomous features
-still require their own positive safety evidence before generating input.
+ungated result or more permissive. An addon too old to publish the gate leaves
+this optional gate absent. After the reader has received menu evidence, a sample
+that fails validation or a lost beacon signal makes menu evidence unavailable.
+Unavailable menu evidence fails closed: bound physical input passes through and
+autonomous features remain gated until a positively decoded Gameplay surface
+returns.
 
 Roll-dodge evidence fails open for physical input and closed for generated input.
 Active or unavailable roll state passes the player's original skill key through.

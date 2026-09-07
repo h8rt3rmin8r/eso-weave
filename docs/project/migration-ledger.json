@@ -694,7 +694,7 @@
         },
         {
           "path": "docs/src/concepts/input-safety.md",
-          "requiredExcerpt": "resolve to **no menu** for interception"
+          "requiredExcerpt": "Unavailable menu evidence fails closed"
         },
         {
           "path": "docs/src/concepts/input-safety.md",
@@ -899,6 +899,22 @@
         {
           "path": "docs/src/features/auto-potion.md",
           "requiredExcerpt": "blocks action without clearing the requested setting"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "World State is positively observed as Active"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "Travel is positively observed as Inactive"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "Explicit Sprinting is not present"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "Roll Dodge is not an Auto Potion prerequisite"
         },
         {
           "path": "docs/src/features/auto-potion.md",
