@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- The dashboard now keeps Live HUD and System and State cards balanced as the
+  window grows, stacks them when System and State is collapsed, aligns controls,
+  uses clearer labels, separates resources from context, and gives status text
+  room to stay readable.
+- Live HUD now adds quarter landmarks to every resource meter and a purple
+  Ultimate meter with exact charge, a cast-cost marker that follows the active
+  weapon bar, and a stable green Ready signal that appears without shifting the
+  interface.
+
 ### Added
 
 - S055 adds exact Ultimate charge and front/back slotted costs through PixelBeacon
@@ -15,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S056 prepares the concise v0.14.0 release candidate from the complete S054 and
+  S055 record while leaving version rollover, publication, and live Ultimate
+  verification to their post-merge stages (issue #85).
 - S054 keeps expanded Live HUD and System and State cards equal in width and
   height, splits wide layouts evenly, and forces top-down order whenever System
   and State is collapsed. System controls now share one trailing column with
