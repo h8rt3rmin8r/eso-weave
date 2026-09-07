@@ -56,8 +56,8 @@
 
 ## Phase 8: Delivery and hosted review
 
-- [ ] T031 Commit with the S054 conventional subject and required coauthor trailer
-- [ ] T032 Push and publish a pull request with separate `Closes` lines for #72-#75
+- [x] T031 Commit with the S054 conventional subject and required coauthor trailer
+- [x] T032 Push and publish a pull request with separate `Closes` lines for #72-#75
 - [ ] T033 Resolve hosted CI and every first-round review comment
 - [ ] T034 Request exactly one second `@Codex` review and resolve every result
 - [ ] T035 Confirm all checks and threads are green, then request maintainer merge ritual
