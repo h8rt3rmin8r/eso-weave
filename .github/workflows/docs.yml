@@ -1,0 +1,82 @@
+# Pinned documentation build and GitHub Pages delivery workflow.
+# Changes require a dated decision in CHANGELOG.md.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/scripts/docs-policy.mjs"
+      - ".github/scripts/docs-policy.test.mjs"
+      - ".github/workflows/docs.yml"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/scripts/docs-policy.mjs"
+      - ".github/scripts/docs-policy.test.mjs"
+      - ".github/workflows/docs.yml"
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned documentation tools
+        run: |
+          cargo install mdbook --version '=0.5.4' --locked
+          cargo install mdbook-linkcheck2 --version '=0.13.0' --locked
+
+      - name: Test documentation policy
+        run: node --test .github/scripts/docs-policy.test.mjs
+
+      - name: Test book examples
+        run: mdbook test docs
+
+      - name: Build book and check links
+        run: mdbook build docs
+
+      - name: Validate generated site
+        run: node .github/scripts/docs-policy.mjs docs target/docs-site/html
+
+      - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Upload checked Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: target/docs-site/html
+
+  deploy:
+    name: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
