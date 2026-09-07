@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-07
+
 ### Highlights
 
 - The dashboard now keeps Live HUD and System and State cards balanced as the
