@@ -1,5 +1,8 @@
 # Scope and Platform Model
 
+Windows Input uses a keyboard hook (`WH_KEYBOARD_LL`) plus `SendInput`. These
+terms distinguish it from the Linux `evdev` and `uinput` path.
+
 ESO Weave is a single-crate Rust desktop companion with three principal
 capabilities:
 
@@ -28,15 +31,38 @@ of solid colors in the game window, and ESO Weave samples the displayed pixels.
 
 ## Platform behavior
 
-| Platform | Input | Screen sampling |
-| --- | --- | --- |
-| Windows 10 and 11 x64 | `WH_KEYBOARD_LL` and `SendInput` | GDI capture of the composited desktop |
-| Linux x64 with X11 | evdev grab and uinput | X11 capture |
-| Linux x64 with Wayland | evdev grab and uinput below the display server | An XWayland game surface is required |
+| Boundary | Windows 10 and 11 x64 | Linux x64 with X11 | Linux x64 with Wayland |
+| --- | --- | --- | --- |
+| Installation discovery | Steam and generic uninstall Registry entries, plus Epic manifests | Native and Flatpak Steam library metadata for Proton | Same as Linux X11 |
+| Process observation | Tool Help process snapshot | `/proc` process names | Same as Linux X11 |
+| Focus | Foreground window process or title, depending on subsystem | X11 active-window title | Requires an XWayland game window; pure Wayland yields Unknown |
+| Physical input | `WH_KEYBOARD_LL` | evdev device grab | evdev device grab below the display server |
+| Synthesized input | `SendInput` | uinput virtual device | uinput virtual device |
+| Screen sampling | GDI capture of the composited desktop | X11 capture | Requires an XWayland surface |
+| Window-position restore | Virtual-screen bounds keep a restored window reachable | Placement is left to the window manager | Placement is left to the window manager |
+| Packages | x64 MSI | x86_64 `.deb`, AppImage, tarball | Same as Linux X11 |
 
 The application identifies the ESO window per platform and activates
 interception only while that window has keyboard focus. Linux input requires
-membership in the `input` group or equivalent udev permissions.
+membership in the `input` group or equivalent udev permissions. Pure Wayland can
+provide evdev and uinput access but cannot supply the X11 focus and capture facts
+that authorize operation, so an XWayland ESO surface is required.
+
+**Known defect**: the advertised Linux uinput keys do not currently include `E`
+or `F3`, despite both being shipped mappings. This prevents a verified claim of
+complete Windows and Linux key parity. See
+[issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93).
+
+**Known lifecycle defect**: the current PixelBeacon Update route can proceed to
+installation after managed removal refuses an unmanaged folder. Documentation
+must not promise that every overwrite is managed-marker gated until
+[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94) is fixed. Managed
+removal itself remains marker gated.
+
+macOS, Linux aarch64, pure Wayland capture, direct process-memory reading, and
+network-traffic inspection are outside the supported product scope.
 
 See [Responsible Use](../getting-started/responsible-use.md) for the project and
-account-safety boundary.
+account-safety boundary, and
+[Release and Packaging](../development/release-and-packaging.md) for the artifact
+pipeline.

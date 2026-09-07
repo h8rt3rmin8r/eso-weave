@@ -8,6 +8,8 @@ import {
   contrastRatio,
   validateBrandCss,
   validateBrandJavascript,
+  validateContentCoverage,
+  validateContentCoverageRepository,
   validateCorpusSnapshot,
   validateGeneratedSite,
   validateMigrationLedger,
@@ -20,6 +22,47 @@ const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
 
 async function migrationLedger() {
   return JSON.parse(await readFile(path.join(repositoryRoot, "docs", "project", "migration-ledger.json"), "utf8"));
+}
+
+async function contentCoverage() {
+  return JSON.parse(await readFile(path.join(repositoryRoot, "docs", "project", "content-coverage.json"), "utf8"));
+}
+
+function virtualCoverage(manifest) {
+  const existingPaths = new Set(["docs/src/SUMMARY.md"]);
+  const textFiles = new Map();
+  const summaryEntries = new Set();
+  for (const row of manifest.obligations) {
+    existingPaths.add(row.destination);
+    summaryEntries.add(row.destination);
+    const prose = [...row.content_anchors, ...(row.search_terms ?? [])].join("\n");
+    textFiles.set(row.destination, `${textFiles.get(row.destination) ?? "# Published page\n"}\n${prose}\n`);
+    for (const reference of [...row.source_evidence, ...row.test_evidence]) {
+      const evidence = typeof reference === "string" ? manifest.evidence[reference] : reference;
+      if (evidence.kind === "TestGap") continue;
+      existingPaths.add(evidence.path);
+      textFiles.set(evidence.path, `${textFiles.get(evidence.path) ?? ""}\n${evidence.anchor}\n`);
+    }
+  }
+  for (const page of manifest.pages) {
+    existingPaths.add(page.path);
+    summaryEntries.add(page.path);
+    textFiles.set(page.path, `${textFiles.get(page.path) ?? "# Published page\n"}\n${page.required_anchors.join("\n")}\n`);
+  }
+  for (const entry of manifest.search_map) {
+    existingPaths.add(entry.target);
+    summaryEntries.add(entry.target);
+    textFiles.set(entry.target, `${textFiles.get(entry.target) ?? "# Published page\n"}\n${entry.canonical}\n${entry.aliases.join("\n")}\n`);
+  }
+  for (const diagram of manifest.diagrams) {
+    existingPaths.add(diagram.destination);
+    summaryEntries.add(diagram.destination);
+    textFiles.set(
+      diagram.destination,
+      `${textFiles.get(diagram.destination) ?? "# Published page\n"}\n${diagram.title}\n${diagram.text_equivalent}\n${diagram.alt_text}\n${diagram.content_anchors.join("\n")}\n`,
+    );
+  }
+  return { existingPaths, summaryEntries, textFiles };
 }
 
 function virtualCorpus(ledger) {
@@ -347,6 +390,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Install pinned documentation tools
+        run: cargo install typos-cli --version '=1.50.1' --locked
+      - name: Check spelling
+        run: typos docs/src docs/README.md README.md
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/configure-pages@cccccccccccccccccccccccccccccccccccccccc
@@ -365,6 +412,65 @@ jobs:
       - uses: actions/deploy-pages@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   `;
   assert.deepEqual(validateWorkflowText(validWorkflow), []);
+});
+
+test("S059 requires the exact pinned spelling tool and spelling gate", () => {
+  const workflow = `
+name: docs
+permissions:
+  contents: read
+jobs:
+  build:
+    permissions:
+      contents: read
+    steps:
+      - name: Install pinned documentation tools
+        run: cargo install typos-cli --version '=1.50.1' --locked
+      - name: Check spelling
+        run: typos docs/src docs/README.md README.md
+      - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/configure-pages@cccccccccccccccccccccccccccccccccccccccc
+      - name: Upload checked Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+`;
+  assert.deepEqual(validateWorkflowText(workflow), []);
+  assert.match(validateWorkflowText(workflow.replace("'=1.50.1'", "'=1.50.2'")).join("\n"), /typos-cli 1\.50\.1/);
+  assert.match(validateWorkflowText(workflow.replace("run: typos docs/src docs/README.md README.md", "run: typos docs/src")).join("\n"), /spelling gate/);
+
+  const unreachable = workflow
+    .replace("run: cargo install typos-cli --version '=1.50.1' --locked", "run: echo omitted install")
+    .replace("run: typos docs/src docs/README.md README.md", "run: echo omitted spelling") + `
+junk:
+  run: cargo install typos-cli --version '=1.50.1' --locked
+  spelling: |
+    run: typos docs/src docs/README.md README.md
+`;
+  assert.match(validateWorkflowText(unreachable).join("\n"), /build job.*typos-cli/);
+  assert.match(validateWorkflowText(unreachable).join("\n"), /build job.*spelling gate/);
+
+  const reversed = workflow.replace(
+    `      - name: Install pinned documentation tools
+        run: cargo install typos-cli --version '=1.50.1' --locked
+      - name: Check spelling
+        run: typos docs/src docs/README.md README.md`,
+    `      - name: Check spelling
+        run: typos docs/src docs/README.md README.md
+      - name: Install pinned documentation tools
+        run: cargo install typos-cli --version '=1.50.1' --locked`,
+  );
+  assert.match(validateWorkflowText(reversed).join("\n"), /install pinned typos-cli before/);
 });
 
 test("rejects write escalation and guards outside their required scopes", () => {
@@ -652,19 +758,23 @@ test("derives post-baseline lifecycle and permits an evidenced archive followed 
   assert.deepEqual(validateCorpusSnapshot(ledger, active), []);
 
   const transitioned = structuredClone(ledger);
-  transitioned.postBaselinePlans[0] = {
-    ...transitioned.postBaselinePlans[0],
+  const activeIndex = transitioned.postBaselinePlans.findIndex((plan) => plan.lifecycle === "Active");
+  assert.notEqual(activeIndex, -1);
+  const activeId = transitioned.postBaselinePlans[activeIndex].id;
+  transitioned.postBaselinePlans[activeIndex] = {
+    ...transitioned.postBaselinePlans[activeIndex],
     completion: "Complete",
     lifecycle: "Archived",
-    destination: "docs/archive/build-plans/plan-028.md",
+    destination: `docs/archive/build-plans/plan-${activeId}.md`,
     evidence: "Merged in PR #99.",
   };
+  const nextId = String(Number(activeId) + 1).padStart(3, "0");
   transitioned.postBaselinePlans.push({
-    id: "029",
+    id: nextId,
     completion: "In Progress",
     lifecycle: "Active",
-    destination: "docs/project/build-plans/plan-029.md",
-    specs: ["specs/059-next-slice"],
+    destination: `docs/project/build-plans/plan-${nextId}.md`,
+    specs: [`specs/${nextId}-next-slice`],
     evidence: "Issue #101 tracks the active delivery.",
   });
   const archivedAndNext = virtualCorpus(transitioned);
@@ -673,32 +783,32 @@ test("derives post-baseline lifecycle and permits an evidenced archive followed 
 
   const erasedArchive = structuredClone(archivedAndNext);
   erasedArchive.textFiles = new Map(archivedAndNext.textFiles);
-  erasedArchive.textFiles.set("docs/archive/build-plans/plan-028.md", "# Plan 028\n");
+  erasedArchive.textFiles.set(`docs/archive/build-plans/plan-${activeId}.md`, `# Plan ${activeId}\n`);
   assert.match(validateMigrationLedger(transitioned, erasedArchive).join("\n"), /invalid Archived lifecycle/);
 
   const ambiguous = structuredClone(archivedAndNext);
   ambiguous.currentPaths = new Set(archivedAndNext.currentPaths);
   ambiguous.existingPaths = new Set(archivedAndNext.existingPaths);
-  ambiguous.currentPaths.add("docs/project/build-plans/plan-028.md");
-  ambiguous.existingPaths.add("docs/project/build-plans/plan-028.md");
+  ambiguous.currentPaths.add(`docs/project/build-plans/plan-${activeId}.md`);
+  ambiguous.existingPaths.add(`docs/project/build-plans/plan-${activeId}.md`);
   assert.match(
     [...validateMigrationLedger(transitioned, ambiguous), ...validateCorpusSnapshot(transitioned, ambiguous)].join("\n"),
     /(?:invalid Archived lifecycle|active project build plan must match)/,
   );
 
   const inverted = structuredClone(transitioned);
-  inverted.postBaselinePlans[0] = {
-    ...inverted.postBaselinePlans[0],
+  inverted.postBaselinePlans[activeIndex] = {
+    ...inverted.postBaselinePlans[activeIndex],
     completion: "In Progress",
     lifecycle: "Active",
-    destination: "docs/project/build-plans/plan-028.md",
+    destination: `docs/project/build-plans/plan-${activeId}.md`,
     evidence: "Issue #80 tracks active delivery.",
   };
-  inverted.postBaselinePlans[1] = {
-    ...inverted.postBaselinePlans[1],
+  inverted.postBaselinePlans[inverted.postBaselinePlans.length - 1] = {
+    ...inverted.postBaselinePlans[inverted.postBaselinePlans.length - 1],
     completion: "Complete",
     lifecycle: "Archived",
-    destination: "docs/archive/build-plans/plan-029.md",
+    destination: `docs/archive/build-plans/plan-${nextId}.md`,
     evidence: "Merged in PR #100.",
   };
   assert.match(
@@ -775,6 +885,19 @@ test("rejects project or archive content in the generated search index", async (
   await writeFile(path.join(f.output, "searchindex-aaa.js"), "const benign = true;\n");
   await writeFile(path.join(f.output, "searchindex-test.js"), 'const leaked = "Current Build Plans";\n');
   assert.match((await validateGeneratedSite(f.output)).join("\n"), /(?:multiple generated search indexes|non-published content.*Current Build Plans)/);
+
+  await rm(path.join(f.output, "searchindex-aaa.js"));
+  await writeFile(
+    path.join(f.output, "searchindex-test.js"),
+    'Object.assign(window.search, {doc_urls:["docs/project/private.html"]});\n',
+  );
+  assert.match((await validateGeneratedSite(f.output)).join("\n"), /publishes a project or archive document URL/);
+
+  await writeFile(
+    path.join(f.output, "searchindex-test.js"),
+    'Object.assign(window.search, {doc_urls:["guide/index.html"], body:"https://example.com/docs/project/releasing.md"});\n',
+  );
+  assert.doesNotMatch((await validateGeneratedSite(f.output)).join("\n"), /project or archive document URL/);
 });
 
 test("applies text hygiene to non-doc files and rejects forbidden dashes", () => {
@@ -800,4 +923,184 @@ test("requires package-safe absolute links in the root README", async () => {
   const corpus = virtualCorpus(ledger);
   corpus.textFiles.set("README.md", "# ESO Weave\n\n[Installation](docs/src/getting-started/installation.md)\n");
   assert.match(validateCorpusSnapshot(ledger, corpus).join("\n"), /package copy requires an absolute link/);
+});
+
+test("S059 accepts the exact evidence-backed completeness manifest", async () => {
+  const manifest = await contentCoverage();
+  assert.deepEqual(validateContentCoverage(manifest, virtualCoverage(manifest)), []);
+});
+
+test("S059 freezes every semantic obligation key", async () => {
+  const manifest = await contentCoverage();
+  for (const [field, value] of [
+    ["id", "LOG-999"],
+    ["area", "Substituted area"],
+    ["audience", ["Maintainer"]],
+    ["statement", "A substituted statement that erases the original contract."],
+    ["destination", "docs/src/README.md"],
+    ["source_evidence", ["S-UI"]],
+    ["test_evidence", ["T-UI"]],
+    ["coverage", "Deferred"],
+    ["labels", ["Diagnostic"]],
+    ["content_anchors", ["Choose a path"]],
+    ["follow_up", { issue: 92, url: "https://github.com/h8rt3rmin8r/eso-weave/issues/92", disposition: "Substituted disposition for the semantic freeze fixture." }],
+  ]) {
+    const changed = structuredClone(manifest);
+    changed.obligations[0][field] = value;
+    assert.match(validateContentCoverage(changed, virtualCoverage(changed)).join("\n"), /semantic projection/, field);
+  }
+  const changedEvidence = structuredClone(manifest);
+  changedEvidence.evidence[manifest.obligations[0].source_evidence[0]].claim = "A substituted evidence claim.";
+  assert.match(validateContentCoverage(changedEvidence, virtualCoverage(changedEvidence)).join("\n"), /semantic projection/, "evidence");
+});
+
+test("S059 rejects missing, duplicate, partial, and non-published obligations", async () => {
+  const manifest = await contentCoverage();
+  const missing = structuredClone(manifest);
+  missing.obligations.pop();
+  assert.match(validateContentCoverage(missing, virtualCoverage(missing)).join("\n"), /exact obligation identifiers/);
+
+  const duplicate = structuredClone(manifest);
+  duplicate.obligations.push(structuredClone(duplicate.obligations[0]));
+  assert.match(validateContentCoverage(duplicate, virtualCoverage(duplicate)).join("\n"), /duplicate obligation/);
+
+  const partial = structuredClone(manifest);
+  partial.obligations[0].coverage = "Partial";
+  assert.match(validateContentCoverage(partial, virtualCoverage(partial)).join("\n"), /may not remain Partial/);
+
+  const unsafe = structuredClone(manifest);
+  unsafe.obligations[0].destination = "docs/project/private.md";
+  assert.match(validateContentCoverage(unsafe, virtualCoverage(unsafe)).join("\n"), /published docs\/src/);
+});
+
+test("S059 rejects unshaped, missing, or unresolvable evidence", async () => {
+  const manifest = await contentCoverage();
+  const unshaped = structuredClone(manifest);
+  unshaped.obligations[0].source_evidence = [{ path: "src/input/mod.rs" }];
+  assert.match(validateContentCoverage(unshaped, virtualCoverage(unshaped)).join("\n"), /invalid source evidence/);
+
+  const absent = structuredClone(manifest);
+  const evidence = absent.evidence[absent.obligations[0].source_evidence[0]];
+  const snapshot = virtualCoverage(absent);
+  snapshot.textFiles.set(evidence.path, "source without the required stable symbol\n");
+  assert.match(validateContentCoverage(absent, snapshot).join("\n"), /evidence anchor is missing/);
+
+  const noTests = structuredClone(manifest);
+  noTests.obligations.find((row) => row.id === "LOG-001").test_evidence = [];
+  assert.match(validateContentCoverage(noTests, virtualCoverage(noTests)).join("\n"), /test evidence or a TestGap/);
+});
+
+test("S059 rejects escaping, absolute, and case-drifted evidence paths", async () => {
+  const manifest = await contentCoverage();
+  for (const badPath of ["../eso-weave/src/input/mod.rs", path.resolve(repositoryRoot, "src", "input", "mod.rs"), "src/Input/mod.rs"]) {
+    const changed = structuredClone(manifest);
+    changed.evidence["S-INPUT"].path = badPath;
+    const errors = await validateContentCoverageRepository(repositoryRoot, changed);
+    assert.match(errors.join("\n"), /evidence path.*(?:repository-relative|exact case)/, badPath);
+  }
+});
+
+test("S059 maps every platform claim dimension to shaped source evidence", async () => {
+  const manifest = await contentCoverage();
+  const platform = manifest.obligations.find((row) => row.id === "PLT-001");
+  assert.deepEqual(platform.source_evidence, [
+    "S-GAME-LINUX", "S-GAME-WINDOWS",
+    "S-INPUT-LINUX", "S-INPUT-WINDOWS", "S-PERMISSION-LINUX",
+    "S-CAPTURE-LINUX", "S-CAPTURE-WINDOWS",
+    "S-PLATFORM-LINUX", "S-PLATFORM-WINDOWS",
+  ]);
+  for (const reference of platform.source_evidence) {
+    assert.equal(manifest.evidence[reference].kind, "Source", reference);
+    assert.ok(manifest.evidence[reference].anchor.length >= 12, reference);
+  }
+  const incomplete = structuredClone(manifest);
+  incomplete.obligations.find((row) => row.id === "PLT-001").source_evidence.pop();
+  assert.match(validateContentCoverage(incomplete, virtualCoverage(incomplete)).join("\n"), /semantic projection/);
+});
+
+test("S059 rejects missing substantive anchors and incomplete page dimensions", async () => {
+  const manifest = await contentCoverage();
+  const row = manifest.obligations.find((item) => item.coverage === "Covered");
+  const missingAnchor = virtualCoverage(manifest);
+  missingAnchor.textFiles.set(row.destination, missingAnchor.textFiles.get(row.destination).replace(row.content_anchors[0], ""));
+  assert.match(validateContentCoverage(manifest, missingAnchor).join("\n"), /substantive anchor is missing/);
+
+  const incomplete = structuredClone(manifest);
+  incomplete.pages[0].required_anchors.pop();
+  assert.match(validateContentCoverage(incomplete, virtualCoverage(incomplete)).join("\n"), /exact page profile/);
+
+  const omittedPage = structuredClone(manifest);
+  omittedPage.pages.pop();
+  assert.match(validateContentCoverage(omittedPage, virtualCoverage(omittedPage)).join("\n"), /exact page profiles/);
+
+  const omittedSearch = structuredClone(manifest);
+  omittedSearch.search_map.pop();
+  assert.match(validateContentCoverage(omittedSearch, virtualCoverage(omittedSearch)).join("\n"), /every contracted canonical term/);
+});
+
+test("S059 requires deferred issues 92 through 96 and truthful dispositions", async () => {
+  const manifest = await contentCoverage();
+  for (const issue of [92, 93, 94, 95, 96]) {
+    assert.ok(manifest.obligations.some((row) => row.coverage === "Deferred" && row.follow_up?.issue === issue));
+  }
+  const broken = structuredClone(manifest);
+  const deferred = broken.obligations.find((row) => row.coverage === "Deferred");
+  delete deferred.follow_up;
+  assert.match(validateContentCoverage(broken, virtualCoverage(broken)).join("\n"), /Deferred.*follow-up/);
+});
+
+test("S059 search aliases must be visible on the canonical published target", async () => {
+  const manifest = await contentCoverage();
+  const snapshot = virtualCoverage(manifest);
+  const entry = manifest.search_map[0];
+  const target = snapshot.textFiles.get(entry.target);
+  const masked = entry.aliases.map((alias) => `\`${alias}\``).join("\n");
+  snapshot.textFiles.set(entry.target, target.replace(entry.aliases.join("\n"), masked));
+  assert.match(validateContentCoverage(manifest, snapshot).join("\n"), /required search alias/);
+
+  const absentCanonical = structuredClone(manifest);
+  absentCanonical.search_map[0].target = "docs/project/search.md";
+  assert.match(validateContentCoverage(absentCanonical, virtualCoverage(absentCanonical)).join("\n"), /search target must be published/);
+});
+
+test("S059 diagrams require useful non-color text equivalents", async () => {
+  const manifest = await contentCoverage();
+  const broken = structuredClone(manifest);
+  broken.diagrams[0].alt_text = "diagram";
+  broken.diagrams[0].text_equivalent = "See colors.";
+  assert.match(validateContentCoverage(broken, virtualCoverage(broken)).join("\n"), /diagram.*text equivalent/);
+
+  const missing = structuredClone(manifest);
+  const snapshot = virtualCoverage(manifest);
+  missing.diagrams[0].destination = "docs/src/missing.md";
+  assert.match(validateContentCoverage(missing, snapshot).join("\n"), /diagram destination.*(?:exist|SUMMARY)/);
+
+  const erased = virtualCoverage(manifest);
+  const diagram = manifest.diagrams[0];
+  erased.textFiles.set(diagram.destination, erased.textFiles.get(diagram.destination).replace(diagram.content_anchors[0], ""));
+  assert.match(validateContentCoverage(manifest, erased).join("\n"), /diagram content anchor/);
+});
+
+test("S059 requires every frozen alias or a directly linked glossary explanation", async () => {
+  const manifest = await contentCoverage();
+  const changed = structuredClone(manifest);
+  changed.search_map[1].aliases = [];
+  assert.match(validateContentCoverage(changed, virtualCoverage(changed)).join("\n"), /semantic projection/);
+
+  const snapshot = virtualCoverage(manifest);
+  const entry = manifest.search_map[0];
+  snapshot.textFiles.set(entry.target, snapshot.textFiles.get(entry.target).replaceAll(entry.aliases[0], ""));
+  assert.match(validateContentCoverage(manifest, snapshot).join("\n"), /required search alias/);
+
+  snapshot.textFiles.set(
+    "docs/src/reference/glossary.md",
+    `# Glossary\n\n- **\`${entry.aliases[0]}\`:** See [${entry.canonical}](../README.md).\n`,
+  );
+  assert.doesNotMatch(validateContentCoverage(manifest, snapshot).join("\n"), /required search alias/);
+
+  snapshot.textFiles.set(
+    "docs/src/reference/glossary.md",
+    `# Glossary\n\n\`\`\`text\n${entry.aliases[0]} [${entry.canonical}](../README.md)\n\`\`\`\n`,
+  );
+  assert.match(validateContentCoverage(manifest, snapshot).join("\n"), /required search alias/);
 });

@@ -1,6 +1,6 @@
 # Features
 
-Current migrated feature guidance covers:
+Choose the feature you want to configure or understand:
 
 - [Weaving](weaving.md)
 - [Fishing](fishing.md)
@@ -9,7 +9,9 @@ Current migrated feature guidance covers:
 - [Ultimate Resource](ultimate-resource.md)
 - [PixelBeacon](pixelbeacon.md)
 
-Issue #81 owns the later complete feature audit and expansion.
+For a field such as **Signal lost**, **Blocked**, **Unknown**, or **Ready**, use
+the [Status Reference](../reference/status-reference.md). For control defaults and
+application timing, use the [Settings Reference](../reference/settings.md).
 
 Continue to [Concepts](../concepts/) or return to the
 [documentation home](../).

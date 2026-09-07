@@ -1,5 +1,9 @@
 # PixelBeacon
 
+PixelBeacon Status covers install addon, update addon, and unmanaged addon
+states. API Version may appear as `APIVersion`, outdated addon, or ESO client
+version in diagnostic discussions.
+
 ESO exposes its Lua API to addons but provides no direct real-time subscription
 for an external desktop application. PixelBeacon is the minimal bridge used by
 ESO Weave. It renders solid-color telemetry blocks and has no settings, libraries,
@@ -8,6 +12,10 @@ saved variables, or interface beyond those blocks.
 PixelBeacon is embedded in the ESO Weave binary and managed from System and
 State. The overlay must remain visible at the top-left of the ESO client because
 anything drawn over it can make the signal unavailable.
+
+The addon is also described as the pixel addon, telemetry overlay, color blocks,
+screen telemetry, or beacon. These terms refer to PixelBeacon and its Pixel Bus,
+not to game memory or packet inspection.
 
 At the default block size, protocol version 5 occupies 512 by 16 physical pixels:
 three layout-header cells and twenty-nine payload cells. PixelBeacon calculates
@@ -25,6 +33,11 @@ then locates `Elder Scrolls Online\<environment>\AddOns`. On Linux, it reads Ste
 library metadata, finds app id `306130`, and resolves the path in the Proton
 prefix. The `live` environment is the default and `pts` can be selected. A manual
 override is also available.
+
+In **Settings > PixelBeacon and Bus**, select **Live** or **PTS**. Use an
+**AddOns Folder Override** only when discovery cannot find the existing
+environment directory. The override must name the `AddOns` directory itself;
+ESO Weave refuses to create a missing root.
 
 Discovery never writes outside the resolved AddOns directory.
 
@@ -44,9 +57,17 @@ The on-disk manifest is classified as:
 | Installed (current) | The marker and embedded version match |
 | Installed (outdated) | The marker exists but versions differ |
 
+The current interface combines Unmanaged with **Installed (outdated)**. Do not
+choose **Update** for an unmanaged folder: uninstall refuses its deletion, but
+the subsequent install can overwrite its files. This defect is tracked in
+[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94). Preserve or move
+only that exact unmanaged `PixelBeacon` directory before manual resolution.
+
 Removal deletes the PixelBeacon directory only when the manifest contains
 `## X-ESO-Weave-Managed: true`. An unmanaged or unreadable directory is never
-deleted. The same managed-marker gate applies to every manifest edit.
+deleted. Managed-marker checks also protect automatic API and block-size edits.
+Because of issue #94, this release does not promise the same protection for the
+manual Update path.
 
 When ESO is running during an install, update, or removal, use `/reloadui` or
 relog before expecting the change in game.
@@ -64,7 +85,11 @@ background startup check reads the official `esoui/esoui` live client version as
 a bump-detection signal. It never guesses an undisclosed numeric API version,
 never downgrades the manifest, and does not block startup on network failure.
 
-## Fishing and quickslot diagnostics
+**Version-sensitive:** ESO API and client versions can change independently of
+an ESO Weave release. The network observation is only a bump signal; compiled
+and last-known values preserve offline startup.
+
+## Fishing signal and quickslot diagnostics
 
 Fishing state is polled from ESO's interaction state every 100 ms. Bait
 consumption while a cast is active is the sole bite signal. PixelBeacon does not
@@ -74,5 +99,20 @@ Run `/pbquickslot` in ESO for one bounded snapshot of quickslot facts. Run
 `/pbquickslot watch` to report only changed snapshots, and run it again to stop.
 The diagnostic intentionally omits localized item names and descriptions.
 Quickslot classification first shipped in PixelBeacon version 13.
+
+The commands are diagnostic tools, not setup requirements. Watch mode reports
+only changed snapshots, and the same command stops it. If the heartbeat is not
+healthy, first use [PixelBeacon signal troubleshooting](../getting-started/troubleshooting.md#pixelbeacon-signal-is-missing-or-lost).
+
+## Overlay and compatibility recovery
+
+Block Size choices are 2, 4, 8, 16, or 32 physical pixels, with 16 as the
+default. After changing it, reload or relog ESO and restart ESO Weave. Color
+Tolerance and sampling intervals are also saved for the next application start
+in the current release. Live reconfiguration is tracked in
+[issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95).
+
+Older layouts remain bounded to the fields they draw. Missing newer fields become
+unavailable and are never guessed.
 
 See [Pixel Bus Protocol](../reference/pixel-bus-protocol.md) for the wire contract.

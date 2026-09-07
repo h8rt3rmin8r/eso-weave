@@ -29,3 +29,23 @@ multi-client orchestration, game memory access, packet manipulation, and in-game
 features beyond the PixelBeacon signal contract are outside project scope.
 
 PixelBeacon ships only inside ESO Weave. It is not published to addon indexes.
+
+## Privacy and network behavior
+
+ESO Weave reads local configuration, process and window state, supported keyboard
+events, and displayed pixels at the ESO client origin. PixelBeacon reads supported
+ESO addon API values and renders them as local color blocks. The project does not
+read game process memory, inspect packet contents, send gameplay telemetry, or
+require an online account service.
+
+The desktop application performs one best-effort background startup check against
+the official `esoui/esoui` live client-version source. That request is used only
+as an addon API-version bump signal. Failure never blocks startup, and the
+application retains a compiled and last-known local fallback. Package download
+and GitHub documentation access naturally use their respective services.
+
+Logs and settings stay in the platform paths described in
+[Configuration](../reference/configuration.md) and [Logging](../reference/logging.md).
+Review a log before sharing it, because paths and operational context may still
+identify the local environment even though input contents are suppressed under
+the documented rules.

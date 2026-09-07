@@ -1,6 +1,6 @@
 # Plan 028: Documentation Corpus Reorganization
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -16,6 +16,6 @@ Sequence:
 5. Verify navigation, links, search scope, generated output, text hygiene, and CI
    parity before removing redundant source documents.
 
-This slice closes issue #80. It does not fill every documentation coverage gap,
-embed the site in application packages, or perform package and live-game
-verification owned by issues #81, #82, #84, and #77.
+This slice closed issue #80 in PR #88. It did not fill every documentation
+coverage gap, embed the site in application packages, or perform package and
+live-game verification owned by issues #81, #82, #84, and #77.

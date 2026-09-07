@@ -10,6 +10,7 @@ on:
       - ".github/scripts/docs-policy.mjs"
       - ".github/scripts/docs-policy.test.mjs"
       - ".github/workflows/docs.yml"
+      - ".typos.toml"
       - "docs/**"
   pull_request:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - ".github/scripts/docs-policy.mjs"
       - ".github/scripts/docs-policy.test.mjs"
       - ".github/workflows/docs.yml"
+      - ".typos.toml"
       - "docs/**"
   workflow_dispatch:
 
@@ -38,6 +40,10 @@ jobs:
         run: |
           cargo install mdbook --version '=0.5.4' --locked
           cargo install mdbook-linkcheck2 --version '=0.13.0' --locked
+          cargo install typos-cli --version '=1.50.1' --locked
+
+      - name: Check spelling
+        run: typos docs/src docs/README.md README.md
 
       - name: Test documentation policy
         run: node --test .github/scripts/docs-policy.test.mjs

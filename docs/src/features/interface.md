@@ -6,7 +6,7 @@ region, and optional live log panel.
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and Live Log |
-| Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, Quickslot, Potion Availability, and Potion Cooldown |
+| Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, and one composed Quickslot classification, availability, and cooldown row |
 | System and State | Game/provider state, World State, ESO Weave state, PixelBeacon Status and Signal, Fishing, Auto Potion, and lifecycle actions |
 | Skills | Slot label, enablement, weave type, timing override, effective delay, and cooldown |
 | Live Log | Recent structured events with a local level filter |
@@ -48,6 +48,14 @@ keyboard, and assistive technology. Activating the header hides or restores the
 complete body, persists the preference, and recomputes intrinsic height without
 leaving blank space. Skills is never part of that disclosure.
 
+Use Tab and Shift+Tab to move among interactive controls. Activate buttons,
+toggles, menu items, and the System and State disclosure with the keyboard action
+offered by the platform and UI framework. Combo boxes expose their current text;
+text fields retain visible labels and help. When a constrained dashboard value is
+truncated, pointer hover and keyboard focus expose the same full text. This
+keyboard focus indicator is a UI selection cue and is distinct from ESO window
+focus, which is a safety prerequisite for generated input.
+
 Hovering an interactive control changes its color but never its size, so hover
 cannot cause layout reflow.
 
@@ -76,11 +84,19 @@ Text and meaningful graphical boundaries meet WCAG 2.2 AA contrast, and color is
 never the only state cue. One compact group boundary follows Ultimate before Game
 Context.
 
+The meter name, numeric or non-numeric text, proportional fill, programmatic
+progress value, quarter landmarks, Ultimate cost threshold, and stable Ready text
+are complementary cues. A reader never needs to infer state from red, green,
+blue, purple, or dot color alone.
+
 ## Live log and settings
 
 The live log uses an always-available in-memory ring buffer, colorizes events by
-level, autoscrolls while at the bottom, and can be filtered independently of file
-logging. Its panel is resizable between a six-line readable minimum and the space
+level, and autoscrolls while at the bottom. Its level selector currently updates
+and persists the global captured level used by both the ring and optional file
+sink. Older display-only filter wording is tracked in
+[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96). Its panel is
+resizable between a six-line readable minimum and the space
 above it, and never covers interactive controls. On every rendered frame,
 including simultaneous splitter drag and window resize, the pane's top edge
 remains at or below the central content's bottom edge. Dragged and restored
@@ -91,15 +107,27 @@ readable floor.
 The Settings modal grows sub-linearly with the window on both axes, so its
 absolute size increases while it occupies a progressively smaller fraction of a
 larger window. It never exceeds 1040 by 1120 logical points or 92 percent of the
-window. Settings apply immediately and are persisted through a coalesced save
-without a separate Save action.
+window. Settings are persisted through a coalesced save without a separate Save
+action. Most settings apply to their running subsystem. Fishing and Pixel Bus
+settings currently take effect after restart, and the PixelBeacon block size also
+requires addon redeploy plus `/reloadui`; see
+[issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) and the
+[Settings Reference](../reference/settings.md#application-timing).
 
 Its rendered rectangle equals its computed extent. The room above the body is
 measured from the laid-out heading, separator, and close row rather than assumed.
 At maximum size, at least half of the body remains visible without scrolling.
 
 Settings cover keybindings; global and per-slot delays; weapon-aware timing and
-weapon presets; latency adaptation and `k`; fishing timing and interact binding;
+weapon presets; latency adaptation and `k`; fishing timing;
 Auto Potion watches, quickslot binding, and retry interval; pixel-bus block size,
 tolerance, and sampling intervals; AddOns override and environment; logging;
 theme; and always-on-top behavior.
+
+The current modal does not expose Fishing's stored interact key. See the
+[Fishing limitation](fishing.md#state-and-safety-behavior) and issue #95.
+
+Open **File > Settings** to edit configuration, **View > Live Log** to diagnose
+events, and **File > Exit** to close after pending geometry is flushed. The
+[Settings Reference](../reference/settings.md) lists every control. The
+[Status Reference](../reference/status-reference.md) explains every field.

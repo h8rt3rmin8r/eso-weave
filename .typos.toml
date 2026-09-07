@@ -1,0 +1,31 @@
+[files]
+extend-exclude = [
+  "target/**",
+  ".git/**",
+  "docs/src/assets/brand/fonts/**",
+  "packaging/windows/*.bmp",
+  "packaging/linux/*.png",
+  "packaging/appimage/**/*.png",
+]
+
+[default]
+extend-ignore-re = [
+  "[0-9a-f]{40}",
+  "(?i)sha256:[0-9a-f]+",
+]
+
+[default.extend-words]
+AddOns = "AddOns"
+APIVersion = "APIVersion"
+BA = "BA"
+ESO = "ESO"
+eso = "eso"
+egui = "egui"
+evdev = "evdev"
+mdbook = "mdbook"
+PixelBeacon = "PixelBeacon"
+pixelbus = "pixelbus"
+Quickslot = "Quickslot"
+quickslot = "quickslot"
+uinput = "uinput"
+XWayland = "XWayland"

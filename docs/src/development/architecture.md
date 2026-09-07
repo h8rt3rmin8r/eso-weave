@@ -4,31 +4,33 @@ ESO Weave is one Rust process composed of cooperating subsystems. The interface
 owns presentation and configuration. Engines own correctness-bearing logic behind
 test seams. Platform modules contain operating-system calls.
 
-| Subsystem | Responsibility |
-| --- | --- |
-| Input Engine | Focus-scoped interception and synthesis, suspension, menu gating, and recursion protection |
-| Game Observer | Installation provider, launcher/game runtime, focus, and normalized Game Context |
-| Weave Engine | Skill configuration, cooldown gating, action sequences, and timing |
-| Fishing Controller | Event-and-tick fishing state machine |
-| Auto Potion Controller | Resource and quickslot eligibility rule |
-| Pixel Bus Reader | Layout negotiation, capture, decoding, freshness, and display description |
-| Beacon Manager | Safe discovery, installation, verification, update, and removal of PixelBeacon |
-| Config and Session State | Separate user settings and derived runtime stores |
-| Logging | Structured file and in-memory sinks |
-| Interface | Immediate-mode egui application surface |
+## Subsystem ownership
+
+| Subsystem | Owns | Does not own |
+| --- | --- | --- |
+| Input Engine | Focus-scoped physical-event decisions, bindings, held-key bookkeeping, suspension, shared synthesis gates, non-blocking handoff | Timed sequences and controller state |
+| Game Observer | Installation candidates, process and launcher presence, focus, freshness, surface, and normalized Game Context | Pixel decoding and feature decisions |
+| Weave Engine | Skill configuration, current timing, Global Cooldown, action sequences, and observable combat data | Physical hook callback and autonomous feature timers |
+| Fishing Controller | Requested fishing state, detector events, deadlines, stop reasons, and Interact output | Pixel capture and hook decisions |
+| Auto Potion Controller | Requested state, ordered eligibility rule, last attempt, and Quickslot output | Resource decoding and potion selection |
+| Pixel Bus Reader | Layout negotiation, one-frame sampling, decoding, change detection, freshness, invalidation, and display description | User feature policy |
+| Beacon Manager | AddOns discovery, embedded install files, status, managed removal, block-size redeploy, and API-version upkeep | ESO runtime loading of the addon |
+| Config and Session State | Separate user settings and derived runtime stores, notices, and serialization | Module-specific validation semantics |
+| Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | Live Log presentation filter |
+| Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
 
 ## Thread model
 
 ESO Weave uses `std::thread`, `Arc<Mutex<...>>`, and `std::sync::mpsc`; it has no
 async runtime.
 
-| Thread | Owns | Never does |
-| --- | --- | --- |
-| Main | Interface, application model, and view | Timed input sequences |
-| Interception | Platform hook or evdev loop | Sleep, block, or synthesize |
-| Weave worker | Action queue and timed sequences | Touch the interception thread |
-| Pixel bus worker | Game observation, capture, event routing, display detection, fishing ticks, and Auto Potion ticks | Sample from another thread |
-| API version check | One startup manifest/client-version pass | Delay the first window |
+| Thread | Receives | Owns or calls | Must not do |
+| --- | --- | --- | --- |
+| Main | UI events, queued application toggles, background API outcome | Interface, App Model, save scheduler, view state | Timed input sequences |
+| Interception | Platform keyboard events | Focus refresh, `InputEngine::classify`, bounded handoff | Sleep, block, or synthesize |
+| Weave worker | Actions from the bounded input channel | Application-toggle forwarding and `WeaveEngine::handle` through `RealSink` | Touch the interception callback |
+| Pixel Bus worker | Clock deadlines, process probes, display and pixel samples | Game observations, safety pre-routing, controller routing, fishing ticks, Auto Potion ticks | Sample through another thread or treat stale data as current |
+| API version check | Stored API cache, addon root, one bounded HTTP result | Monotonic API-version resolution and managed manifest update | Delay the first window or guess a numeric ESO API version |
 
 Five ownership contracts are load-bearing:
 
@@ -41,3 +43,68 @@ Five ownership contracts are load-bearing:
 
 Platform and hardware boundaries are represented by traits so engine, controller,
 and decoder behavior can be tested with deterministic mocks.
+
+## Data flow
+
+Physical input follows this text sequence:
+
+`platform event -> Input Engine decision -> pass to ESO OR suppress -> bounded action queue -> weave worker -> platform synthesis`
+
+Game observation follows a separate sequence:
+
+`process and focus probe + displayed pixels -> Pixel Bus Reader -> close unsafe atomic gates -> lock engines and controllers -> route observations -> feature ticks -> view model`
+
+Configuration follows:
+
+`UI intent -> module validation and live application where implemented -> mark store dirty -> settle interval -> JSON write`
+
+The stores are split deliberately. `config.json` contains user settings.
+`state.json` contains suspend and fishing intent, API-version cache, and window
+geometry. Auto Potion request is runtime-only.
+
+Logging follows:
+
+`structured event -> global level and input-suppression filter -> bounded in-memory ring -> optional monthly file sink`
+
+The Live Log reads the ring and applies a presentation filter. The current UI
+also persists and applies its dropdown as the global capture level. Earlier
+display-only wording is incorrect and tracked in
+[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+
+## Ordering rules
+
+Safety-closing Pixel Bus events update shared atomic gates before the worker waits
+for controller locks. Safe recovery updates the owning engine or controller
+before reopening interception. This asymmetric ordering prevents a recovered
+physical key from being suppressed against stale worker state.
+
+The input callback uses `try_send`, so overload never shifts work onto the hook
+thread. The tradeoff is explicit: a full or disconnected queue drops the handed
+off action after its physical event was suppressed and records a warning.
+
+The App Model and Pixel Bus worker share one monotonic origin for fishing
+deadlines. Wall-clock changes therefore cannot move an armed reel or recast
+deadline.
+
+## Current defects at ownership boundaries
+
+These issues describe shipped behavior. They are not fixed by this documentation
+slice:
+
+- [#92](https://github.com/h8rt3rmin8r/eso-weave/issues/92): queued automation
+  does not observe every authorization gate. Running weaving lacks focus,
+  suspension, and menu gates, and Fishing lacks direct suspension gating.
+- [#93](https://github.com/h8rt3rmin8r/eso-weave/issues/93): the Linux uinput
+  capability list omits two shipped mapped keys.
+- [#94](https://github.com/h8rt3rmin8r/eso-weave/issues/94): the App Model update
+  route can continue to install after managed removal refuses an unmanaged
+  PixelBeacon directory.
+- [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): saved Fishing and
+  PixelBus settings are not propagated to their running owners, and the modal
+  does not expose the Fishing Interact Key.
+- [#96](https://github.com/h8rt3rmin8r/eso-weave/issues/96): latency, Live Log,
+  and menu-gate descriptions have stale copies in UI or source text.
+
+See [Action Authorization](../concepts/action-authorization.md) for the complete
+gate comparison, [State Machines](state-machines.md) for transitions, and
+[Test Strategy](test-strategy.md) for the evidence seams.

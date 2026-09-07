@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Pages delivery path (issue #79).
 - S058 adds a machine-checked migration ledger and explicit published, project,
   and archive documentation lifecycles (issue #80).
+- S059 adds complete task-oriented user and developer documentation, backed by
+  a source-and-test coverage manifest, terminology aliases, and policy checks
+  for content dimensions and accessible visuals (issue #81).
 
 ### Changed
 
@@ -21,8 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audience pages, archives all 27 completed build plans and the orphaned Ultimate
   article, moves current maintainer records under `docs/project`, and reduces
   the root README to a documentation gateway.
+- S059 expands the canonical corpus with first-launch, troubleshooting, settings,
+  status, state-machine, testing, packaging, release-flow, and coverage guidance.
 
 ### Decisions
+
+- 2026-09-07: Pin `typos-cli` 1.50.1 in documentation CI and keep its project
+  dictionary narrow and reviewed. This adds deterministic spelling checks to the
+  existing pinned mdBook toolchain without introducing a runtime site dependency.
+- 2026-09-07: Replace the S058-preserved claim that suspension stops all
+  synthesis with the source-backed limitation tracked by issue #92. Update the
+  frozen preservation digest deliberately so completeness checks reject both
+  accidental deletion and restoration of the disproven guarantee.
 
 - 2026-09-07: Amend the constitution to 2.0.0, replacing the mandatory
   single-file architecture of record with issue-backed numbered slices,
