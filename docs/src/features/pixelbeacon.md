@@ -68,7 +68,10 @@ deleted. Managed-marker checks also protect automatic API and block-size edits.
 Install, Update, API refresh, and block-size redeploy recheck ownership at the
 write boundary and refuse an unproven target without modifying it. Updating an
 outdated managed copy replaces its embedded files in place; it does not delete
-the directory first.
+the directory first. Lua is prepared before the manifest commit marker. A failed
+fresh install removes the directory it just created, while a failed managed
+update restores the previous embedded bytes on a best-effort basis and reports
+the original error.
 
 When ESO is running during an install, update, or removal, use `/reloadui` or
 relog before expecting the change in game.

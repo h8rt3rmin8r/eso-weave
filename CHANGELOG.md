@@ -22,7 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - S060 makes input authorization revocable across queue and sequence boundaries,
   cancels suspended Fishing deadlines without replay, and distinguishes unmanaged
-  PixelBeacon targets from an absent installation (issues #92 and #94).
+  PixelBeacon targets from an absent installation. Managed add-on updates commit
+  the manifest last and restore prior embedded bytes after a failed commit
+  (issues #92 and #94).
 - S058 splits the former technical specification and root manual into canonical
   audience pages, archives all 27 completed build plans and the orphaned Ultimate
   article, moves current maintainer records under `docs/project`, and reduces

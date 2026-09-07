@@ -120,7 +120,7 @@ const CONTENT_OBLIGATION_IDS = new Set([
 const DEFERRED_ISSUES = new Set([93, 95, 96]);
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
-const CONTENT_CONTRACT_SHA256 = "1a05b12389ba0f8fb1c2fc61ddce1d7cda33727544c8ff414ca7d1c1c024f42e";
+const CONTENT_CONTRACT_SHA256 = "30fd82eb4ca09945cfc8febd1f09d14850b0412ac6bae736eb2b1804811ff094";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",

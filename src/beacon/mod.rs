@@ -418,7 +418,9 @@ pub fn install_sized(
         return Err(LifecycleError::AddonsDirMissing);
     }
     let dir = addons_root.join(SUBFOLDER);
-    match status(addons_root) {
+    let existing_status = status(addons_root);
+    let fresh = existing_status == BeaconStatus::NotInstalled;
+    match existing_status {
         BeaconStatus::NotInstalled => std::fs::create_dir(&dir)?,
         BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch => {}
         BeaconStatus::Unmanaged => {
@@ -431,6 +433,7 @@ pub fn install_sized(
         }
     }
 
+    let manifest_path = dir.join(MANIFEST_FILE);
     let lua_path = dir.join(LUA_FILE);
     match std::fs::symlink_metadata(&lua_path) {
         Ok(metadata) if metadata_is_link(&metadata) || !metadata.is_file() => {
@@ -445,13 +448,61 @@ pub fn install_sized(
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => return Err(LifecycleError::Unmanaged),
     }
-    std::fs::write(dir.join(MANIFEST_FILE), render_manifest(api_version))?;
-    std::fs::write(lua_path, render_lua(block_px))?;
+    let original_manifest = if fresh {
+        None
+    } else {
+        Some(std::fs::read(&manifest_path)?)
+    };
+    let original_lua = match std::fs::read(&lua_path) {
+        Ok(bytes) => Some(bytes),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err.into()),
+    };
+
+    // Lua is prepared first and the manifest is the commit marker observed by
+    // status(). If either write fails, a fresh directory is removed or the
+    // previous managed bytes are restored best effort before returning the
+    // original error.
+    if let Err(err) = std::fs::write(&lua_path, render_lua(block_px)) {
+        if fresh {
+            let _ = std::fs::remove_dir_all(&dir);
+        } else {
+            restore_managed_file(&lua_path, original_lua.as_deref());
+        }
+        return Err(err.into());
+    }
+    if let Err(err) = std::fs::write(&manifest_path, render_manifest(api_version)) {
+        if fresh {
+            let _ = std::fs::remove_dir_all(&dir);
+        } else {
+            restore_managed_file(&lua_path, original_lua.as_deref());
+            restore_managed_file(&manifest_path, original_manifest.as_deref());
+        }
+        return Err(err.into());
+    }
     tracing::info!(target: "beacon", path = %dir.display(), block_px, "installed PixelBeacon");
     Ok(LifecycleOutcome {
         status: BeaconStatus::ManagedUpToDate,
         reload_required: reload_reminder(running),
     })
+}
+
+fn restore_managed_file(path: &Path, original: Option<&[u8]>) {
+    let result = match original {
+        Some(bytes) => std::fs::write(path, bytes),
+        None => match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err),
+        },
+    };
+    if let Err(err) = result {
+        tracing::warn!(
+            target: "beacon",
+            path = %path.display(),
+            "failed to restore managed PixelBeacon file after update error: {err}"
+        );
+    }
 }
 
 /// Re-deploys the addon at `block_px`, but only when the install is managed. An

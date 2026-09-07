@@ -334,6 +334,32 @@ fn install_over_older_version_updates_in_place() {
 }
 
 #[test]
+fn s060_failed_manifest_commit_restores_managed_lua() {
+    let root = tmp();
+    write_beacon(root.path(), MANIFEST);
+    let manifest_path = beacon_dir(root.path()).join(MANIFEST_FILE);
+    let lua_path = beacon_dir(root.path()).join(LUA_FILE);
+    let original_manifest = fs::read(&manifest_path).unwrap();
+    let original_lua = fs::read(&lua_path).unwrap();
+    let original_permissions = fs::metadata(&manifest_path).unwrap().permissions();
+    let mut permissions = original_permissions.clone();
+    permissions.set_readonly(true);
+    fs::set_permissions(&manifest_path, permissions).unwrap();
+
+    let result = beacon::install_sized(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        5,
+    );
+
+    fs::set_permissions(&manifest_path, original_permissions).unwrap();
+    assert!(matches!(result, Err(LifecycleError::Io(_))));
+    assert_eq!(fs::read(&manifest_path).unwrap(), original_manifest);
+    assert_eq!(fs::read(&lua_path).unwrap(), original_lua);
+}
+
+#[test]
 fn install_fails_when_addons_dir_missing() {
     let root = tmp();
     let missing = root.path().join("does-not-exist");
