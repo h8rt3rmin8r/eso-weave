@@ -7,9 +7,9 @@ Adaptation may be described as ping adjustment, latency scaling, or k factor.
 While the ESO window is focused, ESO Weave can intercept a configured skill key
 and submit a basic attack and skill sequence in its place. An inactive skill slot
 passes its key through unchanged. Press `F1` to suspend or resume automation.
-Suspension prevents new weave interception. A sequence already queued or running
-does not yet recheck suspension, focus, or menu state at every boundary; see
-[issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92).
+Suspension prevents new weave interception and invalidates queued or running
+work. Focus loss and menu-gate closure do the same. Recovery never replays the
+discarded request.
 
 Weaving requires fresh evidence that the player is alive, the world is active,
 travel is inactive, and roll dodge is inactive. If roll-dodge evidence is Active
@@ -50,8 +50,9 @@ Open **Settings > Keybindings** to select a key for each of the ten actions.
 The application keeps the previous assignment if the selection conflicts. The
 default action hotkeys are `F1` for suspension, `F2` for Fishing, and `F3` for
 Auto Potion. They remain reachable while suspended. F1 changes suspension and
-F3 does not bypass Auto Potion's suspension check. F2 can currently send the
-initial Fishing cast while suspended; see issue #92.
+F3 does not bypass Auto Potion's suspension check. F2 can retain a Fishing
+request while suspended, but it sends no cast until the operator performs a
+fresh manual cast or turns Fishing off and on after resuming.
 
 ## Weave types
 
@@ -121,9 +122,9 @@ The normal decision sequence is:
 
 ```text
 physical bound key -> focused-game interception -> queue
-queue -> active slot + life + world + travel + roll + cooldown checks
+queue -> current authorization epoch + active slot + life + world + travel + roll + cooldown checks
 authorized request -> timed generated sequence
-shared life/world/travel/roll gate closes -> discard remaining work, release held output, never replay
+focus/suspension/menu epoch or shared life/world/travel/roll gate closes -> discard remaining work, release held output, never replay
 ```
 
 Game inactivity, lost focus, native menus or chat entry, and suspension prevent
@@ -132,11 +133,11 @@ evidence and active Roll Dodge keep work from starting. A request inside the
 configured Global Cooldown is dropped. Dropped work requires a new physical
 press after recovery.
 
-**Current safety limitation:** A queued or running sequence rechecks life, roll
-dodge, world, and travel, but does not yet recheck focus,
-suspension, or menu state. [Issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92)
-tracks that exception. Do not treat it as a guarantee or deliberately depend on
-it. The intended focused-game safety boundary remains the operator rule.
+A queued request carries the authorization epoch established at physical
+handoff. Focus loss, suspension, or menu-gate closure invalidates that epoch.
+The worker and sink check it before output and during waits, alongside life,
+roll-dodge, world, and travel. A cancellation still releases any output already
+held by the sink and does not revive when the gate reopens.
 
 ## Troubleshooting
 

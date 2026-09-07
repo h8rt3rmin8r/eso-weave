@@ -95,7 +95,7 @@ pub fn prefs_to_value(prefs: &BeaconPrefs) -> serde_json::Value {
 /// The classified installed state of the beacon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BeaconStatus {
-    /// No `PixelBeacon` folder, or the folder has no readable manifest.
+    /// No `PixelBeacon` filesystem entry exists.
     NotInstalled,
     /// Folder present, marker line present, and the installed version equals the
     /// embedded version.
@@ -103,7 +103,8 @@ pub enum BeaconStatus {
     /// Folder present and marker line present, but the installed version differs
     /// from (or cannot be read against) the embedded version.
     ManagedVersionMismatch,
-    /// Folder present with a readable manifest that lacks the marker line.
+    /// A `PixelBeacon` entry exists, but its shape, readable manifest, or marker
+    /// does not prove that ESO Weave owns it.
     Unmanaged,
 }
 
@@ -144,8 +145,8 @@ pub enum LifecycleError {
     /// The resolved AddOns directory is not an existing directory.
     #[error("the resolved AddOns directory does not exist")]
     AddonsDirMissing,
-    /// Uninstall refused because the on-disk manifest lacks the marker line.
-    #[error("refusing to remove an unmanaged PixelBeacon folder")]
+    /// Mutation refused because the target is not proven to be ESO Weave managed.
+    #[error("refusing to modify an unmanaged PixelBeacon target")]
     Unmanaged,
     /// A filesystem operation failed.
     #[error("io error: {0}")]
@@ -332,10 +333,29 @@ pub fn user_settings_path(addons_root: &Path) -> Option<PathBuf> {
 
 /// Classifies the installed beacon status under `addons_root`. Reads only.
 pub fn status(addons_root: &Path) -> BeaconStatus {
-    let manifest_path = addons_root.join(SUBFOLDER).join(MANIFEST_FILE);
+    let dir = addons_root.join(SUBFOLDER);
+    let dir_metadata = match std::fs::symlink_metadata(&dir) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return BeaconStatus::NotInstalled;
+        }
+        Err(_) => return BeaconStatus::Unmanaged,
+    };
+    if metadata_is_link(&dir_metadata) || !dir_metadata.is_dir() {
+        return BeaconStatus::Unmanaged;
+    }
+
+    let manifest_path = dir.join(MANIFEST_FILE);
+    let manifest_metadata = match std::fs::symlink_metadata(&manifest_path) {
+        Ok(metadata) => metadata,
+        Err(_) => return BeaconStatus::Unmanaged,
+    };
+    if metadata_is_link(&manifest_metadata) || !manifest_metadata.is_file() {
+        return BeaconStatus::Unmanaged;
+    }
     let manifest = match std::fs::read_to_string(&manifest_path) {
         Ok(text) => text,
-        Err(_) => return BeaconStatus::NotInstalled,
+        Err(_) => return BeaconStatus::Unmanaged,
     };
     if !has_managed_marker(&manifest) {
         return BeaconStatus::Unmanaged;
@@ -344,6 +364,22 @@ pub fn status(addons_root: &Path) -> BeaconStatus {
         Some(version) if version == embedded_version() => BeaconStatus::ManagedUpToDate,
         _ => BeaconStatus::ManagedVersionMismatch,
     }
+}
+
+fn metadata_is_link(metadata: &std::fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return true;
+        }
+    }
+    false
 }
 
 /// Installs (or safely updates) the embedded addon into `addons_root` at the
@@ -382,14 +418,91 @@ pub fn install_sized(
         return Err(LifecycleError::AddonsDirMissing);
     }
     let dir = addons_root.join(SUBFOLDER);
-    std::fs::create_dir_all(&dir)?;
-    std::fs::write(dir.join(MANIFEST_FILE), render_manifest(api_version))?;
-    std::fs::write(dir.join(LUA_FILE), render_lua(block_px))?;
+    let existing_status = status(addons_root);
+    let fresh = existing_status == BeaconStatus::NotInstalled;
+    match existing_status {
+        BeaconStatus::NotInstalled => std::fs::create_dir(&dir)?,
+        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch => {}
+        BeaconStatus::Unmanaged => {
+            tracing::warn!(
+                target: "beacon",
+                path = %dir.display(),
+                "install refused: PixelBeacon target is unmanaged"
+            );
+            return Err(LifecycleError::Unmanaged);
+        }
+    }
+
+    let manifest_path = dir.join(MANIFEST_FILE);
+    let lua_path = dir.join(LUA_FILE);
+    match std::fs::symlink_metadata(&lua_path) {
+        Ok(metadata) if metadata_is_link(&metadata) || !metadata.is_file() => {
+            tracing::warn!(
+                target: "beacon",
+                path = %lua_path.display(),
+                "install refused: PixelBeacon Lua target is not a regular file"
+            );
+            return Err(LifecycleError::Unmanaged);
+        }
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(LifecycleError::Unmanaged),
+    }
+    let original_manifest = if fresh {
+        None
+    } else {
+        Some(std::fs::read(&manifest_path)?)
+    };
+    let original_lua = match std::fs::read(&lua_path) {
+        Ok(bytes) => Some(bytes),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err.into()),
+    };
+
+    // Lua is prepared first and the manifest is the commit marker observed by
+    // status(). If either write fails, a fresh directory is removed or the
+    // previous managed bytes are restored best effort before returning the
+    // original error.
+    if let Err(err) = std::fs::write(&lua_path, render_lua(block_px)) {
+        if fresh {
+            let _ = std::fs::remove_dir_all(&dir);
+        } else {
+            restore_managed_file(&lua_path, original_lua.as_deref());
+        }
+        return Err(err.into());
+    }
+    if let Err(err) = std::fs::write(&manifest_path, render_manifest(api_version)) {
+        if fresh {
+            let _ = std::fs::remove_dir_all(&dir);
+        } else {
+            restore_managed_file(&lua_path, original_lua.as_deref());
+            restore_managed_file(&manifest_path, original_manifest.as_deref());
+        }
+        return Err(err.into());
+    }
     tracing::info!(target: "beacon", path = %dir.display(), block_px, "installed PixelBeacon");
     Ok(LifecycleOutcome {
         status: BeaconStatus::ManagedUpToDate,
         reload_required: reload_reminder(running),
     })
+}
+
+fn restore_managed_file(path: &Path, original: Option<&[u8]>) {
+    let result = match original {
+        Some(bytes) => std::fs::write(path, bytes),
+        None => match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err),
+        },
+    };
+    if let Err(err) = result {
+        tracing::warn!(
+            target: "beacon",
+            path = %path.display(),
+            "failed to restore managed PixelBeacon file after update error: {err}"
+        );
+    }
 }
 
 /// Re-deploys the addon at `block_px`, but only when the install is managed. An
@@ -432,23 +545,14 @@ pub fn uninstall(
     running: RunningState,
 ) -> Result<LifecycleOutcome, LifecycleError> {
     let dir = addons_root.join(SUBFOLDER);
-    let manifest_path = dir.join(MANIFEST_FILE);
-    let manifest = match std::fs::read_to_string(&manifest_path) {
-        Ok(text) => text,
-        Err(_) => {
-            tracing::warn!(
-                target: "beacon",
-                path = %dir.display(),
-                "uninstall refused: no readable manifest"
-            );
-            return Err(LifecycleError::Unmanaged);
-        }
-    };
-    if !has_managed_marker(&manifest) {
+    if !matches!(
+        status(addons_root),
+        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch
+    ) {
         tracing::warn!(
             target: "beacon",
             path = %dir.display(),
-            "uninstall refused: manifest lacks the managed-marker line"
+            "uninstall refused: PixelBeacon target is unmanaged or absent"
         );
         return Err(LifecycleError::Unmanaged);
     }

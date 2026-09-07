@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-029.md](plan-029.md) | Active | S059 completes source-backed user and developer documentation and closes issue #81. |
+| [plan-030.md](plan-030.md) | Active | S060 closes queued automation and unmanaged PixelBeacon ownership safety defects #92 and #94. |

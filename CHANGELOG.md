@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S060 makes input authorization revocable across queue and sequence boundaries,
+  cancels suspended Fishing deadlines without replay, and distinguishes unmanaged
+  PixelBeacon targets from an absent installation. Managed add-on updates commit
+  the manifest last and restore prior embedded bytes after a failed commit
+  (issues #92 and #94).
 - S058 splits the former technical specification and root manual into canonical
   audience pages, archives all 27 completed build plans and the orphaned Ultimate
   article, moves current maintainer records under `docs/project`, and reduces
@@ -29,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-07: Carry a monotonic authorization epoch from physical interception
+  through weave execution. Closing any applicable gate invalidates queued and
+  running work even if the gate reopens before the worker observes it, while a
+  held generated input may still receive its matching release.
+- 2026-09-07: Treat every existing PixelBeacon target without provable managed
+  ownership as user-owned. Enforce that rule inside install, update, API refresh,
+  block-size redeploy, and uninstall writers, and update managed content in place
+  so stale UI state cannot authorize deletion or overwrite.
 - 2026-09-07: Pin `typos-cli` 1.50.1 in documentation CI and keep its project
   dictionary narrow and reviewed. This adds deterministic spelling checks to the
   existing pinned mdBook toolchain without introducing a runtime site dependency.

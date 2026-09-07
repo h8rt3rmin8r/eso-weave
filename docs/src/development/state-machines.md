@@ -60,33 +60,34 @@ Evidence: addon functions and event registrations in
 The Weave Engine is request-driven rather than a long-lived visible state
 machine:
 
-1. Resolve the queued action to one active skill slot.
-2. Require Life State Alive.
-3. Require Roll Dodge Inactive.
-4. Require World State Active.
-5. Require Travel Inactive.
-6. Select the front or back timing profile from the active Weapon Bar. Unknown
+1. Require the queued request's authorization epoch to remain current. Focus
+   loss, suspension, or menu-gate closure advances the epoch.
+2. Resolve the queued action to one active skill slot.
+3. Require Life State Alive.
+4. Require Roll Dodge Inactive.
+5. Require World State Active.
+6. Require Travel Inactive.
+7. Select the front or back timing profile from the active Weapon Bar. Unknown
    uses the front profile.
-7. Drop a request inside the selected Global Cooldown.
-8. Generate the selected Light Attack, Heavy Attack, Bash Attack, or Block
+8. Drop a request inside the selected Global Cooldown.
+9. Generate the selected Light Attack, Heavy Attack, Bash Attack, or Block
    Casting step sequence.
-9. During the sequence, recheck the shared life, roll-dodge, world, and travel
-   gates before Down operations and during waits. After cancellation, release
-   output already held by the sink.
-10. Record the Global Cooldown origin only if the sequence emitted a Down event.
+10. During the sequence, recheck the authorization epoch and shared life,
+    roll-dodge, world, and travel gates before Down operations and during waits.
+    After cancellation, release output already held by the sink.
+11. Record the Global Cooldown origin only if the sequence emitted a Down event.
 
 Requests blocked before or during a sequence are never replayed.
 
 Evidence: `WeaveEngine::handle`, `RealSink::emit`, `RealSink::wait`, and
 `sequence_for_adapted` in `src/weave`; tests
 `queued_weave_requires_safe_world_and_inactive_travel_without_replay`,
+`s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes`,
+`s060_transient_suspend_closure_cancels_an_admitted_sequence`,
+`s060_focus_closure_stops_new_presses_but_releases_held_output`, and
 `real_sink_observes_roll_gate_closure_during_a_wait`, and
 `a_gate_cancelled_sequence_does_not_consume_global_cooldown` in
 `tests/weave_engine.rs`.
-
-**Known defect #92**: the shared in-flight gate set omits focus, suspension, and
-menu state. This page describes that implementation boundary and does not claim
-the requested fix is present.
 
 ## Fishing Controller
 
@@ -105,6 +106,8 @@ Normal flow:
 | Armed at cast timeout | Clock tick | Disabled with No Cast Detected; clear request |
 | Any active state | User disables | Disabled; cancel deadline; emit nothing |
 | Any active state | SignalLost | Disabled; cancel deadline; clear request; emit nothing |
+| Any active state | Suspension begins | Disabled; cancel deadline; retain request; emit nothing |
+| Disabled with retained request | Suspension ends | Remain Disabled; emit nothing until a fresh manual cast or off-on request |
 
 A menu gate defers Reel Due and Recast Due without advancing state. Life, world,
 or travel loss disables pending work, preserves the request, and requires fresh
@@ -116,14 +119,11 @@ Evidence: `FishingController::set_enabled`, `on_event`, `tick`,
 `set_game_environment`, and `block_for_safety` in `src/fishing/mod.rs`; tests
 `cast_reel_recast_cycle`, `non_alive_cancels_pending_fishing_without_replay_and_keeps_request`,
 `focus_loss_pauses_and_refocus_rearms_requested_fishing`, and
+`s060_suspension_refuses_initial_cast_and_preserves_request`,
+`s060_suspension_cancels_pending_reel_without_replay`,
+`s060_suspension_cancels_recast_and_timeout_paths`, and
 `signal_loss_while_focus_paused_applies_the_existing_reset_policy` in
 `tests/fishing.rs`.
-
-**Known defect #92**: suspension is not a direct Fishing Controller input. It
-does not prevent the initial enable cast or prove that a pending fishing deadline cannot
-emit. [Issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92) tracks the
-missing stop boundary. This is documented as current behavior, not
-authorization.
 
 ## Auto Potion Controller
 

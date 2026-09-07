@@ -562,6 +562,111 @@ fn travel_gate_passes_physical_skills_exempts_toggles_and_does_not_replay() {
 }
 
 #[test]
+fn s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes() {
+    fn assert_invalidated(close: impl FnOnce(&InputEngine), reopen: impl FnOnce(&InputEngine)) {
+        let (input, rx) = engine();
+        input.set_focused(true);
+
+        assert_eq!(
+            input.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+            Decision::Suppress
+        );
+        let queued = rx
+            .try_recv_authorized()
+            .expect("the weave action must be queued");
+        assert_eq!(queued.action(), Action::Skill1);
+        assert!(input.weave_gates().admits(queued.authorization_epoch()));
+
+        close(&input);
+        reopen(&input);
+        assert!(!input.weave_gates().is_gated());
+        assert!(
+            !input.weave_gates().admits(queued.authorization_epoch()),
+            "closing and reopening a gate must not revive queued work"
+        );
+    }
+
+    assert_invalidated(
+        |input| input.set_game_active(false),
+        |input| {
+            input.set_game_active(true);
+            input.set_life_gated(false);
+            input.set_roll_gated(false);
+            input.set_world_gated(false);
+            input.set_travel_gated(false);
+        },
+    );
+    assert_invalidated(
+        |input| input.set_focused(false),
+        |input| input.set_focused(true),
+    );
+    assert_invalidated(
+        |input| input.set_suspended(true),
+        |input| {
+            input.set_suspended(false);
+            input.set_world_gated(false);
+            input.set_travel_gated(false);
+        },
+    );
+    assert_invalidated(
+        |input| input.set_menu_gated(true),
+        |input| input.set_menu_gated(false),
+    );
+    assert_invalidated(
+        |input| input.set_life_gated(true),
+        |input| input.set_life_gated(false),
+    );
+    assert_invalidated(
+        |input| input.set_roll_gated(true),
+        |input| input.set_roll_gated(false),
+    );
+    assert_invalidated(
+        |input| input.set_world_gated(true),
+        |input| input.set_world_gated(false),
+    );
+    assert_invalidated(
+        |input| input.set_travel_gated(true),
+        |input| input.set_travel_gated(false),
+    );
+}
+
+#[test]
+fn s060_toggle_handoff_remains_identifiable_across_authorization_epochs() {
+    let (input, rx) = engine();
+    input.set_focused(true);
+    input.set_suspended(true);
+
+    assert_eq!(
+        input.classify(ev(Key::F1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    let queued = rx
+        .try_recv_authorized()
+        .expect("the suspend toggle must be queued");
+    assert_eq!(queued.action(), Action::ToggleSuspend);
+    assert!(queued.action().is_app_toggle());
+}
+
+#[test]
+fn s060_fishing_authorization_excludes_roll_but_tracks_shared_runtime_gates() {
+    let (input, _rx) = engine();
+    input.set_focused(true);
+    let gates = input.fishing_gates();
+    let admitted = gates.current_epoch();
+
+    input.set_roll_gated(true);
+    input.set_roll_gated(false);
+    assert!(gates.admits(admitted), "roll is not a Fishing gate");
+
+    input.set_menu_gated(true);
+    input.set_menu_gated(false);
+    assert!(
+        !gates.admits(admitted),
+        "a transient applicable closure must invalidate Fishing work"
+    );
+}
+
+#[test]
 fn ungating_restores_the_previous_decision_everywhere() {
     // FR-012. A gate that engages but never releases is worse than no gate.
     for input in decision_inputs() {

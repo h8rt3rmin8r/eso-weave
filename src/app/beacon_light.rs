@@ -10,6 +10,8 @@ pub enum BeaconCondition {
     InstalledCurrent,
     /// Installed but outdated or unmanaged (a folder is present but not current).
     InstalledOutdated,
+    /// A target exists but ESO Weave cannot prove ownership of it.
+    Unmanaged,
     /// Not installed.
     NotInstalled,
     /// The AddOns directory could not be resolved.
@@ -21,9 +23,8 @@ impl BeaconCondition {
     pub fn from_status(status: BeaconStatus) -> Self {
         match status {
             BeaconStatus::ManagedUpToDate => BeaconCondition::InstalledCurrent,
-            BeaconStatus::ManagedVersionMismatch | BeaconStatus::Unmanaged => {
-                BeaconCondition::InstalledOutdated
-            }
+            BeaconStatus::ManagedVersionMismatch => BeaconCondition::InstalledOutdated,
+            BeaconStatus::Unmanaged => BeaconCondition::Unmanaged,
             BeaconStatus::NotInstalled => BeaconCondition::NotInstalled,
         }
     }
@@ -48,6 +49,10 @@ pub fn beacon_light(condition: BeaconCondition) -> BeaconLight {
         BeaconCondition::InstalledOutdated => BeaconLight {
             green: false,
             tooltip: "installed but outdated",
+        },
+        BeaconCondition::Unmanaged => BeaconLight {
+            green: false,
+            tooltip: "unmanaged; files not modified; move or remove PixelBeacon manually",
         },
         BeaconCondition::NotInstalled => BeaconLight {
             green: false,

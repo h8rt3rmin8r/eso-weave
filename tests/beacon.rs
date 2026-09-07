@@ -7,6 +7,7 @@
 use std::fs;
 use std::path::Path;
 
+use eso_weave::beacon::api_check::{self, ApiCheckError, GameVersion, GameVersionSource};
 use eso_weave::beacon::{
     self, addons_dir_under_documents, embedded_version, eso_addons_subpath, has_managed_marker,
     parse_api_version_primary, parse_manifest_version, prefs_from_value, prefs_to_value,
@@ -135,13 +136,13 @@ fn reload_reminder_rule() {
 // T005: four-state classification.
 
 #[test]
-fn status_not_installed_when_absent_or_no_manifest() {
+fn status_distinguishes_absent_from_existing_unproven_folder() {
     let root = tmp();
     assert_eq!(beacon::status(root.path()), BeaconStatus::NotInstalled);
 
     // Folder exists but has no manifest.
     fs::create_dir_all(beacon_dir(root.path())).unwrap();
-    assert_eq!(beacon::status(root.path()), BeaconStatus::NotInstalled);
+    assert_eq!(beacon::status(root.path()), BeaconStatus::Unmanaged);
 }
 
 #[test]
@@ -175,6 +176,125 @@ fn status_unmanaged_when_marker_absent() {
     let root = tmp();
     write_beacon(root.path(), "## Title: PixelBeacon\n## Version: 1\n");
     assert_eq!(beacon::status(root.path()), BeaconStatus::Unmanaged);
+}
+
+#[test]
+fn s060_status_only_reports_not_installed_for_an_absent_target() {
+    let absent = tmp();
+    assert_eq!(beacon::status(absent.path()), BeaconStatus::NotInstalled);
+
+    let empty = tmp();
+    fs::create_dir_all(beacon_dir(empty.path())).unwrap();
+    assert_eq!(beacon::status(empty.path()), BeaconStatus::Unmanaged);
+
+    let file = tmp();
+    fs::write(beacon_dir(file.path()), b"foreign addon").unwrap();
+    assert_eq!(beacon::status(file.path()), BeaconStatus::Unmanaged);
+
+    let invalid = tmp();
+    fs::create_dir_all(beacon_dir(invalid.path())).unwrap();
+    fs::write(
+        beacon_dir(invalid.path()).join(MANIFEST_FILE),
+        [0xff, 0xfe, 0xfd],
+    )
+    .unwrap();
+    assert_eq!(beacon::status(invalid.path()), BeaconStatus::Unmanaged);
+}
+
+#[test]
+fn s060_install_refuses_unproven_targets_without_mutation() {
+    let root = tmp();
+    let dir = beacon_dir(root.path());
+    fs::create_dir_all(&dir).unwrap();
+    let manifest = b"## Title: Foreign PixelBeacon\n## Version: 7\n";
+    let lua = b"-- foreign implementation\n";
+    fs::write(dir.join(MANIFEST_FILE), manifest).unwrap();
+    fs::write(dir.join(LUA_FILE), lua).unwrap();
+
+    let error =
+        beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap_err();
+
+    assert!(matches!(error, LifecycleError::Unmanaged));
+    assert_eq!(fs::read(dir.join(MANIFEST_FILE)).unwrap(), manifest);
+    assert_eq!(fs::read(dir.join(LUA_FILE)).unwrap(), lua);
+}
+
+#[test]
+fn s060_install_refuses_an_existing_directory_without_a_manifest() {
+    let root = tmp();
+    let dir = beacon_dir(root.path());
+    fs::create_dir_all(&dir).unwrap();
+    let sentinel = dir.join("user-data.txt");
+    fs::write(&sentinel, b"keep me").unwrap();
+
+    let error =
+        beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION).unwrap_err();
+
+    assert!(matches!(error, LifecycleError::Unmanaged));
+    assert_eq!(fs::read(sentinel).unwrap(), b"keep me");
+    assert!(!dir.join(MANIFEST_FILE).exists());
+    assert!(!dir.join(LUA_FILE).exists());
+}
+
+#[test]
+fn s060_api_refresh_does_not_write_an_unmanaged_manifest() {
+    struct Source;
+
+    impl GameVersionSource for Source {
+        fn fetch(&self) -> Result<GameVersion, ApiCheckError> {
+            Ok(GameVersion::new([12, 0, 6, 0]))
+        }
+    }
+
+    let root = tmp();
+    let manifest = "## Title: Foreign PixelBeacon\n## APIVersion: 101040\n";
+    write_beacon(root.path(), manifest);
+
+    api_check::run_check(&Source, Some(root.path()), Some(101070), None);
+
+    assert_eq!(
+        fs::read_to_string(beacon_dir(root.path()).join(MANIFEST_FILE)).unwrap(),
+        manifest
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn s060_lifecycle_operations_do_not_follow_an_unproven_link() {
+    use std::os::unix::fs::symlink;
+
+    let root = tmp();
+    let outside = tmp();
+    write_beacon(outside.path(), MANIFEST);
+    let outside_dir = beacon_dir(outside.path());
+    let original_manifest = fs::read(outside_dir.join(MANIFEST_FILE)).unwrap();
+    let original_lua = fs::read(outside_dir.join(LUA_FILE)).unwrap();
+    symlink(&outside_dir, beacon_dir(root.path())).unwrap();
+
+    assert_eq!(beacon::status(root.path()), BeaconStatus::Unmanaged);
+    assert!(matches!(
+        beacon::install(root.path(), RunningState::NotRunning, DEFAULT_API_VERSION),
+        Err(LifecycleError::Unmanaged)
+    ));
+    assert_eq!(
+        beacon::redeploy_for_block_size(
+            root.path(),
+            RunningState::NotRunning,
+            DEFAULT_API_VERSION,
+            5
+        )
+        .unwrap(),
+        beacon::RedeployOutcome::SkippedUnmanaged
+    );
+    assert!(matches!(
+        beacon::uninstall(root.path(), RunningState::NotRunning),
+        Err(LifecycleError::Unmanaged)
+    ));
+    assert_eq!(
+        fs::read(outside_dir.join(MANIFEST_FILE)).unwrap(),
+        original_manifest
+    );
+    assert_eq!(fs::read(outside_dir.join(LUA_FILE)).unwrap(), original_lua);
 }
 
 // T007: install, over-install, missing dir, write confinement.
@@ -211,6 +331,32 @@ fn install_over_older_version_updates_in_place() {
         fs::read_to_string(beacon_dir(root.path()).join(MANIFEST_FILE)).unwrap(),
         MANIFEST
     );
+}
+
+#[test]
+fn s060_failed_manifest_commit_restores_managed_lua() {
+    let root = tmp();
+    write_beacon(root.path(), MANIFEST);
+    let manifest_path = beacon_dir(root.path()).join(MANIFEST_FILE);
+    let lua_path = beacon_dir(root.path()).join(LUA_FILE);
+    let original_manifest = fs::read(&manifest_path).unwrap();
+    let original_lua = fs::read(&lua_path).unwrap();
+    let original_permissions = fs::metadata(&manifest_path).unwrap().permissions();
+    let mut permissions = original_permissions.clone();
+    permissions.set_readonly(true);
+    fs::set_permissions(&manifest_path, permissions).unwrap();
+
+    let result = beacon::install_sized(
+        root.path(),
+        RunningState::NotRunning,
+        DEFAULT_API_VERSION,
+        5,
+    );
+
+    fs::set_permissions(&manifest_path, original_permissions).unwrap();
+    assert!(matches!(result, Err(LifecycleError::Io(_))));
+    assert_eq!(fs::read(&manifest_path).unwrap(), original_manifest);
+    assert_eq!(fs::read(&lua_path).unwrap(), original_lua);
 }
 
 #[test]

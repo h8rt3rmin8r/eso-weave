@@ -51,8 +51,8 @@ it. This UI and application-timing gap is tracked in
 | Sample Interval While Idle (ms) | 1000; 1 through 60000 | Polling while no fast condition applies |
 
 Changing Block Size redeploys only a managed addon. Run `/reloadui` or relog and
-restart ESO Weave. Do not use Update on an unmanaged PixelBeacon folder; see
-[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94).
+restart ESO Weave. An unmanaged PixelBeacon target has no lifecycle buttons, and
+the redeploy writer refuses it without changing its contents.
 
 ## Auto Potion
 

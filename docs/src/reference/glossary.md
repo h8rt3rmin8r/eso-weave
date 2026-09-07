@@ -23,7 +23,9 @@
 - **Interact key:** The in-game interaction binding, `E` by default, used by
   fishing to cast, reel, and recast.
 - **Managed marker:** `## X-ESO-Weave-Managed: true` in the PixelBeacon manifest.
-  This line gates safe removal. Unmanaged update overwrite remains tracked in issue #94.
+  This line gates install-over-existing, update, removal, API refresh, and
+  block-size redeploy. An existing target without proven ownership is Unmanaged
+  and remains unchanged.
 
 ## Search vocabulary
 

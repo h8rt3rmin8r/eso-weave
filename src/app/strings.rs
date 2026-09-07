@@ -30,6 +30,8 @@ pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
     "Install state of the bundled PixelBeacon companion addon that renders the pixel signal.";
+pub const BEACON_UNMANAGED_TOOLTIP: &str =
+    "ESO Weave did not modify this unmanaged PixelBeacon target. Move or remove it manually before using Install.";
 pub const BEACON_SIGNAL_TOOLTIP: &str =
     "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
 pub const GAME_INSTALLATION_TOOLTIP: &str =
@@ -54,6 +56,7 @@ pub const FISHING_IDLE_NO_CAST: &str = "Idle (no cast detected)";
 pub const FISHING_IDLE_SIGNAL_LOST: &str = "Idle (signal lost)";
 pub const FISHING_IDLE_GAME_INACTIVE: &str = "Idle (game not active)";
 pub const FISHING_IDLE_UNFOCUSED: &str = "Idle (game not focused)";
+pub const FISHING_IDLE_SUSPENDED: &str = "Idle (suspended)";
 pub const FISHING_IDLE_PLAYER_UNAVAILABLE: &str = "Idle (player unavailable)";
 pub const FISHING_IDLE_WORLD_UNAVAILABLE: &str = "Idle (world unavailable)";
 pub const FISHING_IDLE_TRAVEL_PENDING: &str = "Idle (travel pending)";
@@ -409,6 +412,7 @@ pub fn all_labels() -> Vec<&'static str> {
         FISHING_IDLE_SIGNAL_LOST,
         FISHING_IDLE_GAME_INACTIVE,
         FISHING_IDLE_UNFOCUSED,
+        FISHING_IDLE_SUSPENDED,
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,
@@ -469,6 +473,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         STATUS_TOOLTIP,
         FISHING_TOOLTIP,
         BEACON_TOOLTIP,
+        BEACON_UNMANAGED_TOOLTIP,
         GAME_INSTALLATION_TOOLTIP,
         GAME_RUNTIME_TOOLTIP,
         SUSPEND_TOOLTIP,

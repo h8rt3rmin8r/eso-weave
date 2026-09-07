@@ -149,19 +149,21 @@ fn main() {
         thread::spawn(move || {
             let weave_gates = input.weave_gates();
             let mut sink = RealSink::new(SharedBackend(backend), weave_gates.clone());
-            while let Ok(action) = actions.recv() {
+            while let Ok(queued) = actions.recv_authorized() {
+                let action = queued.action();
                 if action.is_app_toggle() {
                     // A send error means the GUI receiver is gone (the app is
                     // exiting); dropping the toggle is the correct response.
                     let _ = toggle_tx.send(action);
                 } else {
-                    if weave_gates.is_gated() {
+                    if !weave_gates.admits(queued.authorization_epoch()) {
                         continue;
                     }
                     let mut weave = weave.lock().unwrap();
-                    if weave_gates.is_gated() {
+                    if !weave_gates.admits(queued.authorization_epoch()) {
                         continue;
                     }
+                    sink.set_admitted_epoch(queued.authorization_epoch());
                     weave.handle(action, &mut sink);
                 }
             }
@@ -183,7 +185,8 @@ fn main() {
         let game = game.clone();
         thread::spawn(move || {
             let mut reader = PixelBusReader::new(reader_config);
-            let mut sink = RealFishingSink::new(SharedBackend(backend.clone()));
+            let mut sink =
+                RealFishingSink::new(SharedBackend(backend.clone()), input.fishing_gates());
             // Auto-potion synthesizes through its own sink over the same backend,
             // preserving recursion flagging. Focus is pushed into the controller
             // explicitly because autonomous synthesis bypasses interception.
@@ -265,8 +268,12 @@ fn main() {
                     let after = processes.runtime();
                     let active = after == GameRuntime::Active;
                     let focused = matches!(processes.focus, FocusObservation::Focused);
-                    input.set_game_active(active);
-                    input.set_focused(focused);
+                    if !active {
+                        input.set_game_active(false);
+                    }
+                    if !focused {
+                        input.set_focused(false);
+                    }
                     fishing
                         .lock()
                         .unwrap()
@@ -275,6 +282,12 @@ fn main() {
                         let mut potion = potion.lock().unwrap();
                         potion.set_game_active(active);
                         potion.set_focused(focused);
+                    }
+                    if active {
+                        input.set_game_active(true);
+                    }
+                    if focused {
+                        input.set_focused(true);
                     }
                     if process_changed {
                         tracing::info!(
@@ -359,7 +372,10 @@ fn main() {
     }
 
     // GUI on the main thread.
-    let gui_sink = Box::new(RealFishingSink::new(SharedBackend(backend.clone())));
+    let gui_sink = Box::new(RealFishingSink::new(
+        SharedBackend(backend.clone()),
+        input.fishing_gates(),
+    ));
     // Load persisted session state before the config directory is moved into the
     // model, so the live suspend and fishing intents can be restored on launch.
     let session = config_dir

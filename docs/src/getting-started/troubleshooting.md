@@ -59,13 +59,14 @@ Do not use recursive permission changes or world-writable device modes.
 | Visible state | Next action |
 | --- | --- |
 | **Not installed** | Choose **Install**, then `/reloadui` or relog if ESO is running |
-| **Installed (outdated)** | Update only a copy known to be managed by ESO Weave; then reload ESO |
+| **Installed (outdated)** | Choose **Update** to replace the managed copy in place; then reload ESO |
+| **Unmanaged (not modified)** | No lifecycle action is offered; move or remove only that exact target manually, then install a managed copy |
 | **AddOns folder not found** | In Settings, select Live or PTS correctly, or enter the existing environment's `AddOns` directory as the override |
 
-An existing unmanaged PixelBeacon folder can currently be shown as **Installed
-(outdated)**. Do not update it through the application until
-[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94) is resolved.
-Back up or relocate only that exact folder before manual resolution.
+An existing PixelBeacon target whose ownership cannot be proven is shown as
+**Unmanaged (not modified)**. Install, Update, Uninstall, API refresh, and
+block-size redeploy refuse it without changing its contents. Resolve only that
+exact target manually; do not disable the ownership guard.
 
 ## PixelBeacon Signal is missing or lost
 
@@ -89,10 +90,10 @@ ESO Weave is not suspended, Game Context is **Gameplay**, Life State is **Alive*
 World State is **Active**, Travel is **Inactive**, and Roll Dodge is **Inactive**.
 
 A blocked physical skill passes through where the input gate can decide safely.
-A request dropped after queueing is not replayed. A current limitation allows an
-already running weave to continue after focus, suspension, or menu authorization
-closes; [issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92) tracks the
-runtime correction. Do not rely on the current exception as a safety control.
+A request dropped after queueing is not replayed. Focus loss, suspension, or
+menu-gate closure invalidates the authorization epoch for queued and running
+work. Any output already held is released, but no new generated press follows
+the closure.
 
 ## Fishing returns to Idle
 

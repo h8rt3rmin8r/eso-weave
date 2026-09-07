@@ -52,22 +52,26 @@ The on-disk manifest is classified as:
 
 | State | Meaning |
 | --- | --- |
-| Not Installed | No manifest is present |
-| Unmanaged | A manifest exists without the managed marker |
+| Not Installed | The PixelBeacon target does not exist |
+| Unmanaged | An existing target cannot be proven to be managed, including a missing, unreadable, invalid, or unmarked manifest |
 | Installed (current) | The marker and embedded version match |
 | Installed (outdated) | The marker exists but versions differ |
 
-The current interface combines Unmanaged with **Installed (outdated)**. Do not
-choose **Update** for an unmanaged folder: uninstall refuses its deletion, but
-the subsequent install can overwrite its files. This defect is tracked in
-[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94). Preserve or move
-only that exact unmanaged `PixelBeacon` directory before manual resolution.
+The interface shows **Unmanaged (not modified)** when the target exists but
+ownership cannot be proven. It exposes no Install, Update, or Uninstall action
+for that state. Move or remove only that exact `PixelBeacon` target manually
+before asking ESO Weave to install a managed copy.
 
 Removal deletes the PixelBeacon directory only when the manifest contains
 `## X-ESO-Weave-Managed: true`. An unmanaged or unreadable directory is never
 deleted. Managed-marker checks also protect automatic API and block-size edits.
-Because of issue #94, this release does not promise the same protection for the
-manual Update path.
+Install, Update, API refresh, and block-size redeploy recheck ownership at the
+write boundary and refuse an unproven target without modifying it. Updating an
+outdated managed copy replaces its embedded files in place; it does not delete
+the directory first. Lua is prepared before the manifest commit marker. A failed
+fresh install removes the directory it just created, while a failed managed
+update restores the previous embedded bytes on a best-effort basis and reports
+the original error.
 
 When ESO is running during an install, update, or removal, use `/reloadui` or
 relog before expecting the change in game.

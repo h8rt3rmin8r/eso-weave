@@ -117,10 +117,10 @@ const CONTENT_OBLIGATION_IDS = new Set([
   ...Array.from({ length: 6 }, (_, index) => `REL-${String(index + 1).padStart(3, "0")}`),
   ...Array.from({ length: 7 }, (_, index) => `DEF-${String(index + 1).padStart(3, "0")}`),
 ]);
-const DEFERRED_ISSUES = new Set([92, 93, 94, 95, 96]);
+const DEFERRED_ISSUES = new Set([93, 95, 96]);
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
-const CONTENT_CONTRACT_SHA256 = "f97da79a0c2ca0f8d6fa45b88dfb8c61d19eb808c63c2b51d93e166b74c3c6c6";
+const CONTENT_CONTRACT_SHA256 = "30fd82eb4ca09945cfc8febd1f09d14850b0412ac6bae736eb2b1804811ff094";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",

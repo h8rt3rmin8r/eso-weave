@@ -40,6 +40,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [026](plan-026.md) | Complete, Archived | [S056 v0.14 release preparation](../../../specs/056-v014-release-prep/spec.md), merged in [PR #86](https://github.com/h8rt3rmin8r/eso-weave/pull/86) and shipped in [v0.14.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.14.0); field verification remains separate |
 | [027](plan-027.md) | Complete, Archived | [S057 mdBook foundation](../../../specs/057-mdbook-foundation/spec.md), merged in [PR #87](https://github.com/h8rt3rmin8r/eso-weave/pull/87); later documentation issues remain separate |
 | [028](plan-028.md) | Complete, Archived | [S058 documentation corpus](../../../specs/058-documentation-corpus/spec.md), merged in [PR #88](https://github.com/h8rt3rmin8r/eso-weave/pull/88) and closed issue #80 |
+| [029](plan-029.md) | Complete, Archived | [S059 documentation completeness](../../../specs/059-documentation-completeness/spec.md), merged in [PR #97](https://github.com/h8rt3rmin8r/eso-weave/pull/97) and closed issue #81 |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

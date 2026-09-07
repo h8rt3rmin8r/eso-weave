@@ -35,11 +35,10 @@ enabled it automatically. The small block overlay must remain visible at the
 top-left of the game client. Do not cover that area with another window or
 overlay.
 
-**Current unmanaged-addon limitation:** Do not choose **Update** when an existing
-PixelBeacon folder was installed or edited outside ESO Weave. The current UI can
-label unmanaged content as outdated and overwrite it. Preserve or move that
-specific folder manually before deciding how to proceed. The fix is tracked in
-[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94).
+If an existing PixelBeacon target was installed or edited outside ESO Weave,
+System and State shows **Unmanaged (not modified)** and offers no lifecycle
+buttons. Move or remove only that exact target manually before using **Install**.
+ESO Weave does not overwrite an unproven target.
 
 ## 4. Verify fresh telemetry
 

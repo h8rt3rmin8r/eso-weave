@@ -28,11 +28,10 @@ manifest, so changing a count cannot hide an omission or substitution.
 - Published and future bundled documentation lives only under `docs/src/`.
 - Current maintainer records live under `docs/project/`.
 - Plans 001 through 027 and the website announcement live under `docs/archive/`.
-- The post-baseline lifecycle lists plan 028 as active during S058. After merge,
-  its row becomes Complete and Archived with concrete delivery evidence, and a
-  later plan may become the sole Active entry. The policy requires the matching
-  plan file and index row for every state and rejects simultaneous current and
-  archive copies.
+- The post-baseline lifecycle preserves every completed plan with concrete
+  delivery evidence and names plan 030 as the sole active S060 entry. The policy
+  requires the matching plan file and index row for every state and rejects
+  simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six
   safety invariants have named canonical destinations.
 

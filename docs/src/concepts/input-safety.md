@@ -54,16 +54,18 @@ comments and related interface wording is tracked in
 Interception callbacks only classify, suppress, and hand off. They never sleep,
 block, or synthesize. Every timed sequence runs on a dedicated worker.
 
-Before a queued weave begins, the worker rechecks that its slot is active, Life
-State is Alive, Roll Dodge is Inactive, World State is Active, Travel is
-Inactive, and the current timing profile's Global Cooldown has elapsed. A
-request rejected at this boundary is dropped and is never replayed.
+Before a queued weave begins, the worker verifies that the request's
+authorization epoch is still current, its slot is active, Life State is Alive,
+Roll Dodge is Inactive, World State is Active, Travel is Inactive, and the
+current timing profile's Global Cooldown has elapsed. Losing focus, entering
+suspension, or closing the menu gate invalidates the epoch. A request rejected
+at this boundary is dropped and is never replayed, even if the gate reopens.
 
-The real input sink rechecks the shared life, roll-dodge, world, and travel gates
-before every generated press and during waits. If one closes during a sequence,
-remaining synthesis stops. Releases for any key or mouse button already held by
-the sink still run. A cancelled sequence that emitted nothing does not consume
-the Global Cooldown.
+The real input sink rechecks the authorization epoch and the shared life,
+roll-dodge, world, and travel gates before every generated press and during
+waits. If one closes during a sequence, remaining synthesis stops. Releases for
+any key or mouse button already held by the sink still run. A cancelled sequence
+that emitted nothing does not consume the Global Cooldown.
 
 Roll-dodge evidence fails open for physical input and closed for generated input.
 Active or unavailable roll state passes the player's original skill key through.
@@ -72,20 +74,12 @@ checks it before every generated press and wait. If a roll begins during a
 sequence, remaining synthesis stops and the sink still releases any mouse button
 it already holds. Dropped work is never replayed after the roll ends.
 
-**Known defect**: focus, suspension, and menu state are checked before the hook
-queues new work, but they are not members of the shared gate set observed by an
-already queued or running weave. A sequence can therefore finish generated
-steps after one of those three conditions changes. This does not authorize new
-physical interception. Runtime cancellation and regression tests are tracked in
-[issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92). Until that issue
-is resolved, a focus, suspend, or menu transition is not proof that an in-flight
-sequence was cancelled.
-
 The application toggles for suspend, fishing, and Auto Potion remain reachable
 while suspended. F1 changes suspension, and Auto Potion checks suspension before
-acting on F3. Fishing does not yet receive suspension state, so enabling it with
-F2 can cast and a pending reel or recast can emit; that gap and the queued-weave limitation
-above are tracked by issue #92.
+acting on F3. Fishing receives suspension directly. Entering suspension cancels
+its deadline without clearing the request, and neither enabling Fishing while
+suspended nor resuming sends Interact. Recovery requires a fresh manual cast or
+turning Fishing off and on after the other gates permit it.
 
 See [Action Authorization](action-authorization.md) for the cross-feature truth
 table.

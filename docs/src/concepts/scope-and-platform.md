@@ -53,11 +53,10 @@ or `F3`, despite both being shipped mappings. This prevents a verified claim of
 complete Windows and Linux key parity. See
 [issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93).
 
-**Known lifecycle defect**: the current PixelBeacon Update route can proceed to
-installation after managed removal refuses an unmanaged folder. Documentation
-must not promise that every overwrite is managed-marker gated until
-[issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94) is fixed. Managed
-removal itself remains marker gated.
+PixelBeacon lifecycle writes are ownership gated on every platform. An existing
+target that cannot be proven managed is reported as Unmanaged, offers no
+lifecycle buttons, and remains unchanged. Managed updates replace embedded files
+in place, while removal still requires the managed marker.
 
 macOS, Linux aarch64, pure Wayland capture, direct process-memory reading, and
 network-traffic inspection are outside the supported product scope.
