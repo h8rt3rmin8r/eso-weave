@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-028.md](plan-028.md) | Active | S058 reorganizes and preserves the documentation corpus, establishes published, project, and archive lifecycles, and closes issue #80. |
+| [plan-029.md](plan-029.md) | Active | S059 completes source-backed user and developer documentation and closes issue #81. |

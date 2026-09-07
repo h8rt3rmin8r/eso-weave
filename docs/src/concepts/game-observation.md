@@ -1,5 +1,9 @@
 # Game Observation and Safety State
 
+Game Context is the gameplay detection or focused game summary. World State may
+appear during a loading screen, world transition, or player activation. Roll
+Dodge is also called a dodge roll, dodge state, or roll gate.
+
 Installation, runtime, focus, and in-game telemetry are independent facts. ESO
 Weave keeps them separate so a weak observation cannot impersonate a safe state.
 
@@ -16,6 +20,11 @@ otherwise unknown game evidence is **Unknown**; a present launcher is
 **Launcher open**; an unknown launcher remains **Unknown**; and two absent
 observations are **Inactive**. Closing the launcher cannot demote an active game.
 
+The Pixel Bus worker probes installation, process presence, and focus at most one
+second apart. A long configured pixel-sampling interval is capped at the next
+process-probe deadline, so runtime changes are not delayed by idle sampling.
+Process enumeration failure produces Unknown rather than a clean negative.
+
 ## Game Context
 
 **Gameplay** requires all of the following:
@@ -29,6 +38,12 @@ Missing or invalid surface evidence is unavailable, not Gameplay. Runtime exit
 clears game-derived observations, held-key state, and menu-gate state. It blocks
 input and pauses autonomous features without rewriting their requested toggles.
 Restart republishes a complete fresh baseline even when values appear unchanged.
+
+Game Context reports Not Detected for every known non-active runtime, Unfocused
+for a known active game without focus, Signal Unavailable for missing freshness
+or surface evidence, a named surface for a decoded menu, and Unknown when process
+or focus observation itself is unknown. No later axis can upgrade an earlier
+uncertain one.
 
 ## World, travel, life, roll dodge, and movement
 
@@ -53,3 +68,20 @@ Movement reports On Foot, Mounted, Sprinting, or Unknown. Keyboard-mode on-foot
 sprint is a bounded inference with entry and exit debounce, lifecycle exclusions,
 and stale-positive expiry. Gamepad and mounted sprint are not inferred. Explicit
 Sprinting delays Auto Potion evaluation; Unknown does not fabricate a sprint.
+
+## Invalidation and recovery order
+
+Safety-closing observations are applied to shared atomic gates before the Pixel
+Bus worker waits for controller locks. Safe recovery opens a gate only after the
+corresponding engine and controllers hold the same fresh observation. This
+ordering prevents a physical key from being newly suppressed while the worker
+still holds stale unsafe state.
+
+After resume, World State and Travel are explicitly invalidated. The next valid
+sample republishes them even when their values match the pre-suspend values.
+After game exit, the reader is reset and all game-derived values start Unknown.
+After signal loss, action-driving observations clear instead of retaining stale
+values.
+
+The source-backed transition tables are in
+[State Machines](../development/state-machines.md).

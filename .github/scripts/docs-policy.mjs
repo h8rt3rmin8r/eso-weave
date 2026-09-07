@@ -103,14 +103,69 @@ const HISTORICAL_EXCEPTIONS = new Map([
   ["CHANGELOG.md\u0000docs/plans/", 2],
 ]);
 const NON_PUBLISHED_SEARCH_SENTINELS = [
-  "docs/project/",
-  "docs/archive/",
   "Migration Ledger",
   "Current Build Plans",
   "Archived Build Plans",
 ];
-const PRESERVATION_MANIFEST_SHA256 = "4452074c6c3e45122b4c51030805677aed8d232523b77ef933e2c80b18256341";
+const PRESERVATION_MANIFEST_SHA256 = "5067105e76147adced7e4a94b3afc5e57bad7dc013059c44eb5663e397a0542e";
 const DELIVERY_EVIDENCE = /(?:\bPR #\d+\b|\bcommit [0-9a-f]{7,40}\b|\bv\d+\.\d+\.\d+ release\b|\bissue #\d+ closed\b)/iu;
+const CONTENT_COVERAGE_BASELINE = "bc2b8356f3bec7b5349be5dbe616e1a10c93f244";
+const CONTENT_OBLIGATION_IDS = new Set([
+  ...Array.from({ length: 25 }, (_, index) => `LOG-${String(index + 1).padStart(3, "0")}`),
+  ...Array.from({ length: 7 }, (_, index) => `CFG-${String(index + 1).padStart(3, "0")}`),
+  "PLT-001", "PLT-002",
+  ...Array.from({ length: 6 }, (_, index) => `REL-${String(index + 1).padStart(3, "0")}`),
+  ...Array.from({ length: 7 }, (_, index) => `DEF-${String(index + 1).padStart(3, "0")}`),
+]);
+const DEFERRED_ISSUES = new Set([92, 93, 94, 95, 96]);
+const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
+const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
+const CONTENT_CONTRACT_SHA256 = "f97da79a0c2ca0f8d6fa45b88dfb8c61d19eb808c63c2b51d93e166b74c3c6c6";
+const CONTENT_PAGE_PATHS = new Set([
+  "docs/src/README.md",
+  "docs/src/getting-started/installation.md",
+  "docs/src/getting-started/first-launch.md",
+  "docs/src/getting-started/troubleshooting.md",
+  "docs/src/features/weaving.md",
+  "docs/src/features/fishing.md",
+  "docs/src/features/auto-potion.md",
+  "docs/src/features/pixelbeacon.md",
+  "docs/src/concepts/action-authorization.md",
+  "docs/src/concepts/game-observation.md",
+  "docs/src/reference/settings.md",
+  "docs/src/reference/configuration.md",
+  "docs/src/development/test-strategy.md",
+  "docs/src/development/release-and-packaging.md",
+]);
+const SEARCH_TARGETS = new Map([
+  ["ESO Weave", "docs/src/README.md"], ["Weaving", "docs/src/features/weaving.md"],
+  ["Light Attack", "docs/src/features/weaving.md"], ["Heavy Attack", "docs/src/features/weaving.md"],
+  ["Bash Attack", "docs/src/features/weaving.md"], ["Block Casting", "docs/src/features/weaving.md"],
+  ["Global Cooldown", "docs/src/features/weaving.md"], ["Weave Delay", "docs/src/features/weaving.md"],
+  ["Weapon Bar", "docs/src/features/weaving.md"], ["Latency Adaptation", "docs/src/features/weaving.md"],
+  ["Input Safety", "docs/src/concepts/input-safety.md"], ["Synthesized Input", "docs/src/concepts/input-safety.md"],
+  ["Suspension", "docs/src/concepts/input-safety.md"], ["Menu Gate", "docs/src/concepts/action-authorization.md"],
+  ["Game Context", "docs/src/concepts/game-observation.md"], ["Life State", "docs/src/concepts/game-observation.md"],
+  ["World State", "docs/src/concepts/game-observation.md"], ["Travel", "docs/src/concepts/game-observation.md"],
+  ["Roll Dodge", "docs/src/concepts/game-observation.md"], ["Sprinting", "docs/src/concepts/game-observation.md"],
+  ["Unknown", "docs/src/concepts/action-authorization.md"], ["Fishing", "docs/src/features/fishing.md"],
+  ["Interact Key", "docs/src/features/fishing.md"], ["No Cast Detected", "docs/src/features/fishing.md"],
+  ["Signal Lost", "docs/src/getting-started/troubleshooting.md"], ["Auto Potion", "docs/src/features/auto-potion.md"],
+  ["Resource Watch", "docs/src/features/auto-potion.md"], ["Quickslot", "docs/src/features/auto-potion.md"],
+  ["Retry Interval", "docs/src/features/auto-potion.md"], ["PixelBeacon", "docs/src/features/pixelbeacon.md"],
+  ["Pixel Bus", "docs/src/reference/pixel-bus-protocol.md"], ["Layout Header", "docs/src/reference/pixel-bus-protocol.md"],
+  ["Payload Block", "docs/src/reference/pixel-bus-protocol.md"], ["Heartbeat", "docs/src/reference/pixel-bus-protocol.md"],
+  ["Capture Tolerance", "docs/src/reference/pixel-bus-protocol.md"], ["Ultimate", "docs/src/features/ultimate-resource.md"],
+  ["Ultimate Cost", "docs/src/features/ultimate-resource.md"], ["Ready", "docs/src/features/ultimate-resource.md"],
+  ["Configuration", "docs/src/reference/configuration.md"], ["Session State", "docs/src/reference/configuration.md"],
+  ["Invalid Configuration", "docs/src/reference/configuration.md"], ["Live Log", "docs/src/reference/logging.md"],
+  ["File Logging", "docs/src/reference/logging.md"], ["Windows Input", "docs/src/concepts/scope-and-platform.md"],
+  ["Linux Input", "docs/src/concepts/scope-and-platform.md"], ["XWayland", "docs/src/concepts/scope-and-platform.md"],
+  ["PixelBeacon Status", "docs/src/features/pixelbeacon.md"], ["API Version", "docs/src/features/pixelbeacon.md"],
+  ["Release Package", "docs/src/getting-started/installation.md"], ["Checksum", "docs/src/getting-started/installation.md"],
+  ["Troubleshooting", "docs/src/getting-started/troubleshooting.md"], ["Startup Failure", "docs/src/getting-started/troubleshooting.md"],
+  ["Test Strategy", "docs/src/development/test-strategy.md"], ["Release Pipeline", "docs/src/development/release-and-packaging.md"],
+]);
 
 async function walk(root, suffix = "") {
   const results = [];
@@ -424,6 +479,9 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
     for (const searchIndex of searchIndexes) {
       const indexContents = await readFile(path.join(outputRoot, searchIndex), "utf8");
       const normalizedIndex = indexContents.toLocaleLowerCase("en-US");
+      if (/\bdoc_urls\s*:\s*\[[^\]]*docs\/(?:project|archive)\//iu.test(indexContents)) {
+        errors.push("generated search index publishes a project or archive document URL");
+      }
       for (const sentinel of NON_PUBLISHED_SEARCH_SENTINELS) {
         if (normalizedIndex.includes(sentinel.toLocaleLowerCase("en-US"))) {
           errors.push(`generated search index contains non-published content sentinel: ${sentinel}`);
@@ -589,6 +647,292 @@ function srcsetCandidates(srcset) {
     }
   }
   return candidates;
+}
+
+function normalizedText(value) {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/gu, " ").trim();
+}
+
+function hasVisiblePhrase(markdown, phrase) {
+  return normalizedText(visibleMarkdown(markdown)).includes(normalizedText(phrase));
+}
+
+function validEvidenceRecord(record, expectedKind) {
+  if (!record || typeof record !== "object") return false;
+  if (record.kind === "TestGap") {
+    return expectedKind === "test" && typeof record.claim === "string" && record.claim.trim().length >= 20 &&
+      Number.isInteger(record.issue) && record.issue > 0;
+  }
+  const allowed = expectedKind === "test" ? new Set(["Test", "Workflow"]) : new Set(["Source", "Protocol", "Packaging", "Workflow"]);
+  return allowed.has(record.kind) && typeof record.path === "string" && record.path.trim() !== "" &&
+    typeof record.anchor === "string" && record.anchor.trim() !== "" &&
+    typeof record.claim === "string" && record.claim.trim().length >= 12;
+}
+
+export function contentContractDigest(manifest) {
+  const projection = {
+    evidence: Object.fromEntries(Object.entries(manifest?.evidence ?? {})
+      .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+      .map(([id, record]) => [id, {
+        kind: record.kind,
+        path: record.path ?? null,
+        anchor: record.anchor ?? null,
+        claim: record.claim,
+        issue: record.issue ?? null,
+      }])),
+    obligations: (manifest?.obligations ?? []).map((row) => ({
+      id: row.id,
+      area: row.area,
+      audience: row.audience,
+      statement: row.statement,
+      destination: row.destination,
+      source_evidence: row.source_evidence,
+      test_evidence: row.test_evidence,
+      coverage: row.coverage,
+      labels: row.labels,
+      content_anchors: row.content_anchors,
+      follow_up: row.follow_up ?? null,
+    })),
+    pages: (manifest?.pages ?? []).map((page) => ({
+      path: page.path,
+      title: page.title,
+      page_type: page.page_type,
+      audiences: page.audiences,
+      required_anchors: page.required_anchors,
+      related_pages: page.related_pages,
+    })),
+    search_map: (manifest?.search_map ?? []).map((entry) => ({
+      canonical: entry.canonical,
+      aliases: entry.aliases,
+      target: entry.target,
+    })),
+    diagrams: (manifest?.diagrams ?? []).map((diagram) => ({
+      id: diagram.id,
+      kind: diagram.kind,
+      destination: diagram.destination,
+      title: diagram.title,
+      relationships: diagram.relationships,
+      alt_text: diagram.alt_text,
+      text_equivalent: diagram.text_equivalent,
+      content_anchors: diagram.content_anchors,
+    })),
+  };
+  return createHash("sha256").update(JSON.stringify(projection), "utf8").digest("hex");
+}
+
+function glossaryExplainsAlias(markdown, alias, target) {
+  return markdown.split(/\n\s*\n/gu).some((block) => {
+    if (/^ {0,3}(?:`{3,}|~{3,})/mu.test(block)) return false;
+    const prose = block.replace(/<!--[\s\S]*?-->/gu, "").replace(/`+/gu, "");
+    return normalizedText(prose).includes(normalizedText(alias)) &&
+      hasMarkdownLinkTo(block, "docs/src/reference/glossary.md", target);
+  });
+}
+
+export function validateContentCoverage(manifest, snapshot) {
+  const errors = [];
+  if (contentContractDigest(manifest) !== CONTENT_CONTRACT_SHA256) {
+    errors.push("S059 content coverage semantic projection does not match the frozen contract");
+  }
+  if (!manifest || manifest.schema_version !== 1) errors.push("S059 content coverage requires schema_version 1");
+  if (manifest?.baseline !== CONTENT_COVERAGE_BASELINE) errors.push("S059 content coverage baseline does not match the frozen commit");
+  const obligations = Array.isArray(manifest?.obligations) ? manifest.obligations : [];
+  const ids = obligations.map((row) => row?.id);
+  const uniqueIds = new Set(ids);
+  if (uniqueIds.size !== ids.length) errors.push("S059 content coverage contains a duplicate obligation identifier");
+  if (uniqueIds.size !== CONTENT_OBLIGATION_IDS.size ||
+      [...CONTENT_OBLIGATION_IDS].some((id) => !uniqueIds.has(id))) {
+    errors.push("S059 content coverage must contain the exact obligation identifiers");
+  }
+  const evidenceCatalog = manifest?.evidence && typeof manifest.evidence === "object" ? manifest.evidence : {};
+  const deferredSeen = new Set();
+  for (const row of obligations) {
+    const prefix = row?.id ?? "unknown obligation";
+    if (typeof row?.area !== "string" || row.area.trim() === "" ||
+        !Array.isArray(row.audience) || row.audience.length === 0 ||
+        typeof row.statement !== "string" || row.statement.trim().length < 20 ||
+        !Array.isArray(row.labels) || row.labels.length === 0 || row.labels.some((label) => !COVERAGE_LABELS.has(label))) {
+      errors.push(`${prefix}: required obligation fields are invalid`);
+    }
+    if (!["Covered", "Deferred"].includes(row?.coverage)) {
+      errors.push(`${prefix}: coverage may not remain ${row?.coverage ?? "missing"}`);
+    }
+    if (typeof row?.destination !== "string" || !/^docs\/src\/.+\.md$/u.test(row.destination)) {
+      errors.push(`${prefix}: destination must be published docs/src Markdown`);
+    } else {
+      if (!snapshot.existingPaths.has(row.destination)) errors.push(`${prefix}: destination does not exist: ${row.destination}`);
+      if (!snapshot.summaryEntries.has(row.destination)) errors.push(`${prefix}: destination is absent from SUMMARY.md`);
+    }
+    if (!Array.isArray(row?.content_anchors) || row.content_anchors.length === 0 ||
+        row.content_anchors.some((anchor) => typeof anchor !== "string" || anchor.trim().length < 8)) {
+      errors.push(`${prefix}: substantive content anchors are required`);
+    } else {
+      const prose = snapshot.textFiles.get(row.destination) ?? "";
+      for (const anchor of row.content_anchors) {
+        if (!hasVisiblePhrase(prose, anchor)) errors.push(`${prefix}: substantive anchor is missing from ${row.destination}: ${anchor}`);
+      }
+    }
+    for (const [field, expectedKind] of [["source_evidence", "source"], ["test_evidence", "test"]]) {
+      const references = Array.isArray(row?.[field]) ? row[field] : [];
+      if (references.length === 0) errors.push(`${prefix}: ${field === "test_evidence" ? "test evidence or a TestGap" : "source evidence"} is required`);
+      for (const reference of references) {
+        const record = typeof reference === "string" ? evidenceCatalog[reference] : null;
+        if (!validEvidenceRecord(record, expectedKind)) {
+          errors.push(`${prefix}: invalid ${expectedKind} evidence reference`);
+          continue;
+        }
+        if (record.kind === "TestGap") continue;
+        if (!snapshot.existingPaths.has(record.path)) {
+          errors.push(`${prefix}: evidence path does not exist: ${record.path}`);
+        } else if (!(snapshot.textFiles.get(record.path) ?? "").includes(record.anchor)) {
+          errors.push(`${prefix}: evidence anchor is missing from ${record.path}: ${record.anchor}`);
+        }
+      }
+    }
+    if (row?.coverage === "Deferred") {
+      const followUp = row.follow_up;
+      if (!followUp || !DEFERRED_ISSUES.has(followUp.issue) ||
+          followUp.url !== `https://github.com/h8rt3rmin8r/eso-weave/issues/${followUp.issue}` ||
+          typeof followUp.disposition !== "string" || followUp.disposition.trim().length < 20) {
+        errors.push(`${prefix}: Deferred coverage requires an exact follow-up issue and truthful disposition`);
+      } else {
+        deferredSeen.add(followUp.issue);
+      }
+    } else if (row?.follow_up) {
+      errors.push(`${prefix}: Covered obligation may not carry a follow-up disposition`);
+    }
+  }
+  for (const issue of DEFERRED_ISSUES) {
+    if (!deferredSeen.has(issue)) errors.push(`S059 deferred coverage must include follow-up issue #${issue}`);
+  }
+
+  const pages = Array.isArray(manifest?.pages) ? manifest.pages : [];
+  const pagePaths = new Set();
+  for (const page of pages) {
+    if (!page || pagePaths.has(page.path) || !/^docs\/src\/.+\.md$/u.test(page.path) ||
+        !["Landing", "Task", "Feature", "Concept", "Reference", "Development"].includes(page.page_type) ||
+        !Array.isArray(page.audiences) || page.audiences.length === 0 ||
+        !Array.isArray(page.required_anchors) || page.required_anchors.length < 2 ||
+        !Array.isArray(page.related_pages) || page.related_pages.length === 0) {
+      errors.push(`S059 exact page profile is invalid: ${page?.path ?? "missing path"}`);
+      continue;
+    }
+    pagePaths.add(page.path);
+    const prose = snapshot.textFiles.get(page.path) ?? "";
+    for (const anchor of page.required_anchors) {
+      if (!hasVisiblePhrase(prose, anchor)) errors.push(`${page.path}: required page anchor is missing: ${anchor}`);
+    }
+  }
+  if (pagePaths.size !== CONTENT_PAGE_PATHS.size || [...CONTENT_PAGE_PATHS].some((item) => !pagePaths.has(item))) {
+    errors.push("S059 exact page profiles are required");
+  }
+
+  const searchMap = Array.isArray(manifest?.search_map) ? manifest.search_map : [];
+  const canonicalTerms = new Set();
+  for (const entry of searchMap) {
+    if (!entry || canonicalTerms.has(entry.canonical) || SEARCH_TARGETS.get(entry.canonical) !== entry.target ||
+        !/^docs\/src\/.+\.md$/u.test(entry.target)) {
+      errors.push(`S059 search target must be published and canonical: ${entry?.canonical ?? "missing term"}`);
+      continue;
+    }
+    canonicalTerms.add(entry.canonical);
+    const prose = snapshot.textFiles.get(entry.target) ?? "";
+    if (!hasVisiblePhrase(prose, entry.canonical)) errors.push(`${entry.canonical}: canonical search term is absent from ${entry.target}`);
+    const glossary = snapshot.textFiles.get("docs/src/reference/glossary.md") ?? "";
+    if (!Array.isArray(entry.aliases) || entry.aliases.length === 0) {
+      errors.push(`${entry.canonical}: required search aliases are missing`);
+    } else for (const alias of entry.aliases) {
+      if (!hasVisiblePhrase(prose, alias) && !glossaryExplainsAlias(glossary, alias, entry.target)) {
+        errors.push(`${entry.canonical}: required search alias is absent: ${alias}`);
+      }
+    }
+  }
+  if (canonicalTerms.size !== SEARCH_TARGETS.size || [...SEARCH_TARGETS].some(([term]) => !canonicalTerms.has(term))) {
+    errors.push("S059 search map must retain every contracted canonical term and target");
+  }
+
+  const diagrams = Array.isArray(manifest?.diagrams) ? manifest.diagrams : [];
+  const diagramIds = new Set(diagrams.map((diagram) => diagram?.id));
+  if (diagramIds.size !== DIAGRAM_IDS.size || [...DIAGRAM_IDS].some((id) => !diagramIds.has(id))) {
+    errors.push("S059 diagrams must contain the exact contracted records");
+  }
+  for (const diagram of diagrams) {
+    if (!diagram || !/^docs\/src\/.+\.md$/u.test(diagram.destination) ||
+        typeof diagram.title !== "string" || diagram.title.trim().length < 8 ||
+        typeof diagram.alt_text !== "string" || diagram.alt_text.trim().length < 20 || /^diagram\.?$/iu.test(diagram.alt_text.trim()) ||
+        typeof diagram.text_equivalent !== "string" || diagram.text_equivalent.trim().length < 30 ||
+        /^(?:see|follow) (?:the )?(?:colors?|diagram)/iu.test(diagram.text_equivalent.trim())) {
+      errors.push(`${diagram?.id ?? "unknown diagram"}: diagram requires a useful non-color text equivalent and alternative`);
+      continue;
+    }
+    if (!snapshot.existingPaths.has(diagram.destination)) {
+      errors.push(`${diagram.id}: diagram destination does not exist: ${diagram.destination}`);
+      continue;
+    }
+    if (!snapshot.summaryEntries.has(diagram.destination)) {
+      errors.push(`${diagram.id}: diagram destination is absent from SUMMARY.md: ${diagram.destination}`);
+    }
+    const prose = snapshot.textFiles.get(diagram.destination) ?? "";
+    if (!hasVisiblePhrase(prose, diagram.title)) {
+      errors.push(`${diagram.id}: diagram title is absent from visible destination content: ${diagram.title}`);
+    }
+    if (!Array.isArray(diagram.content_anchors) || diagram.content_anchors.length === 0) {
+      errors.push(`${diagram.id}: diagram content anchors are required`);
+    } else for (const anchor of diagram.content_anchors) {
+      if (!hasVisiblePhrase(prose, anchor)) {
+        errors.push(`${diagram.id}: diagram content anchor is missing from ${diagram.destination}: ${anchor}`);
+      }
+    }
+  }
+  return errors;
+}
+
+export async function validateContentCoverageRepository(repositoryRoot, manifest) {
+  const sourceRoot = path.join(repositoryRoot, "docs", "src");
+  const summary = await readFile(path.join(sourceRoot, "SUMMARY.md"), "utf8");
+  const summaryEntries = new Set();
+  for (const line of summary.split(/\r?\n/gu)) {
+    if (!/^\s*[-*+]\s+/u.test(line)) continue;
+    for (const link of markdownLinks(line)) {
+      const { pathname } = splitTarget(link.destination);
+      if (!pathname.endsWith(".md")) continue;
+      summaryEntries.add(`docs/src/${slash(path.normalize(pathname))}`);
+    }
+  }
+  const repositoryErrors = [];
+  const referencedPaths = new Set([...(manifest.obligations ?? []).map((row) => row.destination), ...(manifest.pages ?? []).map((page) => page.path), ...(manifest.search_map ?? []).map((entry) => entry.target), ...(manifest.diagrams ?? []).map((diagram) => diagram.destination), "docs/src/reference/glossary.md"]);
+  for (const record of Object.values(manifest.evidence ?? {})) {
+    if (!record?.path) continue;
+    const relative = record.path;
+    const normalized = typeof relative === "string" ? slash(path.normalize(relative)) : "";
+    const resolved = typeof relative === "string" ? path.resolve(repositoryRoot, relative) : repositoryRoot;
+    const fromRoot = path.relative(repositoryRoot, resolved);
+    if (typeof relative !== "string" || path.isAbsolute(relative) || normalized !== relative ||
+        slash(relative).split("/").some((segment) => segment === "." || segment === "..") ||
+        fromRoot.startsWith("..") || path.isAbsolute(fromRoot)) {
+      repositoryErrors.push(`evidence path must be normalized and repository-relative: ${relative}`);
+      continue;
+    }
+    const casing = await exactCase(repositoryRoot, relative);
+    if (casing.exists && !casing.exact) {
+      repositoryErrors.push(`evidence path must use exact case: ${relative}`);
+      continue;
+    }
+    referencedPaths.add(relative);
+  }
+  const existingPaths = new Set();
+  const textFiles = new Map();
+  for (const relative of referencedPaths) {
+    const absolute = path.join(repositoryRoot, relative);
+    try {
+      const contents = await readFile(absolute, "utf8");
+      existingPaths.add(relative);
+      textFiles.set(relative, contents);
+    } catch {
+      // The pure validator reports the exact missing reference.
+    }
+  }
+  return [...repositoryErrors, ...validateContentCoverage(manifest, { existingPaths, summaryEntries, textFiles })];
 }
 
 export function validateMigrationLedger(ledger, snapshot) {
@@ -1146,6 +1490,19 @@ export function validateWorkflowText(workflow) {
   const jobs = yamlBlocks(withoutComments, 2);
   const deploy = jobs.get("deploy") ?? "";
   const build = jobs.get("build") ?? "";
+  const installStep = yamlListBlock(build, "Install pinned documentation tools");
+  const spellingStep = yamlListBlock(build, "Check spelling");
+  const typosInstall = /^\s*(?:run:\s*)?cargo install typos-cli --version ['"]?=1\.50\.1['"]? --locked\s*$/mu;
+  const spellingGate = /^\s*run:\s*typos docs\/src docs\/README\.md README\.md\s*$/mu;
+  if (!typosInstall.test(installStep)) {
+    errors.push("build job must install pinned typos-cli 1.50.1 with --locked");
+  }
+  if (!spellingGate.test(spellingStep)) {
+    errors.push("build job requires the exact canonical-documentation spelling gate");
+  }
+  if (installStep && spellingStep && build.indexOf(installStep) > build.indexOf(spellingStep)) {
+    errors.push("build job must install pinned typos-cli before running the spelling gate");
+  }
   const guard = "github.ref == 'refs/heads/main' && github.event_name != 'pull_request'";
   if (!deploy) errors.push("workflow requires a deploy job");
   if (!build) errors.push("workflow requires a build job");
@@ -1229,13 +1586,16 @@ async function run() {
   const workflowPath = path.resolve(".github", "workflows", "docs.yml");
   const cssPath = path.join(docsRoot, "theme", "eso-weave.css");
   const ledgerPath = path.join(docsRoot, "project", "migration-ledger.json");
+  const coveragePath = path.join(docsRoot, "project", "content-coverage.json");
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
+  const coverage = JSON.parse(await readFile(coveragePath, "utf8"));
   const errors = [
     ...(await validateSourceTree(docsRoot)),
     ...(await validateGeneratedSite(outputRoot)),
     ...validateBrandCss(await readFile(cssPath, "utf8")),
     ...validateWorkflowText(await readFile(workflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
+    ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
   ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`docs policy: ${error}`);

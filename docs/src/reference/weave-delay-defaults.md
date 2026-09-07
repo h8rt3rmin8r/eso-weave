@@ -2,6 +2,9 @@
 
 These values are adjustable defaults rather than fixed gameplay constants.
 
+**Version-sensitive:** The weapon values are community estimates pending
+in-game validation. They are not guaranteed ESO timing constants.
+
 ESO's skill global cooldown is 1000 ms. Light and heavy attacks run on a parallel
 track, and weaving aims to fit one basic attack and one skill into that window. A
 practical light-attack-plus-skill target is about 965 ms; exceeding 1000 ms can

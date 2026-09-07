@@ -1,5 +1,14 @@
 # Pixel Bus Protocol
 
+Pixel Bus is also called pixelbus, screen telemetry, or the color protocol.
+
+**User guarantee:** Missing, invalid, stale, corrupt, or version-incompatible
+evidence never becomes a newer valid payload or a positive authorization value.
+
+**Implementation detail:** The exact geometry and bytes below are the current
+wire authority for contributors. Feature pages link here instead of copying the
+encoding.
+
 PixelBeacon renders a three-cell layout header followed by twenty-nine payload
 blocks at the top-left of the ESO client area. Blocks are 16 by 16 physical
 pixels by default. Interface scaling is compensated so geometry remains physical.
@@ -101,12 +110,10 @@ be updated. Invalid or tolerance-ambiguous B20 is a corrupt signal.
 B23 combat events are filtered to the player and ability 28549. Death,
 deactivation, invalid data, and signal loss publish Unknown and disable combat
 event handling until activation or an in-place resurrection establishes an
-Inactive baseline. While interception is active, the companion caps its sample
-interval at 375 ms so multiple reads fit within the bounded Active window.
+Inactive baseline. While interception is active, the companion sets its sample interval at 375 ms so multiple reads fit within the bounded Active window.
 
 B25 and B26 come from the same
-`GetUnitPower("player", COMBAT_MECHANIC_FLAGS_ULTIMATE)` call. Values from 0
-through 510 publish exactly, except that a zero maximum is unavailable. A nil,
+`GetUnitPower("player", COMBAT_MECHANIC_FLAGS_ULTIMATE)` call. Values from 0 through 510 publish exactly, except that a zero maximum is unavailable. A nil,
 negative, or out-of-range maximum makes both current and maximum unavailable. A
 nil, negative, or out-of-range current makes current unavailable without
 inventing a value.
@@ -114,12 +121,11 @@ inventing a value.
 B27 and B28 call
 `GetSlotAbilityCost(ACTION_BAR_ULTIMATE_SLOT_INDEX + 1,
 COMBAT_MECHANIC_FLAGS_ULTIMATE, hotbarCategory)` with
-`HOTBAR_CATEGORY_PRIMARY` and `HOTBAR_CATEGORY_BACKUP`, respectively. An unused
-slot, nil API result, negative value, zero cost, or value above 510 publishes 511
-for that cost. The primary and backup costs are sampled and published together,
+`HOTBAR_CATEGORY_PRIMARY` and `HOTBAR_CATEGORY_BACKUP`, respectively.
+An unused slot, nil API result, negative value, zero cost, or value above 510 publishes 511 for that cost. The primary and backup costs are sampled and published together,
 so a normal weapon-bar swap selects already cached data atomically. Slot and
-hotbar events plus the 1 Hz recovery backstop refresh the pair. While any special
-or temporary hotbar is active, both costs publish unavailable without changing
+hotbar events plus the 1 Hz recovery backstop refresh the pair.
+While any special or temporary hotbar is active, both costs publish unavailable without changing
 the established weapon-bar signal.
 
 No payload block is hidden to express a state. Absence means only that the addon
@@ -162,8 +168,10 @@ behavior.
 
 Sampling defaults to 100 ms while fishing or interception can be active, and
 1000 ms otherwise. The interception condition keeps the menu gate responsive
-while the operator may type. A suspended application neither intercepts nor
-synthesizes, so it samples slowly. The reader validates the full header before
+while the operator may type.
+A suspended application does not start new interception and samples slowly only when Fishing is inactive. Queued or running
+weave, a newly enabled Fishing cast, and pending Fishing have the known suspension
+gaps tracked by issue #92. The reader validates the full header before
 reading payload from the same captured frame. Missing B0 for more than 2000 ms
 raises SignalLost; a corrupt recognized header suppresses payload immediately.
 
@@ -177,10 +185,28 @@ operating-system measurements are change-detected. Stored video settings provide
 a cross-check and pre-launch fallback, but never override a live measurement. A
 configured descriptor is produced only when both stored resolution pairs are
 identical because no verified mapping exists for the stored window-mode value.
-On X11, the reported display is the X screen, which can be the union of multiple
-heads and carries no scale factor because the core X protocol exposes neither.
+On X11, the reported display is the X screen, which can be the union of multiple heads and carries no scale factor because the core X protocol exposes neither.
 
 The announced row width and complete occupied extent must fit inside the measured
 client area or the layout is rejected before payload decoding. Reading only the
 cells that happen to fit could associate a valid marker with the wrong logical
 signal, so partial layouts are never accepted.
+
+## Diagnostic sequence
+
+```text
+capture current client extent
+  -> validate H0, H1, H2 and complete occupied geometry
+  -> require current or positively identified legacy layout
+  -> require B0 heartbeat
+  -> decode each supported payload with marker and complement checks
+  -> publish changes to consumers
+invalid header -> suppress payload immediately
+heartbeat absent past timeout -> Signal lost and clear authorizing observations
+fresh valid frame -> republish the complete current baseline
+```
+
+This sequence is also the text alternative for the protocol flow. A reader
+diagnosing **Signal unavailable** should first use the
+[PixelBeacon troubleshooting path](../getting-started/troubleshooting.md#pixelbeacon-signal-is-missing-or-lost),
+then inspect byte-level details here only when the shared lifecycle is healthy.

@@ -775,7 +775,7 @@
         },
         {
           "path": "docs/src/reference/pixel-bus-protocol.md",
-          "requiredExcerpt": "A suspended application neither intercepts nor synthesizes, so it samples slowly"
+          "requiredExcerpt": "A suspended application does not start new interception and samples slowly only when Fishing is inactive"
         },
         {
           "path": "docs/src/reference/pixel-bus-protocol.md",
@@ -1436,13 +1436,23 @@
   "postBaselinePlans": [
     {
       "id": "028",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-028.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-028.md",
       "specs": [
         "specs/058-documentation-corpus"
       ],
-      "evidence": "Issue #80 tracks the active S058 delivery."
+      "evidence": "Issue #80 closed and S058 merged in PR #88."
+    },
+    {
+      "id": "029",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-029.md",
+      "specs": [
+        "specs/059-documentation-completeness"
+      ],
+      "evidence": "Issue #81 tracks the active S059 delivery."
     }
   ],
   "safetyCrosswalk": [

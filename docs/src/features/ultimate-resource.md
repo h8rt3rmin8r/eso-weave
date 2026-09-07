@@ -1,9 +1,16 @@
 # Ultimate Resource
 
+Ultimate Cost means the cast cost for the active front-bar or back-bar skill,
+including the readiness tick shown on the meter.
+
 Ultimate differs from Health, Stamina, and Magicka. It has a stored point total,
 a game-reported maximum, and a cast cost that depends on the ability slotted on
 each weapon bar. A percentage alone cannot say whether the active ability is
 castable.
+
+Players may search for this as ult, Ultimate points, enough Ultimate, cast-ready,
+or the readiness tick. The interface uses the exact labels **Ultimate** and
+**Ready**.
 
 PixelBeacon publishes exact current and maximum Ultimate plus the effective cost
 for both the primary and backup hotbars. ESO Weave selects the cost associated
@@ -29,3 +36,9 @@ bounded to their original payload lengths and report Ultimate unavailable.
 After installing or updating PixelBeacon, use `/reloadui` in ESO and restart ESO
 Weave so both sides negotiate the current protocol. Swapping weapon bars changes
 the selected threshold to the cost already reported for that bar.
+
+No color is required to interpret the meter: exact current and maximum points,
+the protruding cost tick, and the fixed Ready text provide separate cues. See
+[Live Interface](interface.md#resource-meters) for meter accessibility and the
+[Status Reference](../reference/status-reference.md#resources-and-ultimate) for
+unavailable states.
