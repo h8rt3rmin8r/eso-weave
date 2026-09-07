@@ -41,7 +41,7 @@ windows-sys = { version = "0.61", features = [
 
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.12"
-x11rb = "0.13"
+x11rb = "0.14"
 
 # Embeds the application icon into the Windows executable at build time. Only a
 # build dependency on Windows hosts; the Linux build never pulls or runs it.
