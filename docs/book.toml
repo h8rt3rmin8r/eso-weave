@@ -1,0 +1,38 @@
+[book]
+title = "ESO Weave Documentation"
+authors = ["The Bushido Collective"]
+description = "User and developer documentation for ESO Weave."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../target/docs-site"
+create-missing = false
+
+[output.html]
+additional-css = ["theme/eso-weave.css"]
+additional-js = ["theme/eso-weave.js"]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/h8rt3rmin8r/eso-weave"
+git-repository-icon = "fab-github"
+edit-url-template = "https://github.com/h8rt3rmin8r/eso-weave/edit/main/docs/{path}"
+site-url = "/eso-weave/"
+input-404 = "404.md"
+hash-files = true
+no-section-label = true
+smart-punctuation = false
+
+[output.html.playground]
+runnable = false
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-boolean-and = true
+
+[output.linkcheck2]
+follow-web-links = false
+traverse-parent-directories = false
+warning-policy = "error"

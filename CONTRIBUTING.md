@@ -76,6 +76,30 @@ cargo test --all --locked
 CI runs the same checks on Windows and Linux. Linux contributors need the system
 libraries listed in `scripts/linux-build-deps.sh`.
 
+## Documentation site
+
+Install the exact documentation tools with the repository's pinned Rust
+toolchain:
+
+```text
+cargo install mdbook --version '=0.5.4' --locked
+cargo install mdbook-linkcheck2 --version '=0.13.0' --locked
+```
+
+Run the complete local documentation check from the repository root:
+
+```text
+node --test .github/scripts/docs-policy.test.mjs
+mdbook test docs
+mdbook build docs
+node .github/scripts/docs-policy.mjs docs target/docs-site/html
+```
+
+The generated site is written beneath the ignored `target/docs-site/` tree.
+Preview it locally with `mdbook serve docs --open`. The hosted workflow performs
+the same validation on pull requests, but only a trusted `main` run may upload
+and deploy the checked artifact to GitHub Pages.
+
 ## Safety invariants
 
 Do not weaken tests for synthesized-input recursion, game-window focus scoping,

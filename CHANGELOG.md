@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S057 establishes a branded mdBook documentation shell with local search,
+  checked navigation and links, offline runtime assets, and a main-only GitHub
+  Pages delivery path (issue #79).
+
+### Decisions
+
+- 2026-09-07: Standardize the future public and bundled documentation source at
+  `docs/src`, using mdBook 0.5.4 and mdbook-linkcheck2 0.13.0 with exact version
+  pins. Add a pinned Pages workflow whose action dependencies use immutable
+  commits, whose pull-request path remains read-only, and whose guarded deploy
+  job alone receives Pages and OIDC writes. This avoids a temporary site under
+  `website/` and preserves #80 as the sole owner of legacy corpus migration.
+
 ## [0.14.0] - 2026-09-07
 
 ### Highlights
