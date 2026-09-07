@@ -296,6 +296,7 @@ pub struct FishingController {
     stop_reason: Option<StopReason>,
     gated: bool,
     suspended: bool,
+    suspension_recovery_required: bool,
     game_active: bool,
     focused: bool,
     life: LifeState,
@@ -326,6 +327,7 @@ impl FishingController {
             stop_reason: None,
             gated: false,
             suspended: false,
+            suspension_recovery_required: false,
             game_active: false,
             focused: false,
             life: LifeState::Unknown,
@@ -377,6 +379,9 @@ impl FishingController {
     pub fn set_enabled(&mut self, enabled: bool, now_ms: u64, sink: &mut dyn FishingSink) {
         self.requested_enabled = enabled;
         if enabled {
+            if self.suspended {
+                self.suspension_recovery_required = true;
+            }
             if self.state == FishingState::Disabled {
                 if !self.game_active {
                     self.stop_reason = Some(StopReason::GameInactive);
@@ -394,6 +399,7 @@ impl FishingController {
                 self.cast(now_ms, sink);
             }
         } else {
+            self.suspension_recovery_required = false;
             if self.state != FishingState::Disabled {
                 self.disable(StopReason::UserStop);
             } else {
@@ -413,6 +419,7 @@ impl FishingController {
             DetectorEvent::SignalLost => {
                 if self.requested_enabled || self.state != FishingState::Disabled {
                     self.requested_enabled = false;
+                    self.suspension_recovery_required = false;
                     if self.state != FishingState::Disabled {
                         self.disable(StopReason::SignalLost);
                     } else {
@@ -435,6 +442,7 @@ impl FishingController {
                     self.state = FishingState::Waiting;
                     self.stop_reason = None;
                     self.deadline = None;
+                    self.suspension_recovery_required = false;
                     return;
                 }
                 if matches!(self.state, FishingState::Armed | FishingState::Recast) {
@@ -472,7 +480,12 @@ impl FishingController {
                         "cast ended without a resolved bite; recasting"
                     );
                     sink.arm_authorization();
-                    self.cast(now_ms, sink);
+                    if self.gated {
+                        self.state = FishingState::Recast;
+                        self.deadline = Some((now_ms + GATE_DEFER_MS, TimerKind::RecastDue));
+                    } else {
+                        self.cast(now_ms, sink);
+                    }
                 }
             }
         }
@@ -504,6 +517,7 @@ impl FishingController {
         match kind {
             TimerKind::ArmTimeout => {
                 self.requested_enabled = false;
+                self.suspension_recovery_required = false;
                 self.disable(StopReason::NoCastDetected);
             }
             TimerKind::ReelDue => {
@@ -572,6 +586,9 @@ impl FishingController {
     /// operator's requested setting. Resuming emits nothing; a fresh manual
     /// cast observation or an explicit off-then-on request is required.
     pub fn set_suspended(&mut self, suspended: bool) {
+        if suspended && (self.requested_enabled || self.state != FishingState::Disabled) {
+            self.suspension_recovery_required = true;
+        }
         self.suspended = suspended;
         if suspended {
             self.block_for_safety();
@@ -629,6 +646,7 @@ impl FishingController {
         } else if self.requested_enabled
             && self.state == FishingState::Disabled
             && !self.suspended
+            && !self.suspension_recovery_required
             && !self.life_gate.is_gated()
             && !self.world.gates()
             && !self.travel.gates()
@@ -666,6 +684,7 @@ impl FishingController {
             );
             self.stop_reason = None;
             self.state = FishingState::Armed;
+            self.suspension_recovery_required = false;
             self.deadline = Some((
                 now_ms + u64::from(self.config.arm_timeout_ms),
                 TimerKind::ArmTimeout,
