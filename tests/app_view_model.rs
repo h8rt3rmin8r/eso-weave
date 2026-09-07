@@ -286,6 +286,13 @@ fn beacon_light_maps_every_condition() {
     assert!(!outdated.green);
     assert_eq!(outdated.tooltip, "installed but outdated");
 
+    let unmanaged = beacon_light(BeaconCondition::Unmanaged);
+    assert!(!unmanaged.green);
+    assert_eq!(
+        unmanaged.tooltip,
+        "unmanaged; files not modified; move or remove PixelBeacon manually"
+    );
+
     assert_eq!(
         beacon_light(BeaconCondition::NotInstalled).tooltip,
         "not installed"
@@ -299,6 +306,7 @@ fn beacon_light_maps_every_condition() {
 
     assert!(uninstall_enabled(BeaconCondition::InstalledCurrent));
     assert!(uninstall_enabled(BeaconCondition::InstalledOutdated));
+    assert!(!uninstall_enabled(BeaconCondition::Unmanaged));
     assert!(!uninstall_enabled(BeaconCondition::NotInstalled));
     assert!(!uninstall_enabled(BeaconCondition::AddonsNotFound));
 }
@@ -385,6 +393,10 @@ fn status_line_beacon_maps_conditions() {
         status_line_beacon(BeaconCondition::InstalledOutdated).role,
         StatusRole::Warning
     );
+    let unmanaged = status_line_beacon(BeaconCondition::Unmanaged);
+    assert_eq!(unmanaged.state_text, "Unmanaged (not modified)");
+    assert_eq!(unmanaged.role, StatusRole::Warning);
+    assert!(unmanaged.tooltip.contains("Move or remove it manually"));
     assert_eq!(
         status_line_beacon(BeaconCondition::NotInstalled).role,
         StatusRole::Muted
@@ -405,14 +417,12 @@ fn beacon_primary_action_matches_the_current_installation_need() {
         beacon_primary_action(BeaconCondition::NotInstalled),
         Some(BeaconPrimaryAction::Install)
     );
-    assert_eq!(
-        beacon_primary_action(BeaconCondition::AddonsNotFound),
-        Some(BeaconPrimaryAction::Install)
-    );
+    assert_eq!(beacon_primary_action(BeaconCondition::AddonsNotFound), None);
     assert_eq!(
         beacon_primary_action(BeaconCondition::InstalledOutdated),
         Some(BeaconPrimaryAction::Update)
     );
+    assert_eq!(beacon_primary_action(BeaconCondition::Unmanaged), None);
     assert_eq!(
         beacon_primary_action(BeaconCondition::InstalledCurrent),
         None
@@ -636,6 +646,25 @@ fn safety_preroute_closes_input_without_waiting_for_controller_access() {
     assert!(input.is_life_gated());
     route_reader_safety_gate(PixelBusEvent::SignalLost, &input);
     assert!(input.is_life_gated());
+    assert!(input.is_menu_gated());
+}
+
+#[test]
+fn s060_safety_preroute_closes_menu_before_controller_access() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    assert!(!input.is_menu_gated());
+
+    route_reader_safety_gate(
+        PixelBusEvent::MenuGate(Some(MenuSurface::ChatEntry)),
+        &input,
+    );
+
+    assert!(input.is_menu_gated());
+    route_reader_safety_gate(PixelBusEvent::MenuGate(Some(MenuSurface::None)), &input);
+    assert!(
+        input.is_menu_gated(),
+        "recovery waits for controller synchronization"
+    );
 }
 
 #[test]
@@ -968,6 +997,24 @@ fn toggle_suspend_intent_flips_input_engine() {
 }
 
 #[test]
+fn s060_toggle_suspend_cancels_fishing_without_clearing_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+    model.apply_intent(UiIntent::SetFishing(true));
+    assert_eq!(model.view().fishing_line.state_text, "Casting");
+
+    model.apply_intent(UiIntent::ToggleSuspend);
+    let suspended = model.view();
+    assert_eq!(suspended.fishing_line.state_text, "Idle (suspended)");
+    assert_eq!(suspended.fishing.button, "Stop Fishing");
+
+    model.apply_intent(UiIntent::ToggleSuspend);
+    let resumed = model.view();
+    assert_eq!(resumed.fishing_line.state_text, "Idle (suspended)");
+    assert_eq!(resumed.fishing.button, "Stop Fishing");
+}
+
+#[test]
 fn system_state_disclosure_intent_updates_persisted_ui_preferences() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());
@@ -1029,7 +1076,7 @@ fn install_and_uninstall_beacon_intents() {
 }
 
 #[test]
-fn update_beacon_intent_reinstalls() {
+fn update_beacon_intent_refreshes_managed_content_in_place() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());
 
@@ -1038,15 +1085,45 @@ fn update_beacon_intent_reinstalls() {
         model.view().beacon_condition,
         BeaconCondition::InstalledCurrent
     );
+    let retained = dir.path().join(beacon::SUBFOLDER).join("retained.txt");
+    std::fs::write(&retained, "user data").unwrap();
 
-    // Update removes and reinstalls in one step, leaving the addon installed and
-    // current (the managed-marker uninstall gate is reused unchanged).
+    // Update refreshes the managed embedded files without deleting the target.
     model.apply_intent(UiIntent::UpdateBeacon);
     assert_eq!(
         model.view().beacon_condition,
         BeaconCondition::InstalledCurrent
     );
     assert!(model.view().uninstall_enabled);
+    assert_eq!(std::fs::read_to_string(retained).unwrap(), "user data");
+}
+
+#[test]
+fn s060_unmanaged_beacon_has_no_actions_and_stale_intents_preserve_files() {
+    let root = tempfile::tempdir().unwrap();
+    let target = root.path().join(beacon::SUBFOLDER);
+    std::fs::create_dir_all(&target).unwrap();
+    let manifest = b"## Title: Foreign PixelBeacon\n## Version: 7\n";
+    let lua = b"-- user owned\n";
+    std::fs::write(target.join(beacon::MANIFEST_FILE), manifest).unwrap();
+    std::fs::write(target.join(beacon::LUA_FILE), lua).unwrap();
+    let mut model = model_with_beacon_root(root.path());
+
+    let view = model.view();
+    assert_eq!(view.beacon_condition, BeaconCondition::Unmanaged);
+    assert_eq!(beacon_primary_action(view.beacon_condition), None);
+    assert!(!view.uninstall_enabled);
+
+    model.apply_intent(UiIntent::InstallBeacon);
+    model.apply_intent(UiIntent::UpdateBeacon);
+    model.apply_intent(UiIntent::UninstallBeacon);
+
+    assert_eq!(
+        std::fs::read(target.join(beacon::MANIFEST_FILE)).unwrap(),
+        manifest
+    );
+    assert_eq!(std::fs::read(target.join(beacon::LUA_FILE)).unwrap(), lua);
+    assert_eq!(model.view().beacon_condition, BeaconCondition::Unmanaged);
 }
 
 #[test]

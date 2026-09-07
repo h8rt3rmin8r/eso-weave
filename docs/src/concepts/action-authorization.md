@@ -31,9 +31,9 @@ present. Application toggles are `F1`, `F2`, and `F3`, or their rebound keys.
 | Condition | Physical skill key | Application toggle | Queued or running weave | Fishing controller | Auto Potion controller |
 | --- | --- | --- | --- | --- | --- |
 | ESO inactive | Pass through | Pass through | Life, world, and travel gates close; remaining shared-gated work cancels | Disable, retain request, emit nothing | Dormant, retain request, emit nothing |
-| ESO unfocused | Pass through | Pass through | Known defect: queued and in-flight work does not recheck focus, issue #92 | Disable, retain request; refocus can arm a new cast | Dormant, retain request, emit nothing |
-| Suspended | Pass through | Suppress and hand off the toggle | Known defect: queued and in-flight work does not recheck suspension, issue #92 | Known defect: enabling Fishing can cast immediately while suspended, and pending timers are not gated, issue #92 | Blocked, retain request, emit nothing |
-| Menu or unavailable menu evidence | Pass through | Suppress and hand off the toggle | Known defect: queued and in-flight work does not recheck menu state, issue #92 | Defer autonomous reel or recast; the operator's initial toggle cast is not deferred | Blocked, retain request, emit nothing |
+| ESO unfocused | Pass through | Pass through | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Disable, retain request; refocus can arm a new cast | Dormant, retain request, emit nothing |
+| Suspended | Pass through | Suppress and hand off the toggle | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Cancel the deadline, retain the request, emit nothing on resume; require a fresh manual cast or off-on recovery | Blocked, retain request, emit nothing |
+| Menu or unavailable menu evidence | Pass through | Suppress and hand off the toggle | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Defer autonomous reel or recast; the operator's initial toggle cast is not deferred | Blocked, retain request, emit nothing |
 | Life not positively Alive | Pass through | Suppress and hand off the toggle | Drop queued work or cancel remaining steps; release held output | Disable, retain request, require fresh manual cast evidence | Blocked, retain request, emit nothing |
 | World not positively Active | Pass through | Suppress and hand off the toggle | Drop queued work or cancel remaining steps; release held output | Disable, retain request, require fresh evidence | Blocked, retain request, emit nothing |
 | Travel not positively Inactive | Pass through | Suppress and hand off the toggle | Drop queued work or cancel remaining steps; release held output | Disable, retain request, require fresh evidence | Blocked, retain request, emit nothing |
@@ -41,9 +41,8 @@ present. Application toggles are `F1`, `F2`, and `F3`, or their rebound keys.
 | Explicit Sprinting | No sprint-specific change | No sprint-specific change | No sprint-specific change | Not a fishing prerequisite | Blocked, retain request, evaluate current readings after recovery |
 | Heartbeat lost | Safety observations clear, so skill passes through | Toggle remains reachable if runtime and focus allow it | Shared safety gates close and queued work is not replayed | Disable and clear the fishing request | Blocked and retain request until fresh observations return |
 
-The table describes current implementation, including known defects. It does not
-weaken the intended rule that unavailable evidence cannot authorize generated
-input.
+The table describes current implementation. It does not weaken the rule that
+unavailable evidence cannot authorize generated input.
 
 ## Authorization paths
 
@@ -56,13 +55,14 @@ suppression and logs a warning. It never blocks the interception callback.
 
 ### Weave
 
-`queued action -> active slot -> life -> roll dodge -> world -> travel -> Global Cooldown -> sequence`
+`queued action + authorization epoch -> active slot -> focus -> suspension -> menu -> life -> roll dodge -> world -> travel -> Global Cooldown -> sequence`
 
-The worker and real sink currently share only life, roll-dodge, world, and travel
-gates. Closing one cancels remaining Down operations while still allowing the Up
-operation for output the sink already holds. Focus, suspension, and menu closure
-are missing from queued and in-flight boundaries and are tracked in
-[issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92).
+Each queued request carries the current authorization epoch. Losing focus,
+entering suspension, or closing the menu gate advances that epoch, so work
+accepted under the earlier state cannot start or continue after recovery. The
+worker and real sink also observe the current life, roll-dodge, world, and travel
+gates. A closure cancels remaining Down operations while still allowing the Up
+operation for output the sink already holds. Cancelled work is never replayed.
 
 ### Fishing
 
@@ -74,11 +74,12 @@ travel loss disables the active state but preserves the request, and no pending
 interact is replayed. Runtime and focus loss preserve the request under their
 controller-specific recovery rules.
 
-Suspension is not a direct Fishing Controller input. Enabling Fishing can cast
-immediately while suspended, and pending fishing output is not proven to stop.
-This current implementation defect is tracked in
-[issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92); it is not
-positive authorization.
+Suspension is a direct Fishing Controller input. Entering suspension cancels the
+current deadline and active state while retaining the operator's request. A
+request made while suspended emits nothing. Resuming also emits nothing: the
+operator must make a fresh manual cast or turn Fishing off and on after the
+other safety gates permit it. Menu state continues to defer autonomous reel and
+recast deadlines rather than cancelling the requested session.
 
 ### Auto Potion
 
@@ -93,14 +94,8 @@ Key Up and records the attempt time, not a confirmed drink.
 
 ## Known defects and current limits
 
-- [Issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92): queued or
-  running automation is not stopped at every authorization boundary. A weave
-  does not recheck focus, suspension, or menu authorization, and Fishing does
-  not route suspension directly to its controller.
 - [Issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93): Linux uinput
   does not advertise every shipped key mapping.
-- [Issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94): PixelBeacon
-  Update can overwrite unmanaged addon content after removal refuses it.
 - [Issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): some saved
   settings do not apply to running components and the Fishing Interact Key is not
   exposed by Settings.

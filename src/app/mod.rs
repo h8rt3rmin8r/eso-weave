@@ -96,6 +96,7 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
             Some(StopReason::SignalLost) => strings::FISHING_IDLE_SIGNAL_LOST,
             Some(StopReason::GameInactive) => strings::FISHING_IDLE_GAME_INACTIVE,
             Some(StopReason::Unfocused) => strings::FISHING_IDLE_UNFOCUSED,
+            Some(StopReason::Suspended) => strings::FISHING_IDLE_SUSPENDED,
             Some(StopReason::PlayerUnavailable) => strings::FISHING_IDLE_PLAYER_UNAVAILABLE,
             Some(StopReason::WorldUnavailable) => strings::FISHING_IDLE_WORLD_UNAVAILABLE,
             Some(StopReason::TravelPending) => strings::FISHING_IDLE_TRAVEL_PENDING,
@@ -209,6 +210,7 @@ pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> S
             | Some(StopReason::SignalLost)
             | Some(StopReason::GameInactive)
             | Some(StopReason::Unfocused)
+            | Some(StopReason::Suspended)
             | Some(StopReason::PlayerUnavailable) => StatusRole::Warning,
             Some(StopReason::WorldUnavailable | StopReason::TravelPending) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
@@ -232,6 +234,7 @@ pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
         BeaconCondition::InstalledOutdated => {
             ("Installed (outdated)".to_string(), StatusRole::Warning)
         }
+        BeaconCondition::Unmanaged => ("Unmanaged (not modified)".to_string(), StatusRole::Warning),
         BeaconCondition::NotInstalled => ("Not installed".to_string(), StatusRole::Muted),
         BeaconCondition::AddonsNotFound => {
             ("AddOns folder not found".to_string(), StatusRole::Error)
@@ -241,7 +244,11 @@ pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
         title: strings::BEACON_TITLE,
         state_text,
         role,
-        tooltip: strings::BEACON_TOOLTIP,
+        tooltip: if condition == BeaconCondition::Unmanaged {
+            strings::BEACON_UNMANAGED_TOOLTIP
+        } else {
+            strings::BEACON_TOOLTIP
+        },
     }
 }
 
@@ -257,9 +264,8 @@ pub enum BeaconPrimaryAction {
 /// Chooses the next useful addon action without promoting destructive removal.
 pub fn beacon_primary_action(condition: BeaconCondition) -> Option<BeaconPrimaryAction> {
     match condition {
-        BeaconCondition::NotInstalled | BeaconCondition::AddonsNotFound => {
-            Some(BeaconPrimaryAction::Install)
-        }
+        BeaconCondition::NotInstalled => Some(BeaconPrimaryAction::Install),
+        BeaconCondition::AddonsNotFound | BeaconCondition::Unmanaged => None,
         BeaconCondition::InstalledOutdated => Some(BeaconPrimaryAction::Update),
         BeaconCondition::InstalledCurrent => None,
     }
@@ -1216,8 +1222,7 @@ pub enum UiIntent {
     InstallBeacon,
     /// Uninstall the beacon addon (the UI has already confirmed).
     UninstallBeacon,
-    /// Update the beacon addon: uninstall the managed copy then install the
-    /// current one.
+    /// Update the beacon addon in place after rechecking managed ownership.
     UpdateBeacon,
     /// Edit a skill slot.
     EditSkill(u8, SkillEdit),
@@ -1867,7 +1872,19 @@ impl AppModel {
         match intent {
             UiIntent::ToggleSuspend => {
                 let now = self.input.is_suspended();
-                self.input.set_suspended(!now);
+                let suspended = !now;
+                if suspended {
+                    // Close the shared synthesis authority before waiting for
+                    // the controller lock, so no pending interact can race the
+                    // suspension transition.
+                    self.input.set_suspended(true);
+                    self.fishing.lock().unwrap().set_suspended(true);
+                } else {
+                    // Synchronize the controller's no-replay recovery state
+                    // before reopening shared authorization.
+                    self.fishing.lock().unwrap().set_suspended(false);
+                    self.input.set_suspended(false);
+                }
                 self.scheduler.mark_session(Instant::now());
                 Vec::new()
             }
@@ -1894,9 +1911,9 @@ impl AppModel {
                 Vec::new()
             }
             UiIntent::UpdateBeacon => {
-                // A clean reinstall: remove the managed copy (marker-gated, so an
-                // unmanaged folder is never deleted) then install the current one.
-                self.uninstall_beacon();
+                // The guarded installer rechecks ownership at mutation time and
+                // refreshes only a managed copy. Deleting first could lose a
+                // valid installation if replacement then failed.
                 self.install_beacon();
                 Vec::new()
             }
@@ -2111,7 +2128,13 @@ impl AppModel {
         self.api_version = state.api_version;
         self.window = state.window;
         if state.suspended != self.input.is_suspended() {
-            self.input.set_suspended(state.suspended);
+            if state.suspended {
+                self.input.set_suspended(true);
+                self.fishing.lock().unwrap().set_suspended(true);
+            } else {
+                self.fishing.lock().unwrap().set_suspended(false);
+                self.input.set_suspended(false);
+            }
         }
         if state.fishing {
             let now = self.now_ms();

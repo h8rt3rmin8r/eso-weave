@@ -17,8 +17,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    has_managed_marker, parse_api_version_primary, rewrite_api_version, DEFAULT_API_VERSION,
-    DEFAULT_GAME_VERSION, MANIFEST_FILE, SUBFOLDER,
+    has_managed_marker, parse_api_version_primary, rewrite_api_version, status, BeaconStatus,
+    DEFAULT_API_VERSION, DEFAULT_GAME_VERSION, MANIFEST_FILE, SUBFOLDER,
 };
 
 /// A parsed, comparable ESO game client version, held as four numeric components
@@ -140,7 +140,7 @@ pub struct ApiCheckOutcome {
 }
 
 /// Runs the startup version check: resolves the effective numeric API version,
-/// keeps the on-disk manifest current (marker-gated, never downgrading), fetches
+/// keeps the on-disk manifest current (ownership-gated, never downgrading), fetches
 /// the game version for bump detection, and returns the values to persist.
 ///
 /// Never blocks beyond the source timeout and never panics; all filesystem and
@@ -187,10 +187,16 @@ pub fn run_check(
 
 /// Rewrites the on-disk manifest APIVersion line to `effective` when the addon is
 /// installed, the manifest carries the managed marker, and its primary token is
-/// older than `effective`. The managed-marker gate governs the write; an unmanaged
-/// or unreadable manifest is never written, and an equal-or-newer primary is left
-/// untouched (no downgrade, no churn).
+/// older than `effective`. The full ownership classification governs the write;
+/// an unmanaged, linked, or unreadable target is never written, and an
+/// equal-or-newer primary is left untouched (no downgrade, no churn).
 fn update_installed_manifest(addons_root: &Path, effective: u32) {
+    if !matches!(
+        status(addons_root),
+        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch
+    ) {
+        return;
+    }
     let manifest_path = addons_root.join(SUBFOLDER).join(MANIFEST_FILE);
     let existing = match std::fs::read_to_string(&manifest_path) {
         Ok(text) => text,

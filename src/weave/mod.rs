@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Notice, NoticeKind, Settings};
 use crate::input::bindings::BindingTable;
-use crate::input::{Action, InputBackend, InputEngine, Key, MouseButton, Transition, WeaveGates};
+use crate::input::{
+    Action, AuthorizationEpoch, InputBackend, InputEngine, Key, MouseButton, Transition, WeaveGates,
+};
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
     QuickslotState, ResourceSet, RollDodgeState, TravelState, UltimateTelemetry, WeaponBarSignal,
@@ -200,6 +202,8 @@ pub struct RealSink<B> {
     backend: B,
     origin: Instant,
     gates: WeaveGates,
+    admitted_epoch: Option<AuthorizationEpoch>,
+    active_epoch: AuthorizationEpoch,
     sequence_cancelled: bool,
     sequence_emitted: bool,
     pressed_keys: HashSet<Key>,
@@ -209,21 +213,33 @@ pub struct RealSink<B> {
 impl<B: InputBackend> RealSink<B> {
     /// Creates a real sink over the given input backend.
     pub fn new(backend: B, gates: WeaveGates) -> Self {
+        let admitted_epoch = gates.current_epoch();
         Self {
             backend,
             origin: Instant::now(),
             gates,
+            admitted_epoch: None,
+            active_epoch: admitted_epoch,
             sequence_cancelled: false,
             sequence_emitted: false,
             pressed_keys: HashSet::new(),
             pressed_mouse: HashSet::new(),
         }
     }
+
+    /// Associates the next sequence with the request's admission generation.
+    pub fn set_admitted_epoch(&mut self, epoch: AuthorizationEpoch) {
+        self.admitted_epoch = Some(epoch);
+    }
 }
 
 impl<B: InputBackend> WeaveSink for RealSink<B> {
     fn begin_sequence(&mut self) {
-        self.sequence_cancelled = self.gates.is_gated();
+        self.active_epoch = self
+            .admitted_epoch
+            .take()
+            .unwrap_or_else(|| self.gates.current_epoch());
+        self.sequence_cancelled = !self.gates.admits(self.active_epoch);
         self.sequence_emitted = false;
     }
 
@@ -237,7 +253,7 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
         // Once life or roll-dodge evidence closes the gate, start no new input. Releases still
         // run so a key or mouse button pressed before the transition cannot be
         // stranded logically down.
-        if self.gates.is_gated() {
+        if !self.gates.admits(self.active_epoch) {
             self.sequence_cancelled = true;
         }
         if self.sequence_cancelled && transition == Transition::Down {
@@ -276,7 +292,7 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
     fn wait(&mut self, ms: u32) {
         let deadline = Instant::now() + Duration::from_millis(u64::from(ms));
         while !self.sequence_cancelled {
-            if self.gates.is_gated() {
+            if !self.gates.admits(self.active_epoch) {
                 self.sequence_cancelled = true;
                 break;
             }

@@ -30,10 +30,11 @@ Observed numeric zero is different from all four states.
 | World State: **Active** | Player activation published a complete baseline | Required for generated features |
 | World State: **Transitioning** or **Not detected** | Loading or no complete baseline | Generated input is blocked; wait for Active |
 | ESO Weave: **Active** | Application is not suspended | Features may still have other blockers |
-| ESO Weave: **Suspended** | New weave interception and Auto Potion input stop; queued or running weave, Fishing enable/cast, and pending Fishing have known gaps | Resume with `F1` or Running toggle when intended; see issue #92 |
-| PixelBeacon Status: **Not installed** | No readable manifest | Install the bundled addon |
+| ESO Weave: **Suspended** | New weave interception and Auto Potion input stop; queued or running weave is invalidated; Fishing deadlines cancel while its request is retained | Resume with `F1` or Running toggle; Fishing then requires a fresh manual cast or off-on recovery |
+| PixelBeacon Status: **Not installed** | The PixelBeacon target does not exist | Install the bundled addon |
+| PixelBeacon Status: **Unmanaged (not modified)** | A target exists but ownership cannot be proven | No lifecycle action is offered; move or remove only that exact target manually |
 | PixelBeacon Status: **Installed (current)** | Managed version matches | No action |
-| PixelBeacon Status: **Installed (outdated)** | Managed mismatch, or current UI collapsed an unmanaged folder into this text | Update only content known to be managed; see issue #94 |
+| PixelBeacon Status: **Installed (outdated)** | The managed marker exists but the embedded version differs | Update the managed copy in place |
 | PixelBeacon Status: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |

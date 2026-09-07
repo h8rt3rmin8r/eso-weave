@@ -16,8 +16,9 @@ before starting the routine.
 - Face a fishing hole until the interact prompt appears.
 
 Press `F2`, or use the Fishing toggle, to cast and start. Press it again to stop.
-Do not enable Fishing while ESO Weave is suspended: the initial cast and later
-timer actions are not yet suspension-gated. Issue #92 tracks this defect.
+If ESO Weave is suspended, enabling Fishing retains the request but sends no
+cast. Resume also sends nothing. Face the fishing hole and make a fresh manual
+cast, or turn Fishing off and on after resuming, to recover deliberately.
 
 On Linux, the default generated `E` interact key is affected by
 [issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) until the virtual
@@ -36,6 +37,7 @@ input capability list is corrected.
 | Idle (signal lost) | The beacon heartbeat disappeared |
 | Idle (game not active) | ESO exited |
 | Idle (game unfocused) | ESO lost keyboard focus |
+| Idle (suspended) | ESO Weave is suspended; the request is retained but no input is pending |
 | Idle (player unavailable) | Alive is not authoritatively observed |
 | Idle (world unavailable) | World State is loading or Unknown |
 | Idle (travel pending) | A recall or jump is pending or cannot be ruled out |
@@ -48,6 +50,11 @@ cancellation, face the fishing hole and make a fresh manual cast (or toggle
 Fishing off and on) once safe evidence returns. Signal loss clears the request;
 restore the heartbeat and start again. **Idle (no cast detected)** also clears the
 request and requires a new start after checking bait and alignment.
+
+Entering suspension cancels any cast-confirmation, reel, recast, or timeout
+deadline and retains the request. Leaving suspension never emits or restores the
+cancelled action. A fresh manual cast or an off-on Fishing toggle is required
+after the other safety gates permit output.
 
 ## State and safety behavior
 

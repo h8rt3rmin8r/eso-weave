@@ -1038,9 +1038,9 @@ test("S059 rejects missing substantive anchors and incomplete page dimensions", 
   assert.match(validateContentCoverage(omittedSearch, virtualCoverage(omittedSearch)).join("\n"), /every contracted canonical term/);
 });
 
-test("S059 requires deferred issues 92 through 96 and truthful dispositions", async () => {
+test("S060 retains only unresolved deferred issues and truthful dispositions", async () => {
   const manifest = await contentCoverage();
-  for (const issue of [92, 93, 94, 95, 96]) {
+  for (const issue of [93, 95, 96]) {
     assert.ok(manifest.obligations.some((row) => row.coverage === "Deferred" && row.follow_up?.issue === issue));
   }
   const broken = structuredClone(manifest);

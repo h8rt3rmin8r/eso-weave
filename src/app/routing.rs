@@ -20,7 +20,13 @@ pub fn route_reader_safety_gate(event: PixelBusEvent, input: &InputEngine) {
         PixelBusEvent::RollDodge(roll_dodge) if roll_dodge.gates() => input.set_roll_gated(true),
         PixelBusEvent::World(world) if world.gates() => input.set_world_gated(true),
         PixelBusEvent::Travel(travel) if travel.gates() => input.set_travel_gated(true),
+        PixelBusEvent::MenuGate(surface)
+            if surface.is_none_or(crate::pixelbus::MenuSurface::gates) =>
+        {
+            input.set_menu_gated(true);
+        }
         PixelBusEvent::SignalLost => {
+            input.set_menu_gated(true);
             input.set_life_gated(true);
             input.set_roll_gated(true);
             input.set_world_gated(true);

@@ -46,10 +46,13 @@ These seams make negative properties reviewable:
 | Recursion rejection | `Origin::SelfOriginated` | `self_originated_event_is_never_intercepted` |
 | Non-blocking overload | `InputEngine::hand_off` | `full_channel_drops_without_blocking` |
 | Mid-sequence cancellation | `RealSink::emit`, `RealSink::wait` | `real_sink_observes_roll_gate_closure_during_a_wait` |
+| Runtime authorization epoch | `InputEngine::authorization_epoch`, `WeaveGates::admits`, focus, suspension, and menu setters | `s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes`, `s060_transient_suspend_closure_cancels_an_admitted_sequence`, `s060_focus_closure_stops_new_presses_but_releases_held_output` |
 | Recovery ordering | `route_reader_safety_gate`, `route_reader_event` | `safety_preroute_defers_recovery_until_worker_state_is_synchronized` |
 | Fishing signal loss | `FishingController::on_event` | `signal_lost_from_every_active_state_disables_without_emitting` |
 | Auto Potion first blocker | `potion::evaluate` | `s043_effective_state_distinguishes_ready_triggered_and_every_runtime_family` |
 | Managed removal | `beacon::uninstall` | `uninstall_refuses_unmanaged_folder` |
+| Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | `s060_install_refuses_unproven_targets_without_mutation`, `s060_api_refresh_does_not_write_an_unmanaged_manifest`, `s060_lifecycle_operations_do_not_follow_an_unproven_link` |
+| Fishing suspension | `FishingController::set_suspended` | `s060_suspension_refuses_initial_cast_and_preserves_request`, `s060_suspension_cancels_pending_reel_without_replay`, `s060_suspension_cancels_recast_and_timeout_paths` |
 | Protocol compatibility | `decode_layout_header` | `recognized_header_corruption_never_falls_back_to_legacy` |
 
 ## Platform coverage
@@ -66,15 +69,9 @@ must never be described as live-game verification.
 
 ## Known coverage gaps
 
-- [Issue #92](https://github.com/h8rt3rmin8r/eso-weave/issues/92) requires tests
-  for focus, suspension, and menu closure during queued or running weaving, plus
-  suspension during pending Fishing output.
 - [Issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) requires a
   contract proving every supported Linux mapping and shipped default is
   advertised to uinput.
-- [Issue #94](https://github.com/h8rt3rmin8r/eso-weave/issues/94) requires an
-  end-to-end lifecycle matrix proving unmanaged addon content cannot be
-  overwritten.
 - [Issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) requires
   application-timing tests for Fishing and PixelBus settings and the Interact Key
   surface decision.
@@ -102,4 +99,3 @@ cargo test --all --locked
 
 The release-note shell contract also runs in Linux CI. A missing local tool is a
 recorded limitation, not a substitute for its hosted check.
-

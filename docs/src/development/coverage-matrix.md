@@ -11,8 +11,8 @@ the evidence reviewed for S059.
 | --- | --- | --- | --- |
 | LOG-001 through LOG-005 | [Input Safety](../concepts/input-safety.md) | `InputEngine::classify`, `InputEngine::hand_off`, `TrySendError` | `unfocused_never_intercepts`, `self_originated_event_is_never_intercepted`, `auto_repeat_down_hands_off_only_once`, `full_channel_drops_without_blocking` |
 | LOG-006, LOG-007, LOG-015 | [Action Authorization](../concepts/action-authorization.md) | `Action::suspend_exempt`, `route_reader_event`, controller routing | `the_gate_exempts_the_toggle_hotkeys`, `menu_event_only_on_change_and_clears_on_loss`, feature authorization tests |
-| LOG-008, LOG-009 | [Weaving](../features/weaving.md) | `WeaveEngine::handle`, `RealSink::emit`, `RealSink::wait` | `queued_weave_requires_safe_world_and_inactive_travel_without_replay`, `real_sink_observes_roll_gate_closure_during_a_wait`, `a_gate_cancelled_sequence_does_not_consume_global_cooldown` |
-| LOG-010 through LOG-012 | [Fishing](../features/fishing.md) | `FishingController::on_event`, `tick`, `set_game_environment`, `block_for_safety` | `cast_reel_recast_cycle`, menu-deferral tests, `signal_loss_while_focus_paused_applies_the_existing_reset_policy` |
+| LOG-008, LOG-009 | [Weaving](../features/weaving.md) | `AuthorizationEpoch`, `InputEngine::authorization_epoch`, `WeaveEngine::handle`, `RealSink::emit`, `RealSink::wait` | `s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes`, `s060_transient_suspend_closure_cancels_an_admitted_sequence`, `s060_focus_closure_stops_new_presses_but_releases_held_output`, shared safety-gate tests |
+| LOG-010 through LOG-012 | [Fishing](../features/fishing.md) | `FishingController::set_suspended`, `set_enabled`, `on_event`, `tick`, `set_game_environment`, `block_for_safety` | `s060_suspension_refuses_initial_cast_and_preserves_request`, `s060_suspension_cancels_pending_reel_without_replay`, `s060_suspension_cancels_recast_and_timeout_paths`, menu-deferral and signal-loss tests |
 | LOG-013, LOG-014 | [Auto Potion](../features/auto-potion.md) | `potion::evaluate`, `low_resource`, `AutoPotionController::tick` | `s043_effective_state_distinguishes_ready_triggered_and_every_runtime_family`, threshold and retry tests |
 | LOG-016 through LOG-019 | [Game Observation and Safety State](../concepts/game-observation.md) | `ProcessObservation::runtime`, `GameObservations::context`, addon state handlers | game-state reduction and context tests, embedded addon contract tests |
 
@@ -25,7 +25,7 @@ together.
 | IDs | Canonical page | Evidence boundary |
 | --- | --- | --- |
 | LOG-020 through LOG-023 | [Pixel Bus Protocol](../reference/pixel-bus-protocol.md) | Layout decoding, B0 through B28 payload decoding, signal loss, invalidation, and recovery republication |
-| LOG-024, LOG-025 | [PixelBeacon](../features/pixelbeacon.md) | Managed addon lifecycle and bounded API-version upkeep |
+| LOG-024, LOG-025 | [PixelBeacon](../features/pixelbeacon.md) | `BeaconStatus::Unmanaged`, ownership-gated lifecycle writers, managed in-place update, and bounded API-version upkeep; `s060_install_refuses_unproven_targets_without_mutation`, `s060_api_refresh_does_not_write_an_unmanaged_manifest`, `s060_lifecycle_operations_do_not_follow_an_unproven_link`, and App Model action tests |
 | CFG-001 through CFG-005 | [Configuration](../reference/configuration.md) | Settings and state ownership, migration, write scheduling, and geometry restoration |
 | CFG-006, CFG-007 | [Logging](../reference/logging.md) | Global capture level, Live Log projection, ring eviction, files, and sink failure |
 | PLT-001, PLT-002 | [Scope and Platform Support](../concepts/scope-and-platform.md) | Windows, X11, XWayland, and pure Wayland capability boundaries |
@@ -41,9 +41,7 @@ not claim that implementation work is complete.
 
 | Issue | Current discrepancy | Documentation treatment |
 | --- | --- | --- |
-| [#92](https://github.com/h8rt3rmin8r/eso-weave/issues/92) | Queued automation is not stopped at every authorization boundary. Running weave omits focus, suspension, and menu gates; Fishing does not route suspension to its initial cast or pending timers. | Marked as a known defect in Action Authorization, Input Safety, State Machines, Architecture, and Test Strategy. |
 | [#93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) | Linux uinput capabilities omit shipped `E` and `F3` mappings. | Linux parity is qualified in Scope and Platform Support and Test Strategy. |
-| [#94](https://github.com/h8rt3rmin8r/eso-weave/issues/94) | PixelBeacon Update can overwrite unmanaged addon content after removal refuses it. | The managed-marker boundary and current defect are identified without promising a fix. |
 | [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) | Some saved settings do not apply live, and Fishing Interact Key is not exposed in Settings. | Runtime application and configuration limits are identified on their canonical pages. |
 | [#96](https://github.com/h8rt3rmin8r/eso-weave/issues/96) | Shipped latency help, Live Log prose, and menu-evidence comments contain stale descriptions. | Published behavior follows current implementation and labels the stale shipped text as a defect. |
 

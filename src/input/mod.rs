@@ -21,7 +21,7 @@ pub use windows::WindowsBackend;
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{sync_channel, Receiver, RecvError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
 
 use crate::config::{Notice, Settings};
@@ -36,21 +36,49 @@ pub use key::Key;
 /// weave sink reads it between timed operations. That separation prevents a
 /// running weave from delaying authoritative death evidence.
 #[derive(Debug, Clone)]
-struct AtomicGate(Arc<AtomicBool>);
+struct AtomicGate {
+    gated: Arc<AtomicBool>,
+    weave_epoch: Option<Arc<AtomicU64>>,
+    fishing_epoch: Option<Arc<AtomicU64>>,
+}
 
 impl Default for AtomicGate {
     fn default() -> Self {
-        Self(Arc::new(AtomicBool::new(true)))
+        Self {
+            gated: Arc::new(AtomicBool::new(true)),
+            weave_epoch: None,
+            fishing_epoch: None,
+        }
     }
 }
 
 impl AtomicGate {
+    fn new(
+        gated: bool,
+        weave_epoch: Option<Arc<AtomicU64>>,
+        fishing_epoch: Option<Arc<AtomicU64>>,
+    ) -> Self {
+        Self {
+            gated: Arc::new(AtomicBool::new(gated)),
+            weave_epoch,
+            fishing_epoch,
+        }
+    }
+
     fn set(&self, gated: bool) {
-        self.0.store(gated, Ordering::Relaxed);
+        let was_gated = self.gated.swap(gated, Ordering::AcqRel);
+        if gated && !was_gated {
+            if let Some(epoch) = &self.weave_epoch {
+                epoch.fetch_add(1, Ordering::AcqRel);
+            }
+            if let Some(epoch) = &self.fishing_epoch {
+                epoch.fetch_add(1, Ordering::AcqRel);
+            }
+        }
     }
 
     fn is_gated(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
+        self.gated.load(Ordering::Acquire)
     }
 }
 
@@ -111,21 +139,84 @@ impl WorldTravelGate {
 /// The independently updated safety gates observed by a running weave sequence.
 #[derive(Debug, Clone)]
 pub struct WeaveGates {
+    game: AtomicGate,
+    focus: AtomicGate,
+    suspension: AtomicGate,
+    menu: AtomicGate,
     life: LifeGate,
     roll: RollGate,
     world: AtomicGate,
     travel: AtomicGate,
+    epoch: Arc<AtomicU64>,
 }
 
 impl WeaveGates {
     /// Whether any safety authority currently blocks generated weave work.
     pub fn is_gated(&self) -> bool {
-        self.life.is_gated()
+        self.game.is_gated()
+            || self.focus.is_gated()
+            || self.suspension.is_gated()
+            || self.menu.is_gated()
+            || self.life.is_gated()
             || self.roll.is_gated()
             || self.world.is_gated()
             || self.travel.is_gated()
     }
+
+    /// Captures the current weave authorization generation.
+    pub fn current_epoch(&self) -> AuthorizationEpoch {
+        AuthorizationEpoch(self.epoch.load(Ordering::Acquire))
+    }
+
+    /// Whether a request admitted in `epoch` remains safe to synthesize.
+    pub fn admits(&self, epoch: AuthorizationEpoch) -> bool {
+        !self.is_gated() && self.current_epoch() == epoch
+    }
 }
+
+/// An opaque generation captured when a weave request is admitted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthorizationEpoch(u64);
+
+/// The applicable runtime gates for Fishing synthesis.
+#[derive(Debug, Clone)]
+pub struct FishingGates {
+    game: AtomicGate,
+    focus: AtomicGate,
+    suspension: AtomicGate,
+    menu: AtomicGate,
+    life: LifeGate,
+    world: AtomicGate,
+    travel: AtomicGate,
+    epoch: Arc<AtomicU64>,
+}
+
+impl FishingGates {
+    /// Whether an applicable authority currently blocks Fishing synthesis.
+    pub fn is_gated(&self) -> bool {
+        self.game.is_gated()
+            || self.focus.is_gated()
+            || self.suspension.is_gated()
+            || self.menu.is_gated()
+            || self.life.is_gated()
+            || self.world.is_gated()
+            || self.travel.is_gated()
+    }
+
+    /// Captures the current Fishing authorization generation.
+    pub fn current_epoch(&self) -> FishingAuthorizationEpoch {
+        FishingAuthorizationEpoch(self.epoch.load(Ordering::Acquire))
+    }
+
+    /// Whether Fishing work admitted in `epoch` remains safe to synthesize.
+    pub fn admits(&self, epoch: FishingAuthorizationEpoch) -> bool {
+        !self.is_gated() && self.current_epoch() == epoch
+    }
+}
+
+/// An opaque generation captured when Fishing work is admitted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FishingAuthorizationEpoch(u64);
 
 /// Whether a key event is a press or a release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,8 +276,49 @@ pub enum InputError {
     Synth(String),
 }
 
+/// An action plus the authorization generation under which it was admitted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QueuedAction {
+    action: Action,
+    authorization_epoch: AuthorizationEpoch,
+}
+
+impl QueuedAction {
+    /// The requested application or weave action.
+    pub fn action(self) -> Action {
+        self.action
+    }
+
+    /// The weave authorization generation captured during interception.
+    pub fn authorization_epoch(self) -> AuthorizationEpoch {
+        self.authorization_epoch
+    }
+}
+
 /// The receiving half of the hand-off channel, drained by the worker.
-pub type ActionReceiver = Receiver<Action>;
+pub struct ActionReceiver(Receiver<QueuedAction>);
+
+impl ActionReceiver {
+    /// Receives an action while preserving the legacy action-only interface.
+    pub fn recv(&self) -> Result<Action, RecvError> {
+        self.0.recv().map(QueuedAction::action)
+    }
+
+    /// Tries to receive an action while preserving the legacy action-only interface.
+    pub fn try_recv(&self) -> Result<Action, TryRecvError> {
+        self.0.try_recv().map(QueuedAction::action)
+    }
+
+    /// Receives an action with its captured authorization generation.
+    pub fn recv_authorized(&self) -> Result<QueuedAction, RecvError> {
+        self.0.recv()
+    }
+
+    /// Tries to receive an action with its captured authorization generation.
+    pub fn try_recv_authorized(&self) -> Result<QueuedAction, TryRecvError> {
+        self.0.try_recv()
+    }
+}
 
 /// The platform-agnostic engine core: holds bindings and state and makes the
 /// safety-critical classification decision for each key event.
@@ -196,15 +328,21 @@ pub struct InputEngine {
     game_active: AtomicBool,
     suspended: AtomicBool,
     menu_gated: AtomicBool,
+    game_gate: AtomicGate,
+    focus_gate: AtomicGate,
+    suspension_gate: AtomicGate,
+    menu_gate: AtomicGate,
     life_gate: LifeGate,
     roll_gate: RollGate,
     world_gate: AtomicGate,
     travel_gate: AtomicGate,
+    weave_authorization_epoch: Arc<AtomicU64>,
+    fishing_authorization_epoch: Arc<AtomicU64>,
     safety_refresh_generation: AtomicU64,
     held: Mutex<HashSet<Key>>,
     passed_through: Mutex<HashSet<Key>>,
     active: Mutex<HashSet<Action>>,
-    tx: SyncSender<Action>,
+    tx: SyncSender<QueuedAction>,
 }
 
 impl InputEngine {
@@ -212,28 +350,49 @@ impl InputEngine {
     /// returning the engine and the receiver the worker drains.
     pub fn new(bindings: BindingTable, channel_capacity: usize) -> (InputEngine, ActionReceiver) {
         let (tx, rx) = sync_channel(channel_capacity);
+        let weave_epoch = Arc::new(AtomicU64::new(0));
+        let fishing_epoch = Arc::new(AtomicU64::new(0));
+        let shared_gate = |gated| {
+            AtomicGate::new(
+                gated,
+                Some(Arc::clone(&weave_epoch)),
+                Some(Arc::clone(&fishing_epoch)),
+            )
+        };
         let engine = InputEngine {
             bindings: Mutex::new(bindings),
             focused: AtomicBool::new(false),
             game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
             menu_gated: AtomicBool::new(false),
-            life_gate: LifeGate::default(),
-            roll_gate: RollGate::default(),
-            world_gate: AtomicGate::default(),
-            travel_gate: AtomicGate::default(),
+            game_gate: shared_gate(true),
+            focus_gate: shared_gate(true),
+            suspension_gate: shared_gate(false),
+            menu_gate: shared_gate(false),
+            life_gate: LifeGate(shared_gate(true)),
+            roll_gate: RollGate(AtomicGate::new(true, Some(Arc::clone(&weave_epoch)), None)),
+            world_gate: shared_gate(true),
+            travel_gate: shared_gate(true),
+            weave_authorization_epoch: weave_epoch,
+            fishing_authorization_epoch: fishing_epoch,
             safety_refresh_generation: AtomicU64::new(0),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
             tx,
         };
-        (engine, rx)
+        (engine, ActionReceiver(rx))
     }
 
     /// Sets whether the game window holds keyboard focus.
     pub fn set_focused(&self, focused: bool) {
-        self.focused.store(focused, Ordering::Relaxed);
+        if focused {
+            self.focused.store(true, Ordering::Release);
+            self.focus_gate.set(false);
+        } else {
+            self.focus_gate.set(true);
+            self.focused.store(false, Ordering::Release);
+        }
         if !focused {
             self.held.lock().unwrap().clear();
         }
@@ -242,9 +401,16 @@ impl InputEngine {
     /// Sets whether the ESO client is currently present. Inactive is the safe
     /// startup value, so process detection must positively enable interception.
     pub fn set_game_active(&self, active: bool) {
-        self.game_active.store(active, Ordering::Relaxed);
+        if active {
+            self.game_active.store(true, Ordering::Release);
+            self.game_gate.set(false);
+        } else {
+            self.game_gate.set(true);
+            self.game_active.store(false, Ordering::Release);
+        }
         if !active {
             self.menu_gated.store(false, Ordering::Relaxed);
+            self.menu_gate.set(false);
             self.life_gate.set(true);
             self.roll_gate.set(true);
             self.world_gate.set(true);
@@ -268,11 +434,18 @@ impl InputEngine {
             self.world_gate.set(true);
             self.travel_gate.set(true);
             self.suspended.store(false, Ordering::Release);
+            self.suspension_gate.set(false);
             self.safety_refresh_generation
                 .fetch_add(1, Ordering::Release);
             return;
         }
-        self.suspended.store(suspended, Ordering::Release);
+        if suspended {
+            self.suspension_gate.set(true);
+            self.suspended.store(true, Ordering::Release);
+        } else {
+            self.suspended.store(false, Ordering::Release);
+            self.suspension_gate.set(false);
+        }
     }
 
     /// Whether the engine is suspended.
@@ -298,7 +471,13 @@ impl InputEngine {
     /// publish the signal, a sample that does not decode, a lost beacon signal)
     /// leaves it there, so the gate can never fail closed.
     pub fn set_menu_gated(&self, gated: bool) {
-        self.menu_gated.store(gated, Ordering::Relaxed);
+        if gated {
+            self.menu_gate.set(true);
+            self.menu_gated.store(true, Ordering::Release);
+        } else {
+            self.menu_gated.store(false, Ordering::Release);
+            self.menu_gate.set(false);
+        }
     }
 
     /// Whether a native game UI surface is currently gating input.
@@ -363,11 +542,35 @@ impl InputEngine {
     /// Shared safety handles for the running weave sink.
     pub fn weave_gates(&self) -> WeaveGates {
         WeaveGates {
+            game: self.game_gate.clone(),
+            focus: self.focus_gate.clone(),
+            suspension: self.suspension_gate.clone(),
+            menu: self.menu_gate.clone(),
             life: self.life_gate.clone(),
             roll: self.roll_gate.clone(),
             world: self.world_gate.clone(),
             travel: self.travel_gate.clone(),
+            epoch: Arc::clone(&self.weave_authorization_epoch),
         }
+    }
+
+    /// Shared runtime authorization for Fishing synthesis.
+    pub fn fishing_gates(&self) -> FishingGates {
+        FishingGates {
+            game: self.game_gate.clone(),
+            focus: self.focus_gate.clone(),
+            suspension: self.suspension_gate.clone(),
+            menu: self.menu_gate.clone(),
+            life: self.life_gate.clone(),
+            world: self.world_gate.clone(),
+            travel: self.travel_gate.clone(),
+            epoch: Arc::clone(&self.fishing_authorization_epoch),
+        }
+    }
+
+    /// Captures the current weave authorization generation.
+    pub fn authorization_epoch(&self) -> AuthorizationEpoch {
+        AuthorizationEpoch(self.weave_authorization_epoch.load(Ordering::Acquire))
     }
 
     /// Shared pre-lock world and travel authorities for autonomous controllers.
@@ -397,6 +600,7 @@ impl InputEngine {
         if event.origin == Origin::SelfOriginated {
             return Decision::Pass;
         }
+        let authorization_epoch = self.authorization_epoch();
         // A release must retire physical held-key state even when a lifecycle or
         // focus transition makes the event pass through. Otherwise the first
         // press after ESO returns can be mistaken for auto-repeat and suppressed
@@ -446,9 +650,12 @@ impl InputEngine {
 
         match event.transition {
             Transition::Down => {
+                if !suspend_exempt && self.authorization_epoch() != authorization_epoch {
+                    return self.pass_physical(event);
+                }
                 let newly_pressed = self.held.lock().unwrap().insert(event.key);
                 if newly_pressed {
-                    self.hand_off(action);
+                    self.hand_off(action, authorization_epoch);
                 }
             }
             Transition::Up => {
@@ -466,8 +673,12 @@ impl InputEngine {
         Decision::Pass
     }
 
-    fn hand_off(&self, action: Action) {
-        match self.tx.try_send(action) {
+    fn hand_off(&self, action: Action, authorization_epoch: AuthorizationEpoch) {
+        let queued = QueuedAction {
+            action,
+            authorization_epoch,
+        };
+        match self.tx.try_send(queued) {
             Ok(()) => {}
             Err(TrySendError::Full(_)) => {
                 tracing::warn!(

@@ -16,7 +16,10 @@ pub use detector::{map_event, BiteDetector, PixelBusDetector, StubDetector};
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
-use crate::input::{InputBackend, Key, LifeGate, Transition, WorldTravelGate};
+use crate::input::{
+    FishingAuthorizationEpoch, FishingGates, InputBackend, Key, LifeGate, Transition,
+    WorldTravelGate,
+};
 use crate::pixelbus::{LifeState, TravelState, WorldState};
 
 /// The maximum accepted value for a fishing timing parameter, in milliseconds.
@@ -68,6 +71,8 @@ pub enum StopReason {
     GameInactive,
     /// The ESO client lost keyboard focus while a session was active.
     Unfocused,
+    /// ESO Weave was suspended while fishing was requested.
+    Suspended,
     /// The player is dead, reincarnating, or not authoritatively known alive.
     PlayerUnavailable,
     /// The world is loading or has no authoritative active baseline.
@@ -204,8 +209,11 @@ fn checked(value: Option<u32>, default: u32, name: &str, notices: &mut Vec<Notic
 
 /// The seam through which the controller synthesizes the interact key.
 pub trait FishingSink {
-    /// Synthesizes one key transition (a press or a release) of the given key.
-    fn key(&mut self, key: Key, transition: Transition);
+    /// Captures authorization for the next scheduled interact.
+    fn arm_authorization(&mut self) {}
+
+    /// Synthesizes one complete interact and reports whether it was admitted.
+    fn interact(&mut self, key: Key) -> bool;
 }
 
 /// A test sink that records each emitted key transition in order.
@@ -228,28 +236,54 @@ impl MockFishingSink {
 }
 
 impl FishingSink for MockFishingSink {
-    fn key(&mut self, key: Key, transition: Transition) {
-        self.ops.push((key, transition));
+    fn interact(&mut self, key: Key) -> bool {
+        self.ops.push((key, Transition::Down));
+        self.ops.push((key, Transition::Up));
+        true
     }
 }
 
 /// A real sink that drives the input engine's synthesis. Never panics or blocks.
 pub struct RealFishingSink<B> {
     backend: B,
+    gates: FishingGates,
+    admitted_epoch: Option<FishingAuthorizationEpoch>,
 }
 
 impl<B: InputBackend> RealFishingSink<B> {
     /// Creates a real sink over the given input backend.
-    pub fn new(backend: B) -> Self {
-        Self { backend }
+    pub fn new(backend: B, gates: FishingGates) -> Self {
+        Self {
+            backend,
+            gates,
+            admitted_epoch: None,
+        }
     }
 }
 
 impl<B: InputBackend> FishingSink for RealFishingSink<B> {
-    fn key(&mut self, key: Key, transition: Transition) {
-        if let Err(err) = self.backend.synthesize(key, transition) {
-            tracing::warn!(target: "eso_weave::fishing", "interact synthesis failed: {err}");
+    fn arm_authorization(&mut self) {
+        self.admitted_epoch = Some(self.gates.current_epoch());
+    }
+
+    fn interact(&mut self, key: Key) -> bool {
+        let epoch = self
+            .admitted_epoch
+            .take()
+            .unwrap_or_else(|| self.gates.current_epoch());
+        if !self.gates.admits(epoch) {
+            return false;
         }
+        if let Err(err) = self.backend.synthesize(key, Transition::Down) {
+            tracing::warn!(target: "eso_weave::fishing", "interact synthesis failed: {err}");
+            return false;
+        }
+        // A successful press always gets its release, even if a gate closes in
+        // between, so cancellation cannot strand a generated key logically down.
+        if let Err(err) = self.backend.synthesize(key, Transition::Up) {
+            tracing::warn!(target: "eso_weave::fishing", "interact release failed: {err}");
+        }
+        true
     }
 }
 
@@ -261,6 +295,7 @@ pub struct FishingController {
     deadline: Option<(u64, TimerKind)>,
     stop_reason: Option<StopReason>,
     gated: bool,
+    suspended: bool,
     game_active: bool,
     focused: bool,
     life: LifeState,
@@ -290,6 +325,7 @@ impl FishingController {
             deadline: None,
             stop_reason: None,
             gated: false,
+            suspended: false,
             game_active: false,
             focused: false,
             life: LifeState::Unknown,
@@ -354,6 +390,7 @@ impl FishingController {
                     return;
                 }
                 tracing::debug!(target: "eso_weave::fishing", "fishing enabled");
+                sink.arm_authorization();
                 self.cast(now_ms, sink);
             }
         } else {
@@ -389,6 +426,7 @@ impl FishingController {
                     && self.state == FishingState::Disabled
                     && self.game_active
                     && self.focused
+                    && !self.gated
                     && !self.life_gate.is_gated()
                     && !self.world.gates()
                     && !self.travel.gates()
@@ -416,6 +454,7 @@ impl FishingController {
                         self.config.reel_delay_ms
                     );
                     self.state = FishingState::Reeling;
+                    sink.arm_authorization();
                     self.deadline = Some((
                         now_ms + u64::from(self.config.reel_delay_ms),
                         TimerKind::ReelDue,
@@ -432,6 +471,7 @@ impl FishingController {
                         target: "eso_weave::fishing",
                         "cast ended without a resolved bite; recasting"
                     );
+                    sink.arm_authorization();
                     self.cast(now_ms, sink);
                 }
             }
@@ -467,29 +507,39 @@ impl FishingController {
                 self.disable(StopReason::NoCastDetected);
             }
             TimerKind::ReelDue => {
-                tracing::debug!(
-                    target: "eso_weave::fishing",
-                    "reel interact sent; recast in {} ms",
-                    self.config.recast_delay_ms
-                );
-                self.send_interact(sink);
-                self.state = FishingState::Recast;
-                self.deadline = Some((
-                    now_ms + u64::from(self.config.recast_delay_ms),
-                    TimerKind::RecastDue,
-                ));
+                if self.send_interact(sink) {
+                    tracing::debug!(
+                        target: "eso_weave::fishing",
+                        "reel interact sent; recast in {} ms",
+                        self.config.recast_delay_ms
+                    );
+                    self.state = FishingState::Recast;
+                    sink.arm_authorization();
+                    self.deadline = Some((
+                        now_ms + u64::from(self.config.recast_delay_ms),
+                        TimerKind::RecastDue,
+                    ));
+                } else {
+                    sink.arm_authorization();
+                    self.deadline = Some((now_ms + GATE_DEFER_MS, TimerKind::ReelDue));
+                }
             }
             TimerKind::RecastDue => {
-                tracing::debug!(
-                    target: "eso_weave::fishing",
-                    "recast interact sent; awaiting cast confirmation for {} ms",
-                    self.config.arm_timeout_ms
-                );
-                self.send_interact(sink);
-                self.deadline = Some((
-                    now_ms + u64::from(self.config.arm_timeout_ms),
-                    TimerKind::RecastArmTimeout,
-                ));
+                if self.send_interact(sink) {
+                    tracing::debug!(
+                        target: "eso_weave::fishing",
+                        "recast interact sent; awaiting cast confirmation for {} ms",
+                        self.config.arm_timeout_ms
+                    );
+                    sink.arm_authorization();
+                    self.deadline = Some((
+                        now_ms + u64::from(self.config.arm_timeout_ms),
+                        TimerKind::RecastArmTimeout,
+                    ));
+                } else {
+                    sink.arm_authorization();
+                    self.deadline = Some((now_ms + GATE_DEFER_MS, TimerKind::RecastDue));
+                }
             }
             TimerKind::RecastArmTimeout => {
                 tracing::debug!(
@@ -514,6 +564,18 @@ impl FishingController {
     /// before this gate existed.
     pub fn set_gated(&mut self, gated: bool) {
         self.gated = gated;
+    }
+
+    /// Applies the application suspension gate.
+    ///
+    /// Suspending cancels active work and its deadline while preserving the
+    /// operator's requested setting. Resuming emits nothing; a fresh manual
+    /// cast observation or an explicit off-then-on request is required.
+    pub fn set_suspended(&mut self, suspended: bool) {
+        self.suspended = suspended;
+        if suspended {
+            self.block_for_safety();
+        }
     }
 
     /// Applies the authoritative life-state gate.
@@ -566,6 +628,7 @@ impl FishingController {
             }
         } else if self.requested_enabled
             && self.state == FishingState::Disabled
+            && !self.suspended
             && !self.life_gate.is_gated()
             && !self.world.gates()
             && !self.travel.gates()
@@ -575,6 +638,7 @@ impl FishingController {
             )
         {
             tracing::debug!(target: "eso_weave::fishing", "fishing resumed after game context returned");
+            sink.arm_authorization();
             self.cast(now_ms, sink);
         }
     }
@@ -594,18 +658,19 @@ impl FishingController {
         if self.block_for_safety() {
             return;
         }
-        tracing::debug!(
-            target: "eso_weave::fishing",
-            "cast interact sent; armed with a {} ms cast-confirmation window",
-            self.config.arm_timeout_ms
-        );
-        self.stop_reason = None;
-        self.send_interact(sink);
-        self.state = FishingState::Armed;
-        self.deadline = Some((
-            now_ms + u64::from(self.config.arm_timeout_ms),
-            TimerKind::ArmTimeout,
-        ));
+        if self.send_interact(sink) {
+            tracing::debug!(
+                target: "eso_weave::fishing",
+                "cast interact sent; armed with a {} ms cast-confirmation window",
+                self.config.arm_timeout_ms
+            );
+            self.stop_reason = None;
+            self.state = FishingState::Armed;
+            self.deadline = Some((
+                now_ms + u64::from(self.config.arm_timeout_ms),
+                TimerKind::ArmTimeout,
+            ));
+        }
     }
 
     /// Returns to Disabled, clears any pending deadline, and records why; emits
@@ -626,7 +691,9 @@ impl FishingController {
             .world_travel_gate
             .as_ref()
             .is_some_and(WorldTravelGate::travel_is_gated);
-        let reason = if self.life_gate.is_gated() {
+        let reason = if self.suspended {
+            Some(StopReason::Suspended)
+        } else if self.life_gate.is_gated() {
             Some(StopReason::PlayerUnavailable)
         } else if shared_world_gated || self.world.gates() {
             Some(StopReason::WorldUnavailable)
@@ -650,8 +717,7 @@ impl FishingController {
     }
 
     /// Emits one interact: a key press followed by a key release.
-    fn send_interact(&self, sink: &mut dyn FishingSink) {
-        sink.key(self.config.interact_key, Transition::Down);
-        sink.key(self.config.interact_key, Transition::Up);
+    fn send_interact(&self, sink: &mut dyn FishingSink) -> bool {
+        sink.interact(self.config.interact_key)
     }
 }

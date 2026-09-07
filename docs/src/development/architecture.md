@@ -8,13 +8,13 @@ test seams. Platform modules contain operating-system calls.
 
 | Subsystem | Owns | Does not own |
 | --- | --- | --- |
-| Input Engine | Focus-scoped physical-event decisions, bindings, held-key bookkeeping, suspension, shared synthesis gates, non-blocking handoff | Timed sequences and controller state |
+| Input Engine | Focus-scoped physical-event decisions, bindings, held-key bookkeeping, suspension, authorization epochs, shared synthesis gates, non-blocking handoff | Timed sequences and controller state |
 | Game Observer | Installation candidates, process and launcher presence, focus, freshness, surface, and normalized Game Context | Pixel decoding and feature decisions |
 | Weave Engine | Skill configuration, current timing, Global Cooldown, action sequences, and observable combat data | Physical hook callback and autonomous feature timers |
 | Fishing Controller | Requested fishing state, detector events, deadlines, stop reasons, and Interact output | Pixel capture and hook decisions |
 | Auto Potion Controller | Requested state, ordered eligibility rule, last attempt, and Quickslot output | Resource decoding and potion selection |
 | Pixel Bus Reader | Layout negotiation, one-frame sampling, decoding, change detection, freshness, invalidation, and display description | User feature policy |
-| Beacon Manager | AddOns discovery, embedded install files, status, managed removal, block-size redeploy, and API-version upkeep | ESO runtime loading of the addon |
+| Beacon Manager | AddOns discovery, ownership classification, embedded install files, managed in-place update and removal, block-size redeploy, and API-version upkeep | ESO runtime loading of the addon |
 | Config and Session State | Separate user settings and derived runtime stores, notices, and serialization | Module-specific validation semantics |
 | Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | Live Log presentation filter |
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
@@ -40,6 +40,9 @@ Five ownership contracts are load-bearing:
    intent path.
 4. Pixel-bus and interface deadlines use one monotonic clock origin.
 5. Network version checking runs once in the background and never blocks startup.
+6. Closing focus, suspension, or menu authorization advances an epoch observed by
+   queued and running weave work; a stale epoch cannot resume after recovery.
+7. Every PixelBeacon writer rechecks managed ownership at its write boundary.
 
 Platform and hardware boundaries are represented by traits so engine, controller,
 and decoder behavior can be tested with deterministic mocks.
@@ -91,14 +94,8 @@ deadline.
 These issues describe shipped behavior. They are not fixed by this documentation
 slice:
 
-- [#92](https://github.com/h8rt3rmin8r/eso-weave/issues/92): queued automation
-  does not observe every authorization gate. Running weaving lacks focus,
-  suspension, and menu gates, and Fishing lacks direct suspension gating.
 - [#93](https://github.com/h8rt3rmin8r/eso-weave/issues/93): the Linux uinput
   capability list omits two shipped mapped keys.
-- [#94](https://github.com/h8rt3rmin8r/eso-weave/issues/94): the App Model update
-  route can continue to install after managed removal refuses an unmanaged
-  PixelBeacon directory.
 - [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): saved Fishing and
   PixelBus settings are not propagated to their running owners, and the modal
   does not expose the Fishing Interact Key.

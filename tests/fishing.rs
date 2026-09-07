@@ -7,8 +7,8 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::fishing::{
-    map_event, BiteDetector, DetectorEvent, FishingConfig, FishingController, FishingState,
-    MockFishingSink, RealFishingSink, StopReason, StubDetector,
+    map_event, BiteDetector, DetectorEvent, FishingConfig, FishingController, FishingSink,
+    FishingState, MockFishingSink, RealFishingSink, StopReason, StubDetector,
 };
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{BindingTable, InputEngine, Key, Transition};
@@ -481,13 +481,61 @@ fn pixel_bus_detector_maps_reader_events_and_drops_latency() {
 fn real_sink_drives_the_input_backend() {
     let backend = MockBackend::new();
     let recorded = backend.synthesized.clone();
-    let mut sink = RealFishingSink::new(backend);
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_game_active(true);
+    input.set_focused(true);
+    input.set_life_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+    let mut sink = RealFishingSink::new(backend, input.fishing_gates());
 
     let mut c = controller();
     c.set_enabled(true, 0, &mut sink);
 
     let ops = recorded.lock().unwrap().clone();
     assert_eq!(ops, press_release(FishingConfig::default().interact_key));
+}
+
+#[test]
+fn s060_real_sink_rejects_a_cast_at_the_final_authorization_boundary() {
+    let backend = MockBackend::new();
+    let recorded = backend.synthesized.clone();
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_game_active(true);
+    input.set_focused(true);
+    input.set_life_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+    input.set_suspended(true);
+    let mut sink = RealFishingSink::new(backend, input.fishing_gates());
+    let mut c = controller();
+
+    c.set_enabled(true, 0, &mut sink);
+
+    assert!(recorded.lock().unwrap().is_empty());
+    assert_eq!(c.state(), FishingState::Disabled);
+}
+
+#[test]
+fn s060_real_sink_rejects_an_interact_admitted_before_a_transient_closure() {
+    let backend = MockBackend::new();
+    let recorded = backend.synthesized.clone();
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_game_active(true);
+    input.set_focused(true);
+    input.set_life_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+    let mut sink = RealFishingSink::new(backend, input.fishing_gates());
+    sink.arm_authorization();
+
+    input.set_suspended(true);
+    input.set_suspended(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+
+    assert!(!sink.interact(FishingConfig::default().interact_key));
+    assert!(recorded.lock().unwrap().is_empty());
 }
 
 // Slice 032: the menu gate on the fishing synthesis path.
@@ -679,5 +727,132 @@ fn signal_loss_while_focus_paused_applies_the_existing_reset_policy() {
     sink.clear();
     c.set_game_environment(true, true, 30, &mut sink);
     assert_eq!(c.state(), FishingState::Disabled);
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn s060_suspension_refuses_initial_cast_and_preserves_request() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+
+    c.set_suspended(true);
+    c.set_enabled(true, 10, &mut sink);
+
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::Suspended));
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn s060_menu_gate_blocks_manual_recovery_after_suspension() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.set_suspended(true);
+    c.set_suspended(false);
+    c.set_gated(true);
+    sink.clear();
+
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn s060_suspension_cancels_pending_reel_without_replay() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    sink.clear();
+
+    c.set_suspended(true);
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::Suspended));
+    c.tick(20 + u64::from(cfg.reel_delay_ms), &mut sink);
+    assert!(sink.ops.is_empty());
+
+    c.set_suspended(false);
+    c.tick(10_000, &mut sink);
+    assert!(sink.ops.is_empty(), "resume must not replay the reel");
+    c.on_event(DetectorEvent::FishingStarted, 10_001, &mut sink);
+    assert_eq!(c.state(), FishingState::Waiting);
+    assert!(sink.ops.is_empty(), "a fresh manual cast is only observed");
+}
+
+#[test]
+fn s060_suspension_cancels_recast_and_timeout_paths() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    let reel_at = 20 + u64::from(cfg.reel_delay_ms);
+    c.tick(reel_at, &mut sink);
+    sink.clear();
+
+    c.set_suspended(true);
+    c.tick(reel_at + u64::from(cfg.recast_delay_ms), &mut sink);
+    c.tick(
+        reel_at + u64::from(cfg.recast_delay_ms) + u64::from(cfg.arm_timeout_ms),
+        &mut sink,
+    );
+
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::Suspended));
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn s060_suspension_cancels_armed_waiting_and_recast_arm_timeout_states() {
+    for (enter_state, expected_state) in [
+        (None, FishingState::Armed),
+        (Some(DetectorEvent::FishingStarted), FishingState::Waiting),
+    ] {
+        let mut c = controller();
+        let mut sink = MockFishingSink::new();
+        c.set_enabled(true, 0, &mut sink);
+        if let Some(event) = enter_state {
+            c.on_event(event, 10, &mut sink);
+        }
+        assert_eq!(c.state(), expected_state);
+        sink.clear();
+
+        c.set_suspended(true);
+        c.tick(100_000, &mut sink);
+
+        assert_eq!(c.state(), FishingState::Disabled);
+        assert_eq!(c.stop_reason(), Some(StopReason::Suspended));
+        assert!(c.enabled());
+        assert!(sink.ops.is_empty());
+    }
+
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    let reel_at = 20 + u64::from(cfg.reel_delay_ms);
+    c.tick(reel_at, &mut sink);
+    let recast_at = reel_at + u64::from(cfg.recast_delay_ms);
+    c.tick(recast_at, &mut sink);
+    assert_eq!(c.state(), FishingState::Recast);
+    assert_eq!(sink.ops.len(), 6, "recast-arm timeout must be established");
+    sink.clear();
+
+    c.set_suspended(true);
+    c.tick(recast_at + u64::from(cfg.arm_timeout_ms), &mut sink);
+
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::Suspended));
+    assert!(c.enabled());
     assert!(sink.ops.is_empty());
 }

@@ -4,7 +4,8 @@
 use eso_weave::config::{self, Settings};
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{
-    Action, BindingTable, Decision, InputEngine, Key, KeyEvent, Origin, Transition,
+    Action, BindingTable, Decision, InputBackend, InputEngine, InputError, Key, KeyEvent,
+    MouseButton, Origin, Transition,
 };
 use eso_weave::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
@@ -16,6 +17,7 @@ use eso_weave::weave::types::{InputOp, TimingConfig, WeaveType};
 use eso_weave::weave::{
     effective_timing, heavy_preset, MockSink, RealSink, WeaveConfig, WeaveEngine, WeaveSink,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -28,6 +30,8 @@ fn down(key: Key) -> KeyEvent {
 }
 
 fn open_input_safety(input: &InputEngine) {
+    input.set_game_active(true);
+    input.set_focused(true);
     input.set_life_gated(false);
     input.set_roll_gated(false);
     input.set_world_gated(false);
@@ -41,6 +45,42 @@ fn open_weave_safety(engine: &mut WeaveEngine) {
     engine.set_travel(TravelState::Inactive);
 }
 
+struct GateClosingBackend {
+    inner: MockBackend,
+    input: Arc<InputEngine>,
+    closed: AtomicBool,
+}
+
+impl GateClosingBackend {
+    fn close_after_first_down(&self, transition: Transition) {
+        if transition == Transition::Down && !self.closed.swap(true, Ordering::AcqRel) {
+            self.input.set_menu_gated(true);
+        }
+    }
+}
+
+impl InputBackend for GateClosingBackend {
+    fn synthesize(&self, key: Key, transition: Transition) -> Result<(), InputError> {
+        self.inner.synthesize(key, transition)?;
+        self.close_after_first_down(transition);
+        Ok(())
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_mouse(button, transition)?;
+        self.close_after_first_down(transition);
+        Ok(())
+    }
+
+    fn run(&self, _engine: Arc<InputEngine>) -> Result<(), InputError> {
+        Ok(())
+    }
+}
+
 #[test]
 fn real_sink_stops_new_presses_but_releases_held_input_when_life_gate_closes() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
@@ -48,10 +88,7 @@ fn real_sink_stops_new_presses_but_releases_held_input_when_life_gate_closes() {
     let captured = backend.synthesized.clone();
     let mut sink = RealSink::new(backend, input.weave_gates());
 
-    input.set_life_gated(false);
-    input.set_roll_gated(false);
-    input.set_world_gated(false);
-    input.set_travel_gated(false);
+    open_input_safety(&input);
     sink.begin_sequence();
     sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
     input.set_life_gated(true);
@@ -84,10 +121,7 @@ fn real_sink_stops_new_presses_but_releases_held_input_when_roll_gate_closes() {
     let backend = MockBackend::new();
     let captured = backend.synthesized.clone();
     let mut sink = RealSink::new(backend, input.weave_gates());
-    input.set_life_gated(false);
-    input.set_roll_gated(false);
-    input.set_world_gated(false);
-    input.set_travel_gated(false);
+    open_input_safety(&input);
     sink.begin_sequence();
     sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
     input.set_roll_gated(true);
@@ -131,10 +165,7 @@ fn real_sink_observes_roll_gate_closure_during_a_wait() {
     let captured_keys = backend.synthesized.clone();
     let captured_mouse = backend.synthesized_mouse.clone();
     let mut sink = RealSink::new(backend, input.weave_gates());
-    input.set_life_gated(false);
-    input.set_roll_gated(false);
-    input.set_world_gated(false);
-    input.set_travel_gated(false);
+    open_input_safety(&input);
     sink.begin_sequence();
     sink.emit(InputOp::Mouse(
         eso_weave::input::MouseButton::Primary,
@@ -176,6 +207,8 @@ fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     engine.set_life(LifeState::Alive);
     engine.set_roll_dodge(RollDodgeState::Inactive);
+    input.set_game_active(true);
+    input.set_focused(true);
     input.set_life_gated(false);
     input.set_world_gated(false);
     input.set_travel_gated(false);
@@ -191,6 +224,130 @@ fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
         !captured.lock().unwrap().is_empty(),
         "a cancelled no-output sequence must not reject the first recovered action"
     );
+}
+
+#[test]
+fn s060_transient_suspend_closure_cancels_an_admitted_sequence() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    let input = Arc::new(input);
+    input.set_game_active(true);
+    input.set_focused(true);
+    open_input_safety(&input);
+    let backend = MockBackend::new();
+    let captured = backend.synthesized.clone();
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    let admitted = input.authorization_epoch();
+    sink.set_admitted_epoch(admitted);
+    sink.begin_sequence();
+
+    let closer = Arc::clone(&input);
+    let closer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        closer.set_suspended(true);
+        closer.set_suspended(false);
+    });
+    sink.wait(500);
+    closer.join().unwrap();
+    sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
+
+    assert!(captured.lock().unwrap().is_empty());
+}
+
+#[test]
+fn s060_focus_closure_stops_new_presses_but_releases_held_output() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_game_active(true);
+    input.set_focused(true);
+    open_input_safety(&input);
+    let backend = MockBackend::new();
+    let captured_keys = backend.synthesized.clone();
+    let captured_mouse = backend.synthesized_mouse.clone();
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    sink.set_admitted_epoch(input.authorization_epoch());
+    sink.begin_sequence();
+    sink.emit(InputOp::Mouse(
+        eso_weave::input::MouseButton::Primary,
+        Transition::Down,
+    ));
+
+    input.set_focused(false);
+    sink.emit(InputOp::Key(Key::Digit1, Transition::Down));
+    sink.emit(InputOp::Mouse(
+        eso_weave::input::MouseButton::Primary,
+        Transition::Up,
+    ));
+
+    assert!(captured_keys.lock().unwrap().is_empty());
+    assert_eq!(
+        *captured_mouse.lock().unwrap(),
+        vec![
+            (eso_weave::input::MouseButton::Primary, Transition::Down),
+            (eso_weave::input::MouseButton::Primary, Transition::Up),
+        ]
+    );
+}
+
+#[test]
+fn s060_gate_closure_cancels_each_weave_shape_and_releases_held_output() {
+    for weave_type in [
+        WeaveType::LightAttack,
+        WeaveType::HeavyAttack,
+        WeaveType::BashAttack,
+        WeaveType::BlockCasting,
+    ] {
+        let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+        let input = Arc::new(input);
+        open_input_safety(&input);
+        let backend = MockBackend::new();
+        let captured_keys = backend.synthesized.clone();
+        let captured_mouse = backend.synthesized_mouse.clone();
+        let backend = GateClosingBackend {
+            inner: backend,
+            input: Arc::clone(&input),
+            closed: AtomicBool::new(false),
+        };
+        let mut sink = RealSink::new(backend, input.weave_gates());
+        sink.set_admitted_epoch(input.authorization_epoch());
+
+        let mut config = WeaveConfig::default();
+        config.slots[0].weave_type = weave_type;
+        config.timing.d_weave = 50;
+        config.timing.d_heavy = 50;
+        config.timing.d_bash = 50;
+        let mut engine = WeaveEngine::new(config);
+        open_weave_safety(&mut engine);
+        engine.handle(Action::Skill1, &mut sink);
+
+        let keys = captured_keys.lock().unwrap().clone();
+        let mouse = captured_mouse.lock().unwrap().clone();
+        match weave_type {
+            WeaveType::LightAttack | WeaveType::HeavyAttack | WeaveType::BashAttack => {
+                assert!(
+                    keys.is_empty(),
+                    "{weave_type:?} started a key after closure"
+                );
+                assert_eq!(
+                    mouse,
+                    vec![
+                        (eso_weave::input::MouseButton::Primary, Transition::Down),
+                        (eso_weave::input::MouseButton::Primary, Transition::Up),
+                    ],
+                    "{weave_type:?} must release only output already held"
+                );
+            }
+            WeaveType::BlockCasting => {
+                assert!(keys.is_empty(), "block casting started a key after closure");
+                assert_eq!(
+                    mouse,
+                    vec![
+                        (eso_weave::input::MouseButton::Secondary, Transition::Down),
+                        (eso_weave::input::MouseButton::Secondary, Transition::Up),
+                    ],
+                    "block casting must release its pre-closure hold"
+                );
+            }
+        }
+    }
 }
 
 #[test]

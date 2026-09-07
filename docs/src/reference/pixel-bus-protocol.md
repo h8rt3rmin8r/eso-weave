@@ -169,10 +169,11 @@ behavior.
 Sampling defaults to 100 ms while fishing or interception can be active, and
 1000 ms otherwise. The interception condition keeps the menu gate responsive
 while the operator may type.
-A suspended application does not start new interception and samples slowly only when Fishing is inactive. Queued or running
-weave, a newly enabled Fishing cast, and pending Fishing have the known suspension
-gaps tracked by issue #92. The reader validates the full header before
-reading payload from the same captured frame. Missing B0 for more than 2000 ms
+A suspended application does not start new interception and samples slowly only
+when Fishing is inactive. Suspension invalidates queued or running weave work,
+cancels Fishing deadlines, retains the Fishing request, and emits nothing on
+resume. The reader validates the full header before reading payload from the
+same captured frame. Missing B0 for more than 2000 ms
 raises SignalLost; a corrupt recognized header suppresses payload immediately.
 
 Windows captures the displayed composited desktop at the client-area origin.

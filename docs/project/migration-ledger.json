@@ -1446,13 +1446,23 @@
     },
     {
       "id": "029",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-029.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-029.md",
       "specs": [
         "specs/059-documentation-completeness"
       ],
-      "evidence": "Issue #81 tracks the active S059 delivery."
+      "evidence": "Issue #81 closed and S059 merged in PR #97."
+    },
+    {
+      "id": "030",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-030.md",
+      "specs": [
+        "specs/060-safety-boundaries"
+      ],
+      "evidence": "Issue #92 and issue #94 track the active S060 delivery."
     }
   ],
   "safetyCrosswalk": [
