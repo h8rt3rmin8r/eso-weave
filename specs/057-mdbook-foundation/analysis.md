@@ -28,7 +28,7 @@ Status: PASS
 - The implemented source tree, exact tool pins, ignored artifact location, and
   Pages subpath match the specification, plan, contract, ADR, and contributor
   guidance.
-- Eighteen dependency-free fixture tests cover positive delivery plus missing,
+- Twenty dependency-free fixture tests cover positive delivery plus missing,
   duplicate, escaping, case-mismatched, orphaned, fragment, CSS-resource,
   contrast, skip-link, and workflow-escalation failures.
 - Test-first red evidence was captured before the checker existed: the initial

@@ -36,7 +36,10 @@ async function fixture() {
   const html = (title, body) =>
     `<!doctype html><html lang="en"><head><link rel="stylesheet" href="/eso-weave/book.css"></head><body><main><h1>${title}</h1>${body}</main><script src="/eso-weave/searcher-test.js"></script><script src="/eso-weave/theme/eso-weave-test.js"></script></body></html>`;
   await writeFile(path.join(output, "index.html"), html("Home", '<a href="/eso-weave/guide/">Guide</a>'));
-  await writeFile(path.join(output, "guide", "index.html"), html("Guide", '<img alt="Mark" src="/eso-weave/assets/mark.svg">'));
+  await writeFile(
+    path.join(output, "guide", "index.html"),
+    html("Guide", '<img alt="Mark" src="/eso-weave/assets/mark.svg" srcset="data:image/svg+xml;base64,AAAA 1x, /eso-weave/assets/mark.svg 2x">'),
+  );
   await writeFile(path.join(output, "404.html"), html("Page Not Found", '<a href="/eso-weave/">Home</a>'));
   await writeFile(path.join(output, "book.css"), "body { color: #e6edf3; background: #0e1116; }\n");
   await writeFile(path.join(output, "searcher-test.js"), "const search = true;\n");
@@ -99,6 +102,18 @@ test("rejects a local source link with a missing target or fragment", async (t) 
   assert.match(errors, /missing fragment/);
 });
 
+test("accepts Markdown destination titles and balanced parentheses", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(path.join(f.source, "guide", "(advanced).md"), "# Advanced\n");
+  await writeFile(
+    path.join(f.source, "SUMMARY.md"),
+    '# Summary\n\n- [Home](README.md)\n- [Guide](guide/README.md "Setup guide")\n- [Advanced](guide/(advanced).md "Advanced guide")\n',
+  );
+  await writeFile(path.join(f.source, "README.md"), '# Home\n\n[Guide](guide/ "Setup guide")\n');
+  assert.deepEqual(await validateSourceTree(f.docs), []);
+});
+
 test("rejects inline README links that mdBook renders as missing README.html", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -117,12 +132,25 @@ test("rejects remote runtime resources and missing generated assets", async (t) 
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await writeFile(
     path.join(f.output, "index.html"),
-    '<!doctype html><html lang="en"><head><link rel="stylesheet" href="../../outside.css"></head><body><main><h1>Home</h1><img alt="Remote" src="https://example.com/logo.svg"><script src="/eso-weave/missing.js"></script></main></body></html>',
+    '<!doctype html><html lang="en"><head><link rel="stylesheet" href="../../outside.css"></head><body><main><h1>Home</h1><img alt="Remote" src="https://example.com/logo.svg"><img alt="Unquoted" src=https://example.com/unquoted.png><img alt="Candidates" srcset="local.png 1x, https://example.com/remote.png 2x"><iframe src="https://example.com/embed"></iframe><iframe src=/outside></iframe><video poster="https://example.com/poster.jpg"></video><object data="https://example.com/object"></object><embed src="https://example.com/plugin"><svg><image href="https://example.com/image.svg"></image><use xlink:href="https://example.com/sprite.svg#icon"></use></svg><script src="/eso-weave/missing.js"></script></main></body></html>',
   );
   const errors = (await validateGeneratedSite(f.output, "/eso-weave/")).join("\n");
-  assert.match(errors, /remote runtime resource/);
+  assert.ok((errors.match(/remote runtime resource/gu)?.length ?? 0) >= 9);
   assert.match(errors, /missing generated resource/);
   assert.match(errors, /resource escapes site base/);
+});
+
+test("tokenizes mixed data and local srcset candidates", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(
+    path.join(f.output, "index.html"),
+    '<!doctype html><html lang="en"><body><main><h1>Home</h1><img alt="First" srcset="data:image/png;base64,AAAA 1x, assets/missing-one.png 2x"><img alt="Middle" srcset="assets/mark.svg 1x, data:image/png;base64,BBBB 2x, assets/missing-two.png 3x"></main><script src="/eso-weave/searcher-test.js"></script><script src="/eso-weave/theme/eso-weave-test.js"></script></body></html>',
+  );
+  const errors = (await validateGeneratedSite(f.output, "/eso-weave/")).join("\n");
+  assert.equal(errors.match(/missing generated resource/gu)?.length, 2);
+  assert.match(errors, /missing-one\.png/);
+  assert.match(errors, /missing-two\.png/);
 });
 
 test("rejects an edit URL that duplicates the docs/src path", async (t) => {

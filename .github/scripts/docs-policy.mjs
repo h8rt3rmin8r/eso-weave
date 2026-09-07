@@ -2,9 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const MARKDOWN_LINK = /!?\[[^\]]*\]\(([^)]+)\)/gu;
 const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/gmu;
-const RUNTIME_RESOURCE = /<(?:img|script|source|video|audio|link)\b[^>]*?\b(?:src|href)=["']([^"']+)["']/giu;
 const HTML_LINK = /<a\b[^>]*?\bhref=["']([^"']+)["']/giu;
 
 async function walk(root, suffix = "") {
@@ -31,6 +29,67 @@ function splitTarget(raw) {
     pathname: decodeURIComponent(hash >= 0 ? cleaned.slice(0, hash) : cleaned),
     fragment: decodeURIComponent(hash >= 0 ? cleaned.slice(hash + 1) : ""),
   };
+}
+
+function markdownLinks(markdown) {
+  const links = [];
+  for (let cursor = 0; cursor < markdown.length; cursor += 1) {
+    const image = markdown[cursor] === "!" && markdown[cursor + 1] === "[";
+    const labelStart = image ? cursor + 1 : cursor;
+    if (markdown[labelStart] !== "[") continue;
+    let labelEnd = labelStart + 1;
+    for (; labelEnd < markdown.length; labelEnd += 1) {
+      if (markdown[labelEnd] === "\\") labelEnd += 1;
+      else if (markdown[labelEnd] === "]") break;
+    }
+    if (markdown[labelEnd] !== "]" || markdown[labelEnd + 1] !== "(") continue;
+    let depth = 0;
+    let quote = "";
+    let destinationEnd = labelEnd + 2;
+    for (; destinationEnd < markdown.length; destinationEnd += 1) {
+      const character = markdown[destinationEnd];
+      if (character === "\\") {
+        destinationEnd += 1;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) quote = "";
+        continue;
+      }
+      if ((character === '"' || character === "'") && /\s/u.test(markdown[destinationEnd - 1] ?? "")) {
+        quote = character;
+        continue;
+      }
+      if (character === "(") depth += 1;
+      else if (character === ")" && depth > 0) depth -= 1;
+      else if (character === ")") break;
+    }
+    if (markdown[destinationEnd] !== ")") continue;
+    const inside = markdown.slice(labelEnd + 2, destinationEnd).trim();
+    const destination = markdownDestination(inside);
+    if (destination) links.push({ destination, image });
+    cursor = destinationEnd;
+  }
+  return links;
+}
+
+function markdownDestination(inside) {
+  if (inside.startsWith("<")) {
+    const end = inside.indexOf(">");
+    return end > 0 ? inside.slice(1, end) : "";
+  }
+  let depth = 0;
+  for (let index = 0; index < inside.length; index += 1) {
+    const character = inside[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
+    if (character === "(") depth += 1;
+    else if (character === ")" && depth > 0) depth -= 1;
+    else if (/\s/u.test(character) && depth === 0) return inside.slice(0, index).replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/gu, "$1");
+  }
+  return inside.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/gu, "$1");
 }
 
 function isExternal(value) {
@@ -79,9 +138,9 @@ function headingIds(markdown) {
 
 async function validateMarkdownLinks(sourceRoot, file, contents) {
   const errors = [];
-  for (const match of contents.matchAll(MARKDOWN_LINK)) {
-    const raw = match[1].trim();
-    const image = match[0].startsWith("!");
+  for (const link of markdownLinks(contents)) {
+    const raw = link.destination.trim();
+    const image = link.image;
     if (isExternal(raw)) {
       if (image) {
         errors.push(`${slash(path.relative(sourceRoot, file))}: remote runtime resource ${raw}`);
@@ -137,8 +196,8 @@ export async function validateSourceTree(docsRoot) {
   const listed = [];
   for (const line of summary.split(/\r?\n/gu)) {
     if (!/^\s*[-*+]\s+/u.test(line)) continue;
-    for (const match of line.matchAll(MARKDOWN_LINK)) {
-      const { pathname } = splitTarget(match[1]);
+    for (const link of markdownLinks(line)) {
+      const { pathname } = splitTarget(link.destination);
       if (!pathname.endsWith(".md")) continue;
       const resolved = path.resolve(sourceRoot, pathname);
       const relative = slash(path.relative(sourceRoot, resolved));
@@ -241,8 +300,8 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
     for (const match of contents.matchAll(/<img\b[^>]*>/giu)) {
       if (!/\balt=["'][^"']*["']/iu.test(match[0])) errors.push(`${relative}: image missing alt`);
     }
-    for (const match of contents.matchAll(RUNTIME_RESOURCE)) {
-      const raw = match[1];
+    for (const raw of runtimeResourceValues(contents)) {
+      if (/^data:/iu.test(raw)) continue;
       if (isExternal(raw) || /^javascript:/iu.test(raw)) {
         errors.push(`${relative}: remote runtime resource ${raw}`);
         continue;
@@ -283,6 +342,68 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
     }
   }
   return errors;
+}
+
+function runtimeResourceValues(html) {
+  const values = [];
+  const allowedAttributes = new Map([
+    ["audio", new Set(["src"])],
+    ["embed", new Set(["src"])],
+    ["iframe", new Set(["src"])],
+    ["image", new Set(["href", "xlink:href"])],
+    ["img", new Set(["src", "srcset"])],
+    ["input", new Set(["src"])],
+    ["link", new Set(["href"])],
+    ["object", new Set(["data"])],
+    ["script", new Set(["src"])],
+    ["source", new Set(["src", "srcset"])],
+    ["track", new Set(["src"])],
+    ["use", new Set(["href", "xlink:href"])],
+    ["video", new Set(["src", "poster"])],
+  ]);
+  for (const tag of html.matchAll(/<(audio|embed|iframe|image|img|input|link|object|script|source|track|use|video)\b([^>]*)>/giu)) {
+    const tagName = tag[1].toLocaleLowerCase("en-US");
+    for (const attribute of tag[2].matchAll(/\b(srcset|xlink:href|src|href|poster|data)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/giu)) {
+      const name = attribute[1].toLocaleLowerCase("en-US");
+      if (!allowedAttributes.get(tagName)?.has(name)) continue;
+      const raw = (attribute[2] ?? attribute[3] ?? attribute[4] ?? "").trim();
+      if (name !== "srcset") {
+        values.push(raw);
+      } else {
+        values.push(...srcsetCandidates(raw));
+      }
+    }
+  }
+  return values;
+}
+
+function srcsetCandidates(srcset) {
+  const candidates = [];
+  let cursor = 0;
+  while (cursor < srcset.length) {
+    while (/[\s,]/u.test(srcset[cursor] ?? "")) cursor += 1;
+    if (cursor >= srcset.length) break;
+    const start = cursor;
+    while (cursor < srcset.length && !/\s/u.test(srcset[cursor])) cursor += 1;
+    let candidate = srcset.slice(start, cursor);
+    const trailingCommas = candidate.match(/,+$/u)?.[0].length ?? 0;
+    if (trailingCommas > 0) candidate = candidate.slice(0, -trailingCommas);
+    if (candidate) candidates.push(candidate);
+    if (trailingCommas === 0) {
+      let parentheses = 0;
+      while (cursor < srcset.length) {
+        const character = srcset[cursor];
+        if (character === "(") parentheses += 1;
+        else if (character === ")" && parentheses > 0) parentheses -= 1;
+        else if (character === "," && parentheses === 0) {
+          cursor += 1;
+          break;
+        }
+        cursor += 1;
+      }
+    }
+  }
+  return candidates;
 }
 
 export function validateBrandCss(css) {
