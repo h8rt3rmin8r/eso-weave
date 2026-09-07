@@ -13,14 +13,14 @@ pub const SYSTEM_STATE_TOOLTIP: &str =
     "Expand or collapse application, addon, and automation state. This layout preference is saved.";
 pub const STATUS_TITLE: &str = "ESO Weave";
 pub const FISHING_TITLE: &str = "Fishing";
-pub const BEACON_TITLE: &str = "PixelBeacon installation";
-pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon signal";
+pub const BEACON_TITLE: &str = "PixelBeacon Status";
+pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon Signal";
 pub const GAME_TITLE: &str = "Game";
-pub const GAME_INSTALLATION_TITLE: &str = "Game installation";
-pub const GAME_RUNTIME_TITLE: &str = "Game state";
-pub const LIFE_TITLE: &str = "Life state";
-pub const ROLL_DODGE_TITLE: &str = "Roll dodge";
-pub const WORLD_TITLE: &str = "World state";
+pub const GAME_INSTALLATION_TITLE: &str = "Game Installation";
+pub const GAME_RUNTIME_TITLE: &str = "Game State";
+pub const LIFE_TITLE: &str = "Life State";
+pub const ROLL_DODGE_TITLE: &str = "Roll Dodge";
+pub const WORLD_TITLE: &str = "World State";
 pub const TRAVEL_TITLE: &str = "Travel";
 
 // Status region tooltips.
@@ -71,7 +71,7 @@ pub const BEACON_UNINSTALL_TOOLTIP: &str =
     "Remove the PixelBeacon addon. Only a folder marked as managed by ESO Weave is deleted.";
 
 // Weapon-bar section.
-pub const WEAPON_BAR_TITLE: &str = "Active weapon bar";
+pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
 pub const WEAPON_BAR_TOOLTIP: &str =
     "The active weapon bar and the weapon class detected on each bar. Requires the updated Pixel Beacon addon; shows Unknown without a signal.";
 
@@ -101,8 +101,8 @@ pub const RESOURCE_TOOLTIP: &str =
 
 // Quickslot section.
 pub const QUICKSLOT_TITLE: &str = "Quickslot";
-pub const QUICKSLOT_AVAILABILITY_TITLE: &str = "Potion availability";
-pub const QUICKSLOT_COOLDOWN_TITLE: &str = "Potion cooldown";
+pub const QUICKSLOT_AVAILABILITY_TITLE: &str = "Potion Availability";
+pub const QUICKSLOT_COOLDOWN_TITLE: &str = "Potion Cooldown";
 pub const QUICKSLOT_TOOLTIP: &str =
     "What the selected quickslot contains, read from the Pixel Beacon addon. Requires addon version 13 or later and distinguishes empty, non-potion, unavailable, and potion states.";
 pub const QUICKSLOT_AVAILABILITY_TOOLTIP: &str =
@@ -111,7 +111,7 @@ pub const QUICKSLOT_COOLDOWN_TOOLTIP: &str =
     "The selected potion's independent slot cooldown. Ready or remaining time never decides whether the slot contains a potion.";
 
 // Auto-potion section.
-pub const AUTO_POTION_TITLE: &str = "Auto-potion";
+pub const AUTO_POTION_TITLE: &str = "Auto Potion";
 pub const AUTO_POTION_OFF: &str = "Off";
 pub const AUTO_POTION_DORMANT_GAME: &str = "Dormant: game inactive";
 pub const AUTO_POTION_DORMANT_UNFOCUSED: &str = "Dormant: game unfocused";
@@ -130,30 +130,30 @@ pub const AUTO_POTION_BLOCKED_POTION: &str = "Blocked: potion unavailable";
 pub const AUTO_POTION_BLOCKED_COOLDOWN: &str = "Blocked: potion cooldown";
 pub const AUTO_POTION_BLOCKED_RETRY: &str = "Blocked: retry interval";
 pub const AUTO_POTION_READY: &str = "Ready";
-pub const AUTO_POTION_TOGGLE_LABEL: &str = "Auto-potion";
+pub const AUTO_POTION_TOGGLE_LABEL: &str = "Auto Potion";
 pub const AUTO_POTION_TOOLTIP: &str =
     "Shows whether auto-potion is Off, dormant, blocked, ready, or just triggered. The switch records your request; the state names the current runtime result.";
 pub const AUTO_POTION_TOGGLE_TOOLTIP: &str =
     "Turn auto-potion on or off (F3). It also needs at least one resource enabled in Settings; with none enabled it never fires.";
-pub const CLUSTER_AUTO_POTION: &str = "Auto-potion";
+pub const CLUSTER_AUTO_POTION: &str = "Auto Potion";
 pub const SET_POTION_HEALTH: Setting = Setting {
-    label: "Watch health (threshold %)",
+    label: "Watch Health (Threshold %)",
     help: "Fire when health is at or below this percentage. The rule is an OR across the enabled resources, so any one of them being low is enough.",
 };
 pub const SET_POTION_MAGICKA: Setting = Setting {
-    label: "Watch magicka (threshold %)",
+    label: "Watch Magicka (Threshold %)",
     help: "Fire when magicka is at or below this percentage.",
 };
 pub const SET_POTION_STAMINA: Setting = Setting {
-    label: "Watch stamina (threshold %)",
+    label: "Watch Stamina (Threshold %)",
     help: "Fire when stamina is at or below this percentage.",
 };
 pub const SET_POTION_KEY: Setting = Setting {
-    label: "Quickslot key",
+    label: "Quickslot Key",
     help: "The key pressed to drink. Defaults to Q, the game's default quickslot bind; change it here if you rebound it in game.",
 };
 pub const SET_POTION_RETRY: Setting = Setting {
-    label: "Minimum retry interval (ms)",
+    label: "Minimum Retry Interval (ms)",
     help: "The floor between two attempts. It covers the gap between pressing the key and the game reporting the resulting cooldown, which is at least one sampling interval. Raise it if potions are being spent too quickly.",
 };
 
@@ -204,11 +204,21 @@ pub const SAVED_TOAST: &str = "Settings saved";
 
 // Settings cluster titles.
 pub const CLUSTER_APPEARANCE: &str = "Appearance";
-pub const CLUSTER_COMBAT_TIMING: &str = "Combat timing";
+pub const CLUSTER_COMBAT_TIMING: &str = "Combat Timing";
 pub const CLUSTER_FISHING: &str = "Fishing";
-pub const CLUSTER_BEACON: &str = "Pixel Beacon and bus";
+pub const CLUSTER_BEACON: &str = "PixelBeacon and Bus";
 pub const CLUSTER_LOGGING: &str = "Logging";
 pub const CLUSTER_KEYBINDINGS: &str = "Keybindings";
+pub const ACTION_SKILL_1: &str = "Skill 1";
+pub const ACTION_SKILL_2: &str = "Skill 2";
+pub const ACTION_SKILL_3: &str = "Skill 3";
+pub const ACTION_SKILL_4: &str = "Skill 4";
+pub const ACTION_SKILL_5: &str = "Skill 5";
+pub const ACTION_ULTIMATE: &str = "Ultimate";
+pub const ACTION_SYNERGY: &str = "Synergy";
+pub const ACTION_TOGGLE_SUSPEND: &str = "Toggle Suspend";
+pub const ACTION_TOGGLE_FISHING: &str = "Toggle Fishing";
+pub const ACTION_TOGGLE_AUTO_POTION: &str = "Toggle Auto Potion";
 
 /// A single settings option's label and help text.
 pub struct Setting {
@@ -223,84 +233,84 @@ pub const SET_THEME: Setting = Setting {
     help: "The color scheme of the window.",
 };
 pub const SET_ALWAYS_ON_TOP: Setting = Setting {
-    label: "Always on top",
+    label: "Always on Top",
     help: "Keep the ESO Weave window above other windows.",
 };
 pub const SET_GLOBAL_COOLDOWN: Setting = Setting {
-    label: "Global cooldown (ms)",
+    label: "Global Cooldown (ms)",
     help: "Minimum interval between weave executions.",
 };
 pub const SET_D_WEAVE: Setting = Setting {
-    label: "Light attack delay (ms)",
+    label: "Light Attack Delay (ms)",
     help: "Base gap between the basic attack and the skill key.",
 };
 pub const SET_D_HEAVY: Setting = Setting {
-    label: "Heavy attack delay (ms)",
+    label: "Heavy Attack Delay (ms)",
     help: "How long a heavy attack is held before the skill key.",
 };
 pub const SET_D_BASH: Setting = Setting {
-    label: "Bash delay (ms)",
+    label: "Bash Delay (ms)",
     help: "Gap before the bash action in a bash attack.",
 };
 pub const SET_AUTO_TIMING: Setting = Setting {
-    label: "Auto timing from weapon",
+    label: "Auto Timing from Weapon",
     help: "Set each bar's heavy-attack delay automatically from the weapon equipped on that bar.",
 };
 pub const SET_LATENCY_ENABLED: Setting = Setting {
-    label: "Adapt to latency",
+    label: "Adapt to Latency",
     help: "Shorten delays automatically as measured latency rises.",
 };
 pub const SET_LATENCY_K: Setting = Setting {
-    label: "Latency factor",
+    label: "Latency Factor",
     help: "How strongly latency shortens the delays (higher adapts more).",
 };
 pub const SET_ARM_TIMEOUT: Setting = Setting {
-    label: "Arm timeout (ms)",
+    label: "Arm Timeout (ms)",
     help: "How long to wait for a bite before recasting.",
 };
 pub const SET_REEL_DELAY: Setting = Setting {
-    label: "Reel delay (ms)",
+    label: "Reel Delay (ms)",
     help: "Delay between detecting a bite and reeling in.",
 };
 pub const SET_RECAST_DELAY: Setting = Setting {
-    label: "Recast delay (ms)",
+    label: "Recast Delay (ms)",
     help: "Delay before casting the line again after a catch or timeout.",
 };
 pub const SET_BEACON_PATH: Setting = Setting {
-    label: "AddOns folder override",
+    label: "AddOns Folder Override",
     help: "Use this AddOns folder instead of the auto-detected one. Leave blank to auto-detect.",
 };
 pub const SET_BEACON_ENV: Setting = Setting {
-    label: "Game environment",
+    label: "Game Environment",
     help: "Which ESO install to target when detecting the AddOns folder.",
 };
 pub const SET_BLOCK_PX: Setting = Setting {
-    label: "Block size (px)",
+    label: "Block Size (px)",
     help: "Advanced: the physical-pixel size of each beacon square, and the only way to shrink the on-screen overlay (which cannot be moved). Changing it re-deploys PixelBeacon and takes effect after a /reloadui and an app restart.",
 };
 pub const SET_TOLERANCE: Setting = Setting {
-    label: "Color tolerance",
+    label: "Color Tolerance",
     help: "How much a sampled pixel may differ from the expected color and still match.",
 };
 pub const SET_INTERVAL_FISHING: Setting = Setting {
-    label: "Fast sample interval (ms)",
+    label: "Fast Sample Interval (ms)",
     help: "How often the pixel signal is read while fishing or input interception is active. Interception is safety-capped at 375 ms.",
 };
 pub const SET_INTERVAL_IDLE: Setting = Setting {
-    label: "Sample interval while idle (ms)",
+    label: "Sample Interval While Idle (ms)",
     help: "How often the pixel signal is read while idle.",
 };
 pub const SET_LOG_LEVEL: Setting = Setting {
-    label: "Log level",
+    label: "Log Level",
     help: "The lowest level of event that is captured.",
 };
 pub const SET_FILE_LOGGING: Setting = Setting {
-    label: "Write log to file",
+    label: "Write Log to File",
     help: "Also write captured events to a monthly log file.",
 };
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 24] = [
+pub const ALL_SETTINGS: [&Setting; 25] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
     &SET_GLOBAL_COOLDOWN,
@@ -315,6 +325,7 @@ pub const ALL_SETTINGS: [&Setting; 24] = [
     &SET_RECAST_DELAY,
     &SET_BEACON_PATH,
     &SET_BEACON_ENV,
+    &SET_BLOCK_PX,
     &SET_TOLERANCE,
     &SET_INTERVAL_FISHING,
     &SET_INTERVAL_IDLE,
@@ -326,6 +337,57 @@ pub const ALL_SETTINGS: [&Setting; 24] = [
     &SET_LOG_LEVEL,
     &SET_FILE_LOGGING,
 ];
+
+/// Visible field and settings labels governed by the title-case policy.
+pub fn field_labels() -> Vec<&'static str> {
+    let mut labels = vec![
+        LIVE_HUD_TITLE,
+        SYSTEM_STATE_TITLE,
+        STATUS_TITLE,
+        FISHING_TITLE,
+        BEACON_TITLE,
+        BEACON_SIGNAL_TITLE,
+        GAME_TITLE,
+        GAME_INSTALLATION_TITLE,
+        GAME_RUNTIME_TITLE,
+        LIFE_TITLE,
+        ROLL_DODGE_TITLE,
+        WORLD_TITLE,
+        TRAVEL_TITLE,
+        WEAPON_BAR_TITLE,
+        COMBAT_TITLE,
+        MOVEMENT_TITLE,
+        MENU_TITLE,
+        HEALTH_TITLE,
+        STAMINA_TITLE,
+        MAGICKA_TITLE,
+        QUICKSLOT_TITLE,
+        QUICKSLOT_AVAILABILITY_TITLE,
+        QUICKSLOT_COOLDOWN_TITLE,
+        AUTO_POTION_TITLE,
+        SKILLS_TITLE,
+        LOG_TITLE,
+        CLUSTER_APPEARANCE,
+        CLUSTER_COMBAT_TIMING,
+        CLUSTER_FISHING,
+        CLUSTER_BEACON,
+        CLUSTER_AUTO_POTION,
+        CLUSTER_LOGGING,
+        CLUSTER_KEYBINDINGS,
+        ACTION_SKILL_1,
+        ACTION_SKILL_2,
+        ACTION_SKILL_3,
+        ACTION_SKILL_4,
+        ACTION_SKILL_5,
+        ACTION_ULTIMATE,
+        ACTION_SYNERGY,
+        ACTION_TOGGLE_SUSPEND,
+        ACTION_TOGGLE_FISHING,
+        ACTION_TOGGLE_AUTO_POTION,
+    ];
+    labels.extend(ALL_SETTINGS.iter().map(|setting| setting.label));
+    labels
+}
 
 /// Every user-facing label, for the no-underscore hygiene test.
 pub fn all_labels() -> Vec<&'static str> {

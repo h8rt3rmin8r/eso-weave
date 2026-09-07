@@ -6,13 +6,13 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
-    combat_view, dashboard_layout, default_delay_for, fishing_label, life_state_view, menu_view,
-    modal_extent, movement_view, override_edit_for, quickslot_view, resource_view,
-    resource_view_with_watch, roll_dodge_view, route_game_observation, route_reader_event,
-    route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon, status_line_fishing,
-    travel_state_view, uninstall_enabled, weapon_bar_view, world_state_view, AppModel,
-    BeaconCondition, BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit,
-    StatusRole, UiIntent,
+    combat_view, dashboard_layout, default_delay_for, effective_dashboard_layout, fishing_label,
+    life_state_view, menu_view, modal_extent, movement_view, override_edit_for, quickslot_view,
+    resource_view, resource_view_with_watch, roll_dodge_view, route_game_observation,
+    route_reader_event, route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon,
+    status_line_fishing, travel_state_view, uninstall_enabled, weapon_bar_view, world_state_view,
+    AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout, ResourcePresentation,
+    SkillEdit, StatusRole, UiIntent,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -59,6 +59,29 @@ fn dashboard_breakpoint_is_exact_and_point_based() {
     assert_eq!(dashboard_layout(879.9), DashboardLayout::Narrow);
     assert_eq!(dashboard_layout(880.0), DashboardLayout::Wide);
     assert_eq!(dashboard_layout(f32::NAN), DashboardLayout::Narrow);
+}
+
+#[test]
+fn collapsed_system_state_overrides_the_dashboard_breakpoint() {
+    for width in [560.0, 760.0, 879.9, 880.0, 1200.0, 2000.0, f32::NAN] {
+        assert_eq!(
+            effective_dashboard_layout(width, false),
+            DashboardLayout::Narrow,
+            "collapsed layout was not stacked at {width} points"
+        );
+    }
+    assert_eq!(
+        effective_dashboard_layout(880.0, true),
+        DashboardLayout::Wide
+    );
+    assert_eq!(
+        effective_dashboard_layout(879.9, true),
+        DashboardLayout::Narrow
+    );
+    assert_eq!(
+        effective_dashboard_layout(f32::NAN, true),
+        DashboardLayout::Narrow
+    );
 }
 
 #[test]
@@ -236,7 +259,7 @@ fn beacon_signal_is_independent_from_addon_installation() {
     use eso_weave::game::{BeaconFreshness, GameRuntime};
 
     let inactive = beacon_signal_line(GameRuntime::Inactive, BeaconFreshness::NeverObserved);
-    assert_eq!(inactive.title, "PixelBeacon signal");
+    assert_eq!(inactive.title, "PixelBeacon Signal");
     assert_eq!(inactive.state_text, "Game not active");
     assert_eq!(inactive.role, StatusRole::Muted);
 
@@ -297,7 +320,7 @@ fn status_line_beacon_maps_conditions() {
     );
     assert_eq!(
         status_line_beacon(BeaconCondition::InstalledCurrent).title,
-        "PixelBeacon installation"
+        "PixelBeacon Status"
     );
 }
 

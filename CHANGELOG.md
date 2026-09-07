@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- S054 keeps expanded Live HUD and System and State cards equal in width and
+  height, splits wide layouts evenly, and forces top-down order whenever System
+  and State is collapsed. System controls now share one trailing column with
+  equal horizontal lifecycle buttons, Live HUD values use available width before
+  truncating, and field labels use concise title case (issues #72, #73, #74, #75).
+
+### Decisions
+
+- 2026-09-07: Treat disclosure state as a responsive-layout input while retaining
+  the 880-point breakpoint for expanded cards. Use Live HUD as the shared expanded
+  height authority, a fixed interaction column sized for two lifecycle buttons,
+  and one count-independent resource-group boundary. Ultimate telemetry remains
+  separate under #71.
+
 ## [0.13.0] - 2026-09-06
 
 ### Highlights

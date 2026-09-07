@@ -152,6 +152,20 @@ pub fn dashboard_layout(available_width: f32) -> DashboardLayout {
     }
 }
 
+/// Selects the dashboard arrangement after applying the System and State
+/// disclosure override. A collapsed disclosure always follows Live HUD in the
+/// stacked reading order; expanding it restores the ordinary width breakpoint.
+pub fn effective_dashboard_layout(
+    available_width: f32,
+    system_state_expanded: bool,
+) -> DashboardLayout {
+    if system_state_expanded {
+        dashboard_layout(available_width)
+    } else {
+        DashboardLayout::Narrow
+    }
+}
+
 /// A normalized status line for the top region: a title, a colorized state
 /// field, and a tooltip. Derived each frame from the subsystem state.
 #[derive(Debug, Clone, PartialEq, Eq)]
