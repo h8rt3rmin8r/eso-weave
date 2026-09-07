@@ -30,7 +30,7 @@ async function fixture() {
   );
   await writeFile(path.join(source, "README.md"), "# Home\n\n[Guide](guide/#guide)\n");
   await writeFile(path.join(source, "guide", "README.md"), "# Guide\n\n![Mark](../assets/mark.svg)\n");
-  await writeFile(path.join(source, "404.md"), "# Page Not Found\n\n[Home](./)\n");
+  await writeFile(path.join(source, "404.md"), '# Page Not Found\n\n<a href="/eso-weave/">Home</a>\n');
   await writeFile(path.join(source, "assets", "mark.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>\n");
 
   const html = (title, body) =>
@@ -114,6 +114,16 @@ test("accepts Markdown destination titles and balanced parentheses", async (t) =
   assert.deepEqual(await validateSourceTree(f.docs), []);
 });
 
+test("ignores Markdown links inside inline code and fenced examples", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(
+    path.join(f.source, "README.md"),
+    "# Home\n\n`[inline](missing-inline.md)`\n\n```markdown\n[fenced](missing-fenced.md)\n```\n\n~~~\n[tilde](missing-tilde.md)\n~~~\n\n[Guide](guide/)\n",
+  );
+  assert.deepEqual(await validateSourceTree(f.docs), []);
+});
+
 test("rejects inline README links that mdBook renders as missing README.html", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -138,6 +148,25 @@ test("rejects remote runtime resources and missing generated assets", async (t) 
   assert.ok((errors.match(/remote runtime resource/gu)?.length ?? 0) >= 9);
   assert.match(errors, /missing generated resource/);
   assert.match(errors, /resource escapes site base/);
+});
+
+test("rejects remote and missing CSS resources embedded in HTML", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(
+    path.join(f.output, "index.html"),
+    '<!doctype html><html lang="en"><head><style>@import "https://example.com/theme.css"; .hero { background: url("assets/missing.png"); }</style></head><body><main><h1 style="background:url(https://example.com/pixel.png)">Home</h1><p style=background:url(https://example.com/unquoted.png)>Copy</p></main><script src="/eso-weave/searcher-test.js"></script></body></html>',
+  );
+  const errors = (await validateGeneratedSite(f.output, "/eso-weave/")).join("\n");
+  assert.equal(errors.match(/remote CSS runtime resource/gu)?.length, 3);
+  assert.match(errors, /missing CSS resource assets\/missing\.png/);
+});
+
+test("requires the 404 recovery link to target the site root", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(path.join(f.output, "404.html"), '<!doctype html><html lang="en"><body><main><h1>Page Not Found</h1><a href="./">Home</a></main></body></html>');
+  assert.match((await validateGeneratedSite(f.output, "/eso-weave/")).join("\n"), /missing site-root recovery link/);
 });
 
 test("tokenizes mixed data and local srcset candidates", async (t) => {

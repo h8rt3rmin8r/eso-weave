@@ -32,6 +32,7 @@ function splitTarget(raw) {
 }
 
 function markdownLinks(markdown) {
+  markdown = maskMarkdownCode(markdown);
   const links = [];
   for (let cursor = 0; cursor < markdown.length; cursor += 1) {
     const image = markdown[cursor] === "!" && markdown[cursor + 1] === "[";
@@ -71,6 +72,47 @@ function markdownLinks(markdown) {
     cursor = destinationEnd;
   }
   return links;
+}
+
+function maskMarkdownCode(markdown) {
+  const characters = markdown.split("");
+  const lines = markdown.match(/.*(?:\r?\n|$)/gu) ?? [];
+  let offset = 0;
+  let fence = null;
+
+  for (const line of lines) {
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+    const closing = fence
+      ? line.match(new RegExp(`^ {0,3}${fence.character}{${fence.length},}\\s*$`, "u"))
+      : null;
+    if (fence || opening) {
+      for (let index = offset; index < offset + line.length; index += 1) {
+        if (characters[index] !== "\r" && characters[index] !== "\n") characters[index] = " ";
+      }
+      if (closing) fence = null;
+      else if (!fence) fence = { character: opening[1][0], length: opening[1].length };
+    }
+    offset += line.length;
+  }
+
+  for (let cursor = 0; cursor < characters.length; cursor += 1) {
+    if (characters[cursor] !== "`") continue;
+    let runLength = 1;
+    while (characters[cursor + runLength] === "`") runLength += 1;
+    const delimiter = "`".repeat(runLength);
+    const remainder = characters.slice(cursor + runLength).join("");
+    const closingOffset = remainder.indexOf(delimiter);
+    if (closingOffset < 0) {
+      cursor += runLength - 1;
+      continue;
+    }
+    const end = cursor + runLength + closingOffset + runLength;
+    for (let index = cursor; index < end; index += 1) {
+      if (characters[index] !== "\r" && characters[index] !== "\n") characters[index] = " ";
+    }
+    cursor = end - 1;
+  }
+  return characters.join("");
 }
 
 function markdownDestination(inside) {
@@ -297,6 +339,10 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
     if (/rel=["']edit["']/iu.test(contents) && contents.includes("/docs/src/src/")) {
       errors.push(`${relative}: edit link duplicates the docs/src path`);
     }
+    const escapedSiteUrl = siteUrl.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    if (relative === "404.html" && !new RegExp(`\\bhref\\s*=\\s*["']${escapedSiteUrl}["']`, "iu").test(contents)) {
+      errors.push(`404.html: missing site-root recovery link ${siteUrl}`);
+    }
     for (const match of contents.matchAll(/<img\b[^>]*>/giu)) {
       if (!/\balt=["'][^"']*["']/iu.test(match[0])) errors.push(`${relative}: image missing alt`);
     }
@@ -309,6 +355,15 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
       const target = localOutputPath(outputRoot, file, raw, siteUrl);
       if (target === null) errors.push(`${relative}: resource escapes site base ${raw}`);
       else if (!(await exists(target))) errors.push(`${relative}: missing generated resource ${raw}`);
+    }
+    const embeddedCss = [
+      ...[...contents.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/giu)].map((match) => match[1]),
+      ...[...contents.matchAll(/\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/giu)].map(
+        (match) => match[1] ?? match[2] ?? match[3] ?? "",
+      ),
+    ];
+    for (const css of embeddedCss) {
+      errors.push(...(await validateCssResources(css, outputRoot, file, siteUrl, relative)));
     }
     for (const match of relative === "print.html" ? [] : contents.matchAll(HTML_LINK)) {
       const raw = match[1];
@@ -325,21 +380,31 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
 
   for (const file of await walk(outputRoot, ".css")) {
     const contents = await readFile(file, "utf8");
-    if (/(?:@import\s+|url\(\s*["']?)(?:https?:|\/\/|javascript:)/iu.test(contents)) {
-      errors.push(`${slash(path.relative(outputRoot, file))}: remote CSS runtime resource`);
+    const relative = slash(path.relative(outputRoot, file));
+    errors.push(...(await validateCssResources(contents, outputRoot, file, siteUrl, relative)));
+  }
+  return errors;
+}
+
+async function validateCssResources(css, outputRoot, contextFile, siteUrl, displayPath) {
+  const errors = [];
+  const references = [];
+  for (const match of css.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s)'";]+))\s*\)/giu)) {
+    references.push(match[1] ?? match[2] ?? match[3] ?? "");
+  }
+  for (const match of css.matchAll(/@import\s+(?!url\()(?:"([^"]*)"|'([^']*)')/giu)) {
+    references.push(match[1] ?? match[2] ?? "");
+  }
+  for (const rawValue of references) {
+    const raw = rawValue.trim();
+    if (!raw || /^(?:data:|#)/iu.test(raw)) continue;
+    if (isExternal(raw) || /^javascript:/iu.test(raw)) {
+      errors.push(`${displayPath}: remote CSS runtime resource ${raw}`);
+      continue;
     }
-    for (const match of contents.matchAll(/(?:@import\s+(?:url\()?|url\()\s*["']?([^"')\s]+)["']?\)?/giu)) {
-      const raw = match[1];
-      if (/^(?:data:|#)/iu.test(raw) || isExternal(raw)) continue;
-      const { pathname } = splitTarget(raw);
-      const target = path.resolve(path.dirname(file), pathname);
-      const relative = path.relative(outputRoot, target);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) {
-        errors.push(`${slash(path.relative(outputRoot, file))}: CSS resource escapes site ${raw}`);
-      } else if (!(await exists(target))) {
-        errors.push(`${slash(path.relative(outputRoot, file))}: missing CSS resource ${raw}`);
-      }
-    }
+    const target = localOutputPath(outputRoot, contextFile, raw, siteUrl);
+    if (target === null) errors.push(`${displayPath}: CSS resource escapes site ${raw}`);
+    else if (!(await exists(target))) errors.push(`${displayPath}: missing CSS resource ${raw}`);
   }
   return errors;
 }
