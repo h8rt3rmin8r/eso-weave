@@ -878,29 +878,34 @@ dashboard, a Skills region, and an optional live log panel.
 | Region | Contents |
 | --- | --- |
 | Menu bar | Settings, Exit, and a Live Log toggle |
-| Live HUD | Labeled Health, Stamina, and Magicka meters; Game Context; combat; movement; roll-dodge state; life state; active and configured weapon bars; selected quickslot classification, potion availability, and cooldown |
-| System and State | A persisted accessible disclosure containing game installation provider and runtime; world-transition state; ESO Weave Active or Suspended; PixelBeacon installation and independent live-signal state; fishing and auto-potion requested/effective state; the one appropriate primary Install or Update action plus secondary managed Uninstall |
+| Live HUD | Labeled Health, Stamina, and Magicka meters; Game Context; Combat; Movement; Roll Dodge; Life State; Weapon Bar; selected Quickslot classification, Potion Availability, and Potion Cooldown |
+| System and State | A persisted accessible disclosure containing game installation provider and runtime; World State; ESO Weave Active or Suspended; PixelBeacon Status and independent PixelBeacon Signal; Fishing and Auto Potion requested/effective state; the one appropriate primary Install or Update action plus secondary managed Uninstall |
 | Skills region | One row per slot: label, active toggle, weave type, override toggle, effective delay, and decoded cooldown |
 | Live log panel | Optional, attached at the bottom |
 
 **Window minimum.** The minimum is not a fixed size. 480 by 420 is a boot floor
 applied only until the content has been laid out and measured over two consecutive
 stable frames. From then on the enforced minimum uses the intrinsic content width
-and the height of the active responsive layout, plus panel padding. Live HUD and
-System and State use two columns at 880 or more available logical points and
-stack in that reading order below 880. The intrinsic minimum width never follows
-an expanding dashboard container, so a continuous drag can cross the breakpoint
-without width ratcheting. The height may change only between the documented wide
-and narrow arrangements. The minimum follows content down when a row disappears,
-grows the window to fit when content no longer fits without shrinking a size the
-operator chose, and is capped at the display work area. With the live log open it
-adds a width bonus and the open-log reserve.
+and the height of the active responsive layout, plus panel padding. While System
+and State is expanded, the two cards have equal outer width and height. They split
+usable width evenly at 880 or more available logical points and each use the full
+stacked width below 880. Collapsing System and State forces top-down order at every
+width and is the sole card-height exception; expanding it immediately restores
+width-driven layout. The intrinsic minimum width never follows an expanding
+dashboard container, so a continuous drag can cross the breakpoint without width
+ratcheting. The minimum follows content down when a row disappears, grows the
+window to fit when content no longer fits without shrinking a size the operator
+chose, and is capped at the display work area. With the live log open it adds a
+width bonus and the open-log reserve. Width- and collapse-driven transitions
+reserve the pending content height before the log renders, preventing overlap.
 
 Hovering an interactive control changes its color, never its size, so the layout
 never reflows on hover.
 
-Game Context help is available from pointer hover and keyboard focus with
-identical text. While runtime is not Active, every Live HUD value uses the shared
+Dashboard rows reserve a stable label region, let dynamic values consume the
+remaining card width, and reserve a fixed trailing region only for System and
+State interactions. Complete constrained values are available from pointer hover
+and keyboard focus with identical text. While runtime is not Active, every Live HUD value uses the shared
 **Game not active** presentation rather than retaining stale values. If the game
 is active but its signal is unavailable, the HUD says **Signal unavailable** and
 never presents an invented zero.
@@ -910,6 +915,11 @@ keyboard, or assistive technology hides or restores the complete body, persists
 the user preference, and recomputes intrinsic height without leaving blank space.
 The Skills region is never part of the disclosure.
 
+System and State toggles and lifecycle actions share one trailing-column origin.
+Install, Update, and Uninstall use identical compact dimensions. The maximum two
+available lifecycle actions render in one primary-then-secondary horizontal row;
+the managed-marker uninstall guard and confirmation remain unchanged.
+
 Resource meters are unanimated and reuse one component. Health, Stamina, and
 Magicka keep their familiar red, green, and blue associations, but every meter
 also carries a visible name, exact integer percentage, proportional fill, and a
@@ -918,6 +928,8 @@ and unavailable states have no numeric value. A meter says **Low** only when its
 auto-potion watch is enabled and the observed percentage is at or below that
 configured threshold. Text and meaningful graphical boundaries meet WCAG 2.2 AA
 contrast, and color is never the only state cue.
+One compact group boundary follows the final resource meter before Game Context;
+it is independent of whether the group contains three meters or a later fourth.
 
 ### 12.2 Live log viewer
 

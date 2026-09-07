@@ -79,14 +79,20 @@ Input interception reads keyboard devices and synthesizes input through
 ## Game state and context
 
 The main window separates information by the question it answers. **Live HUD**
-shows resources, Game Context, combat, movement, roll-dodge state, life state,
-weapon setup, and the selected quickslot. **System and State** shows
-world-transition state and
-whether the game, ESO Weave,
-PixelBeacon, fishing, and auto-potion are ready and why an action is blocked. The
-two sections sit side by side in a wide window and stack with Live HUD first in a
-narrow one. System and State can be collapsed from its full keyboard-accessible
-header, and that preference survives restart. The Skills table remains below it.
+shows resources, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon
+Bar, and the selected Quickslot. **System and State** shows World State and
+whether the game, ESO Weave, PixelBeacon, Fishing, and Auto Potion are ready and
+why an action is blocked. Expanded cards always have equal dimensions: they split
+wide windows evenly and use the same full width when stacked. Collapsing System
+and State forces it below Live HUD at every width; expanding it restores the
+ordinary 880-point breakpoint. The preference survives restart, and Skills stays
+below the complete dashboard.
+
+System controls share one trailing column. Install, Update, and Uninstall use one
+compact size, and any two available actions stay in a horizontal row. Live HUD
+values use the remaining card width before truncating; constrained full text is
+available by pointer hover or keyboard focus. A compact gap after the complete
+resource-meter group keeps Game Context visually distinct.
 
 The Game row reports runtime and installation provider together. Installation is
 detected from provider-owned evidence for the ESO Store, Steam, Epic Games, or
@@ -95,14 +101,14 @@ reports **Inactive**, **Launcher open**, **Active**, or **Unknown**. The game cl
 takes precedence, so closing the launcher after ESO starts does not make an active
 session disappear.
 
-**World state** reports **Active** only after ESO finishes player activation and
+**World State** reports **Active** only after ESO finishes player activation and
 PixelBeacon refreshes every player-derived payload for the current world. It
 reports **Transitioning** from player deactivation through the loading interval,
 and **Not detected** when current lifecycle evidence is unavailable. PixelBeacon
 version 16 advertises protocol version 2 for this field; older negotiated layouts
 remain readable but are never sampled beyond their last defined block.
 
-**Roll dodge** reports **Active** from the player's dodge-roll combat event until
+**Roll Dodge** reports **Active** from the player's dodge-roll combat event until
 its matching effect fade. A 1500 ms watchdog clears a rejected dodge that emits a
 gain without a fade. Loading, death, or lost telemetry clears the observation to
 **Not detected**; late combat events cannot overwrite that invalidation, and

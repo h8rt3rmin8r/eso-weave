@@ -106,6 +106,16 @@ pub fn resource_meter(
 /// when off) with a sliding knob. Returns the response so the caller can detect
 /// changes and attach a hover tooltip.
 pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, palette: &Palette) -> egui::Response {
+    toggle_switch_named(ui, on, palette, "")
+}
+
+/// A toggle switch with a meaningful accessibility name.
+pub fn toggle_switch_named(
+    ui: &mut egui::Ui,
+    on: &mut bool,
+    palette: &Palette,
+    label: &str,
+) -> egui::Response {
     let height = ui.spacing().interact_size.y;
     let desired_size = egui::vec2(1.9 * height, height);
     let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
@@ -114,7 +124,7 @@ pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, palette: &Palette) -> egu
         response.mark_changed();
     }
     response.widget_info(|| {
-        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *on, "")
+        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *on, label)
     });
 
     if ui.is_rect_visible(rect) {
@@ -133,6 +143,22 @@ pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, palette: &Palette) -> egu
         ui.painter().circle_filled(center, 0.72 * radius, knob);
     }
     response
+}
+
+/// Renders a complete resource group followed by its single boundary gap.
+///
+/// The gap belongs to the group rather than today's final resource, so adding a
+/// fourth descriptor cannot leave spacing stranded after Magicka.
+pub fn resource_group(
+    ui: &mut egui::Ui,
+    palette: &Palette,
+    resources: &[(&str, &crate::app::ResourceView, crate::app::ResourceTheme)],
+    trailing_gap: f32,
+) {
+    for &(title, resource, theme) in resources {
+        resource_meter(ui, palette, title, resource, theme);
+    }
+    ui.add_space(trailing_gap);
 }
 
 /// Renders a section heading (SemiBold, larger) from the heading text style.

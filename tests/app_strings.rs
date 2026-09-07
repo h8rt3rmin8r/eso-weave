@@ -21,6 +21,7 @@ fn every_tooltip_and_help_string_is_non_empty() {
 
 #[test]
 fn settings_labels_and_help_are_present() {
+    assert_eq!(strings::ALL_SETTINGS.len(), 25);
     for setting in strings::ALL_SETTINGS {
         assert!(!setting.label.trim().is_empty());
         assert!(!setting.label.contains('_'));
@@ -64,4 +65,64 @@ fn beacon_settings_are_surfaced() {
     let labels: Vec<&str> = strings::ALL_SETTINGS.iter().map(|s| s.label).collect();
     assert!(labels.contains(&strings::SET_BEACON_PATH.label));
     assert!(labels.contains(&strings::SET_BEACON_ENV.label));
+}
+
+#[test]
+fn dashboard_field_labels_use_the_required_concise_title_case() {
+    assert_eq!(strings::WEAPON_BAR_TITLE, "Weapon Bar");
+    assert_eq!(strings::LIFE_TITLE, "Life State");
+    assert_eq!(strings::ROLL_DODGE_TITLE, "Roll Dodge");
+    assert_eq!(strings::WORLD_TITLE, "World State");
+    assert_eq!(strings::AUTO_POTION_TITLE, "Auto Potion");
+    assert_eq!(strings::BEACON_TITLE, "PixelBeacon Status");
+    assert_eq!(strings::BEACON_SIGNAL_TITLE, "PixelBeacon Signal");
+
+    let superseded = [
+        "Active weapon bar",
+        "Life state",
+        "Roll dodge",
+        "World state",
+        "Auto-potion",
+        "PixelBeacon installation",
+        "PixelBeacon signal",
+    ];
+    for label in strings::field_labels() {
+        assert!(
+            !superseded.contains(&label),
+            "superseded field label remains registered: {label}"
+        );
+    }
+}
+
+#[test]
+fn audited_field_and_settings_labels_match_the_title_case_registry() {
+    for label in strings::field_labels() {
+        assert!(!label.trim().is_empty());
+        assert!(!label.contains('_'));
+    }
+
+    for expected in [
+        "Game Installation",
+        "Game State",
+        "Potion Availability",
+        "Potion Cooldown",
+        "Combat Timing",
+        "PixelBeacon and Bus",
+        "Always on Top",
+        "Global Cooldown (ms)",
+        "Light Attack Delay (ms)",
+        "Auto Timing from Weapon",
+        "Adapt to Latency",
+        "Sample Interval While Idle (ms)",
+        "Write Log to File",
+        "Watch Health (Threshold %)",
+        "Toggle Suspend",
+        "Toggle Fishing",
+        "Toggle Auto Potion",
+    ] {
+        assert!(
+            strings::field_labels().contains(&expected),
+            "audited title-case label is missing: {expected}"
+        );
+    }
 }

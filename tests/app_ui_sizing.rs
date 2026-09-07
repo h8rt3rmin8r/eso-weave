@@ -18,9 +18,9 @@ use egui_kittest::{
 
 use eso_weave::app::ui::EsoWeaveApp;
 use eso_weave::app::{
-    resource_view, widgets, AppModel, DashboardLayout, ResourceTheme, DASHBOARD_WIDE_MIN,
+    resource_view, widgets, AppModel, DashboardLayout, ResourceTheme, UiPrefs, DASHBOARD_WIDE_MIN,
 };
-use eso_weave::beacon::{self, BeaconPrefs, Environment, MANAGED_MARKER};
+use eso_weave::beacon::{self, BeaconPrefs, Environment, MANAGED_MARKER, MANIFEST};
 use eso_weave::config::{LoggingPrefs, Settings, Theme};
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
@@ -112,6 +112,7 @@ fn dashboard_stacks_narrow_and_uses_columns_wide() {
         Some(DashboardLayout::Narrow)
     );
     let (narrow_live, narrow_system) = narrow.dashboard_rects().expect("dashboard geometry");
+    assert_rect_sizes_equal(narrow_live, narrow_system, "expanded narrow cards");
     assert!(
         narrow_live.bottom() <= narrow_system.top() + 0.5,
         "narrow sections are not stacked in reading order: {narrow_live:?}, {narrow_system:?}"
@@ -120,6 +121,7 @@ fn dashboard_stacks_narrow_and_uses_columns_wide() {
     let wide = render_at(egui::vec2(1200.0, 1000.0), SETTLE);
     assert_eq!(wide.last_dashboard_layout(), Some(DashboardLayout::Wide));
     let (wide_live, wide_system) = wide.dashboard_rects().expect("dashboard geometry");
+    assert_rect_sizes_equal(wide_live, wide_system, "expanded wide cards");
     assert!(
         wide_live.right() <= wide_system.left() + 0.5,
         "wide sections are not in separate columns: {wide_live:?}, {wide_system:?}"
@@ -128,6 +130,406 @@ fn dashboard_stacks_narrow_and_uses_columns_wide() {
         (wide_live.top() - wide_system.top()).abs() <= 0.5,
         "wide section tops are not aligned: {wide_live:?}, {wide_system:?}"
     );
+}
+
+fn assert_rect_sizes_equal(left: egui::Rect, right: egui::Rect, context: &str) {
+    assert!(
+        (left.width() - right.width()).abs() <= 1.0,
+        "{context} have unequal widths: {left:?}, {right:?}"
+    );
+    assert!(
+        (left.height() - right.height()).abs() <= 1.0,
+        "{context} have unequal heights: {left:?}, {right:?}"
+    );
+}
+
+#[test]
+fn wide_dashboard_cards_grow_symmetrically() {
+    let compact = render_at(egui::vec2(1200.0, 1000.0), SETTLE);
+    let roomy = render_at(egui::vec2(1600.0, 1000.0), SETTLE);
+    let (compact_live, compact_system) = compact.dashboard_rects().expect("compact geometry");
+    let (roomy_live, roomy_system) = roomy.dashboard_rects().expect("roomy geometry");
+
+    let live_growth = roomy_live.width() - compact_live.width();
+    let system_growth = roomy_system.width() - compact_system.width();
+    assert!(
+        (live_growth - system_growth).abs() <= 1.0,
+        "cards grew asymmetrically: live {live_growth}, system {system_growth}"
+    );
+}
+
+#[test]
+fn collapsed_system_state_forces_stacked_layout_until_reexpanded() {
+    let mut harness = harness_at(egui::vec2(1400.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Wide)
+    );
+    harness.get_by_label("System and State").click_accesskit();
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Narrow)
+    );
+    let (live, collapsed) = harness
+        .state()
+        .dashboard_rects()
+        .expect("collapsed geometry");
+    assert!(live.bottom() <= collapsed.top() + 0.5);
+    assert!((live.width() - collapsed.width()).abs() <= 1.0);
+    assert!(collapsed.height() < live.height());
+
+    harness.get_by_label("System and State").click_accesskit();
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Wide)
+    );
+    let (live, system) = harness
+        .state()
+        .dashboard_rects()
+        .expect("expanded geometry");
+    assert_rect_sizes_equal(live, system, "re-expanded wide cards");
+}
+
+#[test]
+fn persisted_collapsed_system_state_starts_stacked_at_wide_width() {
+    let settings = Settings {
+        ui: eso_weave::app::settings_form::ui_to_value(&UiPrefs {
+            system_state_expanded: false,
+            ..UiPrefs::default()
+        }),
+        ..Settings::default()
+    };
+    let app = render_app_at(
+        test_app_with_settings(settings),
+        egui::vec2(1400.0, 1000.0),
+        SETTLE,
+    );
+
+    assert_eq!(app.last_dashboard_layout(), Some(DashboardLayout::Narrow));
+    let (live, collapsed) = app.dashboard_rects().expect("persisted collapsed geometry");
+    assert!(live.bottom() <= collapsed.top() + 0.5);
+    assert!((live.width() - collapsed.width()).abs() <= 1.0);
+    assert!(collapsed.height() < live.height());
+}
+
+#[test]
+fn collapsing_system_state_with_log_open_never_overlaps_and_restores_the_log() {
+    let mut harness = harness_at(egui::vec2(1400.0, 1100.0));
+    harness.step();
+    harness.state_mut().set_log_panel_open(true);
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_no_overlap(harness.state(), "expanded dashboard before collapse");
+
+    harness.get_by_label("System and State").click_accesskit();
+    harness.step();
+    if harness.state().last_log_top().is_some() {
+        assert_no_overlap(harness.state(), "collapse interaction frame");
+    }
+    harness.step();
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Narrow)
+    );
+    if harness.state().last_log_top().is_some() {
+        assert_no_overlap(harness.state(), "first measured collapsed frame");
+    }
+
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    let collapsed_min = harness
+        .state()
+        .last_min_sent()
+        .expect("collapsed log minimum");
+    harness.input_mut().screen_rect = Some(egui::Rect::from_min_size(
+        egui::Pos2::ZERO,
+        egui::vec2(1400.0, collapsed_min.y),
+    ));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    assert_no_overlap(harness.state(), "log restored after collapse reflow");
+
+    harness.get_by_label("System and State").click_accesskit();
+    for frame in 0..=SETTLE {
+        harness.step();
+        if harness.state().last_log_top().is_some() {
+            assert_no_overlap(harness.state(), &format!("re-expansion frame {frame}"));
+        }
+    }
+    assert!(harness.state().system_state_expanded());
+    assert_eq!(
+        harness.state().last_dashboard_layout(),
+        Some(DashboardLayout::Wide)
+    );
+    assert_no_overlap(harness.state(), "log restored after re-expansion");
+}
+
+#[test]
+fn collapse_override_survives_resize_order_and_repeated_toggles() {
+    let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    harness.get_by_label("System and State").click_accesskit();
+    harness.step();
+
+    for width in [
+        560.0,
+        760.0,
+        DASHBOARD_WIDE_MIN - 0.1,
+        DASHBOARD_WIDE_MIN,
+        1400.0,
+    ] {
+        harness.set_size(egui::vec2(width, 1200.0));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert_eq!(
+            harness.state().last_dashboard_layout(),
+            Some(DashboardLayout::Narrow),
+            "collapsed card left stacked layout at {width} points"
+        );
+    }
+
+    for expected in [true, false, true] {
+        harness.get_by_label("System and State").click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert_eq!(harness.state().system_state_expanded(), expected);
+        assert_eq!(
+            harness.state().last_dashboard_layout(),
+            Some(if expected {
+                DashboardLayout::Wide
+            } else {
+                DashboardLayout::Narrow
+            })
+        );
+    }
+}
+
+#[test]
+fn system_state_controls_share_an_origin_and_lifecycle_buttons_share_a_row() {
+    let root = tempfile::tempdir().unwrap();
+    let addon = root.path().join("PixelBeacon");
+    std::fs::create_dir_all(&addon).unwrap();
+    std::fs::write(
+        addon.join("PixelBeacon.txt"),
+        format!("## Title: PixelBeacon\n{MANAGED_MARKER}\n## Version: 1\n"),
+    )
+    .unwrap();
+    let settings = Settings {
+        beacon: beacon::prefs_to_value(&BeaconPrefs {
+            path_override: Some(root.path().to_path_buf()),
+            environment: Environment::Live,
+        }),
+        ..Settings::default()
+    };
+    let mut harness = harness_for_app(test_app_with_settings(settings), egui::vec2(1200.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+
+    let update = harness.get_by_role_and_label(egui::accesskit::Role::Button, "Update");
+    let uninstall = harness.get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall");
+    assert!((update.rect().width() - uninstall.rect().width()).abs() <= 1.0);
+    assert!((update.rect().height() - uninstall.rect().height()).abs() <= 1.0);
+    assert!(
+        (update.rect().top() - uninstall.rect().top()).abs() <= 1.0,
+        "lifecycle buttons are not horizontal: update {:?}, uninstall {:?}",
+        update.rect(),
+        uninstall.rect()
+    );
+    assert!(update.rect().right() <= uninstall.rect().left());
+    let (_, system) = harness
+        .state()
+        .dashboard_rects()
+        .expect("system card geometry");
+    assert!(
+        system.right() - uninstall.rect().right() <= 24.0,
+        "interaction column is not near the trailing edge: system {system:?}, uninstall {:?}",
+        uninstall.rect()
+    );
+
+    for label in ["ESO Weave", "Fishing", "Auto Potion"] {
+        let toggle = harness.get_by_role_and_label(egui::accesskit::Role::CheckBox, label);
+        assert!(
+            (toggle.rect().left() - update.rect().left()).abs() <= 1.0,
+            "{label} starts at {} instead of the action origin {}",
+            toggle.rect().left(),
+            update.rect().left()
+        );
+    }
+}
+
+#[test]
+fn lifecycle_action_matrix_keeps_one_column_and_dispatches_install() {
+    fn beacon_settings(root: &std::path::Path) -> Settings {
+        Settings {
+            beacon: beacon::prefs_to_value(&BeaconPrefs {
+                path_override: Some(root.to_path_buf()),
+                environment: Environment::Live,
+            }),
+            ..Settings::default()
+        }
+    }
+
+    let absent_root = tempfile::tempdir().unwrap();
+    let mut absent = harness_for_app(
+        test_app_with_settings(beacon_settings(absent_root.path())),
+        egui::vec2(1200.0, 1000.0),
+    );
+    for _ in 0..SETTLE {
+        absent.step();
+    }
+    let install = absent.get_by_role_and_label(egui::accesskit::Role::Button, "Install");
+    let install_rect = install.rect();
+    let toggle_rect = absent
+        .get_by_role_and_label(egui::accesskit::Role::CheckBox, "ESO Weave")
+        .rect();
+    assert!((install_rect.left() - toggle_rect.left()).abs() <= 1.0);
+    install.click_accesskit();
+    absent.step();
+    assert!(absent_root
+        .path()
+        .join("PixelBeacon/PixelBeacon.txt")
+        .is_file());
+
+    let current_root = tempfile::tempdir().unwrap();
+    let current_addon = current_root.path().join("PixelBeacon");
+    std::fs::create_dir_all(&current_addon).unwrap();
+    std::fs::write(current_addon.join("PixelBeacon.txt"), MANIFEST).unwrap();
+    let mut current = harness_for_app(
+        test_app_with_settings(beacon_settings(current_root.path())),
+        egui::vec2(1200.0, 1000.0),
+    );
+    for _ in 0..SETTLE {
+        current.step();
+    }
+    let uninstall = current
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall")
+        .rect();
+    assert_eq!(install_rect.size(), uninstall.size());
+    assert!((install_rect.left() - uninstall.left()).abs() <= 1.0);
+    assert!(current
+        .query_by_role_and_label(egui::accesskit::Role::Button, "Install")
+        .is_none());
+    assert!(current
+        .query_by_role_and_label(egui::accesskit::Role::Button, "Update")
+        .is_none());
+}
+
+#[test]
+fn dashboard_value_cell_uses_the_trailing_space_and_preserves_full_text() {
+    use eso_weave::app::ui::{dashboard_metric, dashboard_metric_row, DashboardRowGeometry};
+    use eso_weave::app::StatusRole;
+
+    const FULL_STATE: &str = "Bar 2 | front Two-Handed Greatsword | back Restoration Staff | Ready";
+
+    fn render_row(width: f32) -> (DashboardRowGeometry, f32) {
+        let palette = eso_weave::app::theme::palette(Theme::Dark);
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, 80.0))
+            .build_ui_state(
+                move |ui, state: &mut (bool, Option<(DashboardRowGeometry, f32)>)| {
+                    if !state.0 {
+                        eso_weave::app::theme::install_fonts(ui.ctx());
+                        state.0 = true;
+                        return;
+                    }
+                    let geometry = dashboard_metric_row(
+                        ui,
+                        &palette,
+                        dashboard_metric(
+                            "Weapon Bar",
+                            FULL_STATE,
+                            StatusRole::Healthy,
+                            "Full detail",
+                        ),
+                        0.0,
+                        |_| {},
+                    );
+                    state.1 = Some((geometry, ui.max_rect().right()));
+                },
+                (false, None),
+            );
+        harness.step();
+        let value = harness.get_by_label(FULL_STATE);
+        // The exact full string remains the AccessKit label even when the paint
+        // is constrained and truncated.
+        value.focus();
+        harness.step();
+        harness.state().1.expect("dashboard row geometry")
+    }
+
+    let mut previous_width = 0.0;
+    for width in [360.0, 600.0, DASHBOARD_WIDE_MIN, 1200.0] {
+        let (geometry, trailing_edge) = render_row(width);
+        assert!(
+            (geometry.value.right() - trailing_edge).abs() <= 1.0,
+            "value cell stopped before the trailing edge at {width} points: {geometry:?}"
+        );
+        assert!(geometry.value.width() > previous_width);
+        previous_width = geometry.value.width();
+    }
+}
+
+#[test]
+fn resource_group_gap_follows_three_or_four_meters() {
+    fn gaps(count: usize) -> (f32, f32) {
+        let palette = eso_weave::app::theme::palette(Theme::Dark);
+        let views = [
+            resource_view(eso_weave::pixelbus::ResourceLevel::Percent(10)),
+            resource_view(eso_weave::pixelbus::ResourceLevel::Percent(20)),
+            resource_view(eso_weave::pixelbus::ResourceLevel::Percent(30)),
+            resource_view(eso_weave::pixelbus::ResourceLevel::Percent(40)),
+        ];
+        let descriptors = [
+            ("Health", &views[0], ResourceTheme::Health),
+            ("Stamina", &views[1], ResourceTheme::Stamina),
+            ("Magicka", &views[2], ResourceTheme::Magicka),
+            ("Synthetic", &views[3], ResourceTheme::Magicka),
+        ];
+        let mut harness = Harness::new_ui(|ui| {
+            widgets::resource_group(ui, &palette, &descriptors[..count], 6.0);
+            ui.label("Game Context");
+        });
+        harness.step();
+
+        let first = harness
+            .get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, "Health: 10%")
+            .rect();
+        let second = harness
+            .get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, "Stamina: 20%")
+            .rect();
+        let last_label = if count == 3 {
+            "Magicka: 30%"
+        } else {
+            "Synthetic: 40%"
+        };
+        let last = harness
+            .get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, last_label)
+            .rect();
+        let context = harness.get_by_label("Game Context").rect();
+        (second.top() - first.bottom(), context.top() - last.bottom())
+    }
+
+    let (ordinary, three_gap) = gaps(3);
+    let (_, four_gap) = gaps(4);
+    assert!(three_gap > ordinary);
+    assert!((three_gap - four_gap).abs() <= 1.0);
 }
 
 #[test]
@@ -254,9 +656,9 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
     }
 
     harness.get_by_label("Live HUD");
-    harness.get_by_label("Roll dodge");
+    harness.get_by_label("Roll Dodge");
     harness.get_by_label("System and State");
-    harness.get_by_label("World state");
+    harness.get_by_label("World State");
     harness.get_by_label("Travel");
     for label in [
         "Health: Game not active",
@@ -283,7 +685,7 @@ fn system_state_disclosure_collapses_accessibly_and_reclaims_height() {
     assert!(!harness.state().system_state_expanded());
     assert!(harness.state().content_extent().y < expanded_height);
     assert!(harness.query_by_label("Application").is_none());
-    assert!(harness.query_by_label("World state").is_none());
+    assert!(harness.query_by_label("World State").is_none());
     harness.get_by_label("Skills");
 }
 
@@ -822,6 +1224,8 @@ fn scale_change_selects_layout_in_logical_points() {
         harness.state().last_dashboard_layout(),
         Some(DashboardLayout::Wide)
     );
+    let (base_live, base_system) = harness.state().dashboard_rects().expect("base geometry");
+    assert_rect_sizes_equal(base_live, base_system, "base-scale cards");
 
     harness.ctx.set_pixels_per_point(1.5);
     for _ in 0..SETTLE {
@@ -832,10 +1236,11 @@ fn scale_change_selects_layout_in_logical_points() {
         harness.state().last_dashboard_layout(),
         Some(DashboardLayout::Narrow)
     );
+    let (scaled_live, scaled_system) = harness.state().dashboard_rects().expect("scaled geometry");
+    assert_rect_sizes_equal(scaled_live, scaled_system, "scaled cards");
 
     assert!(
         (scaled.x - base.x).abs() <= 0.5 && scaled.y > base.y,
         "scale should preserve intrinsic width and select taller narrow layout: {base:?} -> {scaled:?}"
     );
 }
-// Temporary diagnostic, appended to tests/app_ui_sizing.rs, removed after use.
