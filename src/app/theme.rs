@@ -1,7 +1,7 @@
 //! Brand theme for the egui GUI (presentation only).
 //!
 //! Maps the "Arcane gold on ink" brand tokens (see
-//! `docs/brand/ESO-Weave-Brand-v1.md`) to egui visuals and style for the dark
+//! `docs/src/development/brand-standard.md`) to egui visuals and style for the dark
 //! (default) and light modes, and installs the bundled Inter font. This layer
 //! carries no correctness-bearing logic; it only styles the view.
 

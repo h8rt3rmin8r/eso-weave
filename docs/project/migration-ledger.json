@@ -1,0 +1,1498 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "bdc7b228b78ef535d07357e7b33a36bbade917cc",
+  "baselineSummary": {
+    "docsArtifacts": 49,
+    "websiteArtifacts": 1,
+    "totalArtifacts": 50,
+    "specificationH2Units": 20,
+    "legacyPlans": 27,
+    "safetyInvariants": 6
+  },
+  "artifacts": [
+    {
+      "source": "docs/ESO-Weave-Specification.md",
+      "blob": "e7fb461cc1492d98fef62eab728dbaf8dcb9af4d",
+      "kind": "published",
+      "disposition": "Split",
+      "destinations": [
+        "docs/src/README.md",
+        "docs/src/concepts/scope-and-platform.md",
+        "docs/src/reference/glossary.md",
+        "docs/src/development/architecture.md",
+        "docs/src/concepts/input-safety.md",
+        "docs/src/concepts/game-observation.md",
+        "docs/src/features/weaving.md",
+        "docs/src/features/fishing.md",
+        "docs/src/features/pixelbeacon.md",
+        "docs/src/features/auto-potion.md",
+        "docs/src/features/interface.md",
+        "docs/src/getting-started/installation.md",
+        "docs/src/getting-started/responsible-use.md",
+        "docs/src/reference/configuration.md",
+        "docs/src/reference/logging.md",
+        "docs/src/reference/pixel-bus-protocol.md",
+        "docs/src/reference/weave-delay-defaults.md",
+        "docs/src/development/repository-conventions.md"
+      ],
+      "authority": "superseded",
+      "evidence": "All 20 H2 units map to canonical audience pages in specificationUnits before the monolith is removed."
+    },
+    {
+      "source": "docs/architecture-decisions/0001-mdbook-documentation-site.md",
+      "blob": "0a33f2681c0403c3a8abc2a6ed30b37211f5c2bd",
+      "kind": "project",
+      "disposition": "Move",
+      "destinations": [
+        "docs/project/architecture-decisions/0001-mdbook-documentation-site.md"
+      ],
+      "authority": "project",
+      "evidence": "Current architecture decision moved intact to the maintainer lifecycle."
+    },
+    {
+      "source": "docs/book.toml",
+      "blob": "ca64b8faccf576678c0ba4d07daa18ae286cad5c",
+      "kind": "infrastructure",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/book.toml"
+      ],
+      "authority": "infrastructure",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/brand/ESO-Weave-Brand-v1.md",
+      "blob": "80bcf6487ff47c0c82ad467ae7148d8b6483bebf",
+      "kind": "published",
+      "disposition": "Move",
+      "destinations": [
+        "docs/src/development/brand-standard.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Durable public design contract moved into the published developer track."
+    },
+    {
+      "source": "docs/build-autopilot.md",
+      "blob": "96d94fd8312e5a182a0bab5f396164559f42c639",
+      "kind": "project",
+      "disposition": "Move",
+      "destinations": [
+        "docs/project/build-autopilot.md"
+      ],
+      "authority": "project",
+      "evidence": "Active maintainer protocol moved to the project lifecycle."
+    },
+    {
+      "source": "docs/plans/README.md",
+      "blob": "04734e75e4340197ca105f44adf7ca7f5a3d35dc",
+      "kind": "archive",
+      "disposition": "Delete",
+      "destinations": [],
+      "authority": "superseded",
+      "evidence": "The stale all-Active index is replaced by separate current and archived indexes.",
+      "replacement": "docs/archive/build-plans/README.md"
+    },
+    {
+      "source": "docs/plans/plan-001.md",
+      "blob": "a11fce81b081d79cf81ea4ae5fa72f78157b602b",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-001.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 001 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-002.md",
+      "blob": "1e153b471eb230d2af888e13bcd518e49de3a21c",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-002.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 002 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-003.md",
+      "blob": "e05ae22a4b5a35370ef553a1a1fc82dcc6a992e2",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-003.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 003 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-004.md",
+      "blob": "4706ffbcea4b51d3a1426c4839481674be262c4b",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-004.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 004 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-005.md",
+      "blob": "f68a1d8064304c212fa79d65a746c4cb0d21e261",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-005.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 005 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-006.md",
+      "blob": "d51418161ffd0c5b28e060efafb85560d6cc825c",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-006.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 006 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-007.md",
+      "blob": "af9d082769238e47086d1d3e91ca603ce78db36a",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-007.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 007 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-008.md",
+      "blob": "3cb1791b0ea28b26e91e61f05fadb06bec4b0e8f",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-008.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 008 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-009.md",
+      "blob": "efc5882c8524bb0d2ce79f7c44df4be995bbac75",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-009.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 009 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-010.md",
+      "blob": "1a4619a961c4422c76cdab7f001414e9fcabe055",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-010.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 010 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-011.md",
+      "blob": "70fb3bfcb2cf2426bfd5c670bdccffa018d8bfbe",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-011.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 011 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-012.md",
+      "blob": "d6297bc8951f43bae2c0e6bde150c95ec0b56eee",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-012.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 012 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-013.md",
+      "blob": "5397e1eacb1757ea254b99208216f6393e12e2b0",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-013.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 013 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-014.md",
+      "blob": "e37c7cfd15665e580440c75db8eb19fe05e7afe7",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-014.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 014 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-015.md",
+      "blob": "cfe1e7fa6ce279e5457136c10466bacec3777e24",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-015.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 015 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-016.md",
+      "blob": "4cc55998cdd69515c89cac1aec0b091fcef2dc0c",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-016.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 016 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-017.md",
+      "blob": "cb487f47d70a7ba98c5c1843943ef620c0bbb951",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-017.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 017 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-018.md",
+      "blob": "8545690bc42ead247be04f9cbf60533a94c2bf7e",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-018.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 018 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-019.md",
+      "blob": "84242a8aceb9ab87869863c13f8988581c4a1533",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-019.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 019 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-020.md",
+      "blob": "6951ab1dec2dc2388bfebaf89a0a12f94e7dee59",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-020.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 020 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-021.md",
+      "blob": "c1cd1c2b4500153a90174e0713ce1f4877b2f60e",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-021.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 021 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-022.md",
+      "blob": "1f77ec256e32291b7c6b3125cb6df92cc3ae2863",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-022.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 022 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-023.md",
+      "blob": "86d834d999a63f891c57fa0737b2971d78fe72c0",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-023.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 023 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-024.md",
+      "blob": "e468a9039d6d72c97d55658cdd0347ffa369d12f",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-024.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 024 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-025.md",
+      "blob": "7e72815b837bc292a430a9bd9ec77ee89ff5ae5d",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-025.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 025 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-026.md",
+      "blob": "1e5eca82ae31be31ff2a7435e67cd3bc89664a96",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-026.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 026 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/plans/plan-027.md",
+      "blob": "518a01fa2fecedca26fcd7ec054e514a43e0ba5b",
+      "kind": "archive",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/build-plans/plan-027.md"
+      ],
+      "authority": "historical",
+      "evidence": "Completed plan 027 is preserved as an archive record with delivery evidence."
+    },
+    {
+      "source": "docs/project-governance.md",
+      "blob": "67c895f427ce5380ec5c03ee3364a73bfa43c716",
+      "kind": "project",
+      "disposition": "Move",
+      "destinations": [
+        "docs/project/governance.md"
+      ],
+      "authority": "project",
+      "evidence": "Active governance record moved to the project lifecycle."
+    },
+    {
+      "source": "docs/releasing.md",
+      "blob": "5f5f33351f93eb11eb8c78c46fd265c1b16c4f3c",
+      "kind": "project",
+      "disposition": "Move",
+      "destinations": [
+        "docs/project/releasing.md"
+      ],
+      "authority": "project",
+      "evidence": "Pinned release procedure moved to the project lifecycle with live references updated."
+    },
+    {
+      "source": "docs/src/404.md",
+      "blob": "27385f2f0abb01be2f8317524804d71a969e530c",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/404.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/README.md",
+      "blob": "07f1f638a2f17a498370a11f77dceb5b823f6341",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/README.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/SUMMARY.md",
+      "blob": "c62ee5d6d56490d223fd63d52da6800a5f8bfb4f",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/SUMMARY.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/assets/brand/eso-weave-mark.svg",
+      "blob": "9f102a3e1fa285ac05659ce3d1b62af151e75812",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/assets/brand/eso-weave-mark.svg"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/assets/brand/fonts/Inter-Regular.ttf",
+      "blob": "012d1b470d92db48d6f45478f9711f088a6c7359",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/assets/brand/fonts/Inter-Regular.ttf"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/assets/brand/fonts/Inter-SemiBold.ttf",
+      "blob": "4be54399d679a0cc0ed46526f79d8e53cec2a1a5",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/assets/brand/fonts/Inter-SemiBold.ttf"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/assets/brand/fonts/OFL.txt",
+      "blob": "ff80f8c615684e796c37ab5ff82a9b31d7390d6e",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/assets/brand/fonts/OFL.txt"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/concepts/README.md",
+      "blob": "c5fdeb855f644a58810b8b6db99f7484d91dca26",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/concepts/README.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/development/README.md",
+      "blob": "c14e20138797031814858c92d92dcd7ad8b209e6",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/development/README.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/features/README.md",
+      "blob": "2af6689aa984b015515331c5f4f34085adfca391",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/features/README.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/getting-started/README.md",
+      "blob": "e4e3add4cfad1abe7e76142bea428b7b0ee0c58e",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/getting-started/README.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/src/reference/README.md",
+      "blob": "c07fb227c9ab6539b6b99dcf1d8c4a3ba731b087",
+      "kind": "published",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/src/reference/README.md"
+      ],
+      "authority": "canonical",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/theme/eso-weave.css",
+      "blob": "2e46acafe395a981462b740516bdd660b9f8bb9c",
+      "kind": "infrastructure",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/theme/eso-weave.css"
+      ],
+      "authority": "infrastructure",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "docs/theme/eso-weave.js",
+      "blob": "b89c06f742105b3e9ca1e203d86a7e461f387de8",
+      "kind": "infrastructure",
+      "disposition": "Retain",
+      "destinations": [
+        "docs/theme/eso-weave.js"
+      ],
+      "authority": "infrastructure",
+      "evidence": "Retained at its established path as documentation infrastructure or canonical published source."
+    },
+    {
+      "source": "website/content/blog/ultimate-resource-meter.md",
+      "blob": "7c6628bc3595c2bf003ca5b65dc56eb2a68a213c",
+      "kind": "website",
+      "disposition": "Archive",
+      "destinations": [
+        "docs/archive/website/ultimate-resource-meter.md"
+      ],
+      "authority": "historical",
+      "evidence": "The announcement is preserved historically; durable behavior is canonical in the Ultimate feature page.",
+      "replacement": "docs/src/features/ultimate-resource.md"
+    }
+  ],
+  "specificationUnits": [
+    {
+      "order": 1,
+      "heading": "Table of Contents",
+      "destinations": [
+        {
+          "path": "docs/src/SUMMARY.md",
+          "requiredExcerpt": "# Summary"
+        }
+      ],
+      "evidence": "Baseline H2 unit 1 is preserved in the named canonical page."
+    },
+    {
+      "order": 2,
+      "heading": "1. Overview",
+      "destinations": [
+        {
+          "path": "docs/src/concepts/scope-and-platform.md",
+          "requiredExcerpt": "ESO Weave is a single-crate Rust desktop companion"
+        }
+      ],
+      "evidence": "Baseline H2 unit 2 is preserved in the named canonical page."
+    },
+    {
+      "order": 3,
+      "heading": "2. Terminology",
+      "destinations": [
+        {
+          "path": "docs/src/reference/glossary.md",
+          "requiredExcerpt": "One of seven automatable inputs"
+        }
+      ],
+      "evidence": "Baseline H2 unit 3 is preserved in the named canonical page."
+    },
+    {
+      "order": 4,
+      "heading": "3. Scope",
+      "destinations": [
+        {
+          "path": "docs/src/concepts/scope-and-platform.md",
+          "requiredExcerpt": "Supported capabilities"
+        }
+      ],
+      "evidence": "Baseline H2 unit 4 is preserved in the named canonical page."
+    },
+    {
+      "order": 5,
+      "heading": "4. Platform Support",
+      "destinations": [
+        {
+          "path": "docs/src/concepts/scope-and-platform.md",
+          "requiredExcerpt": "Windows 10 and 11 x64"
+        }
+      ],
+      "evidence": "Baseline H2 unit 5 is preserved in the named canonical page."
+    },
+    {
+      "order": 6,
+      "heading": "5. System Architecture",
+      "destinations": [
+        {
+          "path": "docs/src/development/architecture.md",
+          "requiredExcerpt": "ESO Weave is one Rust process composed of cooperating subsystems"
+        }
+      ],
+      "evidence": "Baseline H2 unit 6 is preserved in the named canonical page."
+    },
+    {
+      "order": 7,
+      "heading": "6. Concurrency and Ownership",
+      "destinations": [
+        {
+          "path": "docs/src/development/architecture.md",
+          "requiredExcerpt": "The interception callback never sleeps or blocks"
+        }
+      ],
+      "evidence": "Baseline H2 unit 7 is preserved in the named canonical page."
+    },
+    {
+      "order": 8,
+      "heading": "7. Input Engine",
+      "destinations": [
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "Generated input is flagged so the interception engine never consumes its own output"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "timeBeginPeriod(1)"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "timeEndPeriod(1)"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "The higher resolution is held only for the weave worker lifetime"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "The menu gate can only relax interception"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "addon too old to publish the gate"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "a sample that fails validation"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "a lost beacon signal"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "resolve to **no menu** for interception"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "sink still releases any mouse button"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "A slow low-level hook callback can cause Windows to remove the hook"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "sits below the display server and behaves identically under X11 and Wayland"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "capture-style rebinding control"
+        },
+        {
+          "path": "docs/src/concepts/input-safety.md",
+          "requiredExcerpt": "rejects conflicting assignments"
+        }
+      ],
+      "evidence": "Baseline H2 unit 8 is preserved in the named canonical page."
+    },
+    {
+      "order": 9,
+      "heading": "8. Weave Engine",
+      "destinations": [
+        {
+          "path": "docs/src/features/weaving.md",
+          "requiredExcerpt": "submit a basic attack and skill sequence in its place"
+        }
+      ],
+      "evidence": "Baseline H2 unit 9 is preserved in the named canonical page."
+    },
+    {
+      "order": 10,
+      "heading": "9. Fishing Automation",
+      "destinations": [
+        {
+          "path": "docs/src/features/fishing.md",
+          "requiredExcerpt": "It never blocks a worker and never sends input after losing the beacon"
+        }
+      ],
+      "evidence": "Baseline H2 unit 10 is preserved in the named canonical page."
+    },
+    {
+      "order": 11,
+      "heading": "10. PixelBeacon Companion Addon",
+      "destinations": [
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "effective tolerance at 15"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "one additional capture permitted"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "saturating at 12700 ms"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "Synergy has no cooldown block"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "1 Hz recovery backstop"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "sample interval at 375 ms"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "No payload block is hidden"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "A suspended application neither intercepts nor synthesizes, so it samples slowly"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "pre-launch fallback"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "union of multiple heads"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "| B25 Ultimate Current | (456, 8) | Version 5 exact 9-bit value; R carries bits 0 through 7, G is `0x05` when bit 8 is clear or `0x7B` when it is set, and B is `255 - R`; 511 is unavailable |"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "| B26 Ultimate Maximum | (472, 8) | The same exact codec with G `0x1B` or `0x5F`; zero and 511 are unavailable |"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "| B27 Primary Ultimate Cost | (488, 8) | The same exact codec with G `0x27` or `0x48`; 511 is unavailable |"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "| B28 Backup Ultimate Cost | (504, 8) | The same exact codec with G `0x32` or `0x3D`; 511 is unavailable |"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "B25 and B26 come from the same"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "GetUnitPower(\"player\", COMBAT_MECHANIC_FLAGS_ULTIMATE)"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "Values from 0 through 510 publish exactly"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "out-of-range maximum makes both current and maximum unavailable"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "GetSlotAbilityCost(ACTION_BAR_ULTIMATE_SLOT_INDEX + 1"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "HOTBAR_CATEGORY_PRIMARY"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "HOTBAR_CATEGORY_BACKUP"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "An unused slot, nil API result, negative value, zero cost, or value above 510 publishes 511"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "The primary and backup costs are sampled and published together"
+        },
+        {
+          "path": "docs/src/reference/pixel-bus-protocol.md",
+          "requiredExcerpt": "While any special or temporary hotbar is active, both costs publish unavailable"
+        },
+        {
+          "path": "docs/src/features/pixelbeacon.md",
+          "requiredExcerpt": "Removal deletes the PixelBeacon directory only when the manifest contains"
+        },
+        {
+          "path": "docs/src/features/fishing.md",
+          "requiredExcerpt": "the bite only from bait consumption while a cast is active"
+        },
+        {
+          "path": "docs/src/getting-started/installation.md",
+          "requiredExcerpt": "PixelBeacon installation is a separate action inside ESO Weave"
+        }
+      ],
+      "evidence": "Baseline H2 unit 11 is preserved in the named canonical page."
+    },
+    {
+      "order": 12,
+      "heading": "11. Auto-Potion",
+      "destinations": [
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "unavailable evidence always blocks it"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "The Quickslot key defaults to `Q`"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "Every resource watch is off by default"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "the OR rule is not configurable"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "Until the next evaluation"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "The controller ticks on the pixel-bus worker, adds no thread or timer"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "logging records categorical effective-state changes"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "treating unknown as permissive would fire during beacon outages"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "checks menu and suspension directly"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "blocks action without clearing the requested setting"
+        },
+        {
+          "path": "docs/src/features/auto-potion.md",
+          "requiredExcerpt": "never reaches the hook thread"
+        }
+      ],
+      "evidence": "Baseline H2 unit 12 is preserved in the named canonical page."
+    },
+    {
+      "order": 13,
+      "heading": "12. Graphical User Interface",
+      "destinations": [
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "480 by 420 boot floor"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "two consecutive stable frames"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "without ratcheting"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "capped at the display work area"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "reserve pending content height"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "full header is accessible"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "never its size"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "On every rendered frame"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "clamped before display or persistence"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "at least half of the body remains visible"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "Every resource meter is unanimated and reuses one component"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "programmatic progress value"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "Observed zero remains a numeric empty bar"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "Dormant and unavailable states have no numeric value"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "meet WCAG 2.2 AA contrast"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "color is never the only state cue"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "One compact group boundary follows Ultimate before Game Context"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "identical text for both access paths"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "A fixed trailing region is reserved only for System and State"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "At most two lifecycle actions"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "primary-then-secondary horizontal row"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "managed-marker uninstall guard and confirmation"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "grows sub-linearly with the window on both axes"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "colorizes events by level"
+        },
+        {
+          "path": "docs/src/features/interface.md",
+          "requiredExcerpt": "resizable between a six-line readable minimum and the space above it"
+        }
+      ],
+      "evidence": "Baseline H2 unit 13 is preserved in the named canonical page."
+    },
+    {
+      "order": 14,
+      "heading": "13. Configuration and Session State",
+      "destinations": [
+        {
+          "path": "docs/src/reference/configuration.md",
+          "requiredExcerpt": "stores user settings separately from derived runtime state"
+        }
+      ],
+      "evidence": "Baseline H2 unit 14 is preserved in the named canonical page."
+    },
+    {
+      "order": 15,
+      "heading": "14. Logging",
+      "destinations": [
+        {
+          "path": "docs/src/reference/logging.md",
+          "requiredExcerpt": "Input contents are not logged above DEBUG"
+        }
+      ],
+      "evidence": "Baseline H2 unit 15 is preserved in the named canonical page."
+    },
+    {
+      "order": 16,
+      "heading": "15. Packaging and Distribution",
+      "destinations": [
+        {
+          "path": "docs/src/getting-started/installation.md",
+          "requiredExcerpt": "Prebuilt installers are published"
+        }
+      ],
+      "evidence": "Baseline H2 unit 16 is preserved in the named canonical page."
+    },
+    {
+      "order": 17,
+      "heading": "16. Repository Conventions",
+      "destinations": [
+        {
+          "path": "docs/src/development/repository-conventions.md",
+          "requiredExcerpt": "single-crate Rust project"
+        }
+      ],
+      "evidence": "Baseline H2 unit 17 is preserved in the named canonical page."
+    },
+    {
+      "order": 18,
+      "heading": "17. README Disclaimer Text",
+      "destinations": [
+        {
+          "path": "docs/src/getting-started/responsible-use.md",
+          "requiredExcerpt": "The Elder Scrolls®"
+        }
+      ],
+      "evidence": "Baseline H2 unit 18 is preserved in the named canonical page."
+    },
+    {
+      "order": 19,
+      "heading": "Disclaimer",
+      "destinations": [
+        {
+          "path": "docs/src/getting-started/responsible-use.md",
+          "requiredExcerpt": "up to and including permanent account suspension"
+        },
+        {
+          "path": "docs/src/getting-started/responsible-use.md",
+          "requiredExcerpt": "without warranty of any kind, express or implied"
+        }
+      ],
+      "evidence": "Baseline H2 unit 19 is preserved in the named canonical page."
+    },
+    {
+      "order": 20,
+      "heading": "Appendix A. Weave Delay Defaults",
+      "destinations": [
+        {
+          "path": "docs/src/reference/weave-delay-defaults.md",
+          "requiredExcerpt": "These values are adjustable defaults rather than fixed gameplay constants"
+        }
+      ],
+      "evidence": "Baseline H2 unit 20 is preserved in the named canonical page."
+    }
+  ],
+  "plans": [
+    {
+      "id": "001",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-001.md",
+      "specs": [
+        "specs/001-foundations",
+        "specs/002-input-engine",
+        "specs/003-weave-engine",
+        "specs/004-pixelbeacon-addon",
+        "specs/005-pixel-bus-reader",
+        "specs/006-beacon-manager",
+        "specs/007-fishing-controller",
+        "specs/008-latency-adaptive-delays",
+        "specs/009-gui",
+        "specs/010-packaging-and-ci"
+      ],
+      "evidence": "The listed spec packages shipped in the v0.1.1 release.",
+      "notes": ""
+    },
+    {
+      "id": "002",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-002.md",
+      "specs": [
+        "specs/012-brand-ux-polish"
+      ],
+      "evidence": "The listed spec package shipped in the v0.3.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "003",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-003.md",
+      "specs": [
+        "specs/013-gui-ergonomics-autosave",
+        "specs/014-weapon-bar-timing"
+      ],
+      "evidence": "The listed spec packages shipped in the v0.4.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "004",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-004.md",
+      "specs": [
+        "specs/016-fishing-reliability",
+        "specs/017-fishing-weaving-docs"
+      ],
+      "evidence": "The listed spec packages shipped in the v0.4.3 release.",
+      "notes": ""
+    },
+    {
+      "id": "005",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-005.md",
+      "specs": [
+        "specs/018-eso-api-version-check",
+        "specs/019-ui-hover-and-modal-fixes",
+        "specs/020-spec-rewrite-and-fishing-docs"
+      ],
+      "evidence": "The listed spec packages shipped in the v0.5.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "006",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-006.md",
+      "specs": [
+        "specs/021-window-geometry-persistence",
+        "specs/022-primary-skills-controls",
+        "specs/023-settings-modal-logging-keys",
+        "specs/024-fishing-capture-hardening"
+      ],
+      "evidence": "The listed spec packages shipped in the v0.6.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "007",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-007.md",
+      "specs": [
+        "specs/025-fishing-interaction-detection"
+      ],
+      "evidence": "The listed spec package shipped in the v0.6.1 release.",
+      "notes": "Plan 008 later corrected the bite signal without invalidating plan 007's interaction-detection history."
+    },
+    {
+      "id": "008",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-008.md",
+      "specs": [
+        "specs/026-fishing-bite-signal"
+      ],
+      "evidence": "The listed spec package shipped in the v0.6.2 release.",
+      "notes": ""
+    },
+    {
+      "id": "009",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-009.md",
+      "specs": [
+        "specs/030-ui-sizing-correctness"
+      ],
+      "evidence": "The listed spec package shipped in the v0.8.1 release.",
+      "notes": ""
+    },
+    {
+      "id": "010",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-010.md",
+      "specs": [
+        "specs/031-combat-state-block",
+        "specs/032-menu-state-gate",
+        "specs/033-resource-blocks",
+        "specs/034-display-detection",
+        "specs/036-movement-state-block"
+      ],
+      "evidence": "The listed spec packages shipped across the v0.9.0 release and v0.10.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "011",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-011.md",
+      "specs": [
+        "specs/035-grid-wrap"
+      ],
+      "evidence": "The listed spec package shipped in the v0.9.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "012",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-012.md",
+      "specs": [
+        "specs/037-cooldown-blocks",
+        "specs/038-quickslot-blocks",
+        "specs/039-auto-potion"
+      ],
+      "evidence": "The listed spec packages shipped across the v0.10.0 release and v0.11.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "013",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-013.md",
+      "specs": [
+        "specs/041-game-runtime-context"
+      ],
+      "evidence": "The listed spec package merged in PR #31.",
+      "notes": ""
+    },
+    {
+      "id": "014",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-014.md",
+      "specs": [
+        "specs/044-delivery-pipeline-governance"
+      ],
+      "evidence": "The listed spec package merged in PR #48.",
+      "notes": ""
+    },
+    {
+      "id": "015",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-015.md",
+      "specs": [
+        "specs/045-negotiated-width-geometry"
+      ],
+      "evidence": "The listed spec package merged in PR #49.",
+      "notes": ""
+    },
+    {
+      "id": "016",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-016.md",
+      "specs": [
+        "specs/046-live-hud-dashboard"
+      ],
+      "evidence": "The listed spec package merged in PR #50.",
+      "notes": ""
+    },
+    {
+      "id": "017",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-017.md",
+      "specs": [
+        "specs/047-concise-release-notes"
+      ],
+      "evidence": "The listed spec package merged in PR #52 and shipped in the v0.12.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "018",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-018.md",
+      "specs": [
+        "specs/048-life-state-safety"
+      ],
+      "evidence": "The listed spec package merged in PR #62.",
+      "notes": ""
+    },
+    {
+      "id": "019",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-019.md",
+      "specs": [
+        "specs/049-world-transition-state"
+      ],
+      "evidence": "The listed spec package merged in PR #63.",
+      "notes": ""
+    },
+    {
+      "id": "020",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-020.md",
+      "specs": [
+        "specs/050-roll-dodge-safety"
+      ],
+      "evidence": "The listed spec package merged in PR #64.",
+      "notes": ""
+    },
+    {
+      "id": "021",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-021.md",
+      "specs": [
+        "specs/051-travel-safety"
+      ],
+      "evidence": "The listed spec package merged in PR #65.",
+      "notes": ""
+    },
+    {
+      "id": "022",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-022.md",
+      "specs": [
+        "specs/052-sprint-safety"
+      ],
+      "evidence": "The listed spec package merged in PR #66.",
+      "notes": ""
+    },
+    {
+      "id": "023",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-023.md",
+      "specs": [
+        "specs/053-v013-release-prep"
+      ],
+      "evidence": "The listed spec package merged in PR #70 and shipped in the v0.13.0 release.",
+      "notes": ""
+    },
+    {
+      "id": "024",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-024.md",
+      "specs": [
+        "specs/054-dashboard-layout-cohesion"
+      ],
+      "evidence": "The listed spec package merged in PR #76.",
+      "notes": ""
+    },
+    {
+      "id": "025",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-025.md",
+      "specs": [
+        "specs/055-ultimate-resource-meter"
+      ],
+      "evidence": "The listed spec package merged in PR #78.",
+      "notes": "Ultimate field verification remains separately tracked by issue #77 and does not reopen this plan."
+    },
+    {
+      "id": "026",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-026.md",
+      "specs": [
+        "specs/056-v014-release-prep"
+      ],
+      "evidence": "The listed spec package merged in PR #86 and shipped in the v0.14.0 release.",
+      "notes": "Ultimate field verification remains separately tracked by issue #77 and does not reopen this plan."
+    },
+    {
+      "id": "027",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-027.md",
+      "specs": [
+        "specs/057-mdbook-foundation"
+      ],
+      "evidence": "Issue #79 closed, PR #87 merged, and the main Pages workflow completed successfully.",
+      "notes": ""
+    }
+  ],
+  "postBaselinePlans": [
+    {
+      "id": "028",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-028.md",
+      "specs": [
+        "specs/058-documentation-corpus"
+      ],
+      "evidence": "Issue #80 tracks the active S058 delivery."
+    }
+  ],
+  "safetyCrosswalk": [
+    {
+      "id": "injected-input-recursion-breaking",
+      "destination": "docs/src/concepts/input-safety.md",
+      "requiredExcerpt": "Generated input is flagged so the interception engine never consumes its own output",
+      "evidence": "Canonical input-safety page preserves injected-event tagging and recursion rejection."
+    },
+    {
+      "id": "focused-window-only-suppression",
+      "destination": "docs/src/concepts/input-safety.md",
+      "requiredExcerpt": "Focus scoping is unconditional",
+      "evidence": "Canonical input-safety page preserves focused-window scoping."
+    },
+    {
+      "id": "non-blocking-hook-callbacks",
+      "destination": "docs/src/concepts/input-safety.md",
+      "requiredExcerpt": "Interception callbacks only classify, suppress, and hand off. They never sleep, block, or synthesize",
+      "evidence": "Canonical input-safety page preserves the non-blocking callback invariant."
+    },
+    {
+      "id": "managed-marker-gated-uninstall",
+      "destination": "docs/src/features/pixelbeacon.md",
+      "requiredExcerpt": "Removal deletes the PixelBeacon directory only when the manifest contains",
+      "evidence": "Canonical PixelBeacon page preserves managed-marker deletion safety."
+    },
+    {
+      "id": "addons-directory-containment",
+      "destination": "docs/src/features/pixelbeacon.md",
+      "requiredExcerpt": "Discovery never writes outside the resolved AddOns directory",
+      "evidence": "Canonical PixelBeacon page preserves AddOns-directory containment."
+    },
+    {
+      "id": "fishing-signal-loss-fail-closed",
+      "destination": "docs/src/features/fishing.md",
+      "requiredExcerpt": "never sends input after losing the beacon",
+      "evidence": "Canonical fishing page preserves SignalLost fail-closed behavior."
+    }
+  ],
+  "staleLiterals": [
+    "docs/ESO-Weave-Specification.md",
+    "docs/build-autopilot.md",
+    "docs/project-governance.md",
+    "docs/releasing.md",
+    "docs/plans/",
+    "website/content/blog/ultimate-resource-meter.md"
+  ],
+  "historicalExceptions": [
+    {
+      "file": "CHANGELOG.md",
+      "literal": "docs/ESO-Weave-Specification.md",
+      "occurrences": 4,
+      "reason": "These release-era statements preserve the technical specification path that was authoritative when recorded."
+    },
+    {
+      "file": "CHANGELOG.md",
+      "literal": "docs/releasing.md",
+      "occurrences": 2,
+      "reason": "These release-era decisions preserve the pinned release-guide path that existed at the time."
+    },
+    {
+      "file": "CHANGELOG.md",
+      "literal": "docs/plans/",
+      "occurrences": 2,
+      "reason": "These historical entries accurately record that the cited issue-driven work had no build-plan row at the time."
+    }
+  ]
+}

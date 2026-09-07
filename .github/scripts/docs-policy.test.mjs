@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,10 +8,78 @@ import {
   contrastRatio,
   validateBrandCss,
   validateBrandJavascript,
+  validateCorpusSnapshot,
   validateGeneratedSite,
+  validateMigrationLedger,
   validateSourceTree,
+  validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
+
+async function migrationLedger() {
+  return JSON.parse(await readFile(path.join(repositoryRoot, "docs", "project", "migration-ledger.json"), "utf8"));
+}
+
+function virtualCorpus(ledger) {
+  const existingPaths = new Set([
+    "README.md",
+    "docs/README.md",
+    "docs/src/SUMMARY.md",
+    "docs/project/build-plans/README.md",
+    "docs/archive/build-plans/README.md",
+  ]);
+  for (const artifact of ledger.artifacts) {
+    for (const destination of artifact.destinations) existingPaths.add(destination);
+    if (artifact.replacement) existingPaths.add(artifact.replacement);
+  }
+  for (const unit of ledger.specificationUnits) {
+    for (const destination of unit.destinations) existingPaths.add(destination.path);
+  }
+  for (const plan of ledger.plans) {
+    existingPaths.add(plan.destination);
+    for (const spec of plan.specs) existingPaths.add(spec);
+  }
+  for (const invariant of ledger.safetyCrosswalk) existingPaths.add(invariant.destination);
+  for (const plan of ledger.postBaselinePlans) {
+    existingPaths.add(plan.destination);
+    for (const spec of plan.specs) existingPaths.add(spec);
+  }
+  const activeRows = ledger.postBaselinePlans
+    .filter((plan) => plan.lifecycle === "Active")
+    .map((plan) => `| [plan-${plan.id}.md](plan-${plan.id}.md) | Active | Current work |`)
+    .join("\n");
+  const archiveRows = ledger.postBaselinePlans
+    .filter((plan) => plan.lifecycle === "Archived")
+    .map((plan) => `| [${plan.id}](plan-${plan.id}.md) | Complete, Archived | [PR #99](https://example.com/pull/99) |`)
+    .join("\n");
+  const textFiles = new Map([
+    ["README.md", "# ESO Weave\n\n[Documentation](docs/src/)\n"],
+    ["docs/README.md", "# Documentation Lifecycle\n\n[Ledger](project/migration-ledger.md)\n[Ultimate archive](archive/website/ultimate-resource-meter.md)\n"],
+    ["docs/book.toml", '[book]\nsrc = "src"\n'],
+    ["docs/src/SUMMARY.md", "# Summary\n\n- [Home](README.md)\n"],
+    ["docs/archive/website/ultimate-resource-meter.md", "[Canonical Ultimate](../../src/features/ultimate-resource.md)\n"],
+    ["docs/project/build-plans/README.md", `# Current Build Plans\n\n| Plan | Status | Scope |\n| --- | --- | --- |\n${activeRows}\n`],
+    ["docs/archive/build-plans/README.md", `# Archived Build Plans\n\n| Plan | Current disposition | Delivery evidence |\n| --- | --- | --- |\n${archiveRows}\n`],
+  ]);
+  for (const plan of ledger.postBaselinePlans) {
+    textFiles.set(plan.destination, `# Plan ${plan.id}\n\nSubstantive plan record.\n`);
+  }
+  for (const unit of ledger.specificationUnits) {
+    for (const destination of unit.destinations) {
+      textFiles.set(destination.path, `${textFiles.get(destination.path) ?? "# Destination\n"}\n${destination.requiredExcerpt}\n`);
+    }
+  }
+  for (const invariant of ledger.safetyCrosswalk) {
+    textFiles.set(invariant.destination, `${textFiles.get(invariant.destination) ?? "# Destination\n"}\n${invariant.requiredExcerpt}\n`);
+  }
+  return {
+    existingPaths,
+    currentPaths: new Set(existingPaths),
+    textFiles,
+  };
+}
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "eso-weave-docs-policy-"));
@@ -357,4 +425,368 @@ jobs:
   assert.match(errors, /top-level Pages write/);
   assert.match(errors, /immutable commit SHA/);
   assert.match(errors, /main-only guard/);
+});
+
+test("accepts the frozen migration ledger and its virtual post-migration corpus", async () => {
+  const ledger = await migrationLedger();
+  const corpus = virtualCorpus(ledger);
+  assert.deepEqual(validateMigrationLedger(ledger, corpus), []);
+  assert.deepEqual(validateCorpusSnapshot(ledger, corpus), []);
+});
+
+test("rejects omitted and duplicate baseline artifacts", async () => {
+  const ledger = await migrationLedger();
+  const omitted = structuredClone(ledger);
+  omitted.artifacts.pop();
+  assert.match(validateMigrationLedger(omitted, virtualCorpus(omitted)).join("\n"), /baseline artifact coverage/);
+
+  const duplicate = structuredClone(ledger);
+  duplicate.artifacts[1] = structuredClone(duplicate.artifacts[0]);
+  assert.match(validateMigrationLedger(duplicate, virtualCorpus(duplicate)).join("\n"), /duplicate baseline artifact/);
+});
+
+test("rejects dangling and unsafe dispositions", async () => {
+  const ledger = await migrationLedger();
+  const dangling = structuredClone(ledger);
+  dangling.artifacts.find((artifact) => artifact.disposition === "Move").destinations = ["docs/project/missing.md"];
+  assert.match(validateMigrationLedger(dangling, virtualCorpus(ledger)).join("\n"), /destination does not exist/);
+
+  const unsafe = structuredClone(ledger);
+  const deleted = unsafe.artifacts.find((artifact) => artifact.disposition === "Delete");
+  delete deleted.replacement;
+  deleted.evidence = null;
+  assert.match(validateMigrationLedger(unsafe, virtualCorpus(unsafe)).join("\n"), /Delete requires a replacement and evidence/);
+
+  const misplaced = structuredClone(ledger);
+  misplaced.artifacts.find((artifact) => artifact.disposition === "Archive").destinations = ["docs/project/history.md"];
+  assert.match(validateMigrationLedger(misplaced, virtualCorpus(misplaced)).join("\n"), /Archive destination must be under docs\/archive/);
+});
+
+test("rejects project or archive publication and stale live paths", async () => {
+  const ledger = await migrationLedger();
+  const published = virtualCorpus(ledger);
+  published.textFiles.set(
+    "docs/src/SUMMARY.md",
+    "# Summary\n\n- [History](../archive/build-plans/README.md)\n- [Governance](../project/governance.md)\n",
+  );
+  assert.match(validateCorpusSnapshot(ledger, published).join("\n"), /published navigation crosses the docs\/src boundary/);
+
+  const stale = virtualCorpus(ledger);
+  stale.textFiles.set("CONTRIBUTING.md", "Follow docs/releasing.md.\n");
+  assert.match(validateCorpusSnapshot(ledger, stale).join("\n"), /stale live documentation path/);
+});
+
+test("requires exact historical exceptions", async () => {
+  const ledger = await migrationLedger();
+  const wildcard = structuredClone(ledger);
+  wildcard.historicalExceptions.push({ file: "CHANGELOG.md", literal: "docs/*", occurrences: 1, reason: "Too broad." });
+  assert.match(validateMigrationLedger(wildcard, virtualCorpus(wildcard)).join("\n"), /historical exception must be exact/);
+
+  const unmatched = virtualCorpus(ledger);
+  const exception = ledger.historicalExceptions[0];
+  unmatched.textFiles.set(exception.file, `${exception.literal}\n`.repeat(exception.occurrences + 1));
+  assert.match(validateCorpusSnapshot(ledger, unmatched).join("\n"), /historical exception occurrence mismatch/);
+
+  const liveBypass = structuredClone(ledger);
+  liveBypass.historicalExceptions.push({
+    file: "README.md",
+    literal: "docs/releasing.md",
+    occurrences: 1,
+    reason: "This must not exempt a live file.",
+  });
+  assert.match(validateMigrationLedger(liveBypass, virtualCorpus(liveBypass)).join("\n"), /approved CHANGELOG exceptions/);
+});
+
+test("requires contiguous Complete and Archived legacy plans", async () => {
+  const ledger = await migrationLedger();
+  const broken = structuredClone(ledger);
+  broken.plans[4].id = "099";
+  broken.plans[5].completion = "Pending";
+  broken.plans[6].lifecycle = "Active";
+  const errors = validateMigrationLedger(broken, virtualCorpus(broken)).join("\n");
+  assert.match(errors, /plan IDs must be contiguous from 001 through 027/);
+  assert.match(errors, /must be Complete and Archived/);
+
+  const vague = structuredClone(ledger);
+  vague.plans[0].evidence = "Implementation exists somewhere.";
+  assert.match(validateMigrationLedger(vague, virtualCorpus(vague)).join("\n"), /plan 001 requires spec and delivery evidence/);
+});
+
+test("freezes specification units, safety invariants, and baseline blobs", async () => {
+  const ledger = await migrationLedger();
+  const broken = structuredClone(ledger);
+  broken.artifacts[0].blob = "0000000000000000000000000000000000000000";
+  broken.specificationUnits[1] = structuredClone(broken.specificationUnits[0]);
+  broken.safetyCrosswalk.pop();
+  const errors = validateMigrationLedger(broken, virtualCorpus(broken)).join("\n");
+  assert.match(errors, /frozen baseline blob does not match/);
+  assert.match(errors, /specification unit coverage/);
+  assert.match(errors, /safety crosswalk must contain the six required invariants/);
+
+  const weakened = structuredClone(ledger);
+  weakened.specificationUnits[1].destinations[0].requiredExcerpt = "#";
+  assert.match(validateMigrationLedger(weakened, virtualCorpus(weakened)).join("\n"), /preservation excerpts do not match the frozen manifest/);
+});
+
+test("rejects erased specification units and safety statements", async () => {
+  const ledger = await migrationLedger();
+  const corpus = virtualCorpus(ledger);
+  assert.deepEqual(validateMigrationLedger(ledger, corpus), []);
+
+  const erasedUnit = structuredClone(corpus);
+  const overview = ledger.specificationUnits.find((unit) => unit.heading === "1. Overview");
+  erasedUnit.textFiles = new Map(corpus.textFiles);
+  erasedUnit.textFiles.set(overview.destinations[0].path, "# Empty destination\n");
+  assert.match(validateMigrationLedger(ledger, erasedUnit).join("\n"), /required excerpt is missing/);
+
+  const erasedSafety = structuredClone(corpus);
+  const signalLoss = ledger.safetyCrosswalk.find((item) => item.id === "fishing-signal-loss-fail-closed");
+  erasedSafety.textFiles = new Map(corpus.textFiles);
+  erasedSafety.textFiles.set(signalLoss.destination, "# Fishing\n");
+  assert.match(validateMigrationLedger(ledger, erasedSafety).join("\n"), /safety excerpt is missing/);
+
+  const multiDestination = ledger.specificationUnits.find((unit) => unit.heading === "10. PixelBeacon Companion Addon");
+  const exactUltimate = multiDestination.destinations.find((item) => item.requiredExcerpt.includes("B25 Ultimate Current"));
+  const erasedProtocolFact = structuredClone(corpus);
+  erasedProtocolFact.textFiles = new Map(corpus.textFiles);
+  erasedProtocolFact.textFiles.set(
+    exactUltimate.path,
+    erasedProtocolFact.textFiles.get(exactUltimate.path).replace(exactUltimate.requiredExcerpt, ""),
+  );
+  assert.match(validateMigrationLedger(ledger, erasedProtocolFact).join("\n"), /10\. PixelBeacon Companion Addon: required excerpt is missing/);
+
+  for (const phrase of [
+    "R carries bits 0 through 7",
+    "GetUnitPower",
+    "Values from 0 through 510",
+    "out-of-range maximum makes both current and maximum unavailable",
+    "GetSlotAbilityCost",
+    "HOTBAR_CATEGORY_PRIMARY",
+    "HOTBAR_CATEGORY_BACKUP",
+    "unused slot, nil API result",
+    "sampled and published together",
+    "special or temporary hotbar",
+  ]) {
+    const anchor = multiDestination.destinations.find((item) => item.requiredExcerpt.includes(phrase));
+    assert.ok(anchor, `missing test anchor for ${phrase}`);
+    const removed = structuredClone(corpus);
+    removed.textFiles = new Map(corpus.textFiles);
+    removed.textFiles.set(anchor.path, removed.textFiles.get(anchor.path).replace(anchor.requiredExcerpt, ""));
+    assert.match(
+      validateMigrationLedger(ledger, removed).join("\n"),
+      /10\. PixelBeacon Companion Addon: required excerpt is missing/,
+      phrase,
+    );
+  }
+
+  for (const [heading, phrases] of [
+    ["7. Input Engine", [
+      "menu gate can only relax interception",
+      "addon too old to publish the gate",
+      "sample that fails validation",
+      "lost beacon signal",
+      "no menu",
+      "sink still releases any mouse button",
+      "slow low-level hook callback",
+      "below the display server and behaves identically",
+      "capture-style rebinding control",
+      "rejects conflicting assignments",
+    ]],
+    ["11. Auto-Potion", [
+      "Quickslot key defaults",
+      "Every resource watch is off by default",
+      "OR rule is not configurable",
+      "Until the next evaluation",
+      "controller ticks on the pixel-bus worker",
+      "logging records categorical effective-state changes",
+      "treating unknown as permissive",
+      "checks menu and suspension directly",
+      "blocks action without clearing the requested setting",
+      "never reaches the hook thread",
+    ]],
+    ["12. Graphical User Interface", [
+      "resource meter is unanimated",
+      "programmatic progress value",
+      "Observed zero remains a numeric empty bar",
+      "Dormant and unavailable states have no numeric value",
+      "WCAG 2.2 AA contrast",
+      "color is never the only state cue",
+      "compact group boundary follows Ultimate before Game Context",
+      "identical text for both access paths",
+      "fixed trailing region is reserved only for System and State",
+      "At most two lifecycle actions",
+      "primary-then-secondary horizontal row",
+      "managed-marker uninstall guard and confirmation",
+      "grows sub-linearly with the window on both axes",
+      "colorizes events by level",
+      "resizable between a six-line readable minimum and the space above it",
+    ]],
+  ]) {
+    const unit = ledger.specificationUnits.find((item) => item.heading === heading);
+    for (const phrase of phrases) {
+      const anchor = unit.destinations.find((item) => item.requiredExcerpt.includes(phrase));
+      assert.ok(anchor, `missing test anchor for ${phrase}`);
+      const removed = structuredClone(corpus);
+      removed.textFiles = new Map(corpus.textFiles);
+      removed.textFiles.set(anchor.path, removed.textFiles.get(anchor.path).replace(anchor.requiredExcerpt, ""));
+      assert.match(validateMigrationLedger(ledger, removed).join("\n"), /required excerpt is missing/, phrase);
+    }
+  }
+});
+
+test("requires the table of contents unit to map to SUMMARY", async () => {
+  const ledger = await migrationLedger();
+  const broken = structuredClone(ledger);
+  broken.specificationUnits[0].destinations[0].path = "docs/src/README.md";
+  assert.match(validateMigrationLedger(broken, virtualCorpus(broken)).join("\n"), /Table of Contents.*SUMMARY\.md/);
+});
+
+test("derives post-baseline lifecycle and permits an evidenced archive followed by a new active plan", async () => {
+  const ledger = await migrationLedger();
+  const active = virtualCorpus(ledger);
+  assert.deepEqual(validateMigrationLedger(ledger, active), []);
+  assert.deepEqual(validateCorpusSnapshot(ledger, active), []);
+
+  const transitioned = structuredClone(ledger);
+  transitioned.postBaselinePlans[0] = {
+    ...transitioned.postBaselinePlans[0],
+    completion: "Complete",
+    lifecycle: "Archived",
+    destination: "docs/archive/build-plans/plan-028.md",
+    evidence: "Merged in PR #99.",
+  };
+  transitioned.postBaselinePlans.push({
+    id: "029",
+    completion: "In Progress",
+    lifecycle: "Active",
+    destination: "docs/project/build-plans/plan-029.md",
+    specs: ["specs/059-next-slice"],
+    evidence: "Issue #101 tracks the active delivery.",
+  });
+  const archivedAndNext = virtualCorpus(transitioned);
+  assert.deepEqual(validateMigrationLedger(transitioned, archivedAndNext), []);
+  assert.deepEqual(validateCorpusSnapshot(transitioned, archivedAndNext), []);
+
+  const erasedArchive = structuredClone(archivedAndNext);
+  erasedArchive.textFiles = new Map(archivedAndNext.textFiles);
+  erasedArchive.textFiles.set("docs/archive/build-plans/plan-028.md", "# Plan 028\n");
+  assert.match(validateMigrationLedger(transitioned, erasedArchive).join("\n"), /invalid Archived lifecycle/);
+
+  const ambiguous = structuredClone(archivedAndNext);
+  ambiguous.currentPaths = new Set(archivedAndNext.currentPaths);
+  ambiguous.existingPaths = new Set(archivedAndNext.existingPaths);
+  ambiguous.currentPaths.add("docs/project/build-plans/plan-028.md");
+  ambiguous.existingPaths.add("docs/project/build-plans/plan-028.md");
+  assert.match(
+    [...validateMigrationLedger(transitioned, ambiguous), ...validateCorpusSnapshot(transitioned, ambiguous)].join("\n"),
+    /(?:invalid Archived lifecycle|active project build plan must match)/,
+  );
+
+  const inverted = structuredClone(transitioned);
+  inverted.postBaselinePlans[0] = {
+    ...inverted.postBaselinePlans[0],
+    completion: "In Progress",
+    lifecycle: "Active",
+    destination: "docs/project/build-plans/plan-028.md",
+    evidence: "Issue #80 tracks active delivery.",
+  };
+  inverted.postBaselinePlans[1] = {
+    ...inverted.postBaselinePlans[1],
+    completion: "Complete",
+    lifecycle: "Archived",
+    destination: "docs/archive/build-plans/plan-029.md",
+    evidence: "Merged in PR #100.",
+  };
+  assert.match(
+    validateMigrationLedger(inverted, virtualCorpus(inverted)).join("\n"),
+    /Active post-baseline plan must be the final entry/,
+  );
+});
+
+test("does not accept plan index rows hidden in code or comments", async () => {
+  const ledger = await migrationLedger();
+  const active = virtualCorpus(ledger);
+  active.textFiles.set(
+    "docs/project/build-plans/README.md",
+    "# Current Build Plans\n\n```markdown\n| [plan-028.md](plan-028.md) | Active | Hidden |\n```\n",
+  );
+  assert.match(validateCorpusSnapshot(ledger, active).join("\n"), /missing its Active index row/);
+
+  const archivedLedger = structuredClone(ledger);
+  archivedLedger.postBaselinePlans[0] = {
+    ...archivedLedger.postBaselinePlans[0],
+    completion: "Complete",
+    lifecycle: "Archived",
+    destination: "docs/archive/build-plans/plan-028.md",
+    evidence: "Merged in PR #99.",
+  };
+  const archived = virtualCorpus(archivedLedger);
+  archived.textFiles.set(
+    "docs/archive/build-plans/README.md",
+    "# Archived Build Plans\n\n<!--\n| [028](plan-028.md) | Complete, Archived | [PR #99](https://example.com/pull/99) |\n-->\n",
+  );
+  assert.match(validateCorpusSnapshot(archivedLedger, archived).join("\n"), /missing its Complete, Archived evidence row/);
+});
+
+test("rejects a changed mdBook source directory", async () => {
+  const ledger = await migrationLedger();
+  const corpus = virtualCorpus(ledger);
+  corpus.textFiles.set("docs/book.toml", '[book]\nsrc = "project"\n\n[other]\nsrc = "src"\n');
+  assert.match(validateCorpusSnapshot(ledger, corpus).join("\n"), /docs\/book\.toml.*src.*src/);
+});
+
+test("requires lifecycle discovery and the archived Ultimate replacement link", async () => {
+  const ledger = await migrationLedger();
+  const corpus = virtualCorpus(ledger);
+  corpus.textFiles.set("docs/README.md", "# Documentation Map\n");
+  corpus.textFiles.set("docs/archive/website/ultimate-resource-meter.md", "# Historical announcement\n");
+  const errors = validateCorpusSnapshot(ledger, corpus).join("\n");
+  assert.match(errors, /archived Ultimate article must link its canonical replacement/);
+  assert.match(errors, /docs\/README\.md must discover project\/migration-ledger\.md/);
+  assert.match(errors, /docs\/README\.md must discover archive\/website\/ultimate-resource-meter\.md/);
+
+  const disguised = virtualCorpus(ledger);
+  disguised.textFiles.set(
+    "docs/README.md",
+    "# Documentation Map\n\n`project/migration-ledger.md`\n<!-- archive/website/ultimate-resource-meter.md -->\n",
+  );
+  disguised.textFiles.set(
+    "docs/archive/website/ultimate-resource-meter.md",
+    "# Historical announcement\n\n```text\n../../src/features/ultimate-resource.md\n```\n",
+  );
+  const disguisedErrors = validateCorpusSnapshot(ledger, disguised).join("\n");
+  assert.match(disguisedErrors, /archived Ultimate article must link its canonical replacement/);
+  assert.match(disguisedErrors, /docs\/README\.md must discover project\/migration-ledger\.md/);
+});
+
+test("rejects project or archive content in the generated search index", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(
+    path.join(f.output, "searchindex-test.js"),
+    'Object.assign(window.search, {doc_urls:["guide/index.html"], body:"Migration Ledger"});\n',
+  );
+  assert.match((await validateGeneratedSite(f.output)).join("\n"), /non-published content.*Migration Ledger/);
+
+  await writeFile(path.join(f.output, "searchindex-aaa.js"), "const benign = true;\n");
+  await writeFile(path.join(f.output, "searchindex-test.js"), 'const leaked = "Current Build Plans";\n');
+  assert.match((await validateGeneratedSite(f.output)).join("\n"), /(?:multiple generated search indexes|non-published content.*Current Build Plans)/);
+});
+
+test("applies text hygiene to non-doc files and rejects forbidden dashes", () => {
+  assert.match(validateTextHygiene("specs/058/example.md", Buffer.from("bad\r\n", "utf8")).join("\n"), /LF line endings/);
+  assert.match(validateTextHygiene("specs/058/example.md", Buffer.from(`bad ${String.fromCodePoint(0x2014)} dash\n`, "utf8")).join("\n"), /forbidden dash/);
+  assert.match(validateTextHygiene("specs/058/example.md", Buffer.from([0xef, 0xbb, 0xbf, 0x61])).join("\n"), /UTF-8 BOM/);
+  assert.match(validateTextHygiene("specs/058/example.md", Buffer.from([0xff])).join("\n"), /not valid UTF-8/);
+  assert.match(
+    validateTextHygiene("specs/058/example.md", Buffer.from(`bad ${String.fromCodePoint(0x00c3)}x text\n`, "utf8")).join("\n"),
+    /mojibake/,
+  );
+});
+
+test("rejects a root README over 120 lines", async () => {
+  const ledger = await migrationLedger();
+  const corpus = virtualCorpus(ledger);
+  corpus.textFiles.set("README.md", Array.from({ length: 121 }, (_, index) => `line ${index + 1}`).join("\n"));
+  assert.match(validateCorpusSnapshot(ledger, corpus).join("\n"), /README.md exceeds 120 lines/);
 });

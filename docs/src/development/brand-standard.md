@@ -92,6 +92,7 @@ On filled gold buttons, text is near-ink (`#241704`) in both themes for contrast
 ## Assets and reproduction
 
 All rasters are regenerated from the SVG masters by `assets/brand/generate.sh`
-(ImageMagick 7). See [assets/brand/README.md](../../assets/brand/README.md) for the
-list and the command. Packaging assets are pinned; regenerating them is recorded
+(ImageMagick 7). See the
+[brand asset instructions](https://github.com/h8rt3rmin8r/eso-weave/blob/main/assets/brand/README.md)
+for the list and command. Packaging assets are pinned; regenerating them is recorded
 as a dated decision in `CHANGELOG.md`.

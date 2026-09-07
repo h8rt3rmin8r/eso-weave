@@ -10,14 +10,14 @@ Constitution: `.specify/memory/constitution.md`
 This build plan decomposes the master specification into an ordered set of work
 slices. Each slice is scoped to become exactly one spec-kit feature under
 `specs/NNN-name/`, produced and implemented through the Build-Phase Autopilot
-Protocol (`docs/build-autopilot.md`). The master specification remains the
-source of technical scope; this plan supplies the sequence and the slice
+Protocol (`docs/project/build-autopilot.md`). The master specification remains
+the source of technical scope; this plan supplies the sequence and the slice
 boundaries.
 
 A build plan is not a spec-kit feature plan. This document is the higher level
 roadmap; the per-feature `specs/NNN-name/plan.md` files are generated later by
-`/speckit.plan`, one per slice. See `docs/plans/README.md` for the distinction
-and the plans index.
+`/speckit.plan`, one per slice. See `docs/archive/build-plans/README.md` for the
+distinction and the plans index.
 
 ## Slice 0: Constitution (prerequisite)
 

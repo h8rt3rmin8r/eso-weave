@@ -45,7 +45,7 @@ tokens that every user story consumes. The sign-off is a hard gate.
 
 - [ ] T004 Produce the design sign-off visual proof: a rendered HTML/SVG mockup of the themed window on dark and light, the weave-knot mark at 16/32/48/256px on light and dark, and the installer wizard; capture final exact hex tokens. HALT for operator approval before any egui/WiX code change.
 - [ ] T005 Author the abstract weave-knot master `assets/brand/eso-weave-mark.svg` and the theme-safe badged variant `assets/brand/eso-weave-mark-badge.svg` from the approved proof.
-- [ ] T006 Write the brand standard document [docs/brand/ESO-Weave-Brand-v1.md](docs/brand/ESO-Weave-Brand-v1.md) with the final dark/light color tokens, typography (Inter, OFL 1.1), spacing/radius scale, and iconography/accent rules.
+- [ ] T006 Write the brand standard document [docs/brand/ESO-Weave-Brand-v1.md](../../docs/src/development/brand-standard.md) with the final dark/light color tokens, typography (Inter, OFL 1.1), spacing/radius scale, and iconography/accent rules.
 - [ ] T007 [P] Add the bundled font `assets/brand/fonts/Inter-Regular.ttf` (and any needed weight) plus its `OFL.txt` license.
 - [ ] T008 Regenerate `assets/icon.ico` (16/32/48/64/128/256) from the badge master via the recorded recipe.
 - [ ] T009 [P] Regenerate `packaging/linux/eso-weave.png` (256) and `packaging/appimage/AppDir/eso-weave.png` (256) from the badge master.
@@ -115,8 +115,8 @@ default-off shortcut checkbox honored on install, and branded wizard art.
 **Independent test**: The brand doc resolves any color/type decision; the plan
 index and master spec reference the brand standard.
 
-- [ ] T029 [US4] Add a `plan-002.md` row to [docs/plans/README.md](docs/plans/README.md) and create [docs/plans/plan-002.md](docs/plans/plan-002.md) registering the brand-and-UX-polish slice.
-- [ ] T030 [P] [US4] Add a light note to the GUI section of [docs/ESO-Weave-Specification.md](docs/ESO-Weave-Specification.md) that a brand standard (`docs/brand/ESO-Weave-Brand-v1.md`) now governs visual identity.
+- [ ] T029 [US4] Add a `plan-002.md` row to [docs/plans/README.md](../../docs/archive/build-plans/README.md) and create [docs/plans/plan-002.md](../../docs/archive/build-plans/plan-002.md) registering the brand-and-UX-polish slice.
+- [ ] T030 [P] [US4] Add a light note to the GUI section of [docs/ESO-Weave-Specification.md](../../docs/src/features/interface.md) that a brand standard (`docs/brand/ESO-Weave-Brand-v1.md`) now governs visual identity.
 
 ---
 

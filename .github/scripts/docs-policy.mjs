@@ -1,9 +1,116 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/gmu;
 const HTML_LINK = /<a\b[^>]*?\bhref=["']([^"']+)["']/giu;
+
+const MIGRATION_BASELINE = "bdc7b228b78ef535d07357e7b33a36bbade917cc";
+const BASELINE_ARTIFACTS = new Map([
+  ["docs/ESO-Weave-Specification.md", "e7fb461cc1492d98fef62eab728dbaf8dcb9af4d"],
+  ["docs/architecture-decisions/0001-mdbook-documentation-site.md", "0a33f2681c0403c3a8abc2a6ed30b37211f5c2bd"],
+  ["docs/book.toml", "ca64b8faccf576678c0ba4d07daa18ae286cad5c"],
+  ["docs/brand/ESO-Weave-Brand-v1.md", "80bcf6487ff47c0c82ad467ae7148d8b6483bebf"],
+  ["docs/build-autopilot.md", "96d94fd8312e5a182a0bab5f396164559f42c639"],
+  ["docs/plans/README.md", "04734e75e4340197ca105f44adf7ca7f5a3d35dc"],
+  ["docs/plans/plan-001.md", "a11fce81b081d79cf81ea4ae5fa72f78157b602b"],
+  ["docs/plans/plan-002.md", "1e153b471eb230d2af888e13bcd518e49de3a21c"],
+  ["docs/plans/plan-003.md", "e05ae22a4b5a35370ef553a1a1fc82dcc6a992e2"],
+  ["docs/plans/plan-004.md", "4706ffbcea4b51d3a1426c4839481674be262c4b"],
+  ["docs/plans/plan-005.md", "f68a1d8064304c212fa79d65a746c4cb0d21e261"],
+  ["docs/plans/plan-006.md", "d51418161ffd0c5b28e060efafb85560d6cc825c"],
+  ["docs/plans/plan-007.md", "af9d082769238e47086d1d3e91ca603ce78db36a"],
+  ["docs/plans/plan-008.md", "3cb1791b0ea28b26e91e61f05fadb06bec4b0e8f"],
+  ["docs/plans/plan-009.md", "efc5882c8524bb0d2ce79f7c44df4be995bbac75"],
+  ["docs/plans/plan-010.md", "1a4619a961c4422c76cdab7f001414e9fcabe055"],
+  ["docs/plans/plan-011.md", "70fb3bfcb2cf2426bfd5c670bdccffa018d8bfbe"],
+  ["docs/plans/plan-012.md", "d6297bc8951f43bae2c0e6bde150c95ec0b56eee"],
+  ["docs/plans/plan-013.md", "5397e1eacb1757ea254b99208216f6393e12e2b0"],
+  ["docs/plans/plan-014.md", "e37c7cfd15665e580440c75db8eb19fe05e7afe7"],
+  ["docs/plans/plan-015.md", "cfe1e7fa6ce279e5457136c10466bacec3777e24"],
+  ["docs/plans/plan-016.md", "4cc55998cdd69515c89cac1aec0b091fcef2dc0c"],
+  ["docs/plans/plan-017.md", "cb487f47d70a7ba98c5c1843943ef620c0bbb951"],
+  ["docs/plans/plan-018.md", "8545690bc42ead247be04f9cbf60533a94c2bf7e"],
+  ["docs/plans/plan-019.md", "84242a8aceb9ab87869863c13f8988581c4a1533"],
+  ["docs/plans/plan-020.md", "6951ab1dec2dc2388bfebaf89a0a12f94e7dee59"],
+  ["docs/plans/plan-021.md", "c1cd1c2b4500153a90174e0713ce1f4877b2f60e"],
+  ["docs/plans/plan-022.md", "1f77ec256e32291b7c6b3125cb6df92cc3ae2863"],
+  ["docs/plans/plan-023.md", "86d834d999a63f891c57fa0737b2971d78fe72c0"],
+  ["docs/plans/plan-024.md", "e468a9039d6d72c97d55658cdd0347ffa369d12f"],
+  ["docs/plans/plan-025.md", "7e72815b837bc292a430a9bd9ec77ee89ff5ae5d"],
+  ["docs/plans/plan-026.md", "1e5eca82ae31be31ff2a7435e67cd3bc89664a96"],
+  ["docs/plans/plan-027.md", "518a01fa2fecedca26fcd7ec054e514a43e0ba5b"],
+  ["docs/project-governance.md", "67c895f427ce5380ec5c03ee3364a73bfa43c716"],
+  ["docs/releasing.md", "5f5f33351f93eb11eb8c78c46fd265c1b16c4f3c"],
+  ["docs/src/404.md", "27385f2f0abb01be2f8317524804d71a969e530c"],
+  ["docs/src/README.md", "07f1f638a2f17a498370a11f77dceb5b823f6341"],
+  ["docs/src/SUMMARY.md", "c62ee5d6d56490d223fd63d52da6800a5f8bfb4f"],
+  ["docs/src/assets/brand/eso-weave-mark.svg", "9f102a3e1fa285ac05659ce3d1b62af151e75812"],
+  ["docs/src/assets/brand/fonts/Inter-Regular.ttf", "012d1b470d92db48d6f45478f9711f088a6c7359"],
+  ["docs/src/assets/brand/fonts/Inter-SemiBold.ttf", "4be54399d679a0cc0ed46526f79d8e53cec2a1a5"],
+  ["docs/src/assets/brand/fonts/OFL.txt", "ff80f8c615684e796c37ab5ff82a9b31d7390d6e"],
+  ["docs/src/concepts/README.md", "c5fdeb855f644a58810b8b6db99f7484d91dca26"],
+  ["docs/src/development/README.md", "c14e20138797031814858c92d92dcd7ad8b209e6"],
+  ["docs/src/features/README.md", "2af6689aa984b015515331c5f4f34085adfca391"],
+  ["docs/src/getting-started/README.md", "e4e3add4cfad1abe7e76142bea428b7b0ee0c58e"],
+  ["docs/src/reference/README.md", "c07fb227c9ab6539b6b99dcf1d8c4a3ba731b087"],
+  ["docs/theme/eso-weave.css", "2e46acafe395a981462b740516bdd660b9f8bb9c"],
+  ["docs/theme/eso-weave.js", "b89c06f742105b3e9ca1e203d86a7e461f387de8"],
+  ["website/content/blog/ultimate-resource-meter.md", "7c6628bc3595c2bf003ca5b65dc56eb2a68a213c"],
+]);
+const SPECIFICATION_HEADINGS = [
+  "Table of Contents",
+  "1. Overview",
+  "2. Terminology",
+  "3. Scope",
+  "4. Platform Support",
+  "5. System Architecture",
+  "6. Concurrency and Ownership",
+  "7. Input Engine",
+  "8. Weave Engine",
+  "9. Fishing Automation",
+  "10. PixelBeacon Companion Addon",
+  "11. Auto-Potion",
+  "12. Graphical User Interface",
+  "13. Configuration and Session State",
+  "14. Logging",
+  "15. Packaging and Distribution",
+  "16. Repository Conventions",
+  "17. README Disclaimer Text",
+  "Disclaimer",
+  "Appendix A. Weave Delay Defaults",
+];
+const SAFETY_INVARIANTS = new Set([
+  "injected-input-recursion-breaking",
+  "focused-window-only-suppression",
+  "non-blocking-hook-callbacks",
+  "managed-marker-gated-uninstall",
+  "addons-directory-containment",
+  "fishing-signal-loss-fail-closed",
+]);
+const LEGACY_LITERALS = new Set([
+  "docs/ESO-Weave-Specification.md",
+  "docs/build-autopilot.md",
+  "docs/project-governance.md",
+  "docs/releasing.md",
+  "docs/plans/",
+  "website/content/blog/ultimate-resource-meter.md",
+]);
+const HISTORICAL_EXCEPTIONS = new Map([
+  ["CHANGELOG.md\u0000docs/ESO-Weave-Specification.md", 4],
+  ["CHANGELOG.md\u0000docs/releasing.md", 2],
+  ["CHANGELOG.md\u0000docs/plans/", 2],
+]);
+const NON_PUBLISHED_SEARCH_SENTINELS = [
+  "docs/project/",
+  "docs/archive/",
+  "Migration Ledger",
+  "Current Build Plans",
+  "Archived Build Plans",
+];
+const PRESERVATION_MANIFEST_SHA256 = "57f8c747dc1e334850fb11ccdf2ce2ccc5efd5023510e6b122f4faa62a07b7b6";
+const DELIVERY_EVIDENCE = /(?:\bPR #\d+\b|\bcommit [0-9a-f]{7,40}\b|\bv\d+\.\d+\.\d+ release\b|\bissue #\d+ closed\b)/iu;
 
 async function walk(root, suffix = "") {
   const results = [];
@@ -310,7 +417,20 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
 
   const outputFiles = (await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file)));
   if (!outputFiles.some((file) => /^searcher-[0-9a-z]+\.js$/u.test(file))) errors.push("missing generated searcher JavaScript");
-  if (!outputFiles.some((file) => /^searchindex-[0-9a-z]+\.js$/u.test(file))) errors.push("missing generated search index");
+  const searchIndexes = outputFiles.filter((file) => /^searchindex-[0-9a-z]+\.js$/u.test(file));
+  if (searchIndexes.length === 0) {
+    errors.push("missing generated search index");
+  } else {
+    for (const searchIndex of searchIndexes) {
+      const indexContents = await readFile(path.join(outputRoot, searchIndex), "utf8");
+      const normalizedIndex = indexContents.toLocaleLowerCase("en-US");
+      for (const sentinel of NON_PUBLISHED_SEARCH_SENTINELS) {
+        if (normalizedIndex.includes(sentinel.toLocaleLowerCase("en-US"))) {
+          errors.push(`generated search index contains non-published content sentinel: ${sentinel}`);
+        }
+      }
+    }
+  }
   const brandScript = outputFiles.find((file) => /^theme\/eso-weave-[0-9a-z]+\.js$/u.test(file));
   if (!brandScript) {
     errors.push("missing generated ESO Weave behavior JavaScript");
@@ -469,6 +589,461 @@ function srcsetCandidates(srcset) {
     }
   }
   return candidates;
+}
+
+export function validateMigrationLedger(ledger, snapshot) {
+  const errors = [];
+  if (ledger.baselineCommit !== MIGRATION_BASELINE) {
+    errors.push(`migration ledger baselineCommit must be ${MIGRATION_BASELINE}`);
+  }
+  const expectedSummary = {
+    docsArtifacts: 49,
+    websiteArtifacts: 1,
+    totalArtifacts: 50,
+    specificationH2Units: 20,
+    legacyPlans: 27,
+    safetyInvariants: 6,
+  };
+  if (JSON.stringify(ledger.baselineSummary) !== JSON.stringify(expectedSummary)) {
+    errors.push("migration ledger baselineSummary does not match the frozen corpus");
+  }
+
+  const artifacts = Array.isArray(ledger.artifacts) ? ledger.artifacts : [];
+  const bySource = new Map();
+  for (const artifact of artifacts) {
+    if (bySource.has(artifact.source)) errors.push(`duplicate baseline artifact: ${artifact.source}`);
+    bySource.set(artifact.source, artifact);
+  }
+  const artifactPaths = new Set(bySource.keys());
+  const missing = [...BASELINE_ARTIFACTS.keys()].filter((source) => !artifactPaths.has(source));
+  const unexpected = [...artifactPaths].filter((source) => !BASELINE_ARTIFACTS.has(source));
+  if (artifacts.length !== BASELINE_ARTIFACTS.size || missing.length > 0 || unexpected.length > 0) {
+    errors.push(`baseline artifact coverage must contain exactly ${BASELINE_ARTIFACTS.size} frozen paths`);
+  }
+
+  const existingPaths = snapshot?.existingPaths ?? new Set();
+  const currentPaths = snapshot?.currentPaths ?? existingPaths;
+  const textFiles = snapshot?.textFiles ?? new Map();
+  const preservationManifest = {
+    units: (Array.isArray(ledger.specificationUnits) ? ledger.specificationUnits : []).map((unit) => ({
+      order: unit.order,
+      heading: unit.heading,
+      destinations: unit.destinations,
+    })),
+    safety: (Array.isArray(ledger.safetyCrosswalk) ? ledger.safetyCrosswalk : []).map((invariant) => ({
+      id: invariant.id,
+      destination: invariant.destination,
+      requiredExcerpt: invariant.requiredExcerpt,
+    })),
+  };
+  const preservationHash = createHash("sha256").update(JSON.stringify(preservationManifest)).digest("hex");
+  if (preservationHash !== PRESERVATION_MANIFEST_SHA256) {
+    errors.push("migration preservation excerpts do not match the frozen manifest");
+  }
+  const dispositions = new Set(["Retain", "Move", "Split", "Archive", "Delete"]);
+  const authorities = new Set(["canonical", "project", "historical", "infrastructure", "superseded"]);
+  const kinds = new Set(["published", "project", "archive", "infrastructure", "website"]);
+  for (const [source, expectedBlob] of BASELINE_ARTIFACTS) {
+    const artifact = bySource.get(source);
+    if (!artifact) continue;
+    if (artifact.blob !== expectedBlob) errors.push(`${source}: frozen baseline blob does not match`);
+    if (!dispositions.has(artifact.disposition)) errors.push(`${source}: unknown disposition ${artifact.disposition}`);
+    if (!authorities.has(artifact.authority)) errors.push(`${source}: unknown authority ${artifact.authority}`);
+    if (!kinds.has(artifact.kind)) errors.push(`${source}: unknown artifact kind ${artifact.kind}`);
+    const hasEvidence = typeof artifact.evidence === "string" && artifact.evidence.trim() !== "";
+    if (!hasEvidence) errors.push(`${source}: evidence is required`);
+    const destinations = Array.isArray(artifact.destinations) ? artifact.destinations : [];
+    if (artifact.disposition === "Retain" && (destinations.length !== 1 || destinations[0] !== source)) {
+      errors.push(`${source}: Retain requires the unchanged path as its destination`);
+    }
+    if (["Move", "Archive"].includes(artifact.disposition) && destinations.length !== 1) {
+      errors.push(`${source}: ${artifact.disposition} requires exactly one destination`);
+    }
+    if (artifact.disposition === "Split" && destinations.length < 1) errors.push(`${source}: Split requires destinations`);
+    if (artifact.disposition === "Archive" && !destinations[0]?.startsWith("docs/archive/")) {
+      errors.push(`${source}: Archive destination must be under docs/archive/`);
+    }
+    if (artifact.disposition === "Delete" &&
+        (typeof artifact.replacement !== "string" || artifact.replacement === "" || !hasEvidence)) {
+      errors.push(`${source}: Delete requires a replacement and evidence`);
+    }
+    const authorityRoot = new Map([
+      ["canonical", "docs/src/"],
+      ["project", "docs/project/"],
+      ["historical", "docs/archive/"],
+    ]).get(artifact.authority);
+    if (authorityRoot && destinations.some((destination) => !destination.startsWith(authorityRoot))) {
+      errors.push(`${source}: ${artifact.authority} destination must be under ${authorityRoot}`);
+    }
+    for (const destination of destinations) {
+      if (!existingPaths.has(destination)) errors.push(`${source}: destination does not exist: ${destination}`);
+    }
+    if (artifact.replacement && !existingPaths.has(artifact.replacement)) {
+      errors.push(`${source}: replacement does not exist: ${artifact.replacement}`);
+    }
+    if (artifact.disposition !== "Retain" && currentPaths.has(source)) {
+      errors.push(`${source}: migrated source still exists`);
+    }
+  }
+
+  const units = Array.isArray(ledger.specificationUnits) ? ledger.specificationUnits : [];
+  const unitHeadings = new Set(units.map((unit) => unit.heading));
+  if (units.length !== SPECIFICATION_HEADINGS.length || unitHeadings.size !== SPECIFICATION_HEADINGS.length) {
+    errors.push(`specification unit coverage must contain exactly ${SPECIFICATION_HEADINGS.length} unique H2 units`);
+  }
+  for (const [index, heading] of SPECIFICATION_HEADINGS.entries()) {
+    const unit = units[index];
+    if (!unit || unit.order !== index + 1 || unit.heading !== heading) {
+      errors.push(`specification unit ${index + 1} must be ${heading}`);
+      continue;
+    }
+    const destinations = Array.isArray(unit.destinations) ? unit.destinations : [];
+    if (destinations.length === 0) errors.push(`${heading}: at least one preservation destination is required`);
+    if (heading === "Table of Contents" &&
+        (destinations.length !== 1 || destinations[0]?.path !== "docs/src/SUMMARY.md")) {
+      errors.push("Table of Contents must map to docs/src/SUMMARY.md");
+    }
+    for (const destination of destinations) {
+      if (!existingPaths.has(destination.path)) {
+        errors.push(`${heading}: destination does not exist: ${destination.path}`);
+        continue;
+      }
+      if (typeof destination.requiredExcerpt !== "string" || destination.requiredExcerpt.trim() === "") {
+        errors.push(`${heading}: normalized required excerpt is required for ${destination.path}`);
+        continue;
+      }
+      const contents = textFiles.get(destination.path);
+      if (typeof contents !== "string" || !normalizePreservedText(contents).includes(normalizePreservedText(destination.requiredExcerpt))) {
+        errors.push(`${heading}: required excerpt is missing from ${destination.path}`);
+      }
+    }
+    if (typeof unit.evidence !== "string" || unit.evidence.trim() === "") errors.push(`${heading}: preservation evidence is required`);
+  }
+
+  const plans = Array.isArray(ledger.plans) ? ledger.plans : [];
+  const expectedPlanIds = Array.from({ length: 27 }, (_, index) => String(index + 1).padStart(3, "0"));
+  if (plans.length !== expectedPlanIds.length || plans.some((plan, index) => plan.id !== expectedPlanIds[index])) {
+    errors.push("plan IDs must be contiguous from 001 through 027");
+  }
+  for (const plan of plans) {
+    if (plan.completion !== "Complete" || plan.lifecycle !== "Archived") {
+      errors.push(`plan ${plan.id} must be Complete and Archived`);
+    }
+    if (plan.destination !== `docs/archive/build-plans/plan-${plan.id}.md`) {
+      errors.push(`plan ${plan.id} has an invalid archive destination`);
+    } else if (!existingPaths.has(plan.destination)) {
+      errors.push(`plan ${plan.id}: destination does not exist`);
+    }
+    if (!Array.isArray(plan.specs) || plan.specs.length === 0 ||
+        plan.specs.some((spec) => !/^specs\/\d{3}-[a-z0-9-]+$/u.test(spec) || !existingPaths.has(spec)) ||
+        typeof plan.evidence !== "string" || plan.evidence.trim() === "" ||
+        !DELIVERY_EVIDENCE.test(plan.evidence)) {
+      errors.push(`plan ${plan.id} requires spec and delivery evidence`);
+    }
+  }
+
+  const postBaselinePlans = Array.isArray(ledger.postBaselinePlans) ? ledger.postBaselinePlans : [];
+  const postIds = new Set(postBaselinePlans.map((plan) => plan.id));
+  if (postBaselinePlans.length === 0 || postIds.size !== postBaselinePlans.length ||
+      postBaselinePlans.some((plan, index) => !/^\d{3}$/u.test(plan.id) || Number(plan.id) !== 28 + index)) {
+    errors.push("postBaselinePlans must be unique and contiguous from 028");
+  }
+  if (postBaselinePlans.filter((plan) => plan.lifecycle === "Active").length > 1) {
+    errors.push("postBaselinePlans may contain at most one Active plan");
+  }
+  const activePlanIndex = postBaselinePlans.findIndex((plan) => plan.lifecycle === "Active");
+  if (activePlanIndex >= 0 &&
+      (activePlanIndex !== postBaselinePlans.length - 1 ||
+       postBaselinePlans.slice(0, activePlanIndex).some((plan) => plan.lifecycle !== "Archived"))) {
+    errors.push("Active post-baseline plan must be the final entry after Archived predecessors");
+  }
+  for (const plan of postBaselinePlans) {
+    const activePath = `docs/project/build-plans/plan-${plan.id}.md`;
+    const archivePath = `docs/archive/build-plans/plan-${plan.id}.md`;
+    const validSpecs = Array.isArray(plan.specs) && plan.specs.length > 0 &&
+      plan.specs.every((spec) => /^specs\/\d{3}-[a-z0-9-]+$/u.test(spec) && existingPaths.has(spec));
+    if (!validSpecs || typeof plan.evidence !== "string" || plan.evidence.trim() === "") {
+      errors.push(`post-baseline plan ${plan.id} requires spec and evidence`);
+    }
+    if (plan.lifecycle === "Active") {
+      if (plan.completion !== "In Progress" || plan.destination !== activePath ||
+          !/\bissue #\d+\b/iu.test(plan.evidence) || !existingPaths.has(activePath) || currentPaths.has(archivePath)) {
+        errors.push(`post-baseline plan ${plan.id} has an invalid Active lifecycle`);
+      }
+    } else if (plan.lifecycle === "Archived") {
+      const contents = textFiles.get(archivePath) ?? "";
+      if (plan.completion !== "Complete" || plan.destination !== archivePath || !DELIVERY_EVIDENCE.test(plan.evidence) ||
+          !existingPaths.has(archivePath) || currentPaths.has(activePath) ||
+          !/^#\s+\S/mu.test(contents) || contents.trim().split(/\r?\n/gu).length < 3) {
+        errors.push(`post-baseline plan ${plan.id} has an invalid Archived lifecycle`);
+      }
+    } else {
+      errors.push(`post-baseline plan ${plan.id} has an unknown lifecycle`);
+    }
+  }
+
+  const invariants = Array.isArray(ledger.safetyCrosswalk) ? ledger.safetyCrosswalk : [];
+  const invariantIds = new Set(invariants.map((invariant) => invariant.id));
+  if (invariants.length !== SAFETY_INVARIANTS.size ||
+      [...SAFETY_INVARIANTS].some((id) => !invariantIds.has(id))) {
+    errors.push(`safety crosswalk must contain the six required invariants`);
+  }
+  for (const invariant of invariants) {
+    if (!existingPaths.has(invariant.destination)) errors.push(`${invariant.id}: destination does not exist`);
+    if (typeof invariant.evidence !== "string" || invariant.evidence.trim() === "") {
+      errors.push(`${invariant.id}: preservation evidence is required`);
+    }
+    if (typeof invariant.requiredExcerpt !== "string" || invariant.requiredExcerpt.trim() === "") {
+      errors.push(`${invariant.id}: normalized safety excerpt is required`);
+    } else {
+      const contents = textFiles.get(invariant.destination);
+      if (typeof contents !== "string" || !normalizePreservedText(contents).includes(normalizePreservedText(invariant.requiredExcerpt))) {
+        errors.push(`${invariant.id}: safety excerpt is missing from ${invariant.destination}`);
+      }
+    }
+  }
+
+  const staleLiterals = Array.isArray(ledger.staleLiterals) ? ledger.staleLiterals : [];
+  if (staleLiterals.length !== LEGACY_LITERALS.size ||
+      [...LEGACY_LITERALS].some((literal) => !staleLiterals.includes(literal))) {
+    errors.push("staleLiterals must enumerate every retired live path exactly once");
+  }
+  const exceptionKeys = new Set();
+  for (const exception of ledger.historicalExceptions ?? []) {
+    const key = `${exception.file}\u0000${exception.literal}`;
+    if (exceptionKeys.has(key)) errors.push(`duplicate historical exception: ${exception.file} ${exception.literal}`);
+    exceptionKeys.add(key);
+    if (!exception.file || !exception.literal || /[*?\[\]]/u.test(exception.file) || /[*?\[\]]/u.test(exception.literal) ||
+        !LEGACY_LITERALS.has(exception.literal) || !Number.isInteger(exception.occurrences) || exception.occurrences < 1 ||
+        typeof exception.reason !== "string" || exception.reason.trim() === "") {
+      errors.push(`historical exception must be exact: ${exception.file ?? "<missing>"}`);
+    }
+  }
+  if (exceptionKeys.size !== HISTORICAL_EXCEPTIONS.size ||
+      [...HISTORICAL_EXCEPTIONS].some(([key, occurrences]) =>
+        !exceptionKeys.has(key) || ledger.historicalExceptions.find((entry) => `${entry.file}\u0000${entry.literal}` === key)?.occurrences !== occurrences)) {
+    errors.push("historicalExceptions must match the approved CHANGELOG exceptions");
+  }
+  return errors;
+}
+
+function normalizePreservedText(value) {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/gu, " ").trim();
+}
+
+export function validateCorpusSnapshot(ledger, snapshot) {
+  const errors = [];
+  const textFiles = snapshot?.textFiles ?? new Map();
+  const currentPaths = snapshot?.currentPaths ?? new Set();
+  const readme = textFiles.get("README.md");
+  if (typeof readme !== "string") {
+    errors.push("README.md is missing from the corpus snapshot");
+  } else {
+    const lines = readme === "" ? 0 : readme.replace(/\n$/u, "").split("\n").length;
+    if (lines > 120) errors.push(`README.md exceeds 120 lines (${lines})`);
+  }
+
+  const summary = textFiles.get("docs/src/SUMMARY.md") ?? "";
+  for (const link of markdownLinks(summary)) {
+    if (isExternal(link.destination)) continue;
+    const { pathname } = splitTarget(link.destination);
+    const resolved = path.posix.normalize(path.posix.join("docs/src", pathname));
+    if (pathname && !resolved.startsWith("docs/src/")) {
+      errors.push(`published navigation crosses the docs/src boundary: ${link.destination}`);
+    }
+  }
+
+  const bookConfig = textFiles.get("docs/book.toml") ?? "";
+  if (tomlStringValue(bookConfig, "book", "src") !== "src") {
+    errors.push('docs/book.toml must keep [book] src = "src"');
+  }
+
+  const postBaselinePlans = Array.isArray(ledger.postBaselinePlans) ? ledger.postBaselinePlans : [];
+  const archivedPlans = [...currentPaths].filter((name) => /^docs\/archive\/build-plans\/plan-\d{3}\.md$/u.test(name));
+  const expectedArchivedPlans = new Set([
+    ...(ledger.plans?.map((plan) => plan.destination) ?? []),
+    ...postBaselinePlans.filter((plan) => plan.lifecycle === "Archived").map((plan) => plan.destination),
+  ]);
+  if (archivedPlans.length !== expectedArchivedPlans.size || archivedPlans.some((name) => !expectedArchivedPlans.has(name))) {
+    errors.push("archive plan files must match the declared completed-plan lifecycle");
+  }
+  const activePlans = [...currentPaths].filter((name) => /^docs\/project\/build-plans\/plan-\d{3}\.md$/u.test(name));
+  const expectedActivePlans = postBaselinePlans.filter((plan) => plan.lifecycle === "Active").map((plan) => plan.destination);
+  if (activePlans.length !== expectedActivePlans.length || activePlans.some((name) => !expectedActivePlans.includes(name))) {
+    errors.push("active project build plan must match the ledger lifecycle declaration");
+  }
+  const currentPlanIndex = textFiles.get("docs/project/build-plans/README.md") ?? "";
+  const archivePlanIndex = textFiles.get("docs/archive/build-plans/README.md") ?? "";
+  for (const plan of postBaselinePlans) {
+    if (plan.lifecycle === "Active" && !hasPlanIndexRow(currentPlanIndex, plan.id, "Active")) {
+      errors.push(`post-baseline plan ${plan.id} is missing its Active index row`);
+    }
+    if (plan.lifecycle === "Archived" &&
+        (!hasPlanIndexRow(archivePlanIndex, plan.id, "Complete, Archived") ||
+         !hasConcreteEvidenceRow(archivePlanIndex, plan.id))) {
+      errors.push(`post-baseline plan ${plan.id} is missing its Complete, Archived evidence row`);
+    }
+  }
+
+  const archiveUltimatePath = "docs/archive/website/ultimate-resource-meter.md";
+  const archiveUltimate = textFiles.get(archiveUltimatePath) ?? "";
+  if (!hasMarkdownLinkTo(archiveUltimate, archiveUltimatePath, "docs/src/features/ultimate-resource.md")) {
+    errors.push("archived Ultimate article must link its canonical replacement");
+  }
+  const lifecycleMap = textFiles.get("docs/README.md") ?? "";
+  for (const required of ["docs/project/migration-ledger.md", "docs/archive/website/ultimate-resource-meter.md"]) {
+    if (!hasMarkdownLinkTo(lifecycleMap, "docs/README.md", required)) {
+      errors.push(`docs/README.md must discover ${required.slice("docs/".length)}`);
+    }
+  }
+
+  const exceptionMap = new Map((ledger.historicalExceptions ?? []).map((entry) => [`${entry.file}\u0000${entry.literal}`, entry]));
+  for (const literal of ledger.staleLiterals ?? []) {
+    for (const [file, contents] of textFiles) {
+      if (file.startsWith("docs/archive/") || file.startsWith("specs/") ||
+          [
+            ".github/scripts/docs-policy.mjs",
+            ".github/scripts/docs-policy.test.mjs",
+            "docs/project/migration-ledger.json",
+            "docs/project/migration-ledger.md",
+          ].includes(file)) continue;
+      const occurrences = contents.split(literal).length - 1;
+      if (occurrences === 0) continue;
+      const exception = exceptionMap.get(`${file}\u0000${literal}`);
+      if (!exception) errors.push(`${file}: stale live documentation path ${literal}`);
+      else if (occurrences !== exception.occurrences) {
+        errors.push(`${file}: historical exception occurrence mismatch for ${literal}`);
+      }
+    }
+  }
+  for (const exception of ledger.historicalExceptions ?? []) {
+    const contents = textFiles.get(exception.file);
+    if (contents === undefined) continue;
+    const occurrences = contents.split(exception.literal).length - 1;
+    if (occurrences !== exception.occurrences) {
+      errors.push(`${exception.file}: historical exception occurrence mismatch for ${exception.literal}`);
+    }
+  }
+  return [...new Set(errors)];
+}
+
+function hasMarkdownLinkTo(contents, source, expectedTarget) {
+  const withoutComments = contents.replace(/<!--[\s\S]*?-->/gu, "");
+  return markdownLinks(withoutComments).some((link) => {
+    if (link.image || isExternal(link.destination)) return false;
+    const { pathname } = splitTarget(link.destination);
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(source), pathname));
+    return resolved === expectedTarget;
+  });
+}
+
+function hasPlanIndexRow(contents, id, status) {
+  contents = visibleMarkdown(contents);
+  const row = new RegExp(
+    `^\\|\\s*\\[(?:plan-)?${escapeRegExp(id)}(?:\\.md)?\\]\\(plan-${escapeRegExp(id)}\\.md\\)\\s*\\|\\s*${escapeRegExp(status)}\\s*\\|`,
+    "mu",
+  );
+  return row.test(contents);
+}
+
+function hasConcreteEvidenceRow(contents, id) {
+  const row = visibleMarkdown(contents).split(/\r?\n/gu).find((line) =>
+    new RegExp(`^\\|\\s*\\[(?:plan-)?${escapeRegExp(id)}(?:\\.md)?\\]\\(plan-${escapeRegExp(id)}\\.md\\)`, "u").test(line));
+  return typeof row === "string" && /(?:\/pull\/\d+|\/releases\/tag\/v\d+\.\d+\.\d+|\/issues\/\d+|\bcommit [0-9a-f]{7,40}\b)/iu.test(row);
+}
+
+function visibleMarkdown(contents) {
+  return maskMarkdownCode(contents).replace(/<!--[\s\S]*?-->/gu, "");
+}
+
+function tomlStringValue(contents, requestedSection, requestedKey) {
+  let section = "";
+  for (const rawLine of contents.split(/\r?\n/gu)) {
+    const line = rawLine.replace(/\s+#.*$/u, "").trim();
+    const sectionMatch = line.match(/^\[([^\]]+)\]$/u);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      continue;
+    }
+    if (section !== requestedSection) continue;
+    const valueMatch = line.match(new RegExp(`^${escapeRegExp(requestedKey)}\\s*=\\s*["']([^"']*)["']$`, "u"));
+    if (valueMatch) return valueMatch[1];
+  }
+  return undefined;
+}
+
+export async function validateCorpusRepository(repositoryRoot, ledger) {
+  const errors = [];
+  const existingPaths = new Set(["README.md"]);
+  for (const rootName of ["docs", "website"]) {
+    const root = path.join(repositoryRoot, rootName);
+    try {
+      for (const file of await walk(root)) existingPaths.add(slash(path.relative(repositoryRoot, file)));
+    } catch {
+      // A removed legacy root is a valid migration result.
+    }
+  }
+  try {
+    for (const entry of await readdir(path.join(repositoryRoot, "specs"), { withFileTypes: true })) {
+      if (entry.isDirectory()) existingPaths.add(`specs/${entry.name}`);
+    }
+  } catch {
+    errors.push("specs directory is missing");
+  }
+
+  const textFiles = new Map();
+  const textExtensions = new Set([".c", ".css", ".h", ".html", ".js", ".json", ".lua", ".md", ".mjs", ".ps1", ".rs", ".sh", ".toml", ".txt", ".yml", ".yaml"]);
+  const scanRoots = [".github", ".specify", "addon", "assets", "docs", "packaging", "scripts", "specs", "src", "tests", "website", "wix"];
+  const candidates = [
+    "Cargo.toml",
+    "CHANGELOG.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "release.toml",
+    "rust-toolchain.toml",
+  ].map((name) => path.join(repositoryRoot, name));
+  for (const rootName of scanRoots) {
+    try {
+      candidates.push(...(await walk(path.join(repositoryRoot, rootName))));
+    } catch {
+      // Optional or retired roots do not invalidate the corpus by themselves.
+    }
+  }
+  for (const file of candidates) {
+    if (!textExtensions.has(path.extname(file).toLocaleLowerCase("en-US"))) continue;
+    const relative = slash(path.relative(repositoryRoot, file));
+    const bytes = await readFile(file);
+    const hygieneErrors = validateTextHygiene(relative, bytes);
+    errors.push(...hygieneErrors);
+    if (hygieneErrors.some((error) => error.endsWith("text is not valid UTF-8"))) continue;
+    const contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    textFiles.set(relative, contents);
+  }
+
+  const snapshot = { existingPaths, currentPaths: existingPaths, textFiles };
+  errors.push(...validateMigrationLedger(ledger, snapshot));
+  errors.push(...validateCorpusSnapshot(ledger, snapshot));
+  return errors;
+}
+
+export function validateTextHygiene(relative, bytes) {
+  const errors = [];
+  let contents;
+  try {
+    contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return [`${relative}: text is not valid UTF-8`];
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    errors.push(`${relative}: UTF-8 BOM is forbidden`);
+  }
+  if (contents.includes("\r")) errors.push(`${relative}: text must use LF line endings`);
+  if (/(?:\uFFFD|\u00c3.|\u00e2\u20ac|\u00ef\u00bb\u00bf)/u.test(contents)) {
+    errors.push(`${relative}: possible mojibake detected`);
+  }
+  if (/[\u2013\u2014]/u.test(contents)) errors.push(`${relative}: forbidden dash character`);
+  return errors;
 }
 
 export function validateBrandCss(css) {
@@ -644,14 +1219,18 @@ function hasExactPermissions(text, indent, expected) {
 
 async function run() {
   const docsRoot = path.resolve(process.argv[2] ?? "docs");
+  const repositoryRoot = path.dirname(docsRoot);
   const outputRoot = path.resolve(process.argv[3] ?? path.join("target", "docs-site", "html"));
   const workflowPath = path.resolve(".github", "workflows", "docs.yml");
   const cssPath = path.join(docsRoot, "theme", "eso-weave.css");
+  const ledgerPath = path.join(docsRoot, "project", "migration-ledger.json");
+  const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   const errors = [
     ...(await validateSourceTree(docsRoot)),
     ...(await validateGeneratedSite(outputRoot)),
     ...validateBrandCss(await readFile(cssPath, "utf8")),
     ...validateWorkflowText(await readFile(workflowPath, "utf8")),
+    ...(await validateCorpusRepository(repositoryRoot, ledger)),
   ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`docs policy: ${error}`);

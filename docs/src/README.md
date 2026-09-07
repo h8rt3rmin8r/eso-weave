@@ -2,20 +2,19 @@
 
 ![ESO Weave mark](assets/brand/eso-weave-mark.svg)
 
-Welcome to the offline-first documentation foundation for ESO Weave, a desktop
-companion for The Elder Scrolls Online.
+ESO Weave is an offline-first desktop companion for The Elder Scrolls Online.
+It provides focus-scoped combat weaving, optional fishing, and cautious Auto
+Potion behavior without reading game memory or network traffic.
 
-This initial site establishes stable navigation, local search, and publication.
-The following documentation slices will migrate existing material and add the
-complete user and developer manuals. Until then, use the repository
-[README](https://github.com/h8rt3rmin8r/eso-weave/blob/main/README.md) for current
-installation and operation guidance.
+This site preserves the project's current user and technical guidance in one
+published tree. Issue #81 owns the later completeness and source-level accuracy
+review, so these pages do not claim to document every shipped detail yet.
 
 ## Choose a path
 
-- [Getting Started](getting-started/) reserves the installation and
-  first-run path.
-- [Features](features/) reserves task-oriented product guidance.
-- [Concepts](concepts/) reserves deeper behavior and safety explanations.
-- [Reference](reference/) reserves settings and diagnostic references.
-- [Development](development/) reserves contributor documentation.
+- [Getting Started](getting-started/) covers installation and responsible use.
+- [Features](features/) explains current user-visible behavior.
+- [Concepts](concepts/) preserves scope, state, and input-safety reasoning.
+- [Reference](reference/) collects settings, protocol, logging, and timing facts.
+- [Development](development/) records architecture, brand, and repository
+  conventions.

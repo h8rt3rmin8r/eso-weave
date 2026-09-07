@@ -3,7 +3,7 @@
 #
 # Contract: a release is cut by pushing a tag of the form vX.Y.Z. The changelog rollover and
 # version bump happen locally as part of `cargo release` BEFORE the tag is pushed (see
-# docs/releasing.md), so this workflow never writes back to main. It only verifies, builds
+# docs/project/releasing.md), so this workflow never writes back to main. It only verifies, builds
 # assets, and publishes.
 #
 # Assets: Windows x64 MSI (cargo-wix), Linux x86_64 .deb (cargo-deb), AppImage

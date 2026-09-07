@@ -7,6 +7,10 @@ tags: ["eso", "pixelbeacon", "accessibility", "ui"]
 category: "Feature"
 ---
 
+> **Archived announcement:** This release-era article is retained for historical
+> context. The [Ultimate Resource guide](../../src/features/ultimate-resource.md)
+> is the current canonical explanation.
+
 Ultimate is one of the most important combat resources in The Elder Scrolls
 Online, but it does not behave like Health, Stamina, or Magicka. It has a stored
 point total, a game-reported maximum, and a cast cost that depends on the ability
