@@ -110,8 +110,8 @@ non-actionable.
 ## Pinned and release artifacts
 
 Changes under `.github/workflows/`, plus release, packaging, toolchain, and script
-artifacts named in `docs/releasing.md`, require a dated decision in
-`CHANGELOG.md`. Releases follow `docs/releasing.md` and always require explicit
+artifacts named in `docs/project/releasing.md`, require a dated decision in
+`CHANGELOG.md`. Releases follow `docs/project/releasing.md` and always require explicit
 maintainer authorization.
 
 All text is UTF-8 without BOM and uses LF line endings. Avoid em-dashes and

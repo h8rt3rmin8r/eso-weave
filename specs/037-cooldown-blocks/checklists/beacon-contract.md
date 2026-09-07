@@ -15,7 +15,7 @@
 - [x] CHK005 Is it specified what happens to the compile-time assertion that this slice trips, and is replacing it distinguished from removing it? [Clarity, Spec §FR-015]
 - [x] CHK006 Is the reason the assertion must survive in some form stated, rather than treated as a one-time obstacle? [Completeness, Spec §FR-015]
 - [x] CHK007 Is it specified how much of the row-two behaviour already exists versus must be built, so the slice does not rebuild working geometry? [Ambiguity, Spec §Clarifications, §Assumptions]
-- [x] CHK008 Are requirements defined for what the operator sees when the overlay changes size on screen, as distinct from what the application computes? [Gap, Spec §FR-012] — dissolved rather than answered: the corrected six-block scope keeps the grid one row tall, so the overlay grows sideways to a bound it was always designed for and gains no height. It returns when slice 038 crosses.
+- [x] CHK008 Are requirements defined for what the operator sees when the overlay changes size on screen, as distinct from what the application computes? [Gap, Spec §FR-012] (dissolved rather than answered: the corrected six-block scope keeps the grid one row tall, so the overlay grows sideways to a bound it was always designed for and gains no height. It returns when slice 038 crosses).
 
 ## Multi-Block Contract Completeness
 
@@ -33,7 +33,7 @@
 - [x] CHK017 Is the range specified, and is out-of-range behaviour defined rather than left to overflow? [Coverage, Spec §FR-003, §Edge Cases]
 - [x] CHK018 Are the three cases (a duration, ready, unavailable) distinguished, and is unavailable defined as a reading failure rather than a duration? [Clarity, Spec §FR-002, §Key Entities]
 - [x] CHK019 Is it specified that an empty slot and an unreadable square produce the same value, and is that collapse justified? [Ambiguity, Spec §Edge Cases]
-- [x] CHK020 Is the mapping from the application's slots to the game's own slot numbering specified, or deferred with a stated reason? [Gap, Spec §Clarifications] — closed by verification: the game's action bar iterates from its first-normal-slot index through its ultimate-slot index, and Synergy is outside that range because it is not an action slot, which is what reduced the scope from seven blocks to six.
+- [x] CHK020 Is the mapping from the application's slots to the game's own slot numbering specified, or deferred with a stated reason? [Gap, Spec §Clarifications] (closed by verification: the game's action bar iterates from its first-normal-slot index through its ultimate-slot index, and Synergy is outside that range because it is not an action slot, which is what reduced the scope from seven blocks to six).
 
 ## Announcement and Log Volume
 

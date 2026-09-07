@@ -13,7 +13,7 @@
 - [x] CHK003 Are requirements defined for the separation between the encoded movement states themselves, not only between marks of different squares? [Coverage, Spec §FR-006]
 - [x] CHK004 Is it specified that the encoding must be identical on both sides of the contract rather than merely compatible? [Clarity, Spec §FR-016]
 - [x] CHK005 Are requirements defined for what the companion does with a color carrying a valid mark but an unrecognized state value? [Coverage, Spec §FR-007]
-- [x] CHK006 Is the set of marks already in use discoverable, so this slice's mark can be chosen against it rather than by rediscovery? [Gap, Spec §FR-006] — the shared registry introduced after slice 031 closes the gap that slice left open.
+- [x] CHK006 Is the set of marks already in use discoverable, so this slice's mark can be chosen against it rather than by rediscovery? [Gap, Spec §FR-006] (the shared registry introduced after slice 031 closes the gap that slice left open).
 - [x] CHK007 Is it required that the new mark be added to that shared registry, so its separation is proven automatically rather than asserted by the author? [Gap, Spec §FR-006]
 - [x] CHK008 Are requirements defined for an integrity check beyond the mark, so unrelated screen content that happens to match the mark is still rejected? [Coverage, Spec §FR-007]
 - [x] CHK009 Is the behavior specified for an operator who raises the color-match tolerance far enough to collide two encodings? [Consistency, Spec §FR-006]

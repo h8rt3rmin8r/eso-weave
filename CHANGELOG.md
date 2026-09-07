@@ -12,9 +12,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S057 establishes a branded mdBook documentation shell with local search,
   checked navigation and links, offline runtime assets, and a main-only GitHub
   Pages delivery path (issue #79).
+- S058 adds a machine-checked migration ledger and explicit published, project,
+  and archive documentation lifecycles (issue #80).
+
+### Changed
+
+- S058 splits the former technical specification and root manual into canonical
+  audience pages, archives all 27 completed build plans and the orphaned Ultimate
+  article, moves current maintainer records under `docs/project`, and reduces
+  the root README to a documentation gateway.
 
 ### Decisions
 
+- 2026-09-07: Amend the constitution to 2.0.0, replacing the mandatory
+  single-file architecture of record with issue-backed numbered slices,
+  canonical shipped behavior and architecture under `docs/src`, and active
+  sequencing under `docs/project/build-plans`. This is a MAJOR governance
+  change because the former named authority is retired, while the full spec-kit
+  sequence, blocking analyze gate, safety principles, CI parity, and pull-request
+  workflow remain mandatory.
+- 2026-09-07: Move pinned release guidance to
+  `docs/project/releasing.md`, update its workflow, release configuration,
+  Linux dependency script, contributor, and agent references atomically, and
+  preserve plans 001 through 027 under `docs/archive/build-plans`. Preserve the
+  orphaned Ultimate announcement under `docs/archive/website` while moving its
+  durable explanation into the canonical site. These path and lifecycle changes
+  separate active process from published and historical material without
+  deleting unique evidence.
 - 2026-09-07: Standardize the future public and bundled documentation source at
   `docs/src`, using mdBook 0.5.4 and mdbook-linkcheck2 0.13.0 with exact version
   pins. Add a pinned Pages workflow whose action dependencies use immutable

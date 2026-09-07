@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs the Linux system libraries required to build the ESO Weave GUI and its
 # input and pixel-bus backends. This is the single source shared by CI and
-# developer machines so the two cannot drift (see docs/releasing.md).
+# developer machines so the two cannot drift (see docs/project/releasing.md).
 #
 # Run with elevated privileges, as the pinned release pipeline does
 # (`sudo scripts/linux-build-deps.sh`). Targets Debian/Ubuntu (apt).

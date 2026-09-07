@@ -1,8 +1,8 @@
 # Build-Phase Autopilot Protocol
 
-Version: 1.1.0
+Version: 2.0.0
 Adopted: 2026-07-10
-Last amended: 2026-09-03
+Last amended: 2026-09-07
 Status: operating procedure for the coding agent
 Project: eso-weave (`github.com/h8rt3rmin8r/eso-weave`)
 
@@ -14,11 +14,12 @@ conflict, the constitution wins.
 
 ## Purpose
 
-Every feature derived from the master specification
-(`docs/ESO-Weave-Specification.md`) runs the same spec-kit sequence. The
-sequence and slice boundaries of those features come from the current build plan
-under `docs/plans/` (index `docs/plans/README.md`); the master specification
-supplies each slice's technical scope. The default agent behavior pauses for
+Every feature derived from an actionable issue and the canonical documentation
+under `docs/src/` runs the same spec-kit sequence. The sequence and slice
+boundaries of those features come from the current build plan under
+`docs/project/build-plans/` (index `docs/project/build-plans/README.md`), while
+the issue and canonical corpus supply each slice's technical scope. The default
+agent behavior pauses for
 authorization between each step and raises routine decisions to the user that,
 in practice, are approved as recommended.
 Autopilot removes that friction: one verbal kickoff runs a full feature end to
@@ -51,11 +52,11 @@ inter-step authorization.
 The agent runs these steps in order, with no halt between them:
 
 1. `/speckit.specify` creates `specs/NNN-*/`, `spec.md`, and
-   `checklists/requirements.md`, drawing scope from the relevant sections of the
-   master specification.
+   `checklists/requirements.md`, drawing scope from the actionable issue and the
+   relevant canonical documentation.
 2. `/speckit.clarify` runs under the decision policy below. The agent answers
    clarification questions itself from the feature spec, the constitution, the
-   master specification, and the feature's stated scope and acceptance criteria.
+   canonical documentation, and the feature's stated scope and acceptance criteria.
    Only genuinely unanswerable questions are escalated.
 3. `/speckit.checklist` adds domain checklists where the feature warrants them.
 4. `/speckit.plan` produces `research.md`, `data-model.md`, `contracts/`, and
@@ -100,7 +101,7 @@ This is the core behavioral change. For any decision point that the default
 behavior would raise to the user, the agent instead:
 
 - Enumerates the viable alternatives.
-- Evaluates them against the constitution, the master specification, the
+- Evaluates them against the constitution, the canonical documentation, the
   feature's stated scope and acceptance criteria, and existing code patterns.
 - Picks the best-supported option, proceeds, and records the decision and its
   rationale in the feature's `plan.md` or `spec.md`, and in `CHANGELOG.md`
@@ -110,8 +111,8 @@ The agent halts to the user only when one of these holds:
 
 - No option is clearly best and the choice is materially irreversible or
   architecture-defining.
-- The feature's intent or scope is genuinely ambiguous in the master
-  specification.
+- The feature's intent or scope is genuinely ambiguous in the actionable issue
+  and canonical documentation.
 - A constitution CRITICAL conflict cannot be resolved without a human decision.
 
 ## The pre-push halt breakdown
@@ -153,13 +154,13 @@ explicit authorization.
 
 ## Scope and expiry
 
-Autopilot is valid for features derived from
-`docs/ESO-Weave-Specification.md`. It also applies to any other feature or
+Autopilot is valid for features derived from actionable issues and canonical
+documentation under `docs/src/`. It also applies to any other feature or
 task when the operator explicitly requests an autopilot run (for example "run the
 MSI packaging under autopilot" or "autopilot this"). Such an explicit request
 authorizes autopilot for the named work and is itself the renewal.
 
-Absent an explicit request, work not traceable to the master specification falls
-back to normal interactive mode. When the master specification is superseded by a
-new version, the standing authorization lapses and requires renewal against the
-new document; per-request autopilot remains available regardless.
+Absent an explicit request, work not traceable to that authority chain falls
+back to normal interactive mode. When the constitution changes the authority
+model, the standing authorization lapses and requires renewal against the new
+model; per-request autopilot remains available regardless.

@@ -1,8 +1,9 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 1.1.0
-- Ratification: pull-request integration and remote review amendment
-- Modified principles: IV clarified as both the local and hosted merge gate
+- Version change: 1.1.0 -> 2.0.0
+- Ratification: structured documentation authority and lifecycle migration
+- Modified principles: I replaces the single master-specification file with the
+  canonical published corpus, issue-backed slices, and current build-plan index
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -13,8 +14,8 @@ Sync Impact Report
     references; no edit needed)
   .specify/templates/tasks-template.md ........ aligned (no constitution
     references; no edit needed)
-  CLAUDE.md, docs/build-autopilot.md .......... updated to the pull-request
-    workflow and post-merge housekeeping sequence
+  CLAUDE.md, docs/project/build-autopilot.md .. updated to the structured
+    authority model and new project/archive paths
 - Follow-up TODOs: none
 -->
 
@@ -24,18 +25,20 @@ Sync Impact Report
 
 ### I. Spec-Driven Development (NON-NEGOTIABLE)
 
-Every feature traces to the master specification
-(`docs/ESO-Weave-Specification.md`) and is built through the full
+Every feature traces to an actionable issue and the canonical shipped behavior
+and architecture documentation under `docs/src`, then is built through the full
 spec-kit sequence before any implementation code: specify, clarify, checklist,
 plan, tasks, analyze, then implement. Work lands as a numbered
-`specs/NNN-name/` slice holding its `spec.md`, `plan.md`, and `tasks.md`. Build
-plans under `docs/plans/` set slice order and boundaries; the master
-specification supplies technical scope. The `/speckit.analyze` gate MUST pass
-and MUST NOT be weakened or skipped.
+`specs/NNN-name/` slice holding its `spec.md`, `plan.md`, and `tasks.md`.
+Current build plans under `docs/project/build-plans/` set slice order and
+boundaries. When new or changed behavior makes canonical documentation
+incomplete, the implementing slice updates it or links a separately scoped
+documentation issue. The `/speckit.analyze` gate MUST pass and MUST NOT be
+weakened or skipped.
 
-Rationale: the specification is the architecture of record. Deriving code any
-other way lets scope drift away from it and defeats the workflow the project is
-built on.
+Rationale: issue scope, numbered implementation evidence, and the published
+corpus form one reviewable authority chain. A single monolithic specification
+became stale and mixed user, architecture, and project lifecycles.
 
 ### II. Safety-Critical Surfaces Are Sacrosanct (NON-NEGOTIABLE)
 
@@ -116,7 +119,7 @@ Crossing it changes what the software is.
 ## Development Workflow and Quality Gates
 
 - Features run under the Build-Phase Autopilot Protocol
-  (`docs/build-autopilot.md`): one kickoff runs the spec-kit sequence end to
+  (`docs/project/build-autopilot.md`): one kickoff runs the spec-kit sequence end to
   end, the agent decides routine questions itself and records the rationale, and
   halts once before the first remote push unless publication was explicitly
   authorized at kickoff.
@@ -127,10 +130,10 @@ Crossing it changes what the software is.
 - Direct pushes to `main` are limited to explicitly authorized repository
   administration or release work.
 - Pinned artifacts (`.github/workflows/**`, `rust-toolchain.toml`,
-  `release.toml`, `scripts/**`, `packaging/**`, `docs/releasing.md`, plus
+  `release.toml`, `scripts/**`, `packaging/**`, `docs/project/releasing.md`, plus
   `.gitattributes`, `.gitignore`, `LICENSE`) change only with a dated decision
   recorded in `CHANGELOG.md`.
-- Releases follow `docs/releasing.md` exactly. Cutting a `vX.Y.Z` tag and
+- Releases follow `docs/project/releasing.md` exactly. Cutting a `vX.Y.Z` tag and
   running `cargo release` always require explicit human authorization, as does
   every remote push unless that authorization was supplied at kickoff for the
   named work.
@@ -138,7 +141,7 @@ Crossing it changes what the software is.
 ## Governance
 
 This constitution supersedes other process conventions where they conflict.
-`CLAUDE.md` and `docs/build-autopilot.md` provide runtime development guidance
+`CLAUDE.md` and `docs/project/build-autopilot.md` provide runtime development guidance
 and MUST remain consistent with these principles; where they appear to conflict,
 the constitution wins.
 
@@ -151,4 +154,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-03
+**Version**: 2.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-07

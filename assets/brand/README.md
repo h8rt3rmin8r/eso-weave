@@ -2,7 +2,8 @@
 
 This directory holds the ESO Weave brand masters and the script that regenerates
 every rasterized asset from them. The full brand standard (palette, typography,
-usage) lives in [docs/brand/ESO-Weave-Brand-v1.md](../../docs/brand/ESO-Weave-Brand-v1.md).
+usage) lives in the
+[published brand standard](../../docs/src/development/brand-standard.md).
 
 ## Masters
 

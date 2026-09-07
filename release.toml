@@ -1,6 +1,6 @@
 # cargo-release configuration for ESO Weave.
 #
-# Cutting a release is `cargo release X.Y.Z --execute` (see docs/releasing.md).
+# Cutting a release is `cargo release X.Y.Z --execute` (see docs/project/releasing.md).
 # That bumps the crate version in Cargo.toml (the single source of the app, MSI,
 # and embedded addon version), rolls CHANGELOG.md (renaming the Unreleased section
 # to the versioned one and opening a fresh Unreleased), commits as
