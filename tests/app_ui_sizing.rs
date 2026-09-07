@@ -649,6 +649,70 @@ fn resource_meter_geometry_is_stable_across_boundary_values() {
 }
 
 #[test]
+fn meter_geometry_places_quarters_and_reserves_three_point_threshold_protrusion() {
+    let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(400.0, 24.0));
+    let geometry = widgets::resource_meter_geometry(rect, Some(0.5));
+    for (segment, fraction) in geometry.quarters.into_iter().zip([0.25, 0.5, 0.75]) {
+        assert_eq!(
+            segment[0].x,
+            geometry.track.left() + geometry.track.width() * fraction
+        );
+        assert!(segment[0].y > geometry.track.top());
+        assert!(segment[1].y < geometry.track.bottom());
+    }
+    let threshold = geometry.threshold.expect("known cost");
+    assert_eq!(threshold[0].x, geometry.quarters[1][0].x);
+    assert!(threshold[0].y < geometry.track.bottom());
+    assert_eq!(threshold[1].y, rect.bottom());
+    assert_eq!(rect.bottom() - geometry.track.bottom(), 3.0);
+    assert_eq!(geometry.numeric.right(), geometry.ready.left());
+}
+
+#[test]
+fn ultimate_meter_exposes_exact_accessible_value_and_fixed_ready_state() {
+    let palette = eso_weave::app::theme::palette(Theme::Dark);
+    let view = eso_weave::app::ultimate_view(
+        eso_weave::pixelbus::UltimateTelemetry {
+            current: eso_weave::pixelbus::UltimateValue::Points(185),
+            maximum: eso_weave::pixelbus::UltimateValue::Points(500),
+            front_cost: eso_weave::pixelbus::UltimateValue::Points(125),
+            back_cost: eso_weave::pixelbus::UltimateValue::Unknown,
+        },
+        eso_weave::pixelbus::ActiveBar::Front,
+    );
+    let label = "Ultimate: 185 of 500; Front bar cost 125; Ready";
+    let mut harness = Harness::new_ui(|ui| {
+        widgets::ultimate_meter(ui, &palette, "Ultimate", &view);
+    });
+    harness.step();
+    let meter = harness.get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, label);
+    assert_eq!(meter.accesskit_node().numeric_value(), Some(37.0));
+}
+
+#[test]
+fn ultimate_ready_transition_preserves_meter_geometry() {
+    let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(400.0, 24.0));
+    let geometries =
+        [124_u16, 125, 126].map(|_| widgets::resource_meter_geometry(rect, Some(125.0 / 500.0)));
+    assert_eq!(geometries[0], geometries[1]);
+    assert_eq!(geometries[1], geometries[2]);
+    assert!(geometries[0].numeric.right() <= geometries[0].ready.left());
+
+    for (current, expected_ready) in [(124, false), (125, true), (126, true)] {
+        let view = eso_weave::app::ultimate_view(
+            eso_weave::pixelbus::UltimateTelemetry {
+                current: eso_weave::pixelbus::UltimateValue::Points(current),
+                maximum: eso_weave::pixelbus::UltimateValue::Points(500),
+                front_cost: eso_weave::pixelbus::UltimateValue::Points(125),
+                back_cost: eso_weave::pixelbus::UltimateValue::Unknown,
+            },
+            eso_weave::pixelbus::ActiveBar::Front,
+        );
+        assert_eq!(view.ready, Some(expected_ready));
+    }
+}
+
+#[test]
 fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
     let mut harness = harness_at(egui::vec2(760.0, 1000.0));
     for _ in 0..SETTLE {
@@ -664,6 +728,7 @@ fn dashboard_accessibility_tree_names_sections_and_dormant_resources() {
         "Health: Game not active",
         "Stamina: Game not active",
         "Magicka: Game not active",
+        "Ultimate: Game not active",
     ] {
         let meter = harness.get_by_role_and_label(egui::accesskit::Role::ProgressIndicator, label);
         assert_eq!(meter.accesskit_node().numeric_value(), None);

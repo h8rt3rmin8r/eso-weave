@@ -133,6 +133,10 @@ publishes explicit on-foot sprint through B9 without changing protocol geometry.
 Auto-potion waits while Sprinting is explicit, then evaluates the latest resource,
 quickslot, cooldown, and safety evidence after sprint ends. It never queues a drink.
 
+PixelBeacon version 20 advertises protocol version 5 and appends exact Ultimate
+current, maximum, primary cost, and backup cost values. Versions 1 through 4 keep
+their original payload extents and report the Ultimate meter as unavailable.
+
 **Game Context** combines four independent observations: whether the game is
 active, whether its window is focused, whether PixelBeacon is fresh, and which
 in-game surface PixelBeacon reports. **Gameplay** appears only when all four are
@@ -150,6 +154,13 @@ Health, Stamina, and Magicka use labeled bars with exact percentages. Observed
 separate non-numeric states, so missing telemetry never looks like an empty
 resource. A bar says **Low** only when that resource is enabled in auto-potion
 settings and has reached its configured threshold.
+
+**Ultimate** is a fourth purple meter with an exact current/maximum readout.
+Subtle quarter marks appear on every resource meter. Ultimate also shows a thin
+threshold for the ability slotted on the active front or back bar. When charge
+meets that exact cost, green **Ready** text appears in a fixed slot to the right
+of the numbers, so the interface does not jump. Ultimate is display-only and is
+never an auto-potion or weaving input.
 
 ## Weaving
 
@@ -339,15 +350,15 @@ same thing: a small grid of colored squares that PixelBeacon draws in the
 That grid is the entire channel between the addon and the app. It has to be
 visible, because anything drawn over it reads as a missing signal.
 
-At the default square size it covers **432 by 16 physical pixels**: a three-cell
-layout header followed by twenty-four signal squares in one row. PixelBeacon uses
+At the default square size it covers **512 by 16 physical pixels**: a three-cell
+layout header followed by twenty-nine signal squares in one row. PixelBeacon uses
 the current client width and wraps only when the complete next square would cross
 the right edge.
 
 **To make it smaller**, lower **Block size (px)** in Settings, under the beacon
 group. The app shows the running reader's detected footprint beside that setting
 and records layout transitions in the log. At the smallest supported size the
-current overlay is 52 by 2 pixels. A newly selected size is not mixed with the old
+current overlay is 64 by 2 pixels. A newly selected size is not mixed with the old
 live column count: it redeploys the addon and becomes the reported geometry after
 a `/reloadui` and an app restart.
 

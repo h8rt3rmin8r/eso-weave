@@ -270,6 +270,44 @@ impl ResourceSet {
     }
 }
 
+/// One exact Ultimate point value, or unavailable evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UltimateValue {
+    /// The value could not be read or is outside the wire contract.
+    #[default]
+    Unknown,
+    /// An exact point value from 0 through 510.
+    Points(u16),
+}
+
+/// Exact stored Ultimate and both slotted bar costs as one display-only value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct UltimateTelemetry {
+    pub current: UltimateValue,
+    pub maximum: UltimateValue,
+    pub front_cost: UltimateValue,
+    pub back_cost: UltimateValue,
+}
+
+impl UltimateTelemetry {
+    /// The initial, unsupported, corrupt, and signal-loss value.
+    pub fn new_unknown() -> Self {
+        Self::default()
+    }
+}
+
+// Each 9-bit scalar uses one of two field-specific markers for bit 8. Red
+// carries bits 0 through 7 and blue remains the complement checksum.
+pub const ULTIMATE_CURRENT_LOW_MARKER: u8 = 0x05;
+pub const ULTIMATE_CURRENT_HIGH_MARKER: u8 = 0x7B;
+pub const ULTIMATE_MAX_LOW_MARKER: u8 = 0x1B;
+pub const ULTIMATE_MAX_HIGH_MARKER: u8 = 0x5F;
+pub const ULTIMATE_FRONT_LOW_MARKER: u8 = 0x27;
+pub const ULTIMATE_FRONT_HIGH_MARKER: u8 = 0x48;
+pub const ULTIMATE_BACK_LOW_MARKER: u8 = 0x32;
+pub const ULTIMATE_BACK_HIGH_MARKER: u8 = 0x3D;
+const ULTIMATE_UNAVAILABLE: u16 = 0x1FF;
+
 /// The green marker identifying a health sample.
 const HEALTH_MARKER: u8 = 0x16;
 /// The green marker identifying a stamina sample.
@@ -657,7 +695,7 @@ const QUICKSLOT_POTION_USABLE: u8 = 0xD0;
 /// separated by more than the default tolerance, so a colliding marker fails the
 /// build and names the collision instead of silently decoding as its neighbour
 /// when the strip geometry is off by a block.
-pub const BLOCK_CENTER_GREENS: [(&str, u8); 29] = [
+pub const BLOCK_CENTER_GREENS: [(&str, u8); 37] = [
     ("H0 layout magic", LAYOUT_MAGIC_G),
     ("H1 layout high marker", LAYOUT_HIGH_MARKER),
     ("H2 layout low marker", LAYOUT_LOW_MARKER),
@@ -687,6 +725,20 @@ pub const BLOCK_CENTER_GREENS: [(&str, u8); 29] = [
     ("B22 world-state marker", WORLD_MARKER),
     ("B23 roll-dodge marker", ROLL_DODGE_MARKER),
     ("B24 travel-state marker", TRAVEL_MARKER),
+    (
+        "B25 ultimate current low marker",
+        ULTIMATE_CURRENT_LOW_MARKER,
+    ),
+    (
+        "B25 ultimate current high marker",
+        ULTIMATE_CURRENT_HIGH_MARKER,
+    ),
+    ("B26 ultimate max low marker", ULTIMATE_MAX_LOW_MARKER),
+    ("B26 ultimate max high marker", ULTIMATE_MAX_HIGH_MARKER),
+    ("B27 ultimate front low marker", ULTIMATE_FRONT_LOW_MARKER),
+    ("B27 ultimate front high marker", ULTIMATE_FRONT_HIGH_MARKER),
+    ("B28 ultimate back low marker", ULTIMATE_BACK_LOW_MARKER),
+    ("B28 ultimate back high marker", ULTIMATE_BACK_HIGH_MARKER),
 ];
 
 /// A typed event decoded from the pixel bus.
@@ -718,6 +770,8 @@ pub enum PixelBusEvent {
     /// which several move at once (the common case in combat) is one event rather
     /// than three.
     Resources(ResourceSet),
+    /// A change in exact stored Ultimate or either slotted bar cost.
+    Ultimate(UltimateTelemetry),
     /// A change in decoded movement. Explicit sprint is consumed by auto-potion;
     /// all other values remain observational.
     Movement(MovementSignal),
@@ -803,6 +857,14 @@ pub struct BlockSamples {
     pub roll_dodge: Option<Rgb>,
     /// B24, the bounded travel-state block.
     pub travel: Option<Rgb>,
+    /// B25, exact stored Ultimate.
+    pub ultimate_current: Option<Rgb>,
+    /// B26, exact current Ultimate maximum.
+    pub ultimate_max: Option<Rgb>,
+    /// B27, exact front-bar Ultimate cost.
+    pub ultimate_front_cost: Option<Rgb>,
+    /// B28, exact back-bar Ultimate cost.
+    pub ultimate_back_cost: Option<Rgb>,
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -923,11 +985,11 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In the version-18 addon, the 25 blocks follow three negotiated header cells
+/// In the version-20 addon, the 29 blocks follow three negotiated header cells
 /// and remain on one row at every supported client width and block size. In the
 /// explicit legacy layout they retain the two-row 16-column shape introduced by
 /// slices 038 and 042.
-pub const NUM_BLOCKS: u32 = 25;
+pub const NUM_BLOCKS: u32 = 29;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -947,11 +1009,10 @@ pub const COLUMNS: u32 = 16;
 /// identified by its legacy heartbeat at cell zero.
 pub const LEGACY_COLUMNS: u32 = COLUMNS;
 
-/// Current negotiated geometry header version. Version 4 identifies the B24
-/// travel payload introduced by addon version 18.
-pub const LAYOUT_PROTOCOL_VERSION: u8 = 4;
-/// Spaced blue-channel wire code representing current protocol version 4.
-pub const LAYOUT_VERSION_CODE: u8 = 0x80;
+/// Current negotiated geometry header version. Version 5 identifies B25-B28.
+pub const LAYOUT_PROTOCOL_VERSION: u8 = 5;
+/// Spaced blue-channel wire code representing current protocol version 5.
+pub const LAYOUT_VERSION_CODE: u8 = 0xA0;
 /// Frozen blue-channel wire code for negotiated protocol version 1.
 pub const LAYOUT_VERSION_ONE_CODE: u8 = 0x20;
 /// Payload count of negotiated protocol version 1 (addon versions 14 and 15).
@@ -964,6 +1025,10 @@ pub const LAYOUT_VERSION_TWO_BLOCKS: u32 = 23;
 pub const LAYOUT_VERSION_THREE_CODE: u8 = 0x60;
 /// Payload count of negotiated protocol version 3 (addon version 17).
 pub const LAYOUT_VERSION_THREE_BLOCKS: u32 = 24;
+/// Frozen blue-channel wire code for negotiated protocol version 4.
+pub const LAYOUT_VERSION_FOUR_CODE: u8 = 0x80;
+/// Payload count of negotiated protocol version 4 (addon version 18 and 19).
+pub const LAYOUT_VERSION_FOUR_BLOCKS: u32 = 25;
 /// Maximum tolerance accepted for geometry metadata.
 ///
 /// This remains below half the 0x20 version-code spacing so a caller's broad
@@ -1036,6 +1101,7 @@ impl BusLayout {
             LayoutMode::Negotiated { version: 1 } => LAYOUT_VERSION_ONE_BLOCKS,
             LayoutMode::Negotiated { version: 2 } => LAYOUT_VERSION_TWO_BLOCKS,
             LayoutMode::Negotiated { version: 3 } => LAYOUT_VERSION_THREE_BLOCKS,
+            LayoutMode::Negotiated { version: 4 } => LAYOUT_VERSION_FOUR_BLOCKS,
             LayoutMode::Legacy | LayoutMode::Negotiated { .. } => NUM_BLOCKS,
         }
     }
@@ -1053,6 +1119,11 @@ impl BusLayout {
     /// Whether this geometry generation positively identifies B24.
     pub const fn supports_travel(self) -> bool {
         matches!(self.mode, LayoutMode::Negotiated { version } if version >= 4)
+    }
+
+    /// Whether this geometry generation positively identifies B25 through B28.
+    pub const fn supports_ultimate(self) -> bool {
+        matches!(self.mode, LayoutMode::Negotiated { version } if version >= 5)
     }
 
     /// Total occupied cells, including the negotiated header when present.
@@ -1507,6 +1578,8 @@ pub fn decode_layout_header(
     }
     let version = if within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
         LAYOUT_PROTOCOL_VERSION
+    } else if within(h0.b, LAYOUT_VERSION_FOUR_CODE, layout_tolerance) {
+        4
     } else if within(h0.b, LAYOUT_VERSION_TWO_CODE, layout_tolerance) {
         2
     } else if within(h0.b, LAYOUT_VERSION_THREE_CODE, layout_tolerance) {
@@ -1825,6 +1898,65 @@ pub fn decode_resources(
     }
 }
 
+/// Decodes one exact 9-bit Ultimate value from a field-specific marker pair.
+pub fn decode_ultimate(
+    sample: Rgb,
+    low_marker: u8,
+    high_marker: u8,
+    tolerance: u8,
+) -> UltimateValue {
+    let checksum = u16::from(sample.r) + u16::from(sample.b);
+    if checksum.abs_diff(255) > u16::from(tolerance) {
+        return UltimateValue::Unknown;
+    }
+    let high = match (
+        within(sample.g, low_marker, tolerance),
+        within(sample.g, high_marker, tolerance),
+    ) {
+        (true, false) => 0u16,
+        (false, true) => 1u16,
+        _ => return UltimateValue::Unknown,
+    };
+    let value = (high << 8) | u16::from(sample.r);
+    if value == ULTIMATE_UNAVAILABLE {
+        UltimateValue::Unknown
+    } else {
+        UltimateValue::Points(value)
+    }
+}
+
+fn decode_ultimate_telemetry(
+    current: Option<Rgb>,
+    maximum: Option<Rgb>,
+    front_cost: Option<Rgb>,
+    back_cost: Option<Rgb>,
+    tolerance: u8,
+) -> UltimateTelemetry {
+    let decode = |sample: Option<Rgb>, low: u8, high: u8| {
+        sample.map_or(UltimateValue::Unknown, |sample| {
+            decode_ultimate(sample, low, high, tolerance)
+        })
+    };
+    UltimateTelemetry {
+        current: decode(
+            current,
+            ULTIMATE_CURRENT_LOW_MARKER,
+            ULTIMATE_CURRENT_HIGH_MARKER,
+        ),
+        maximum: decode(maximum, ULTIMATE_MAX_LOW_MARKER, ULTIMATE_MAX_HIGH_MARKER),
+        front_cost: decode(
+            front_cost,
+            ULTIMATE_FRONT_LOW_MARKER,
+            ULTIMATE_FRONT_HIGH_MARKER,
+        ),
+        back_cost: decode(
+            back_cost,
+            ULTIMATE_BACK_LOW_MARKER,
+            ULTIMATE_BACK_HIGH_MARKER,
+        ),
+    }
+}
+
 /// Decodes one cooldown block against its marker.
 ///
 /// Validation follows [`decode_resource`]: the marker and the `red + blue`
@@ -2057,6 +2189,7 @@ pub struct PixelBusReader {
     combat: CombatSignal,
     menu: Option<MenuSurface>,
     resources: ResourceSet,
+    ultimate: UltimateTelemetry,
     movement: MovementSignal,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
@@ -2080,6 +2213,7 @@ impl PixelBusReader {
             combat: CombatSignal::Unknown,
             menu: None,
             resources: ResourceSet::new_unknown(),
+            ultimate: UltimateTelemetry::new_unknown(),
             movement: MovementSignal::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
@@ -2154,6 +2288,11 @@ impl PixelBusReader {
             self.resources = cleared_resources;
             events.push(PixelBusEvent::Resources(cleared_resources));
         }
+        let cleared_ultimate = UltimateTelemetry::new_unknown();
+        if self.ultimate != cleared_ultimate {
+            self.ultimate = cleared_ultimate;
+            events.push(PixelBusEvent::Ultimate(cleared_ultimate));
+        }
         if self.movement != MovementSignal::Unknown {
             self.movement = MovementSignal::Unknown;
             events.push(PixelBusEvent::Movement(MovementSignal::Unknown));
@@ -2216,6 +2355,10 @@ impl PixelBusReader {
             world: b22,
             roll_dodge: b23,
             travel: b24,
+            ultimate_current: b25,
+            ultimate_max: b26,
+            ultimate_front_cost: b27,
+            ultimate_back_cost: b28,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -2448,6 +2591,13 @@ impl PixelBusReader {
                 );
                 events.push(PixelBusEvent::Resources(resources));
             }
+
+            let ultimate = decode_ultimate_telemetry(b25, b26, b27, b28, tolerance);
+            if ultimate != self.ultimate {
+                self.ultimate = ultimate;
+                tracing::trace!(target: "eso_weave::pixelbus", ?ultimate, "ultimate changed");
+                events.push(PixelBusEvent::Ultimate(ultimate));
+            }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {
                 events.extend(self.lose_signal());
@@ -2575,6 +2725,26 @@ impl PixelBusReader {
             },
             travel: if layout.supports_travel() {
                 sample(24)
+            } else {
+                None
+            },
+            ultimate_current: if layout.supports_ultimate() {
+                sample(25)
+            } else {
+                None
+            },
+            ultimate_max: if layout.supports_ultimate() {
+                sample(26)
+            } else {
+                None
+            },
+            ultimate_front_cost: if layout.supports_ultimate() {
+                sample(27)
+            } else {
+                None
+            },
+            ultimate_back_cost: if layout.supports_ultimate() {
+                sample(28)
             } else {
                 None
             },

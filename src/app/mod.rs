@@ -35,7 +35,7 @@ use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState, SlotCooldown,
-    TravelState, WeaponClass, WorldState,
+    TravelState, UltimateTelemetry, UltimateValue, WeaponClass, WorldState,
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
@@ -683,6 +683,8 @@ pub enum ResourceTheme {
     Stamina,
     /// Magicka, conventionally blue.
     Magicka,
+    /// Ultimate, conventionally purple in this interface.
+    Ultimate,
 }
 
 /// A normalized view of one resource pool for the status region.
@@ -784,6 +786,122 @@ pub fn resources_view_with_config(set: ResourceSet, config: AutoPotionConfig) ->
         health: resource_view_with_watch(set.health, config.health),
         stamina: resource_view_with_watch(set.stamina, config.stamina),
         magicka: resource_view_with_watch(set.magicka, config.magicka),
+    }
+}
+
+/// Display-only projection of exact Ultimate telemetry and the selected bar cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UltimatePresentation {
+    Observed,
+    Dormant,
+    Unavailable,
+}
+
+/// Display-only projection of exact Ultimate telemetry and the selected bar cost.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UltimateView {
+    pub presentation: UltimatePresentation,
+    pub text: String,
+    pub role: StatusRole,
+    pub current: Option<u16>,
+    pub maximum: Option<u16>,
+    pub active_cost: Option<u16>,
+    pub active_bar: ActiveBar,
+    pub ready: Option<bool>,
+    pub accessibility: String,
+}
+
+impl UltimateView {
+    pub fn fraction(&self) -> Option<f32> {
+        Some(self.current? as f32 / self.maximum? as f32).map(|value| value.clamp(0.0, 1.0))
+    }
+
+    pub fn threshold_fraction(&self) -> Option<f32> {
+        Some(self.active_cost? as f32 / self.maximum? as f32).map(|value| value.clamp(0.0, 1.0))
+    }
+
+    pub fn dormant() -> Self {
+        Self {
+            presentation: UltimatePresentation::Dormant,
+            text: "Game not active".to_string(),
+            role: StatusRole::Muted,
+            current: None,
+            maximum: None,
+            active_cost: None,
+            active_bar: ActiveBar::Unknown,
+            ready: None,
+            accessibility: "Ultimate: Game not active".to_string(),
+        }
+    }
+}
+
+/// Derives an Ultimate meter without exposing it to resource automation.
+pub fn ultimate_view(telemetry: UltimateTelemetry, active_bar: ActiveBar) -> UltimateView {
+    let (UltimateValue::Points(current), UltimateValue::Points(maximum)) =
+        (telemetry.current, telemetry.maximum)
+    else {
+        return UltimateView {
+            presentation: UltimatePresentation::Unavailable,
+            text: "Signal unavailable".to_string(),
+            role: StatusRole::Warning,
+            current: None,
+            maximum: None,
+            active_cost: None,
+            active_bar,
+            ready: None,
+            accessibility: "Ultimate: Signal unavailable".to_string(),
+        };
+    };
+    if maximum == 0 {
+        return ultimate_view(UltimateTelemetry::new_unknown(), active_bar);
+    }
+    let cost = match active_bar {
+        ActiveBar::Front => telemetry.front_cost,
+        ActiveBar::Back => telemetry.back_cost,
+        ActiveBar::Unknown => UltimateValue::Unknown,
+    };
+    let active_cost = match cost {
+        UltimateValue::Points(value) if value > 0 => Some(value),
+        UltimateValue::Unknown | UltimateValue::Points(_) => None,
+    };
+    let ready = active_cost.map(|cost| current >= cost);
+    let bar = match active_bar {
+        ActiveBar::Front => "Front",
+        ActiveBar::Back => "Back",
+        ActiveBar::Unknown => "Unknown",
+    };
+    let accessibility = match (active_cost, ready) {
+        (Some(cost), Some(true)) => {
+            format!("Ultimate: {current} of {maximum}; {bar} bar cost {cost}; Ready")
+        }
+        (Some(cost), Some(false)) => {
+            format!("Ultimate: {current} of {maximum}; {bar} bar cost {cost}; Not ready")
+        }
+        _ => format!("Ultimate: {current} of {maximum}; active cost unavailable"),
+    };
+    UltimateView {
+        presentation: UltimatePresentation::Observed,
+        text: format!("{current}/{maximum}"),
+        role: StatusRole::Active,
+        current: Some(current),
+        maximum: Some(maximum),
+        active_cost,
+        active_bar,
+        ready,
+        accessibility,
+    }
+}
+
+/// Hides stale exact values while the decoded world is not ready for play.
+pub fn ultimate_view_for_world(
+    telemetry: UltimateTelemetry,
+    active_bar: ActiveBar,
+    world: WorldState,
+) -> UltimateView {
+    if world == WorldState::Active {
+        ultimate_view(telemetry, active_bar)
+    } else {
+        ultimate_view(UltimateTelemetry::new_unknown(), ActiveBar::Unknown)
     }
 }
 
@@ -1342,6 +1460,8 @@ pub struct AppView {
     pub menu: MenuView,
     /// The detected resource levels.
     pub resources: ResourcesView,
+    /// Exact Ultimate charge and active-bar cost presentation.
+    pub ultimate: UltimateView,
     /// The detected quickslot state.
     pub quickslot: QuickslotView,
     /// Whether the operator currently requests auto-potion.
@@ -1610,6 +1730,7 @@ impl AppModel {
             roll_dodge,
             travel,
             resources,
+            ultimate,
             quickslot,
         ) = {
             let cooldowns = self.weave.lock().unwrap().cooldowns();
@@ -1624,6 +1745,7 @@ impl AppModel {
                 weave.roll_dodge(),
                 weave.travel(),
                 weave.resources(),
+                weave.ultimate(),
                 weave.quickslot(),
             )
         };
@@ -1638,6 +1760,7 @@ impl AppModel {
         let mut world = world_state_view(game.world);
         let mut travel = travel_state_view(travel);
         let mut resources = resources_view_with_config(resources, auto_potion_config);
+        let mut ultimate = ultimate_view_for_world(ultimate, active_bar, game.world);
         let mut quickslot = quickslot_view(quickslot);
         if !active {
             weapon_bar = WeaponBarView {
@@ -1680,6 +1803,7 @@ impl AppModel {
             ] {
                 *value = ResourceView::dormant();
             }
+            ultimate = UltimateView::dormant();
             for value in [
                 &mut quickslot.state,
                 &mut quickslot.availability,
@@ -1721,6 +1845,7 @@ impl AppModel {
             travel,
             menu: game_context_view(game.context()),
             resources,
+            ultimate,
             quickslot,
             auto_potion_requested,
             auto_potion: auto_potion_view(auto_potion_state),

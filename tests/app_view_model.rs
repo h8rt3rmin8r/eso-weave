@@ -10,9 +10,10 @@ use eso_weave::app::{
     life_state_view, menu_view, modal_extent, movement_view, override_edit_for, quickslot_view,
     resource_view, resource_view_with_watch, roll_dodge_view, route_game_observation,
     route_reader_event, route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon,
-    status_line_fishing, travel_state_view, uninstall_enabled, weapon_bar_view, world_state_view,
-    AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout, ResourcePresentation,
-    SkillEdit, StatusRole, UiIntent,
+    status_line_fishing, travel_state_view, ultimate_view, ultimate_view_for_world,
+    uninstall_enabled, weapon_bar_view, world_state_view, AppModel, BeaconCondition,
+    BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
+    UltimatePresentation,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
@@ -26,13 +27,87 @@ use eso_weave::pixelbus::{
     ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, MovementSignal,
     PixelBusEvent, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
     QuickslotState, QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState,
-    SlotCooldown, TravelState, WeaponBarSignal, WeaponClass, WorldState,
+    SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponBarSignal, WeaponClass,
+    WorldState,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
 use eso_weave::potion::{
     AutoPotionResource, AutoPotionState, BlockReason, DormantReason, ResourceWatch, TriggerCause,
 };
+
+#[test]
+fn ultimate_view_selects_exact_active_bar_cost_and_readiness() {
+    let telemetry = UltimateTelemetry {
+        current: UltimateValue::Points(185),
+        maximum: UltimateValue::Points(500),
+        front_cost: UltimateValue::Points(200),
+        back_cost: UltimateValue::Points(125),
+    };
+    let front = ultimate_view(telemetry, ActiveBar::Front);
+    assert_eq!(front.text, "185/500");
+    assert_eq!(front.active_cost, Some(200));
+    assert_eq!(front.ready, Some(false));
+    assert_eq!(front.threshold_fraction(), Some(0.4));
+
+    let back = ultimate_view(telemetry, ActiveBar::Back);
+    assert_eq!(back.active_cost, Some(125));
+    assert_eq!(back.ready, Some(true));
+    assert!(back.accessibility.ends_with("Ready"));
+
+    let unknown = ultimate_view(telemetry, ActiveBar::Unknown);
+    assert_eq!(unknown.active_cost, None);
+    assert_eq!(unknown.ready, None);
+}
+
+#[test]
+fn ultimate_view_treats_zero_current_as_observed_and_zero_max_as_unavailable() {
+    let observed = ultimate_view(
+        UltimateTelemetry {
+            current: UltimateValue::Points(0),
+            maximum: UltimateValue::Points(500),
+            front_cost: UltimateValue::Points(0),
+            back_cost: UltimateValue::Unknown,
+        },
+        ActiveBar::Front,
+    );
+    assert_eq!(observed.text, "0/500");
+    assert_eq!(observed.fraction(), Some(0.0));
+    assert_eq!(observed.ready, None);
+
+    let unavailable = ultimate_view(
+        UltimateTelemetry {
+            current: UltimateValue::Points(5),
+            maximum: UltimateValue::Points(0),
+            front_cost: UltimateValue::Points(5),
+            back_cost: UltimateValue::Points(5),
+        },
+        ActiveBar::Front,
+    );
+    assert_eq!(unavailable.presentation, UltimatePresentation::Unavailable);
+}
+
+#[test]
+fn ultimate_view_hides_stale_values_until_world_is_active() {
+    let telemetry = UltimateTelemetry {
+        current: UltimateValue::Points(185),
+        maximum: UltimateValue::Points(500),
+        front_cost: UltimateValue::Points(125),
+        back_cost: UltimateValue::Points(200),
+    };
+    for world in [WorldState::Unknown, WorldState::Transitioning] {
+        let view = ultimate_view_for_world(telemetry, ActiveBar::Front, world);
+        assert_eq!(view.presentation, UltimatePresentation::Unavailable);
+        assert_eq!(view.text, "Signal unavailable");
+        assert_eq!(view.active_bar, ActiveBar::Unknown);
+        assert_eq!(view.active_cost, None);
+        assert_eq!(view.ready, None);
+    }
+    assert_eq!(
+        ultimate_view_for_world(telemetry, ActiveBar::Front, WorldState::Active),
+        ultimate_view(telemetry, ActiveBar::Front)
+    );
+}
 
 fn active_fishing_controller() -> FishingController {
     let mut controller = FishingController::new(FishingConfig::default());
@@ -1343,6 +1418,36 @@ fn routing_a_resource_event_stores_it_without_touching_fishing() {
         !input.is_menu_gated(),
         "resources do not touch the input gate"
     );
+}
+
+#[test]
+fn routing_an_ultimate_event_is_display_only() {
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+    fishing.set_enabled(true, 0, &mut sink);
+    let ultimate = UltimateTelemetry {
+        current: UltimateValue::Points(185),
+        maximum: UltimateValue::Points(500),
+        front_cost: UltimateValue::Points(200),
+        back_cost: UltimateValue::Points(125),
+    };
+    route_reader_event(
+        PixelBusEvent::Ultimate(ultimate),
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1,
+        &mut sink,
+    );
+    assert_eq!(weave.ultimate(), ultimate);
+    assert_eq!(fishing.state(), FishingState::Armed);
+    assert!(!input.is_menu_gated());
 }
 
 // Slice 039: the auto-potion gates reach the controller by the routing path.

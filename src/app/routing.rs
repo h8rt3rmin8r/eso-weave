@@ -106,6 +106,10 @@ pub fn route_reader_event(
             weave.set_resources(set);
             return;
         }
+        PixelBusEvent::Ultimate(ultimate) => {
+            weave.set_ultimate(ultimate);
+            return;
+        }
         PixelBusEvent::Movement(signal) => {
             weave.set_movement(signal);
             potion.set_movement(signal);

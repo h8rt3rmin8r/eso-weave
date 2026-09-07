@@ -18,8 +18,8 @@ use crate::input::bindings::BindingTable;
 use crate::input::{Action, InputBackend, InputEngine, Key, MouseButton, Transition, WeaveGates};
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
-    QuickslotState, ResourceSet, RollDodgeState, TravelState, WeaponBarSignal, WeaponClass,
-    WorldState,
+    QuickslotState, ResourceSet, RollDodgeState, TravelState, UltimateTelemetry, WeaponBarSignal,
+    WeaponClass, WorldState,
 };
 
 pub use sequence::{effective_delay, sequence_for, sequence_for_adapted};
@@ -316,6 +316,7 @@ pub struct WeaveEngine {
     quickslot: QuickslotState,
     menu: MenuSurface,
     resources: ResourceSet,
+    ultimate: UltimateTelemetry,
     layout: LayoutState,
 }
 
@@ -341,6 +342,7 @@ impl WeaveEngine {
             quickslot: QuickslotState::new_unknown(),
             menu: MenuSurface::None,
             resources: ResourceSet::new_unknown(),
+            ultimate: UltimateTelemetry::new_unknown(),
             layout: LayoutState::Unknown,
         }
     }
@@ -482,6 +484,16 @@ impl WeaveEngine {
         self.resources
     }
 
+    /// Records exact Ultimate values for display only.
+    pub fn set_ultimate(&mut self, ultimate: UltimateTelemetry) {
+        self.ultimate = ultimate;
+    }
+
+    /// The last decoded exact Ultimate values.
+    pub fn ultimate(&self) -> UltimateTelemetry {
+        self.ultimate
+    }
+
     /// Records the decoded pixel-bus geometry for diagnostics and display only.
     pub fn set_layout(&mut self, layout: LayoutState) {
         self.layout = layout;
@@ -508,6 +520,7 @@ impl WeaveEngine {
         self.quickslot = QuickslotState::new_unknown();
         self.menu = MenuSurface::None;
         self.resources = ResourceSet::new_unknown();
+        self.ultimate = UltimateTelemetry::new_unknown();
         self.layout = LayoutState::Unknown;
     }
 

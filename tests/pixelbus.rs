@@ -4,19 +4,23 @@ use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
     block_center, capture_dims, decode_combat, decode_cooldown, decode_latency,
     decode_layout_header, decode_life_state, decode_menu, decode_movement, decode_quickslot,
-    decode_resource, decode_resources, decode_roll_dodge, decode_travel_state, decode_weapon_bar,
-    decode_world_state, fishing_signal, grid_extent, grid_position, grid_rows,
+    decode_resource, decode_resources, decode_roll_dodge, decode_travel_state, decode_ultimate,
+    decode_weapon_bar, decode_world_state, fishing_signal, grid_extent, grid_position, grid_rows,
     layout_header_colors, load_reader_config, poll_interval, sanitize_block_px, status_present,
     store_reader_config, strip_pixel, ActiveBar, BlockSamples, BusLayout, CombatSignal,
     CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples, LayoutMode, LayoutState,
     LifeState, MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, RollDodgeState,
-    Size, SlotCooldown, TravelState, WeaponBarSignal, WeaponClass, WorldState, BLOCK_CENTER_GREENS,
-    COLUMNS, DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE,
-    LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE, LAYOUT_VERSION_THREE_BLOCKS,
-    LAYOUT_VERSION_THREE_CODE, LAYOUT_VERSION_TWO_BLOCKS, LAYOUT_VERSION_TWO_CODE, MAX_BLOCK_PX,
-    MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
+    Size, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponBarSignal,
+    WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS,
+    LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE, LAYOUT_VERSION_FOUR_BLOCKS,
+    LAYOUT_VERSION_FOUR_CODE, LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE,
+    LAYOUT_VERSION_THREE_BLOCKS, LAYOUT_VERSION_THREE_CODE, LAYOUT_VERSION_TWO_BLOCKS,
+    LAYOUT_VERSION_TWO_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
+    ULTIMATE_BACK_HIGH_MARKER, ULTIMATE_BACK_LOW_MARKER, ULTIMATE_CURRENT_HIGH_MARKER,
+    ULTIMATE_CURRENT_LOW_MARKER, ULTIMATE_FRONT_HIGH_MARKER, ULTIMATE_FRONT_LOW_MARKER,
+    ULTIMATE_MAX_HIGH_MARKER, ULTIMATE_MAX_LOW_MARKER,
 };
 
 #[test]
@@ -94,6 +98,25 @@ fn negotiated_version_two_geometry_remains_readable_without_b23_support() {
     assert!(BusLayout::negotiated(columns)
         .unwrap()
         .supports_roll_dodge());
+}
+
+#[test]
+fn negotiated_version_four_geometry_stays_frozen_without_ultimate_support() {
+    let columns = 120;
+    let mut colors = layout_header_colors(columns).unwrap();
+    colors[0].b = LAYOUT_VERSION_FOUR_CODE;
+    let LayoutState::Ready(layout) = decode_layout_header(
+        LayoutHeaderSamples::from(colors),
+        ReaderConfig::default().tolerance,
+        DEFAULT_BLOCK_PX,
+        None,
+    ) else {
+        panic!("version 4 layout should remain readable");
+    };
+    assert_eq!(layout.payload_blocks(), LAYOUT_VERSION_FOUR_BLOCKS);
+    assert!(!layout.supports_ultimate());
+    assert_eq!(BusLayout::negotiated(columns).unwrap().payload_blocks(), 29);
+    assert!(BusLayout::negotiated(columns).unwrap().supports_ultimate());
 }
 
 #[test]
@@ -277,7 +300,7 @@ fn invalid_block_size_and_short_surface_are_rejected() {
             Some(Size::new(48, 127))
         ),
         LayoutState::Unavailable(LayoutFailure::ExtentExceedsSurface {
-            extent: Size::new(48, 160),
+            extent: Size::new(48, 176),
             surface: Size::new(48, 127),
         })
     );
@@ -998,7 +1021,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 25);
+    assert_eq!(NUM_BLOCKS, 29);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -1690,6 +1713,106 @@ fn resource_event_only_on_change_and_clears_on_loss() {
     let lost = r.observe(BlockSamples::default(), 3000);
     assert!(lost.contains(&PixelBusEvent::SignalLost));
     assert!(lost.contains(&PixelBusEvent::Resources(ResourceSet::new_unknown())));
+}
+
+fn ultimate(marker_low: u8, marker_high: u8, value: u16) -> Rgb {
+    assert!(value <= 511);
+    let red = value as u8;
+    let marker = if value & 0x100 == 0 {
+        marker_low
+    } else {
+        marker_high
+    };
+    Rgb::new(red, marker, 255 - red)
+}
+
+#[test]
+fn ultimate_values_round_trip_exactly_and_reserve_511() {
+    let tolerance = ReaderConfig::default().tolerance;
+    for value in [0, 1, 125, 255, 256, 500, 510] {
+        assert_eq!(
+            decode_ultimate(
+                ultimate(
+                    ULTIMATE_CURRENT_LOW_MARKER,
+                    ULTIMATE_CURRENT_HIGH_MARKER,
+                    value,
+                ),
+                ULTIMATE_CURRENT_LOW_MARKER,
+                ULTIMATE_CURRENT_HIGH_MARKER,
+                tolerance,
+            ),
+            UltimateValue::Points(value)
+        );
+    }
+    assert_eq!(
+        decode_ultimate(
+            ultimate(
+                ULTIMATE_CURRENT_LOW_MARKER,
+                ULTIMATE_CURRENT_HIGH_MARKER,
+                511,
+            ),
+            ULTIMATE_CURRENT_LOW_MARKER,
+            ULTIMATE_CURRENT_HIGH_MARKER,
+            tolerance,
+        ),
+        UltimateValue::Unknown
+    );
+}
+
+#[test]
+fn ultimate_fields_decode_independently_and_emit_atomically() {
+    let samples = BlockSamples {
+        ultimate_current: Some(ultimate(
+            ULTIMATE_CURRENT_LOW_MARKER,
+            ULTIMATE_CURRENT_HIGH_MARKER,
+            185,
+        )),
+        ultimate_max: Some(ultimate(
+            ULTIMATE_MAX_LOW_MARKER,
+            ULTIMATE_MAX_HIGH_MARKER,
+            500,
+        )),
+        ultimate_front_cost: Some(ultimate(
+            ULTIMATE_FRONT_LOW_MARKER,
+            ULTIMATE_FRONT_HIGH_MARKER,
+            200,
+        )),
+        ultimate_back_cost: Some(ultimate(
+            ULTIMATE_BACK_LOW_MARKER,
+            ULTIMATE_BACK_HIGH_MARKER,
+            125,
+        )),
+        ..alive()
+    };
+    let expected = UltimateTelemetry {
+        current: UltimateValue::Points(185),
+        maximum: UltimateValue::Points(500),
+        front_cost: UltimateValue::Points(200),
+        back_cost: UltimateValue::Points(125),
+    };
+    let mut reader = reader();
+    let first = reader.observe(samples, 0);
+    assert!(first.contains(&PixelBusEvent::Ultimate(expected)));
+    assert!(!reader
+        .observe(samples, 100)
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::Ultimate(_))));
+
+    let corrupt_front = BlockSamples {
+        ultimate_front_cost: Some(Rgb::new(200, ULTIMATE_FRONT_LOW_MARKER, 0)),
+        ..samples
+    };
+    assert!(reader
+        .observe(corrupt_front, 200)
+        .contains(&PixelBusEvent::Ultimate(UltimateTelemetry {
+            front_cost: UltimateValue::Unknown,
+            ..expected
+        })));
+
+    reader.observe(samples, 300);
+    let lost = reader.observe(BlockSamples::default(), 3_000);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::Ultimate(UltimateTelemetry::new_unknown())));
 }
 
 // Slice 035: the grid wrap. The beacon stopped being a strip and became a grid,
@@ -2604,6 +2727,37 @@ fn negotiated_version_three_keeps_24_blocks_and_never_samples_b24() {
 }
 
 #[test]
+fn negotiated_version_four_keeps_25_blocks_and_never_samples_ultimate() {
+    let config = ReaderConfig::default();
+    let mut reader = PixelBusReader::new(config);
+    let mut sampler = MockSampler::new();
+    let current = BusLayout::negotiated(120).unwrap();
+    let mut header = layout_header_colors(120).unwrap();
+    header[0].b = LAYOUT_VERSION_FOUR_CODE;
+    for (index, color) in header.into_iter().enumerate() {
+        let point = current.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = current.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, MAGENTA);
+    let screen_pixel = current.payload_point(config.block_px, 25);
+    sampler.set(
+        screen_pixel.0,
+        screen_pixel.1,
+        ultimate(
+            ULTIMATE_CURRENT_LOW_MARKER,
+            ULTIMATE_CURRENT_HIGH_MARKER,
+            185,
+        ),
+    );
+    let events = reader.sample_and_observe(&sampler, 0);
+    assert!(events.contains(&PixelBusEvent::Heartbeat));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::Ultimate(_))));
+}
+
+#[test]
 fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.
@@ -2630,8 +2784,12 @@ fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     assert_eq!(grid_rows(NUM_BLOCKS, COLUMNS), 2);
     assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
 
-    // The shape in full: a full first row, eight blocks on the second.
-    assert_eq!(NUM_BLOCKS - COLUMNS, 9, "row 1 should hold nine blocks");
+    // The shape in full: a full first row, thirteen blocks on the second.
+    assert_eq!(
+        NUM_BLOCKS - COLUMNS,
+        13,
+        "row 1 should hold thirteen blocks"
+    );
 }
 
 // Slice 037: the six skill-cooldown blocks (B10 to B15).

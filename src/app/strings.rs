@@ -82,6 +82,9 @@ pub const COMBAT_TOOLTIP: &str =
 
 // Movement-state section.
 pub const MOVEMENT_TITLE: &str = "Movement";
+pub const ULTIMATE_TITLE: &str = "Ultimate";
+pub const ULTIMATE_TOOLTIP: &str =
+    "Exact stored Ultimate and the cast cost of the Ultimate slotted on the active weapon bar.";
 pub const MOVEMENT_TOOLTIP: &str =
     "Whether the character is on foot, mounted, or inferred to be sprinting. Sprint detection requires Pixel Beacon version 19 and keyboard mode; unsupported modes remain truthful rather than guessed. Explicit sprinting defers auto-potion.";
 pub const LIFE_TOOLTIP: &str =

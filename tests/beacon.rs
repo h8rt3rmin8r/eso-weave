@@ -64,17 +64,17 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_nineteen() {
-    // Slice 052 completes bounded on-foot sprint. Version 18 remains readable
-    // with no explicit sprint signal and an addon update affordance.
-    assert_eq!(embedded_version(), 19);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(19));
+fn embedded_manifest_version_is_twenty() {
+    // Slice 055 adds exact Ultimate telemetry. Version 19 remains readable
+    // without the new fields and with an addon update affordance.
+    assert_eq!(embedded_version(), 20);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(20));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 19);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(19));
+    assert_eq!(embedded_version(), 20);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(20));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -630,7 +630,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
-    assert_eq!(NUM_BLOCKS, 25, "S051 adds exactly one B24 travel block");
+    assert_eq!(NUM_BLOCKS, 29, "S055 appends four exact Ultimate blocks");
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
         beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
@@ -668,6 +668,26 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     assert_eq!(
         beacon::parse_lua_constant(lua, "RESOURCE_MAX_PERCENT"),
         Some(100)
+    );
+    for (name, expected) in [
+        ("ULTIMATE_CURRENT_LOW_MARKER", 0x05),
+        ("ULTIMATE_CURRENT_HIGH_MARKER", 0x7B),
+        ("ULTIMATE_MAX_LOW_MARKER", 0x1B),
+        ("ULTIMATE_MAX_HIGH_MARKER", 0x5F),
+        ("ULTIMATE_FRONT_LOW_MARKER", 0x27),
+        ("ULTIMATE_FRONT_HIGH_MARKER", 0x48),
+        ("ULTIMATE_BACK_LOW_MARKER", 0x32),
+        ("ULTIMATE_BACK_HIGH_MARKER", 0x3D),
+    ] {
+        assert_eq!(
+            beacon::parse_lua_constant(lua, name),
+            Some(expected),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        beacon::parse_lua_constant(lua, "ULTIMATE_UNAVAILABLE"),
+        Some(511)
     );
     // Slice 052: B9 adds bounded on-foot sprint while mounted sprint remains reserved.
     assert_eq!(
@@ -790,6 +810,91 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
 }
 
 #[test]
+fn addon_ultimate_pipeline_is_exact_bar_aware_and_lifecycle_complete() {
+    let lua = beacon::LUA;
+    for required in [
+        "GetUnitPower(\"player\", COMBAT_MECHANIC_FLAGS_ULTIMATE)",
+        "GetSlotAbilityCost(slot, COMBAT_MECHANIC_FLAGS_ULTIMATE, hotbarCategory)",
+        "IsSlotUsed(slot, hotbarCategory)",
+        "HOTBAR_CATEGORY_PRIMARY",
+        "HOTBAR_CATEGORY_BACKUP",
+        "EVENT_HOTBAR_SLOT_UPDATED",
+        "EVENT_HOTBAR_SLOT_STATE_UPDATED",
+        "EVENT_ACTION_SLOTS_ACTIVE_HOTBAR_UPDATED",
+        "EVENT_ACTION_SLOTS_ALL_HOTBARS_UPDATED",
+        "EVENT_ULTIMATE_ABILITY_COST_CHANGED",
+        "updateUltimate()",
+        "renderUltimate()",
+    ] {
+        assert!(
+            lua.contains(required),
+            "Ultimate pipeline is missing {required}"
+        );
+    }
+    let baseline = lua
+        .find("updateUltimate()\n    renderUltimate()")
+        .expect("activation rebaseline publishes Ultimate");
+    let active = lua
+        .find("setWorldState(WORLD_ACTIVE_RED)")
+        .expect("world activation exists");
+    assert!(
+        baseline < active,
+        "Ultimate baseline must precede world Active"
+    );
+}
+
+#[test]
+fn addon_ultimate_polling_preserves_weapon_authority_and_bounds_cost_queries() {
+    let lua = beacon::LUA;
+    let weapon = lua
+        .split("local function computeWeaponBar()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function renderWeapon()").next())
+        .expect("weapon computation has a bounded source section");
+    assert!(weapon.contains("GetActiveWeaponPairInfo()"));
+    assert!(!weapon.contains("GetActiveHotbarCategory()"));
+
+    let fast = lua
+        .split("local function onFastTick()")
+        .nth(1)
+        .and_then(|suffix| {
+            suffix
+                .split("local function rebaselinePlayerState()")
+                .next()
+        })
+        .expect("fast tick has a bounded source section");
+    assert!(fast.contains("updateUltimatePool()"));
+    assert!(!fast.contains("updateUltimateCosts()"));
+    assert!(!fast.contains("updateUltimate()"));
+
+    let costs = lua
+        .split("local function updateUltimateCosts()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function updateUltimate()").next())
+        .expect("cost refresh has a bounded source section");
+    assert!(costs.contains("GetActiveHotbarCategory()"));
+    assert!(costs.contains("front = ULTIMATE_UNAVAILABLE"));
+    assert!(costs.contains("back = ULTIMATE_UNAVAILABLE"));
+}
+
+#[test]
+fn addon_ultimate_is_invalidated_during_world_transition() {
+    let lua = beacon::LUA;
+    let deactivation = lua
+        .split("local function onPlayerDeactivated()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function onPlayerActivated()").next())
+        .expect("deactivation callback has a bounded source section");
+    let invalidate = deactivation
+        .find("invalidateUltimate()")
+        .expect("deactivation invalidates Ultimate");
+    let transitioning = deactivation
+        .find("setWorldState(WORLD_TRANSITIONING_RED)")
+        .expect("deactivation publishes transition");
+    assert!(invalidate < transitioning);
+}
+
+#[test]
 fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
     let lua = beacon::LUA;
     for required in [
@@ -901,7 +1006,7 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 19);
+    assert_eq!(beacon::embedded_version(), 20);
 }
 
 #[test]
@@ -937,7 +1042,7 @@ fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
         baseline < active,
         "recall must be rebaselined before world activation"
     );
-    assert_eq!(beacon::embedded_version(), 19);
+    assert_eq!(beacon::embedded_version(), 20);
 }
 
 #[test]
@@ -1071,7 +1176,7 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
         "the addon references a sprint API that does not exist"
     );
-    assert_eq!(beacon::embedded_version(), 19);
+    assert_eq!(beacon::embedded_version(), 20);
 
     let detector = lua
         .split("local function allActiveSlotsHaveNonCostFailure()")
