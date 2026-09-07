@@ -38,7 +38,7 @@ Status: PASS
   and current plan paths use the same structured authority model.
 - Historical exceptions are limited to exact counted changelog statements. No
   stale live documentation path survives.
-- The 39 migration-policy fixtures, mdBook test/build/linkcheck, generated-site
+- The 40 migration-policy fixtures, mdBook test/build/linkcheck, generated-site
   policy, formatting, strict all-target Clippy, and complete locked Cargo tests
   pass.
 - No runtime, package, release, tag, or safety-critical behavior changed. The

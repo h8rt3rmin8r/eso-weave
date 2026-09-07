@@ -841,6 +841,11 @@ export function validateCorpusSnapshot(ledger, snapshot) {
   } else {
     const lines = readme === "" ? 0 : readme.replace(/\n$/u, "").split("\n").length;
     if (lines > 120) errors.push(`README.md exceeds 120 lines (${lines})`);
+    for (const link of markdownLinks(readme)) {
+      if (!link.image && !isExternal(link.destination)) {
+        errors.push(`README.md package copy requires an absolute link: ${link.destination}`);
+      }
+    }
   }
 
   const summary = textFiles.get("docs/src/SUMMARY.md") ?? "";

@@ -46,8 +46,11 @@ A request inside the configured global cooldown is dropped while its physical ke
 remains suppressed. Each slot can override the parameters used by its weave type;
 a blank override inherits the global value.
 
-Weapon-aware timing selects the `d_heavy` preset for the active bar's weapon
-class. An unknown bar retains the configured heavy attack value. See
+ESO Weave always keeps separate base timing profiles for the primary and backup
+weapon bars and selects the profile for the active bar. If the active bar is
+unknown, it uses the primary profile. Weapon-aware timing then selects the
+`d_heavy` preset for the active bar's weapon class; when that class is unknown,
+it retains the selected profile's configured heavy attack value. See
 [Weave Delay Defaults](../reference/weave-delay-defaults.md).
 
 Optional latency adaptation computes:

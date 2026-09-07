@@ -55,7 +55,7 @@ function virtualCorpus(ledger) {
     .map((plan) => `| [${plan.id}](plan-${plan.id}.md) | Complete, Archived | [PR #99](https://example.com/pull/99) |`)
     .join("\n");
   const textFiles = new Map([
-    ["README.md", "# ESO Weave\n\n[Documentation](docs/src/)\n"],
+    ["README.md", "# ESO Weave\n\n[Documentation](https://h8rt3rmin8r.github.io/eso-weave/)\n"],
     ["docs/README.md", "# Documentation Lifecycle\n\n[Ledger](project/migration-ledger.md)\n[Ultimate archive](archive/website/ultimate-resource-meter.md)\n"],
     ["docs/book.toml", '[book]\nsrc = "src"\n'],
     ["docs/src/SUMMARY.md", "# Summary\n\n- [Home](README.md)\n"],
@@ -789,4 +789,11 @@ test("rejects a root README over 120 lines", async () => {
   const corpus = virtualCorpus(ledger);
   corpus.textFiles.set("README.md", Array.from({ length: 121 }, (_, index) => `line ${index + 1}`).join("\n"));
   assert.match(validateCorpusSnapshot(ledger, corpus).join("\n"), /README.md exceeds 120 lines/);
+});
+
+test("requires package-safe absolute links in the root README", async () => {
+  const ledger = await migrationLedger();
+  const corpus = virtualCorpus(ledger);
+  corpus.textFiles.set("README.md", "# ESO Weave\n\n[Installation](docs/src/getting-started/installation.md)\n");
+  assert.match(validateCorpusSnapshot(ledger, corpus).join("\n"), /package copy requires an absolute link/);
 });

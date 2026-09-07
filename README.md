@@ -18,31 +18,36 @@ touches game network traffic.
 Download the Windows x64 installer or a Linux x86_64 package from
 [GitHub Releases](https://github.com/h8rt3rmin8r/eso-weave/releases).
 
-Start with the full [installation guide](docs/src/getting-started/installation.md),
-then read the [responsible-use notice](docs/src/getting-started/responsible-use.md).
+Start with the full
+[installation guide](https://h8rt3rmin8r.github.io/eso-weave/getting-started/installation.html),
+then read the
+[responsible-use notice](https://h8rt3rmin8r.github.io/eso-weave/getting-started/responsible-use.html).
 
 ## Features
 
-- [Weaving](docs/src/features/weaving.md) combines a basic attack with a skill
+- [Weaving](https://h8rt3rmin8r.github.io/eso-weave/features/weaving.html) combines a basic attack with a skill
   press while preserving focus and safety gates.
-- [Fishing](docs/src/features/fishing.md) automates the cast, bite, reel, and
+- [Fishing](https://h8rt3rmin8r.github.io/eso-weave/features/fishing.html) automates the cast, bite, reel, and
   recast cycle through PixelBeacon observations.
-- [Auto Potion](docs/src/features/auto-potion.md) uses the active quickslot when
+- [Auto Potion](https://h8rt3rmin8r.github.io/eso-weave/features/auto-potion.html) uses the active quickslot when
   configured resources cross their thresholds.
-- [Live interface](docs/src/features/interface.md) reports resources, runtime
+- [Live interface](https://h8rt3rmin8r.github.io/eso-weave/features/interface.html) reports resources, runtime
   context, automation state, and installation status.
-- [Ultimate resource](docs/src/features/ultimate-resource.md) shows current
+- [Ultimate resource](https://h8rt3rmin8r.github.io/eso-weave/features/ultimate-resource.html) shows current
   charge, active-bar cast cost, and readiness without controlling gameplay.
 
 The complete, searchable manual is published at
 [h8rt3rmin8r.github.io/eso-weave](https://h8rt3rmin8r.github.io/eso-weave/).
-Its canonical source is the [documentation corpus](docs/src/README.md).
+Its canonical source is the
+[documentation corpus](https://github.com/h8rt3rmin8r/eso-weave/tree/main/docs/src).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development requirements. Current
+See the
+[contribution guide](https://github.com/h8rt3rmin8r/eso-weave/blob/main/CONTRIBUTING.md)
+for development requirements. Current
 project procedures and historical records are indexed in the
-[documentation map](docs/README.md).
+[documentation map](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/README.md).
 
 ## Disclaimer
 
@@ -55,4 +60,5 @@ including possible account suspension.
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the
+[Apache License 2.0](https://github.com/h8rt3rmin8r/eso-weave/blob/main/LICENSE).
