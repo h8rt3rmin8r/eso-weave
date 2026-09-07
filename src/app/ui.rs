@@ -500,15 +500,6 @@ impl EsoWeaveApp {
             }
             _ => return self.content_extent.y,
         };
-        if !self.system_state_expanded {
-            if let Some((live, system)) = self.dashboard_rects {
-                // A disclosure click is handled in the central panel, after the
-                // bottom log has already claimed its space. While collapsed,
-                // reserve the height the expanded card can reveal in that same
-                // frame so the log cannot cover it before the reflow guard starts.
-                return self.content_extent.y + (live.height() - system.height()).max(0.0);
-            }
-        }
         if self.last_dashboard_layout == Some(DashboardLayout::Wide)
             && effective_dashboard_layout(projected_dashboard_width, self.system_state_expanded)
                 == DashboardLayout::Narrow
@@ -1287,6 +1278,13 @@ impl EsoWeaveApp {
                         .default_open(self.system_state_expanded)
                         .show_background(true)
                         .show(ui, |ui| {
+                            // The bottom log is allocated before this disclosure.
+                            // On a collapsed-to-expanded click, wait until the next
+                            // guarded frame to reveal the body so content cannot
+                            // grow underneath a log sized for the collapsed frame.
+                            if !self.system_state_expanded {
+                                return;
+                            }
                             ui.spacing_mut().item_spacing.y = 2.0;
                             let game_summary = format!(
                                 "{} | {}",
@@ -1307,7 +1305,7 @@ impl EsoWeaveApp {
                                     game_role,
                                     strings::GAME_RUNTIME_TOOLTIP,
                                 ),
-                                DASHBOARD_INTERACTION_WIDTH,
+                                0.0,
                                 |_| {},
                             );
                             dashboard_metric_row(
@@ -1319,7 +1317,7 @@ impl EsoWeaveApp {
                                     view.travel.role,
                                     strings::TRAVEL_TOOLTIP,
                                 ),
-                                DASHBOARD_INTERACTION_WIDTH,
+                                0.0,
                                 |_| {},
                             );
                             dashboard_metric_row(
@@ -1331,7 +1329,7 @@ impl EsoWeaveApp {
                                     view.world.role,
                                     strings::WORLD_TOOLTIP,
                                 ),
-                                DASHBOARD_INTERACTION_WIDTH,
+                                0.0,
                                 |_| {},
                             );
 
@@ -1397,7 +1395,7 @@ impl EsoWeaveApp {
                                 ui,
                                 palette,
                                 &view.beacon_signal_line,
-                                DASHBOARD_INTERACTION_WIDTH,
+                                0.0,
                                 |_| {},
                             );
 

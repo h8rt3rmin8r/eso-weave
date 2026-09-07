@@ -749,6 +749,38 @@ fn enforced_minimum_adds_log_reserve_when_open() {
     );
 }
 
+#[test]
+fn collapsed_log_minimum_does_not_reserve_hidden_card_body() {
+    fn collapsed_app(log_open: bool) -> EsoWeaveApp {
+        let settings = Settings {
+            ui: eso_weave::app::settings_form::ui_to_value(&UiPrefs {
+                system_state_expanded: false,
+                ..UiPrefs::default()
+            }),
+            ..Settings::default()
+        };
+        let mut harness =
+            harness_for_app(test_app_with_settings(settings), egui::vec2(1400.0, 1000.0));
+        harness.step();
+        harness.state_mut().set_log_panel_open(log_open);
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        harness.into_state()
+    }
+
+    let closed = collapsed_app(false);
+    let open = collapsed_app(true);
+    let reserve = open.last_min_sent().unwrap().y - open.content_extent().y;
+    assert!(reserve > 0.0);
+    assert!(
+        (open.content_extent().y - closed.content_extent().y).abs() <= 0.5,
+        "opening the log reserved the hidden expanded card body: closed {:?}, open {:?}",
+        closed.content_extent(),
+        open.content_extent()
+    );
+}
+
 /// C3 (S046 FR-017): across a monotonically shrinking gesture, the minimum width
 /// stays intrinsic and the height can take only the documented wide or narrow
 /// content extent. A continuously window-derived value would produce many heights.
