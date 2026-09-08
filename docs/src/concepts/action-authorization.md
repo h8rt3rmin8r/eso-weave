@@ -93,11 +93,13 @@ continues through quickslot, cooldown, and retry and ends Ready only when those
 prerequisites also hold. Triggered emits one configured quickslot Key Down and
 Key Up and records the attempt time, not a confirmed drink.
 
-## Known defects and current limits
+## Configuration boundaries
 
-- [Issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): some saved
-  settings do not apply to running components and the Fishing Interact Key is not
-  exposed by Settings.
+A changed Fishing configuration cancels pending autonomous work without input
+and clears its request, so a deadline from one configuration cannot emit a key
+from another. A tolerance change closes cached reader safety evidence before a
+fresh sample can reopen any generated-input gate. Sampling-interval edits do not
+invalidate evidence, and Block Size remains fixed for the process lifetime.
 
 For the exact hook ordering, see [Input Safety](input-safety.md). For observation
 entry and recovery, see [Game Observation and Safety State](game-observation.md).

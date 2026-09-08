@@ -85,16 +85,11 @@ off action after its physical event was suppressed and records a warning.
 
 The App Model and Pixel Bus worker share one monotonic origin for fishing
 deadlines. Wall-clock changes therefore cannot move an armed reel or recast
-deadline.
-
-## Current defects at ownership boundaries
-
-These issues describe shipped behavior. They are not fixed by this documentation
-slice:
-
-- [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): saved Fishing and
-  PixelBus settings are not propagated to their running owners, and the modal
-  does not expose the Fishing Interact Key.
+deadline. The App Model publishes complete scalar reader updates through a
+standard-library channel. The worker's deadline wait wakes for an update, drains
+rapid edits to the newest value, and applies one configuration boundary to both
+decoding and cadence. Block geometry remains startup-owned because PixelBeacon
+and screen capture must change together.
 
 See [Action Authorization](../concepts/action-authorization.md) for the complete
 gate comparison, [State Machines](state-machines.md) for transitions, and

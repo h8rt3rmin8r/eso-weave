@@ -21,11 +21,36 @@ fn every_tooltip_and_help_string_is_non_empty() {
 
 #[test]
 fn settings_labels_and_help_are_present() {
-    assert_eq!(strings::ALL_SETTINGS.len(), 25);
+    assert_eq!(strings::ALL_SETTINGS.len(), 26);
     for setting in strings::ALL_SETTINGS {
         assert!(!setting.label.trim().is_empty());
         assert!(!setting.label.contains('_'));
         assert!(!setting.help.trim().is_empty());
+    }
+}
+
+#[test]
+fn s062_settings_copy_distinguishes_live_updates_from_staged_geometry() {
+    assert_eq!(
+        strings::FISHING_IDLE_SETTINGS_CHANGED,
+        "Idle (settings changed)"
+    );
+    assert_eq!(strings::SET_FISHING_INTERACT_KEY.label, "Interact Key");
+    assert!(strings::FISHING_SETTINGS_APPLICATION_HELP.contains("apply while ESO Weave is running"));
+    assert!(strings::READER_SETTINGS_APPLICATION_HELP.contains("apply while ESO Weave is running"));
+
+    let block = strings::SET_BLOCK_PX.help;
+    assert!(block.contains("re-deploys PixelBeacon"));
+    assert!(block.contains("/reloadui or relog"));
+    assert!(block.contains("ESO Weave restart"));
+
+    let shipped = strings::all_tooltips().join("\n");
+    for obsolete in [
+        "all settings apply immediately",
+        "live reader fields require restart",
+        "Fishing Interact Key is not exposed",
+    ] {
+        assert!(!shipped.contains(obsolete), "obsolete claim: {obsolete}");
     }
 }
 
@@ -114,6 +139,7 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
         "Auto Timing from Weapon",
         "Adapt to Latency",
         "Sample Interval While Idle (ms)",
+        "Interact Key",
         "Write Log to File",
         "Watch Health (Threshold %)",
         "Toggle Suspend",

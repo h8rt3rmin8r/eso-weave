@@ -28,6 +28,20 @@ fn controller() -> FishingController {
 }
 
 #[test]
+fn configuration_generation_changes_only_for_a_distinct_config() {
+    let mut controller = controller();
+    let initial = controller.config_generation();
+
+    controller.apply_config(FishingConfig::default());
+    assert_eq!(controller.config_generation(), initial);
+
+    let mut changed = FishingConfig::default();
+    changed.reel_delay_ms += 1;
+    controller.apply_config(changed);
+    assert_eq!(controller.config_generation(), initial.wrapping_add(1));
+}
+
+#[test]
 fn a_fresh_controller_is_menu_gated_until_valid_evidence_arrives() {
     let mut controller = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();
@@ -1017,4 +1031,174 @@ fn s060_suspension_cancels_armed_waiting_and_recast_arm_timeout_states() {
     assert_eq!(c.stop_reason(), Some(StopReason::Suspended));
     assert!(c.enabled());
     assert!(sink.ops.is_empty());
+}
+
+fn changed_fishing_config() -> FishingConfig {
+    FishingConfig {
+        arm_timeout_ms: 7_000,
+        reel_delay_ms: 250,
+        recast_delay_ms: 2_000,
+        interact_key: Key::R,
+    }
+}
+
+#[test]
+fn s062_identical_fishing_config_is_a_strict_no_op() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    sink.clear();
+
+    c.apply_config(cfg);
+
+    assert_eq!(c.config(), &cfg);
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Reeling);
+    assert_eq!(c.stop_reason(), None);
+    assert!(sink.ops.is_empty());
+
+    c.tick(20 + u64::from(cfg.reel_delay_ms), &mut sink);
+    assert_eq!(sink.ops, press_release(cfg.interact_key));
+}
+
+#[test]
+fn s062_changed_fishing_config_updates_an_idle_controller_without_a_stop_reason() {
+    let mut c = controller();
+    let next = changed_fishing_config();
+
+    c.apply_config(next);
+
+    assert_eq!(c.config(), &next);
+    assert!(!c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), None);
+}
+
+#[test]
+fn s062_changed_fishing_config_cancels_every_active_phase_without_output() {
+    for phase in [
+        FishingState::Armed,
+        FishingState::Waiting,
+        FishingState::Reeling,
+        FishingState::Recast,
+    ] {
+        let cfg = FishingConfig::default();
+        let mut c = controller();
+        let mut sink = MockFishingSink::new();
+        c.set_enabled(true, 0, &mut sink);
+        if phase != FishingState::Armed {
+            c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+        }
+        if matches!(phase, FishingState::Reeling | FishingState::Recast) {
+            c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+        }
+        if phase == FishingState::Recast {
+            c.tick(20 + u64::from(cfg.reel_delay_ms), &mut sink);
+        }
+        assert_eq!(c.state(), phase);
+        sink.clear();
+
+        let next = changed_fishing_config();
+        c.apply_config(next);
+        c.tick(100_000, &mut sink);
+
+        assert_eq!(c.config(), &next, "config was not replaced in {phase:?}");
+        assert!(!c.enabled(), "operator request remained set in {phase:?}");
+        assert_eq!(c.state(), FishingState::Disabled, "phase {phase:?}");
+        assert_eq!(
+            c.stop_reason(),
+            Some(StopReason::SettingsChanged),
+            "phase {phase:?}"
+        );
+        assert!(sink.ops.is_empty(), "phase {phase:?} replayed input");
+    }
+}
+
+#[test]
+fn s062_changed_fishing_config_cancels_the_recast_confirmation_timeout() {
+    let cfg = FishingConfig::default();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    c.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+    let reel_at = 20 + u64::from(cfg.reel_delay_ms);
+    c.tick(reel_at, &mut sink);
+    let recast_at = reel_at + u64::from(cfg.recast_delay_ms);
+    c.tick(recast_at, &mut sink);
+    assert_eq!(c.state(), FishingState::Recast);
+    sink.clear();
+
+    c.apply_config(changed_fishing_config());
+    c.tick(recast_at + u64::from(cfg.arm_timeout_ms), &mut sink);
+
+    assert!(!c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert_eq!(c.stop_reason(), Some(StopReason::SettingsChanged));
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn s062_changed_fishing_config_cancels_a_pending_requested_session() {
+    let mut c = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+
+    c.apply_config(changed_fishing_config());
+    c.set_game_environment(true, true, 10, &mut sink);
+    c.set_life_state(LifeState::Alive);
+    c.set_world_state(WorldState::Active);
+    c.set_travel_state(TravelState::Inactive);
+    c.set_gated(false, 20, &mut sink);
+
+    assert_eq!(c.stop_reason(), Some(StopReason::SettingsChanged));
+    assert!(!c.enabled());
+    assert!(sink.ops.is_empty(), "gate recovery must not replay a cast");
+}
+
+#[test]
+fn s062_fishing_can_be_explicitly_reenabled_with_the_new_config() {
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    sink.clear();
+
+    let next = changed_fishing_config();
+    c.apply_config(next);
+    c.set_enabled(true, 11, &mut sink);
+
+    assert_eq!(c.state(), FishingState::Armed);
+    assert_eq!(c.stop_reason(), None);
+    assert_eq!(sink.ops, press_release(next.interact_key));
+}
+
+#[test]
+fn s062_changed_config_clears_transient_recovery_but_preserves_safety_gates() {
+    let next = changed_fishing_config();
+    let mut c = controller();
+    let mut sink = MockFishingSink::new();
+    c.set_enabled(true, 0, &mut sink);
+    c.set_suspended(true);
+    sink.clear();
+
+    c.apply_config(next);
+    c.set_suspended(false);
+    c.set_gated(true, 10, &mut sink);
+    c.set_enabled(true, 11, &mut sink);
+
+    assert!(c.enabled());
+    assert_eq!(c.state(), FishingState::Disabled);
+    assert!(
+        sink.ops.is_empty(),
+        "the existing menu gate must remain closed"
+    );
+
+    c.set_gated(false, 12, &mut sink);
+    assert_eq!(c.state(), FishingState::Armed);
+    assert_eq!(sink.ops, press_release(next.interact_key));
 }

@@ -18,6 +18,7 @@ pub mod ui;
 pub mod widgets;
 
 use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -32,10 +33,10 @@ use crate::game::{
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
 use crate::pixelbus::{
-    ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
+    ActiveBar, CombatSignal, CooldownSet, LifeState, LiveReaderConfig, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState, SlotCooldown,
-    TravelState, UltimateTelemetry, UltimateValue, WeaponClass, WorldState,
+    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, RollDodgeState,
+    SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponClass, WorldState,
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
@@ -100,6 +101,7 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
             Some(StopReason::PlayerUnavailable) => strings::FISHING_IDLE_PLAYER_UNAVAILABLE,
             Some(StopReason::WorldUnavailable) => strings::FISHING_IDLE_WORLD_UNAVAILABLE,
             Some(StopReason::TravelPending) => strings::FISHING_IDLE_TRAVEL_PENDING,
+            Some(StopReason::SettingsChanged) => strings::FISHING_IDLE_SETTINGS_CHANGED,
             None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
     }
@@ -211,7 +213,8 @@ pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> S
             | Some(StopReason::GameInactive)
             | Some(StopReason::Unfocused)
             | Some(StopReason::Suspended)
-            | Some(StopReason::PlayerUnavailable) => StatusRole::Warning,
+            | Some(StopReason::PlayerUnavailable)
+            | Some(StopReason::SettingsChanged) => StatusRole::Warning,
             Some(StopReason::WorldUnavailable | StopReason::TravelPending) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
         },
@@ -1608,7 +1611,8 @@ pub struct AppModel {
     settings: Settings,
     config_dir: Option<PathBuf>,
     beacon_prefs: BeaconPrefs,
-    runtime_block_px: u32,
+    runtime_reader_config: ReaderConfig,
+    reader_update_tx: Sender<LiveReaderConfig>,
     log_panel_open: bool,
     log_filter: LevelName,
     scheduler: SaveScheduler,
@@ -1626,6 +1630,7 @@ impl AppModel {
         fishing_sink: Box<dyn FishingSink + Send>,
         potion: Arc<Mutex<AutoPotionController>>,
         log: LogHandle,
+        reader_update_tx: Sender<LiveReaderConfig>,
         settings: Settings,
         config_dir: Option<PathBuf>,
         clock: Instant,
@@ -1638,6 +1643,7 @@ impl AppModel {
             potion,
             GameState::default(),
             log,
+            reader_update_tx,
             settings,
             config_dir,
             clock,
@@ -1654,6 +1660,7 @@ impl AppModel {
         potion: Arc<Mutex<AutoPotionController>>,
         game: GameState,
         log: LogHandle,
+        reader_update_tx: Sender<LiveReaderConfig>,
         settings: Settings,
         config_dir: Option<PathBuf>,
         clock: Instant,
@@ -1661,8 +1668,8 @@ impl AppModel {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
         let log_filter = settings.logging.level;
         let mut reader_notices = Vec::new();
-        let runtime_block_px =
-            crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices).block_px;
+        let runtime_reader_config =
+            crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices);
         Self {
             input,
             weave,
@@ -1675,7 +1682,8 @@ impl AppModel {
             settings,
             config_dir,
             beacon_prefs,
-            runtime_block_px,
+            runtime_reader_config,
+            reader_update_tx,
             log_panel_open: false,
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
@@ -1711,7 +1719,12 @@ impl AppModel {
 
     /// Block size used by this process's reader until the next application start.
     pub fn runtime_block_px(&self) -> u32 {
-        self.runtime_block_px
+        self.runtime_reader_config.block_px
+    }
+
+    /// Effective configuration published to the running reader update port.
+    pub fn runtime_reader_config(&self) -> ReaderConfig {
+        self.runtime_reader_config
     }
 
     /// The current derived display state.
@@ -2178,6 +2191,11 @@ impl AppModel {
         self.fishing.lock().unwrap().enabled()
     }
 
+    /// Effective configuration used by the running Fishing controller.
+    pub fn runtime_fishing_config(&self) -> crate::fishing::FishingConfig {
+        *self.fishing.lock().unwrap().config()
+    }
+
     /// Whether auto-potion is currently switched on.
     pub fn auto_potion_on(&self) -> bool {
         self.potion.lock().unwrap().enabled()
@@ -2269,6 +2287,33 @@ impl AppModel {
         notices.extend(self.input.load_bindings(&self.settings));
         notices.extend(self.weave.lock().unwrap().load(&self.settings));
         self.weave.lock().unwrap().apply_activity(&self.input);
+        let fishing_config =
+            crate::fishing::FishingConfig::load(&self.settings.fishing, &mut notices);
+        let fishing_request_cleared = {
+            let mut fishing = self.fishing.lock().unwrap();
+            let was_requested = fishing.enabled();
+            fishing.apply_config(fishing_config);
+            was_requested && !fishing.enabled()
+        };
+        if fishing_request_cleared {
+            self.scheduler.mark_session(Instant::now());
+        }
+        self.settings.fishing = fishing_config.store();
+        let requested_reader =
+            crate::pixelbus::load_reader_config(&self.settings.pixelbus, &mut notices);
+        self.settings.pixelbus = crate::pixelbus::store_reader_config(&requested_reader);
+        let live_reader = LiveReaderConfig::from(requested_reader);
+        if live_reader != LiveReaderConfig::from(self.runtime_reader_config) {
+            match self.reader_update_tx.send(live_reader) {
+                Ok(()) => {
+                    self.runtime_reader_config.apply_live(live_reader);
+                }
+                Err(_) => tracing::warn!(
+                    target: "eso_weave::app",
+                    "reader settings were saved but the live reader update channel is unavailable; restart ESO Weave to recover"
+                ),
+            }
+        }
         let potion_config = AutoPotionConfig::load(&self.settings.potion, &mut notices);
         self.potion.lock().unwrap().set_config(potion_config);
         self.beacon_prefs = beacon::prefs_from_value(&self.settings.beacon);

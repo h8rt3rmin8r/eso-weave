@@ -67,15 +67,15 @@ Platform modules therefore require narrow source review and, where possible,
 contract tests over exported tables and translation helpers. A passing mock test
 must never be described as live-game verification.
 
-## Known coverage gaps
+## Settings runtime coverage
 
-- [Issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) requires
-  application-timing tests for Fishing and PixelBus settings and the Interact Key
-  surface decision.
-
-This gap is not green coverage. S059 documents it and makes no claim that its
-required runtime changes have landed. S061 adds exhaustive Linux mapping and
-capability tests plus string and menu-evidence behavior anchors.
+S062 tests Fishing configuration changes in every active phase, including
+zero-output cancellation, unchanged no-op behavior, and explicit re-enable with
+the new key. Reader tests cover live-subset preservation, tolerance invalidation,
+worker wake, latest-value coalescing, timeout, and disconnect. App Model and
+headless UI tests connect those seams to persistence and the Interact Key control.
+S061 separately provides exhaustive Linux mapping plus string and menu-evidence
+behavior anchors.
 
 ## Local verification sequence
 

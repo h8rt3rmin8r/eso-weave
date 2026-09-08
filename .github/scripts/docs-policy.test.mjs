@@ -14,6 +14,7 @@ import {
   validateGeneratedSite,
   validateMigrationLedger,
   validateSourceTree,
+  validateSettingsRuntimeClaims,
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
@@ -1038,15 +1039,39 @@ test("S059 rejects missing substantive anchors and incomplete page dimensions", 
   assert.match(validateContentCoverage(omittedSearch, virtualCoverage(omittedSearch)).join("\n"), /every contracted canonical term/);
 });
 
-test("S061 retains only unresolved deferred issues and truthful dispositions", async () => {
+test("S062 has no unresolved deferred documentation obligations", async () => {
   const manifest = await contentCoverage();
-  for (const issue of [95]) {
-    assert.ok(manifest.obligations.some((row) => row.coverage === "Deferred" && row.follow_up?.issue === issue));
-  }
+  assert.equal(manifest.obligations.filter((row) => row.coverage === "Deferred").length, 0);
   const broken = structuredClone(manifest);
-  const deferred = broken.obligations.find((row) => row.coverage === "Deferred");
-  delete deferred.follow_up;
+  const deferred = broken.obligations.find((row) => row.id === "DEF-005");
+  deferred.coverage = "Deferred";
   assert.match(validateContentCoverage(broken, virtualCoverage(broken)).join("\n"), /Deferred.*follow-up/);
+});
+
+test("S062 rejects obsolete settings runtime claims", () => {
+  assert.deepEqual(
+    validateSettingsRuntimeClaims(
+      "Fishing controls and scalar reader fields apply live. Block Size remains staged.",
+    ),
+    [],
+  );
+  for (const claim of [
+    "All settings apply immediately.",
+    "Any change to the draft is applied live.",
+    "Live reader fields require restart.",
+    "Some Fishing and Pixel Bus settings currently require an application restart.",
+    "Color Tolerance and sampling intervals are saved for the next application start.",
+    "Fishing and Pixel Bus changes are saved but are not propagated to their running components, so restart ESO Weave after changing them.",
+    "Fishing Interact Key is not exposed.",
+    "The current modal has no editor for the stored interact key.",
+    "The current modal does not expose Fishing's stored interact key.",
+    "The Settings modal does not currently expose that Interact Key.",
+    "The modal exposes Arm Timeout, Reel Delay, and Recast Delay, but no interact-key control.",
+    "There is no supported in-app editor for it.",
+    "The modal does not expose the Fishing Interact Key.",
+  ]) {
+    assert.match(validateSettingsRuntimeClaims(claim).join("\n"), /obsolete/u, claim);
+  }
 });
 
 test("S059 search aliases must be visible on the canonical published target", async () => {

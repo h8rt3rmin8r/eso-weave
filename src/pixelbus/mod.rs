@@ -23,6 +23,8 @@ pub use windows::GdiSampler;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -1309,7 +1311,77 @@ pub struct ReaderConfig {
     pub interval_idle_ms: u64,
 }
 
+/// The complete subset of reader settings that can change while the worker runs.
+///
+/// Block geometry remains fixed for the process lifetime because the reader and
+/// PixelBeacon must agree on the physical square size. The heartbeat timeout is
+/// internal rather than user-configurable, so neither value can enter this update
+/// path accidentally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveReaderConfig {
+    /// Per-channel color match tolerance.
+    pub tolerance: u8,
+    /// Sampling interval while fishing is enabled.
+    pub interval_fishing_ms: u64,
+    /// Sampling interval otherwise.
+    pub interval_idle_ms: u64,
+}
+
+impl From<ReaderConfig> for LiveReaderConfig {
+    fn from(config: ReaderConfig) -> Self {
+        Self {
+            tolerance: config.tolerance,
+            interval_fishing_ms: config.interval_fishing_ms,
+            interval_idle_ms: config.interval_idle_ms,
+        }
+    }
+}
+
+/// Outcome from waiting for a live reader configuration update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveReaderConfigWait {
+    /// One or more complete updates arrived; this is the newest queued value.
+    Update(LiveReaderConfig),
+    /// The current worker deadline arrived before a configuration update.
+    TimedOut,
+    /// Every sender was dropped before an update arrived.
+    Disconnected,
+}
+
+/// Waits for a reader update or the current worker deadline, coalescing a burst
+/// of complete messages so the newest immediately available value wins.
+pub fn wait_for_live_config(
+    receiver: &Receiver<LiveReaderConfig>,
+    timeout: Duration,
+) -> LiveReaderConfigWait {
+    let mut newest = match receiver.recv_timeout(timeout) {
+        Ok(config) => config,
+        Err(RecvTimeoutError::Timeout) => return LiveReaderConfigWait::TimedOut,
+        Err(RecvTimeoutError::Disconnected) => return LiveReaderConfigWait::Disconnected,
+    };
+
+    loop {
+        match receiver.try_recv() {
+            Ok(config) => newest = config,
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => {
+                return LiveReaderConfigWait::Update(newest);
+            }
+        }
+    }
+}
+
 impl ReaderConfig {
+    /// Applies runtime-safe reader fields and reports whether color tolerance
+    /// changed. Startup block geometry and the internal heartbeat timeout remain
+    /// untouched by construction.
+    pub fn apply_live(&mut self, update: LiveReaderConfig) -> bool {
+        let tolerance_changed = self.tolerance != update.tolerance;
+        self.tolerance = update.tolerance;
+        self.interval_fishing_ms = update.interval_fishing_ms;
+        self.interval_idle_ms = update.interval_idle_ms;
+        tolerance_changed
+    }
+
     /// The legacy status block (B0) sample point.
     pub fn status_point(&self) -> (u32, u32) {
         block_center(self.block_px, 0)
@@ -2197,7 +2269,19 @@ pub struct PixelBusReader {
     world: WorldState,
     roll_dodge: RollDodgeState,
     travel: TravelState,
+    fishing_config_generation: u64,
     had_heartbeat: bool,
+}
+
+/// Applies one worker update boundary to both cadence selection and pixel
+/// decoding, returning fail-closed events when tolerance changed.
+pub fn apply_live_reader_update(
+    poll_config: &mut ReaderConfig,
+    reader: &mut PixelBusReader,
+    update: LiveReaderConfig,
+) -> Option<[PixelBusEvent; 6]> {
+    poll_config.apply_live(update);
+    reader.apply_live_config(update)
 }
 
 impl PixelBusReader {
@@ -2221,8 +2305,39 @@ impl PixelBusReader {
             world: WorldState::Unknown,
             roll_dodge: RollDodgeState::Unknown,
             travel: TravelState::Unknown,
+            fishing_config_generation: 0,
             had_heartbeat: false,
         }
+    }
+
+    /// The effective configuration used by the running reader.
+    pub fn config(&self) -> ReaderConfig {
+        self.config
+    }
+
+    /// Applies the runtime-safe reader subset. A color-tolerance boundary clears
+    /// every cached observation that can authorize generated input and returns the
+    /// fail-closed events the worker must route before taking a fresh sample.
+    /// Interval-only and identical updates preserve all observations.
+    pub fn apply_live_config(&mut self, update: LiveReaderConfig) -> Option<[PixelBusEvent; 6]> {
+        if !self.config.apply_live(update) {
+            return None;
+        }
+
+        self.menu = None;
+        self.life = LifeState::Unknown;
+        self.world = WorldState::Unknown;
+        self.roll_dodge = RollDodgeState::Unknown;
+        self.travel = TravelState::Unknown;
+        self.fishing = FishingSignal::None;
+        Some([
+            PixelBusEvent::MenuGate(None),
+            PixelBusEvent::Life(LifeState::Unknown),
+            PixelBusEvent::World(WorldState::Unknown),
+            PixelBusEvent::RollDodge(RollDodgeState::Unknown),
+            PixelBusEvent::Travel(TravelState::Unknown),
+            PixelBusEvent::FishingStopped,
+        ])
     }
 
     /// Whether the signal is currently lost.
@@ -2253,6 +2368,31 @@ impl PixelBusReader {
             PixelBusEvent::World(WorldState::Unknown),
             PixelBusEvent::Travel(TravelState::Unknown),
         ]
+    }
+
+    /// Clears the cached Fishing detector signal after its controller changes
+    /// configuration. The next valid sample republishes the current cast state,
+    /// even when the B1 value itself did not change.
+    pub fn invalidate_fishing_observation(&mut self) -> Option<PixelBusEvent> {
+        if self.fishing == FishingSignal::None {
+            return None;
+        }
+        self.fishing = FishingSignal::None;
+        Some(PixelBusEvent::FishingStopped)
+    }
+
+    /// Applies the controller's current Fishing configuration generation once.
+    /// A changed generation discards detector history so an explicit re-enable
+    /// can be confirmed even when the in-game B1 value is unchanged.
+    pub fn synchronize_fishing_config_generation(
+        &mut self,
+        generation: u64,
+    ) -> Option<PixelBusEvent> {
+        if generation == self.fishing_config_generation {
+            return None;
+        }
+        self.fishing_config_generation = generation;
+        self.invalidate_fishing_observation()
     }
 
     /// Clears every payload-derived observation exactly once. This is used both
@@ -2461,6 +2601,20 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Travel(travel));
             }
 
+            // The menu block authorizes generated input and must recover before
+            // any Fishing edge from the same captured frame is routed.
+            let menu = b5.and_then(|c| decode_menu(c, tolerance));
+            if menu != self.menu {
+                self.menu = menu;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    surface = ?menu,
+                    gates = menu.is_none_or(MenuSurface::gates),
+                    "menu surface changed"
+                );
+                events.push(PixelBusEvent::MenuGate(menu));
+            }
+
             let signal = b1.map_or(FishingSignal::None, |c| fishing_signal(c, tolerance));
             if signal != self.fishing {
                 match signal {
@@ -2559,21 +2713,6 @@ impl PixelBusReader {
                     "quickslot state detected"
                 );
                 events.push(PixelBusEvent::Quickslot(quickslot));
-            }
-
-            // The menu block authorizes generated input only through a valid
-            // gameplay observation. A sample that does not decode clears the
-            // observation and therefore closes the fail-safe gate.
-            let menu = b5.and_then(|c| decode_menu(c, tolerance));
-            if menu != self.menu {
-                self.menu = menu;
-                tracing::debug!(
-                    target: "eso_weave::pixelbus",
-                    surface = ?menu,
-                    gates = menu.is_none_or(MenuSurface::gates),
-                    "menu surface changed"
-                );
-                events.push(PixelBusEvent::MenuGate(menu));
             }
 
             // Resources clear on a non-decoding sample like the two blocks above.

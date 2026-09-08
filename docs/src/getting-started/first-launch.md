@@ -10,8 +10,10 @@ Live HUD, System and State, Skills, and an optional Live Log. **ESO Weave** shou
 show **Active** unless you intentionally suspended it.
 
 Open **Settings** from the File menu and confirm the theme and platform-specific
-options are usable. Changes are saved automatically. Some Fishing and Pixel Bus
-settings currently require an application restart; see
+options are usable. Changes are saved automatically. All Fishing controls and
+the Pixel Bus tolerance and sampling intervals apply live. Only Pixel Bus Block
+Size remains staged for an ESO reload
+or relog plus an ESO Weave restart; see
 [Settings application timing](../reference/settings.md#application-timing).
 
 ## 2. Confirm ESO discovery

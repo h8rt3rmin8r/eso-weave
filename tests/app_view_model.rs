@@ -24,9 +24,10 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, MenuSurface, MovementSignal,
-    PixelBusEvent, QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability,
-    QuickslotState, QuickslotUnavailableReason, ResourceLevel, ResourceSet, RollDodgeState,
+    ActiveBar, BlockSamples, BusLayout, CombatSignal, LayoutState, LifeState, LiveReaderConfig,
+    MenuSurface, MovementSignal, PixelBusEvent, PixelBusReader, QuickslotClassification,
+    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, RollDodgeState,
     SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponBarSignal, WeaponClass,
     WorldState,
 };
@@ -682,6 +683,90 @@ fn safety_preroute_defers_recovery_until_worker_state_is_synchronized() {
 }
 
 #[test]
+fn tolerance_resynchronization_routes_menu_before_fishing_recovery() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let samples = BlockSamples {
+        status: Some(Rgb::new(255, 0, 255)),
+        fishing: Some(Rgb::new(0, 0x80, 255)),
+        menu: Some(Rgb::new(0, 0xD2, 255)),
+        life: Some(Rgb::new(0x20, 0x89, 0xDF)),
+        world: Some(Rgb::new(0xE0, 0xCC, 0x1F)),
+        roll_dodge: Some(Rgb::new(0x80, 0xF9, 0x7F)),
+        travel: Some(Rgb::new(0x80, 0x13, 0x7F)),
+        ..Default::default()
+    };
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(Default::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 8);
+    fishing.set_enabled(true, 0, &mut sink);
+
+    for event in reader.observe(samples, 0) {
+        route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            0,
+            &mut sink,
+        );
+    }
+    assert_eq!(fishing.state(), FishingState::Waiting);
+
+    let update = LiveReaderConfig {
+        tolerance: 3,
+        ..LiveReaderConfig::from(ReaderConfig::default())
+    };
+    for event in reader.apply_live_config(update).unwrap() {
+        route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            1,
+            &mut sink,
+        );
+    }
+    assert!(fishing.enabled());
+    assert_eq!(fishing.state(), FishingState::Disabled);
+
+    let refreshed = reader.observe(samples, 2);
+    let menu_index = refreshed
+        .iter()
+        .position(|event| *event == PixelBusEvent::MenuGate(Some(MenuSurface::None)))
+        .unwrap();
+    let fishing_index = refreshed
+        .iter()
+        .position(|event| *event == PixelBusEvent::FishingStarted)
+        .unwrap();
+    assert!(menu_index < fishing_index);
+    for event in refreshed {
+        route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            2,
+            &mut sink,
+        );
+        if event == PixelBusEvent::FishingStarted {
+            assert_eq!(
+                fishing.state(),
+                FishingState::Waiting,
+                "FishingStarted was ignored with request={}, reason={:?}",
+                fishing.enabled(),
+                fishing.stop_reason()
+            );
+        }
+    }
+    assert_eq!(fishing.state(), FishingState::Waiting);
+}
+
+#[test]
 fn routing_roll_dodge_updates_hook_and_worker_and_signal_loss_closes_both() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = active_fishing_controller();
@@ -870,6 +955,8 @@ fn model_with_clock_and_potion(
 ) -> (
     AppModel,
     Arc<Mutex<eso_weave::potion::AutoPotionController>>,
+    std::sync::mpsc::Receiver<LiveReaderConfig>,
+    tracing::Dispatch,
 ) {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     engine.set_game_active(true);
@@ -890,7 +977,7 @@ fn model_with_clock_and_potion(
     fishing_controller.set_travel_state(TravelState::Inactive);
     fishing_controller.set_gated(false, 0, &mut init_sink);
     let fishing = Arc::new(Mutex::new(fishing_controller));
-    let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
+    let (dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
 
     let prefs = BeaconPrefs {
         path_override: Some(root.to_path_buf()),
@@ -908,6 +995,7 @@ fn model_with_clock_and_potion(
     potion_controller.set_world_state(WorldState::Active);
     potion_controller.set_travel_state(TravelState::Inactive);
     let potion = Arc::new(Mutex::new(potion_controller));
+    let (reader_update_tx, reader_update_rx) = std::sync::mpsc::channel();
     let model = AppModel::new(
         Arc::new(engine),
         weave,
@@ -915,11 +1003,12 @@ fn model_with_clock_and_potion(
         Box::new(MockFishingSink::new()),
         potion.clone(),
         log,
+        reader_update_tx,
         settings,
-        None,
+        Some(root.to_path_buf()),
         clock,
     );
-    (model, potion)
+    (model, potion, reader_update_rx, dispatch)
 }
 
 #[test]
@@ -1154,7 +1243,8 @@ fn log_filter_and_settings_level_stay_linked() {
 #[test]
 fn applying_settings_refreshes_the_live_auto_potion_controller() {
     let dir = tempfile::tempdir().unwrap();
-    let (mut model, potion) = model_with_clock_and_potion(dir.path(), Instant::now());
+    let (mut model, potion, _reader_updates, _dispatch) =
+        model_with_clock_and_potion(dir.path(), Instant::now());
     let mut form = model.settings_form();
     form.potion.health = eso_weave::potion::ResourceWatch {
         enabled: true,
@@ -1170,6 +1260,112 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
     assert_eq!(config.health.threshold, 42);
     assert_eq!(config.quickslot_key, eso_weave::input::Key::X);
     assert_eq!(config.retry_interval_ms, 2345);
+}
+
+#[test]
+fn s062_applying_settings_refreshes_live_fishing_and_reader_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut model, _potion, reader_updates, _dispatch) =
+        model_with_clock_and_potion(dir.path(), Instant::now());
+    let mut form = model.settings_form();
+    form.fishing = FishingConfig {
+        arm_timeout_ms: 7_000,
+        reel_delay_ms: 250,
+        recast_delay_ms: 2_000,
+        interact_key: eso_weave::input::Key::R,
+    };
+    form.reader.tolerance = 7;
+    form.reader.interval_fishing_ms = 75;
+    form.reader.interval_idle_ms = 750;
+    form.reader.block_px = 32;
+
+    model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+
+    assert_eq!(
+        model.runtime_fishing_config().interact_key,
+        eso_weave::input::Key::R
+    );
+    assert_eq!(model.runtime_fishing_config().reel_delay_ms, 250);
+    let reader = model.runtime_reader_config();
+    assert_eq!(reader.tolerance, 7);
+    assert_eq!(reader.interval_fishing_ms, 75);
+    assert_eq!(reader.interval_idle_ms, 750);
+    assert_eq!(
+        reader.block_px, 16,
+        "running geometry stays at startup size"
+    );
+    assert_eq!(
+        reader_updates.try_recv().unwrap(),
+        LiveReaderConfig {
+            tolerance: 7,
+            interval_fishing_ms: 75,
+            interval_idle_ms: 750,
+        }
+    );
+    assert!(
+        reader_updates.try_recv().is_err(),
+        "one complete update expected"
+    );
+}
+
+#[test]
+fn s062_disconnected_reader_update_keeps_restart_recovery_and_reports_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut model, _potion, reader_updates, dispatch) =
+        model_with_clock_and_potion(dir.path(), Instant::now());
+    drop(reader_updates);
+    let before = model.runtime_reader_config();
+    let mut form = model.settings_form();
+    form.reader.tolerance = 9;
+    form.reader.interval_fishing_ms = 0;
+
+    tracing::dispatcher::with_default(&dispatch, || {
+        model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
+    });
+
+    assert_eq!(model.runtime_reader_config(), before);
+    assert_eq!(model.settings_form().reader.tolerance, 9);
+    assert_eq!(model.settings_form().reader.interval_fishing_ms, 100);
+    assert!(model.log_handle().recent(20).iter().any(|event| {
+        event.message.contains(
+            "reader settings were saved but the live reader update channel is unavailable",
+        )
+    }));
+
+    let flushed = model.maybe_flush(Instant::now() + Duration::from_secs(1));
+    assert!(flushed.wrote);
+    let stored = eso_weave::config::load(dir.path());
+    assert!(stored.notices.is_empty());
+    let (stored_form, notices) = eso_weave::app::SettingsForm::load(&stored.settings);
+    assert!(notices.is_empty());
+    assert_eq!(stored_form.reader.tolerance, 9);
+    assert_eq!(stored_form.reader.interval_fishing_ms, 100);
+}
+
+#[test]
+fn s062_changed_fishing_settings_turn_off_requested_work_but_no_op_edits_do_not() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(dir.path());
+    model.apply_intent(UiIntent::SetFishing(true));
+    assert!(model.fishing_on());
+
+    let unchanged = model.settings_form();
+    model.apply_intent(UiIntent::ApplySettings(Box::new(unchanged)));
+    assert!(
+        model.fishing_on(),
+        "an unchanged form must not interrupt Fishing"
+    );
+
+    let mut changed = model.settings_form();
+    changed.fishing.interact_key = eso_weave::input::Key::R;
+    model.apply_intent(UiIntent::ApplySettings(Box::new(changed)));
+
+    assert!(!model.fishing_on());
+    assert_eq!(
+        model.view().fishing_line.state_text,
+        "Idle (settings changed)"
+    );
+    assert_eq!(model.view().fishing.button, "Go Fish");
 }
 
 #[test]

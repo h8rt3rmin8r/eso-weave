@@ -107,7 +107,7 @@ capture-style rebinding control and rejects conflicting assignments. Every
 binding remains scoped to the focused ESO window.
 
 These ten application bindings are separate from fishing's generated Interact
-Key, which defaults to `E`. The Settings modal does not currently expose that
-Interact Key, and saved Fishing and PixelBus changes do not update their running
-components until restart. The inaccurate live-apply and configurability claims
-are tracked in [issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95).
+Key, which defaults to `E` and is independently configurable in Settings. A
+changed Fishing configuration turns requested work off without input before the
+new key can be used. Pixel Bus tolerance and cadence changes stay on the reader
+worker and never move work onto the input callback.

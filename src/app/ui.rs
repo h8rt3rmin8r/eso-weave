@@ -1489,7 +1489,8 @@ impl EsoWeaveApp {
     }
 
     /// Renders settings as a full-frame modal over a dimmed backdrop. Changes are
-    /// applied and persisted automatically (coalesced), with no explicit save.
+    /// submitted to each setting's runtime contract and persisted automatically
+    /// (coalesced), with no explicit save.
     /// The modal closes on an outside click, on Escape, or on the close control.
     fn settings_modal(&mut self, ctx: &egui::Context, intents: &mut Vec<UiIntent>) {
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
@@ -1582,8 +1583,8 @@ impl EsoWeaveApp {
             close = true;
         }
 
-        // Auto-apply: any change to the draft is applied live and persisted
-        // (coalesced through the save scheduler), with no explicit save action.
+        // Auto-submit: each draft change follows its setting's live or staged
+        // runtime contract and is persisted through the coalesced save scheduler.
         if self.settings_applied.as_ref() != Some(&draft) {
             intents.push(UiIntent::ApplySettings(Box::new(draft.clone())));
             self.ui_prefs = draft.ui;
@@ -1673,14 +1674,38 @@ fn settings_body(
     widgets::heading(ui, strings::CLUSTER_FISHING);
     egui::Frame::group(ui.style()).show(ui, |ui| {
         setting(ui, palette, &strings::SET_ARM_TIMEOUT, |ui| {
-            ui.add(egui::DragValue::new(&mut draft.fishing.arm_timeout_ms));
+            ui.add(egui::DragValue::new(&mut draft.fishing.arm_timeout_ms).range(0..=60_000));
         });
         setting(ui, palette, &strings::SET_REEL_DELAY, |ui| {
-            ui.add(egui::DragValue::new(&mut draft.fishing.reel_delay_ms));
+            ui.add(egui::DragValue::new(&mut draft.fishing.reel_delay_ms).range(0..=60_000));
         });
         setting(ui, palette, &strings::SET_RECAST_DELAY, |ui| {
-            ui.add(egui::DragValue::new(&mut draft.fishing.recast_delay_ms));
+            ui.add(egui::DragValue::new(&mut draft.fishing.recast_delay_ms).range(0..=60_000));
         });
+        labelled_setting(
+            ui,
+            palette,
+            &strings::SET_FISHING_INTERACT_KEY,
+            |ui, label_id| {
+                combo(
+                    "set_fishing_interact_key",
+                    draft.fishing.interact_key.display_name(),
+                )
+                .show_ui(ui, |ui| {
+                    for key in Key::ALL {
+                        ui.selectable_value(
+                            &mut draft.fishing.interact_key,
+                            key,
+                            key.display_name(),
+                        );
+                    }
+                })
+                .response
+                .labelled_by(label_id)
+                .clickable();
+            },
+        );
+        widgets::muted_help(ui, palette, strings::FISHING_SETTINGS_APPLICATION_HELP);
     });
     ui.add_space(6.0);
 
@@ -1741,11 +1766,12 @@ fn settings_body(
             ui.add(egui::DragValue::new(&mut draft.reader.tolerance));
         });
         setting(ui, palette, &strings::SET_INTERVAL_FISHING, |ui| {
-            ui.add(egui::DragValue::new(&mut draft.reader.interval_fishing_ms));
+            ui.add(egui::DragValue::new(&mut draft.reader.interval_fishing_ms).range(1..=60_000));
         });
         setting(ui, palette, &strings::SET_INTERVAL_IDLE, |ui| {
-            ui.add(egui::DragValue::new(&mut draft.reader.interval_idle_ms));
+            ui.add(egui::DragValue::new(&mut draft.reader.interval_idle_ms).range(1..=60_000));
         });
+        widgets::muted_help(ui, palette, strings::READER_SETTINGS_APPLICATION_HELP);
     });
     ui.add_space(6.0);
 
@@ -1836,6 +1862,21 @@ fn setting(
     ui.horizontal(|ui| {
         ui.label(s.label).on_hover_text(s.help);
         add(ui);
+    });
+    widgets::muted_help(ui, palette, s.help);
+}
+
+/// Renders a setting and associates its visible label with the interactive
+/// control for assistive technology.
+fn labelled_setting(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    s: &strings::Setting,
+    add: impl FnOnce(&mut egui::Ui, egui::Id),
+) {
+    ui.horizontal(|ui| {
+        let label = ui.label(s.label).on_hover_text(s.help);
+        add(ui, label.id);
     });
     widgets::muted_help(ui, palette, s.help);
 }

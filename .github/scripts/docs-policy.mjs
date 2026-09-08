@@ -117,10 +117,10 @@ const CONTENT_OBLIGATION_IDS = new Set([
   ...Array.from({ length: 6 }, (_, index) => `REL-${String(index + 1).padStart(3, "0")}`),
   ...Array.from({ length: 7 }, (_, index) => `DEF-${String(index + 1).padStart(3, "0")}`),
 ]);
-const DEFERRED_ISSUES = new Set([95]);
+const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
-const CONTENT_CONTRACT_SHA256 = "f7f5fa42c791ddeb8f83e9b283125ea1476465a62d44427ab560f8c4354da67c";
+const CONTENT_CONTRACT_SHA256 = "8493d71d66dd81874967f91e34c41a82692136c022762476bd44d6e7244a9db0";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -436,8 +436,34 @@ export async function validateSourceTree(docsRoot) {
       errors.push(`${relative} has no non-empty level-one heading`);
     }
     errors.push(...(await validateMarkdownLinks(sourceRoot, file, contents)));
+    errors.push(
+      ...validateSettingsRuntimeClaims(contents).map(
+        (error) => `${relative}: ${error}`,
+      ),
+    );
   }
   return errors;
+}
+
+/// Rejects settings claims superseded by S062's per-setting runtime contract.
+export function validateSettingsRuntimeClaims(markdown) {
+  const obsolete = [
+    [
+      "blanket immediate-application claim",
+      /\b(?:all settings apply immediately|any change to the draft is applied live)\b/iu,
+    ],
+    [
+      "live-reader restart claim",
+      /\b(?:live reader fields require restart|some Fishing and Pixel Bus settings currently require an application restart|Color Tolerance and sampling intervals are (?:also )?saved for the next application start|Fishing and Pixel Bus changes are saved but are not propagated to their running components, so restart ESO Weave after changing them)\b/iu,
+    ],
+    [
+      "missing Fishing Interact Key claim",
+      /\b(?:Fishing Interact Key is not exposed|current modal has no editor for (?:the stored interact key|it)|current modal does not expose Fishing's stored interact key|Settings modal does not currently expose that Interact Key|modal exposes Arm Timeout, Reel Delay, and Recast Delay, but no interact-key control|there is no supported in-app editor for it|modal does not expose the Fishing Interact Key)\b/iu,
+    ],
+  ];
+  return obsolete
+    .filter(([, pattern]) => pattern.test(markdown))
+    .map(([label]) => `obsolete ${label}`);
 }
 
 function localOutputPath(outputRoot, htmlFile, raw, siteUrl) {

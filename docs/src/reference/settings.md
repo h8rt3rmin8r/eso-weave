@@ -34,10 +34,12 @@ adaptation adds its scaled allowance to Light Attack and Bash only, with a
 | Arm Timeout (ms) | 8000; 0 through 60000 | Maximum wait for cast confirmation |
 | Reel Delay (ms) | 100; 0 through 60000 | Wait after a detected bite before reeling |
 | Recast Delay (ms) | 3000; 0 through 60000 | Wait after a catch or timeout before recasting |
+| Interact Key | `E`; supported key list below | Key generated for cast, reel, and recast actions |
 
-The stored interact key defaults to `E`, but the current modal has no editor for
-it. This UI and application-timing gap is tracked in
-[issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95).
+All four Fishing controls apply live. If a value changes while Fishing is
+requested or active, ESO Weave stops that session without sending another input.
+Start Fishing explicitly after the edit to use the new configuration. Applying
+an unchanged form does not interrupt a session.
 
 ## PixelBeacon and Bus
 
@@ -52,7 +54,9 @@ it. This UI and application-timing gap is tracked in
 
 Changing Block Size redeploys only a managed addon. Run `/reloadui` or relog and
 restart ESO Weave. An unmanaged PixelBeacon target has no lifecycle buttons, and
-the redeploy writer refuses it without changing its contents.
+the redeploy writer refuses it without changing its contents. Color Tolerance
+and both sample intervals apply to the running reader. A tolerance change closes
+cached safety evidence until a fresh sample is decoded.
 
 ## Auto Potion
 
@@ -108,11 +112,12 @@ request never persists and always starts off.
 | Change | Saved | Current runtime effect |
 | --- | --- | --- |
 | Appearance, bindings, weaving, Auto Potion, logging, AddOns override, environment | Yes | Applied to the relevant current application component |
-| Fishing timing or stored interact key | Yes | Restart ESO Weave; live propagation is missing in issue #95 |
-| Color Tolerance or sample intervals | Yes | Restart ESO Weave; live propagation is missing in issue #95 |
+| Fishing timing or Interact Key | Yes | Applied live; a changed configuration safely turns Fishing off |
+| Color Tolerance or sample intervals | Yes | Applied live at the next reader-worker iteration |
 | Block Size | Yes | Managed addon redeploy is attempted; reload ESO and restart ESO Weave |
 | Window, disclosure, and log height | Yes | Applied immediately as layout state |
 
-A **Settings saved** toast confirms persistence, not that a restart-dependent
-component has reconfigured. See [Configuration and Session State](configuration.md)
-for file ownership and recovery.
+A **Settings saved** toast confirms persistence. It does not claim that staged
+Block Size geometry is active. See
+[Configuration and Session State](configuration.md) for file ownership and
+recovery.
