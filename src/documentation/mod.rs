@@ -7,11 +7,12 @@ use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub const MOUNT_PATH: &str = "/eso-weave/";
 const MAX_REQUEST_BYTES: usize = 8 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_millis(250);
+const CONNECTION_LIFETIME: Duration = Duration::from_millis(500);
 const ACCEPT_PAUSE: Duration = Duration::from_millis(10);
 const CSP: &str = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
@@ -199,12 +200,11 @@ fn run_server(listener: TcpListener, shutdown: Receiver<()>) {
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
-    let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-    let response = read_request(&mut stream)
+    let deadline = Instant::now() + CONNECTION_LIFETIME;
+    let response = read_request(&mut stream, deadline)
         .map(|request| route_request(&request))
-        .unwrap_or_else(|status| Response::error(status, false));
-    let _ = response.write_to(&mut stream);
+        .unwrap_or_else(|failure| Response::error(failure.status, failure.head));
+    let _ = response.write_to(&mut stream, deadline);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,36 +220,57 @@ struct Request {
     target: String,
 }
 
-fn read_request(stream: &mut TcpStream) -> Result<Request, Status> {
+#[derive(Debug, Clone, Copy)]
+struct RequestFailure {
+    status: Status,
+    head: bool,
+}
+
+impl RequestFailure {
+    fn from_bytes(status: Status, bytes: &[u8]) -> Self {
+        Self {
+            status,
+            head: bytes.starts_with(b"HEAD "),
+        }
+    }
+}
+
+fn read_request(stream: &mut TcpStream, deadline: Instant) -> Result<Request, RequestFailure> {
     let mut bytes = Vec::with_capacity(1024);
     let mut chunk = [0_u8; 1024];
     loop {
+        let timeout = operation_timeout(deadline)
+            .map_err(|_| RequestFailure::from_bytes(Status::BadRequest, &bytes))?;
+        stream
+            .set_read_timeout(Some(timeout))
+            .map_err(|_| RequestFailure::from_bytes(Status::BadRequest, &bytes))?;
         match stream.read(&mut chunk) {
-            Ok(0) => return Err(Status::BadRequest),
+            Ok(0) => return Err(RequestFailure::from_bytes(Status::BadRequest, &bytes)),
             Ok(count) => {
                 bytes.extend_from_slice(&chunk[..count]);
                 if bytes.len() > MAX_REQUEST_BYTES {
-                    return Err(Status::HeadersTooLarge);
+                    return Err(RequestFailure::from_bytes(Status::HeadersTooLarge, &bytes));
                 }
                 if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
                     break;
                 }
             }
-            Err(_) => return Err(Status::BadRequest),
+            Err(_) => return Err(RequestFailure::from_bytes(Status::BadRequest, &bytes)),
         }
     }
-    let text = std::str::from_utf8(&bytes).map_err(|_| Status::BadRequest)?;
-    let line = text.split("\r\n").next().ok_or(Status::BadRequest)?;
+    let failure = || RequestFailure::from_bytes(Status::BadRequest, &bytes);
+    let text = std::str::from_utf8(&bytes).map_err(|_| failure())?;
+    let line = text.split("\r\n").next().ok_or_else(failure)?;
     let mut fields = line.split(' ');
-    let method = match fields.next().ok_or(Status::BadRequest)? {
+    let method = match fields.next().ok_or_else(failure)? {
         "GET" => Method::Get,
         "HEAD" => Method::Head,
         _ => Method::Other,
     };
-    let target = fields.next().ok_or(Status::BadRequest)?;
-    let version = fields.next().ok_or(Status::BadRequest)?;
+    let target = fields.next().ok_or_else(failure)?;
+    let version = fields.next().ok_or_else(failure)?;
     if fields.next().is_some() || !matches!(version, "HTTP/1.0" | "HTTP/1.1") {
-        return Err(Status::BadRequest);
+        return Err(failure());
     }
     Ok(Request {
         method,
@@ -352,19 +373,44 @@ impl Response {
         }
     }
 
-    fn write_to(&self, stream: &mut TcpStream) -> io::Result<()> {
-        write!(
-            stream,
+    fn write_to(&self, stream: &mut TcpStream, deadline: Instant) -> io::Result<()> {
+        let headers = format!(
             "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: {}\r\n{}\r\n",
             self.status,
             self.content_type,
             self.body.len(),
             CSP,
             self.extra.unwrap_or("")
-        )?;
+        );
+        write_all_before(stream, headers.as_bytes(), deadline)?;
         if !self.head {
-            stream.write_all(self.body)?;
+            write_all_before(stream, self.body, deadline)?;
         }
         Ok(())
     }
+}
+
+fn operation_timeout(deadline: Instant) -> io::Result<Duration> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "documentation connection deadline elapsed",
+        ))
+    } else {
+        Ok(remaining.min(IO_TIMEOUT))
+    }
+}
+
+fn write_all_before(stream: &mut TcpStream, mut bytes: &[u8], deadline: Instant) -> io::Result<()> {
+    while !bytes.is_empty() {
+        stream.set_write_timeout(Some(operation_timeout(deadline)?))?;
+        match stream.write(bytes) {
+            Ok(0) => return Err(io::Error::from(io::ErrorKind::WriteZero)),
+            Ok(count) => bytes = &bytes[count..],
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }

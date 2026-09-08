@@ -146,9 +146,41 @@ fn service_bounds_requests_and_shuts_down_promptly() {
         let oversized = format!("GET /eso-weave/ HTTP/1.1\r\nX-Fill: {}", "x".repeat(9000));
         let response = response_text(address, oversized.as_bytes());
         assert!(response.starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n"));
+
+        let oversized_head = format!("HEAD /eso-weave/ HTTP/1.1\r\nX-Fill: {}", "x".repeat(9000));
+        let response = request(address, oversized_head.as_bytes());
+        let header_end = response
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+            .unwrap();
+        assert!(response.starts_with(b"HTTP/1.1 431 Request Header Fields Too Large\r\n"));
+        assert_eq!(response.len(), header_end + 4);
     }
     assert!(start.elapsed() < Duration::from_secs(1));
     assert!(TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_err());
+}
+
+#[test]
+fn service_enforces_one_deadline_against_trickled_requests() {
+    let mut service = DocumentationService::new();
+    service.start().unwrap();
+    let address = service.address().unwrap();
+    let mut stream = TcpStream::connect(address).unwrap();
+    stream.write_all(b"G").unwrap();
+    let sender = std::thread::spawn(move || {
+        for byte in b"ET /eso-weave/ HTTP/1.1\r\n" {
+            if stream.write_all(std::slice::from_ref(byte)).is_err() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    std::thread::sleep(Duration::from_millis(50));
+    let start = Instant::now();
+    drop(service);
+    assert!(start.elapsed() < Duration::from_secs(1));
+    sender.join().unwrap();
 }
 
 #[test]
