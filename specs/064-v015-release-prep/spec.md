@@ -25,11 +25,11 @@ As a release reader, I can understand the major documentation, safety, Linux inp
 
 As a maintainer, I can rely on the detailed Unreleased sections as the authoritative record while Highlights remain a compact presentation layer.
 
-**Independent Test**: Compare the pre-S064 Added, Changed, and Decisions content byte-for-byte except for the new S064 preparation entry and chronological plan updates.
+**Independent Test**: Confirm the detailed Added, Changed, Dependencies, and Decisions sections account for every merge since v0.14.0 while the generated release body excludes those sections.
 
 **Acceptance Scenarios**:
 
-1. **Given** the existing post-v0.14.0 changelog, **When** S064 is implemented, **Then** every detailed S057 through S063 entry and dated decision remains intact.
+1. **Given** the existing post-v0.14.0 changelog and first-parent merge history, **When** S064 is implemented, **Then** every detailed S057 through S063 entry and dated decision remains intact and dependency PRs #89 and #90 are recorded.
 2. **Given** the release-note generator, **When** it reads Unreleased, **Then** engineering detail stays out of the generated GitHub release body.
 
 ### User Story 3 - Keep Publication Separately Authorized (Priority: P1)
@@ -59,7 +59,7 @@ As the release operator, I can merge a reviewed candidate without accidentally c
 - **FR-002**: Highlights MUST contain four top-level bullets totaling no more than 120 words.
 - **FR-003**: The four bullets MUST cover the public and bundled documentation system, automation and PixelBeacon ownership safety, Linux input parity and fail-closed menu evidence, and live Fishing and Pixel Bus settings behavior.
 - **FR-004**: Highlights MUST describe user outcomes and MUST NOT duplicate detailed implementation prose or claim installed-package verification.
-- **FR-005**: Existing Added, Changed, and Decisions content for S057 through S063 MUST remain intact.
+- **FR-005**: Existing Added, Changed, and Decisions content for S057 through S063 MUST remain intact, and the detailed record MUST include dependency upgrades from PRs #89 and #90.
 - **FR-006**: S064 MUST add one detailed Changed entry describing candidate preparation without claiming publication.
 - **FR-007**: The existing release-note generator MUST output only Highlights plus the immutable v0.15.0 changelog link.
 - **FR-008**: `Cargo.toml`, `Cargo.lock`, and the README badge MUST remain at v0.14.0 in this pull request.
@@ -82,13 +82,13 @@ As the release operator, I can merge a reviewed candidate without accidentally c
 - **SC-002**: Every post-v0.14.0 user-facing outcome maps to one Highlight category with no unexplained gap.
 - **SC-003**: The generated candidate ends with the v0.15.0 immutable changelog link and contains no detailed subsections.
 - **SC-004**: All v0.14.0 version references, tags, releases, pinned release machinery, and open verification issues remain unchanged.
-- **SC-005**: The detailed changelog retains every pre-S064 S057 through S063 entry and decision.
+- **SC-005**: The detailed changelog retains every pre-S064 S057 through S063 entry and decision and accounts for dependency PRs #89 and #90.
 
 ## Assumptions
 
 - v0.15.0 is the correct next version because the bundled offline documentation action is a new backward-compatible user capability.
 - Four Highlights are the smallest structure that represents the distinct post-v0.14.0 user outcomes without collapsing safety or platform behavior into vague prose.
-- Dependency-only merges require no user-facing Highlight because the complete repository history retains them and no direct user capability changed.
+- Dependency-only merges require no user-facing Highlight, but they remain part of the authoritative detailed changelog record.
 - The S047 release-note contract and current release machinery remain fit for purpose.
 
 ## Clarification Decisions

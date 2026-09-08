@@ -12,6 +12,8 @@
 
 **Rationale**: S057 through S059 and S063 form one documentation-system outcome. S060, S061, and S062 each change a separate user-visible reliability contract. Combining any of those three into a generic maintenance bullet would hide material safety or platform behavior.
 
+Dependency PRs #89 and #90 belong in a detailed Dependencies subsection so every merge since v0.14.0 is recorded, but they do not warrant a user-facing Highlight.
+
 ## Decision 3: Reuse the S047 release-note contract
 
 **Decision**: Add compliant Highlights and make no script, workflow, release configuration, packaging, or guide changes.
@@ -36,4 +38,4 @@
 - Documentation-only Highlights: rejected because S060 through S062 also shipped after v0.14.0.
 - Modify release automation: rejected because current machinery passed v0.14.0 and already supports bundled documentation prerequisites.
 - Publish from the feature branch: rejected because release governance reserves publication for explicitly authorized work on `main`.
-- Include dependency upgrade details in Highlights: rejected because those merges do not change a user workflow.
+- Include dependency upgrade details in Highlights: rejected because those merges do not change a user workflow; retain them in the detailed Dependencies record instead.

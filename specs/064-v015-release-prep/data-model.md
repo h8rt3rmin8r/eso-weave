@@ -6,7 +6,7 @@
 | --- | --- |
 | Target version | 0.15.0 |
 | Source section | `CHANGELOG.md` Unreleased |
-| Detailed scope | S057 through S063 |
+| Detailed scope | S057 through S063 and dependency PRs #89 and #90 |
 | Presentation | One Highlights subsection with four bullets |
 | Publication state | Prepared, not published |
 
@@ -18,6 +18,13 @@
 | Safety | S060 | Revocable automation and protected PixelBeacon ownership |
 | Linux input | S061 | Complete forwarding, explicit errors, fail-closed menu evidence |
 | Live settings | S062 | Immediate safe Fishing and Pixel Bus scalar updates |
+
+## Detailed Dependency Record
+
+| Pull request | Direct dependency change | Highlight |
+| --- | --- | --- |
+| #89 | `x11rb` 0.13.2 to 0.14.0 | None |
+| #90 | `thiserror` 1.0.69 to 2.0.18 | None |
 
 ## Publication Boundary
 

@@ -12,7 +12,7 @@
 ## Phase 2: Release Candidate
 
 - [x] T007 [US1] Add four bounded v0.15.0 Highlights bullets to Unreleased.
-- [x] T008 [US2] Preserve all detailed S057 through S063 Added, Changed, and Decisions entries.
+- [x] T008 [US2] Preserve all detailed S057 through S063 Added, Changed, and Decisions entries and record dependency PRs #89 and #90.
 - [x] T009 [US2] Add a detailed S064 Changed entry without claiming publication.
 - [x] T010 [US3] Archive plan 033 with PR #101 evidence.
 - [x] T011 [US3] Establish active chronological plan 034 and update the lifecycle ledger and both plan indexes.

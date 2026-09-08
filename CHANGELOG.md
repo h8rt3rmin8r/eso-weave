@@ -60,6 +60,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S059 expands the canonical corpus with first-launch, troubleshooting, settings,
   status, state-machine, testing, packaging, release-flow, and coverage guidance.
 
+### Dependencies
+
+- Upgrade the direct `x11rb` dependency from 0.13.2 to 0.14.0 (PR #89).
+- Upgrade the direct `thiserror` dependency from 1.0.69 to 2.0.18 (PR #90).
+
 ### Decisions
 
 - 2026-09-07: Generate the canonical mdBook inside every release-profile Cargo
