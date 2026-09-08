@@ -39,7 +39,7 @@ As an operator, I need generated input to remain blocked until valid gameplay me
 **Acceptance Scenarios**:
 
 1. **Given** no menu sample has been decoded, **When** controllers initialize, **Then** input, Fishing, and Auto Potion are gated.
-2. **Given** a valid gameplay sample, **When** `MenuGate(Some(MenuSurface::None))` is routed, **Then** the menu gate opens.
+2. **Given** a valid gameplay sample, **When** `MenuGate(Some(MenuSurface::None))` is routed, **Then** the menu gate opens and a pending initial Fishing request begins its cast.
 3. **Given** unavailable, corrupt, or lost menu evidence, **When** `MenuGate(None)` is routed, **Then** every generated-input controller closes while physical pass-through remains available.
 
 ---
@@ -83,7 +83,7 @@ As an operator, I need latency and logging help text to describe what the contro
 - **FR-010**: Input and Fishing menu gates MUST initialize closed; the already closed Auto Potion default MUST remain unchanged.
 - **FR-011**: Only valid explicit gameplay evidence MAY open the menu gate; missing, corrupt, and lost evidence MUST close it.
 - **FR-012**: The first valid gameplay observation MUST be emitted even when the prior decoded menu state was unavailable.
-- **FR-013**: Initial or later unavailable menu evidence MUST produce zero generated input while preserving physical pass-through and documented toggle exemptions.
+- **FR-013**: Initial or later unavailable menu evidence MUST produce zero generated input while preserving physical pass-through and documented toggle exemptions; a pending initial Fishing request MUST start when valid gameplay evidence opens the startup gate.
 - **FR-014**: Latency help MUST state that measured latency adds a bounded allowance to Light Attack and Bash delays, capped at 300 ms after scaling.
 - **FR-015**: Live Log help MUST state that the saved global level controls captured events shown in the ring and written to optional file logging.
 - **FR-016**: Source comments, diagnostics, tests, and canonical documentation MUST consistently describe unavailable menu evidence as gated.

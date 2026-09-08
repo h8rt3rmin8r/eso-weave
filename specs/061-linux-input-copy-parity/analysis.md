@@ -63,7 +63,7 @@ No CRITICAL, HIGH, or unresolved ambiguity remains. Implementation may begin und
 
 - Linux capability construction derives from `Key::ALL`, includes both mouse buttons, preserves physical-only key codes, and upgrades an early virtual device before grab.
 - Exhaustive Linux unit tests cover all 13 application keys, the shipped E and F3 bindings, physical capability union, rebuild policy, metadata exclusion, and explicit forwarding failure.
-- Input and Fishing now initialize fail-closed, game exit restores that state, and regression tests prove generated work remains blocked until fresh gameplay evidence arrives.
+- Input and Fishing now initialize fail-closed, game exit restores that state, and regression tests prove generated work remains blocked until fresh gameplay evidence arrives; a pending initial Fishing request then starts without another toggle.
 - PixelBus tests prove the first valid gameplay observation is published after an unavailable startup state.
 - Semantic string tests reject the obsolete latency and Live Log claims, while canonical documentation and coverage records now describe implemented behavior.
 - Plan 030 is archived with PR #98 evidence, plan 031 is the sole active plan, and issue #95 remains the only deferred issue in policy fixtures.

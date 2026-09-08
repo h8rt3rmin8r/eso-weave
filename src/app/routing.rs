@@ -160,7 +160,7 @@ pub fn route_reader_event(
             // gameplay surface may release any synthesis path.
             let gates = surface.is_none_or(crate::pixelbus::MenuSurface::gates);
             input.set_menu_gated(gates);
-            fishing.set_gated(gates);
+            fishing.set_gated(gates, now_ms, sink);
             // The auto-potion controller is gated directly, for the same reason
             // the fishing controller is: it synthesizes on its own timers and
             // never passes through interception, so gating interception alone

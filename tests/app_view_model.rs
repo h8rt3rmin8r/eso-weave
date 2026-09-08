@@ -116,7 +116,7 @@ fn active_fishing_controller() -> FishingController {
     controller.set_life_state(LifeState::Alive);
     controller.set_world_state(WorldState::Active);
     controller.set_travel_state(TravelState::Inactive);
-    controller.set_gated(false);
+    controller.set_gated(false, 0, &mut sink);
     controller
 }
 
@@ -888,7 +888,7 @@ fn model_with_clock_and_potion(
     fishing_controller.set_life_state(LifeState::Alive);
     fishing_controller.set_world_state(WorldState::Active);
     fishing_controller.set_travel_state(TravelState::Inactive);
-    fishing_controller.set_gated(false);
+    fishing_controller.set_gated(false, 0, &mut init_sink);
     let fishing = Arc::new(Mutex::new(fishing_controller));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
 
