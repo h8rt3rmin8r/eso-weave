@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-033.md](plan-033.md) | Active | S063 bundles secure searchable offline documentation and closes #82. |
+| [plan-034.md](plan-034.md) | Active | S064 prepares the v0.15.0 documentation and reliability release candidate for #102. |

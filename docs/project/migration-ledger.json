@@ -1486,13 +1486,23 @@
     },
     {
       "id": "033",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-033.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-033.md",
       "specs": [
         "specs/063-bundled-offline-docs"
       ],
-      "evidence": "Issue #82 tracks the active S063 delivery."
+      "evidence": "Issue #82 closed and S063 merged in PR #101."
+    },
+    {
+      "id": "034",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-034.md",
+      "specs": [
+        "specs/064-v015-release-prep"
+      ],
+      "evidence": "Issue #102 tracks the active S064 release preparation."
     }
   ],
   "safetyCrosswalk": [

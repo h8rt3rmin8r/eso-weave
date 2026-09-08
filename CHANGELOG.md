@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Read a comprehensive searchable guide online or open the same documentation
+  offline from Help > Documentation, with no separate manual or network
+  dependency.
+- Automation now stops cleanly when authorization closes, while PixelBeacon
+  protects unmanaged add-on files and restores managed content after failed
+  updates.
+- Linux input handling now preserves physical keyboard capabilities, reports
+  forwarding failures, and blocks generated input until valid menu evidence
+  arrives.
+- Fishing timing and Interact Key changes now apply immediately, as do Pixel Bus
+  tolerance and sampling intervals, with clear guidance for Block Size changes.
+
 ### Added
 
 - S057 establishes a branded mdBook documentation shell with local search,
@@ -23,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S064 prepares the concise v0.15.0 release candidate from the complete S057
+  through S063 record while leaving version rollover, publication, and installed
+  package verification to separately authorized post-merge work (issue #102).
 - S062 applies Fishing timing and Interact Key changes to the running controller,
   safely stops requested work across configuration changes, and live-updates
   Pixel Bus tolerance and cadence while preserving staged block geometry
