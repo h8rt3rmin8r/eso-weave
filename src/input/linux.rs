@@ -265,6 +265,10 @@ fn from_ev_code(code: u16) -> Option<Key> {
     }
 }
 
+fn active_window_matches(title: &str) -> bool {
+    crate::platform::active_window_title().is_some_and(|name| name.contains(title))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,8 +340,4 @@ mod tests {
         let metadata = InputEvent::new(EventType::MISC, 4, 30);
         emit_forwarded_key(metadata, |_| panic!("metadata must not be emitted")).unwrap();
     }
-}
-
-fn active_window_matches(title: &str) -> bool {
-    crate::platform::active_window_title().is_some_and(|name| name.contains(title))
 }
