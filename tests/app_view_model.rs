@@ -24,11 +24,12 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
 use eso_weave::logging;
 use eso_weave::pixelbus::{
-    ActiveBar, BusLayout, CombatSignal, LayoutState, LifeState, LiveReaderConfig, MenuSurface,
-    MovementSignal, PixelBusEvent, QuickslotClassification, QuickslotNonPotionKind,
-    QuickslotPotionAvailability, QuickslotState, QuickslotUnavailableReason, ResourceLevel,
-    ResourceSet, RollDodgeState, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue,
-    WeaponBarSignal, WeaponClass, WorldState,
+    ActiveBar, BlockSamples, BusLayout, CombatSignal, LayoutState, LifeState, LiveReaderConfig,
+    MenuSurface, MovementSignal, PixelBusEvent, PixelBusReader, QuickslotClassification,
+    QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
+    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, RollDodgeState,
+    SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponBarSignal, WeaponClass,
+    WorldState,
 };
 use eso_weave::weave::{LatencyConfig, WeaveConfig, WeaveEngine, WeaveType};
 
@@ -679,6 +680,90 @@ fn safety_preroute_defers_recovery_until_worker_state_is_synchronized() {
 
     assert!(input.is_life_gated());
     assert!(input.is_roll_gated());
+}
+
+#[test]
+fn tolerance_resynchronization_routes_menu_before_fishing_recovery() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let samples = BlockSamples {
+        status: Some(Rgb::new(255, 0, 255)),
+        fishing: Some(Rgb::new(0, 0x80, 255)),
+        menu: Some(Rgb::new(0, 0xD2, 255)),
+        life: Some(Rgb::new(0x20, 0x89, 0xDF)),
+        world: Some(Rgb::new(0xE0, 0xCC, 0x1F)),
+        roll_dodge: Some(Rgb::new(0x80, 0xF9, 0x7F)),
+        travel: Some(Rgb::new(0x80, 0x13, 0x7F)),
+        ..Default::default()
+    };
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(Default::default());
+    let mut sink = MockFishingSink::new();
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 8);
+    fishing.set_enabled(true, 0, &mut sink);
+
+    for event in reader.observe(samples, 0) {
+        route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            0,
+            &mut sink,
+        );
+    }
+    assert_eq!(fishing.state(), FishingState::Waiting);
+
+    let update = LiveReaderConfig {
+        tolerance: 3,
+        ..LiveReaderConfig::from(ReaderConfig::default())
+    };
+    for event in reader.apply_live_config(update).unwrap() {
+        route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            1,
+            &mut sink,
+        );
+    }
+    assert!(fishing.enabled());
+    assert_eq!(fishing.state(), FishingState::Disabled);
+
+    let refreshed = reader.observe(samples, 2);
+    let menu_index = refreshed
+        .iter()
+        .position(|event| *event == PixelBusEvent::MenuGate(Some(MenuSurface::None)))
+        .unwrap();
+    let fishing_index = refreshed
+        .iter()
+        .position(|event| *event == PixelBusEvent::FishingStarted)
+        .unwrap();
+    assert!(menu_index < fishing_index);
+    for event in refreshed {
+        route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            2,
+            &mut sink,
+        );
+        if event == PixelBusEvent::FishingStarted {
+            assert_eq!(
+                fishing.state(),
+                FishingState::Waiting,
+                "FishingStarted was ignored with request={}, reason={:?}",
+                fishing.enabled(),
+                fishing.stop_reason()
+            );
+        }
+    }
+    assert_eq!(fishing.state(), FishingState::Waiting);
 }
 
 #[test]

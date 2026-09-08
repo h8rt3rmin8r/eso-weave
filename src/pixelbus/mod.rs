@@ -2269,6 +2269,7 @@ pub struct PixelBusReader {
     world: WorldState,
     roll_dodge: RollDodgeState,
     travel: TravelState,
+    fishing_config_generation: u64,
     had_heartbeat: bool,
 }
 
@@ -2304,6 +2305,7 @@ impl PixelBusReader {
             world: WorldState::Unknown,
             roll_dodge: RollDodgeState::Unknown,
             travel: TravelState::Unknown,
+            fishing_config_generation: 0,
             had_heartbeat: false,
         }
     }
@@ -2366,6 +2368,31 @@ impl PixelBusReader {
             PixelBusEvent::World(WorldState::Unknown),
             PixelBusEvent::Travel(TravelState::Unknown),
         ]
+    }
+
+    /// Clears the cached Fishing detector signal after its controller changes
+    /// configuration. The next valid sample republishes the current cast state,
+    /// even when the B1 value itself did not change.
+    pub fn invalidate_fishing_observation(&mut self) -> Option<PixelBusEvent> {
+        if self.fishing == FishingSignal::None {
+            return None;
+        }
+        self.fishing = FishingSignal::None;
+        Some(PixelBusEvent::FishingStopped)
+    }
+
+    /// Applies the controller's current Fishing configuration generation once.
+    /// A changed generation discards detector history so an explicit re-enable
+    /// can be confirmed even when the in-game B1 value is unchanged.
+    pub fn synchronize_fishing_config_generation(
+        &mut self,
+        generation: u64,
+    ) -> Option<PixelBusEvent> {
+        if generation == self.fishing_config_generation {
+            return None;
+        }
+        self.fishing_config_generation = generation;
+        self.invalidate_fishing_observation()
     }
 
     /// Clears every payload-derived observation exactly once. This is used both
@@ -2574,6 +2601,20 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Travel(travel));
             }
 
+            // The menu block authorizes generated input and must recover before
+            // any Fishing edge from the same captured frame is routed.
+            let menu = b5.and_then(|c| decode_menu(c, tolerance));
+            if menu != self.menu {
+                self.menu = menu;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    surface = ?menu,
+                    gates = menu.is_none_or(MenuSurface::gates),
+                    "menu surface changed"
+                );
+                events.push(PixelBusEvent::MenuGate(menu));
+            }
+
             let signal = b1.map_or(FishingSignal::None, |c| fishing_signal(c, tolerance));
             if signal != self.fishing {
                 match signal {
@@ -2672,21 +2713,6 @@ impl PixelBusReader {
                     "quickslot state detected"
                 );
                 events.push(PixelBusEvent::Quickslot(quickslot));
-            }
-
-            // The menu block authorizes generated input only through a valid
-            // gameplay observation. A sample that does not decode clears the
-            // observation and therefore closes the fail-safe gate.
-            let menu = b5.and_then(|c| decode_menu(c, tolerance));
-            if menu != self.menu {
-                self.menu = menu;
-                tracing::debug!(
-                    target: "eso_weave::pixelbus",
-                    surface = ?menu,
-                    gates = menu.is_none_or(MenuSurface::gates),
-                    "menu surface changed"
-                );
-                events.push(PixelBusEvent::MenuGate(menu));
             }
 
             // Resources clear on a non-decoding sample like the two blocks above.

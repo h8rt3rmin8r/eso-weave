@@ -642,6 +642,39 @@ fn tolerance_update_invalidates_every_cached_safety_observation_before_resamplin
     assert!(refreshed.contains(&PixelBusEvent::RollDodge(RollDodgeState::Inactive)));
     assert!(refreshed.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
     assert!(refreshed.contains(&PixelBusEvent::FishingStarted));
+    let menu_index = refreshed
+        .iter()
+        .position(|event| *event == PixelBusEvent::MenuGate(Some(MenuSurface::None)))
+        .unwrap();
+    let fishing_index = refreshed
+        .iter()
+        .position(|event| *event == PixelBusEvent::FishingStarted)
+        .unwrap();
+    assert!(
+        menu_index < fishing_index,
+        "menu recovery must precede republished Fishing work"
+    );
+}
+
+#[test]
+fn fishing_observation_invalidation_republishes_an_unchanged_cast() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let safe = BlockSamples {
+        fishing: Some(WAITING),
+        ..safe_runtime_samples()
+    };
+    assert!(reader
+        .observe(safe, 0)
+        .contains(&PixelBusEvent::FishingStarted));
+
+    assert_eq!(
+        reader.synchronize_fishing_config_generation(1),
+        Some(PixelBusEvent::FishingStopped)
+    );
+    assert_eq!(reader.synchronize_fishing_config_generation(1), None);
+    assert!(reader
+        .observe(safe, 1)
+        .contains(&PixelBusEvent::FishingStarted));
 }
 
 #[test]

@@ -28,6 +28,20 @@ fn controller() -> FishingController {
 }
 
 #[test]
+fn configuration_generation_changes_only_for_a_distinct_config() {
+    let mut controller = controller();
+    let initial = controller.config_generation();
+
+    controller.apply_config(FishingConfig::default());
+    assert_eq!(controller.config_generation(), initial);
+
+    let mut changed = FishingConfig::default();
+    changed.reel_delay_ms += 1;
+    controller.apply_config(changed);
+    assert_eq!(controller.config_generation(), initial.wrapping_add(1));
+}
+
+#[test]
 fn a_fresh_controller_is_menu_gated_until_valid_evidence_arrives() {
     let mut controller = FishingController::new(FishingConfig::default());
     let mut sink = MockFishingSink::new();

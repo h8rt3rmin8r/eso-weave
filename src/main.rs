@@ -255,6 +255,23 @@ fn main() {
                     }
                 }
                 let now = origin.elapsed().as_millis() as u64;
+                let fishing_config_generation = fishing.lock().unwrap().config_generation();
+                if let Some(event) =
+                    reader.synchronize_fishing_config_generation(fishing_config_generation)
+                {
+                    let mut weave = weave.lock().unwrap();
+                    let mut fishing = fishing.lock().unwrap();
+                    let mut potion = potion.lock().unwrap();
+                    route_reader_event(
+                        event,
+                        &mut weave,
+                        &mut fishing,
+                        &mut potion,
+                        &input,
+                        now,
+                        &mut sink,
+                    );
+                }
                 let requested_generation = input.safety_refresh_generation();
                 if requested_generation != safety_refresh_generation {
                     safety_refresh_generation = requested_generation;

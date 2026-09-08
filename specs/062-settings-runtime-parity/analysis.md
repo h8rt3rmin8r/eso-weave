@@ -73,10 +73,11 @@ No CRITICAL, HIGH, or unresolved ambiguity remains. Implementation may begin und
 
 - `cargo fmt --all -- --check` passed.
 - `cargo clippy --all-targets --all-features --locked -- -D warnings` passed.
-- All 653 Rust tests passed under all targets and features with the lockfile enforced.
+- All 655 Rust tests passed under all targets and features with the lockfile enforced.
 - Documentation policy passed all 53 fixture tests and the generated-site check; mdBook test, build, link checking, spelling, release-note, text-hygiene, whitespace, and encoding checks passed.
 - Independent runtime, concurrency, safety, UI, test, documentation, and spec-kit reviews completed. Wake synchronization, first-launch copy, obsolete-claim policy, shared worker application, and disconnected persistence findings were resolved.
 - First-round hosted review identified stale Fishing detector state at a tolerance boundary. The cache is now invalidated after the five safety-closing events, and a regression proves the next safe sample republishes `FishingStarted`.
+- Second-round hosted review found that menu recovery followed Fishing recovery and that Fishing-only configuration changes did not invalidate reader history. Menu recovery now precedes Fishing edges, and a monotonic controller configuration generation makes the worker discard stale B1 history before sampling. Reader, controller, and complete routing regressions cover both corrections.
 
 ## Documentation Outcome
 

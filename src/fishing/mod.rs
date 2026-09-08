@@ -292,6 +292,7 @@ impl<B: InputBackend> FishingSink for RealFishingSink<B> {
 /// The fishing controller state machine.
 pub struct FishingController {
     config: FishingConfig,
+    config_generation: u64,
     requested_enabled: bool,
     state: FishingState,
     deadline: Option<(u64, TimerKind)>,
@@ -323,6 +324,7 @@ impl FishingController {
     pub fn with_life_gate(config: FishingConfig, life_gate: LifeGate) -> Self {
         Self {
             config,
+            config_generation: 0,
             requested_enabled: false,
             state: FishingState::Disabled,
             deadline: None,
@@ -374,6 +376,12 @@ impl FishingController {
         &self.config
     }
 
+    /// Monotonic revision used by the pixel worker to discard detector state
+    /// captured under an older Fishing configuration.
+    pub fn config_generation(&self) -> u64 {
+        self.config_generation
+    }
+
     /// Applies a new runtime configuration without synthesizing input.
     ///
     /// An identical configuration is a strict no-op. Changing configuration
@@ -386,6 +394,7 @@ impl FishingController {
             return;
         }
         self.config = config;
+        self.config_generation = self.config_generation.wrapping_add(1);
         if self.requested_enabled || self.state != FishingState::Disabled {
             self.requested_enabled = false;
             self.suspension_recovery_required = false;
