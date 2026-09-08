@@ -2278,7 +2278,7 @@ pub fn apply_live_reader_update(
     poll_config: &mut ReaderConfig,
     reader: &mut PixelBusReader,
     update: LiveReaderConfig,
-) -> Option<[PixelBusEvent; 5]> {
+) -> Option<[PixelBusEvent; 6]> {
     poll_config.apply_live(update);
     reader.apply_live_config(update)
 }
@@ -2317,7 +2317,7 @@ impl PixelBusReader {
     /// every cached observation that can authorize generated input and returns the
     /// fail-closed events the worker must route before taking a fresh sample.
     /// Interval-only and identical updates preserve all observations.
-    pub fn apply_live_config(&mut self, update: LiveReaderConfig) -> Option<[PixelBusEvent; 5]> {
+    pub fn apply_live_config(&mut self, update: LiveReaderConfig) -> Option<[PixelBusEvent; 6]> {
         if !self.config.apply_live(update) {
             return None;
         }
@@ -2327,12 +2327,14 @@ impl PixelBusReader {
         self.world = WorldState::Unknown;
         self.roll_dodge = RollDodgeState::Unknown;
         self.travel = TravelState::Unknown;
+        self.fishing = FishingSignal::None;
         Some([
             PixelBusEvent::MenuGate(None),
             PixelBusEvent::Life(LifeState::Unknown),
             PixelBusEvent::World(WorldState::Unknown),
             PixelBusEvent::RollDodge(RollDodgeState::Unknown),
             PixelBusEvent::Travel(TravelState::Unknown),
+            PixelBusEvent::FishingStopped,
         ])
     }
 

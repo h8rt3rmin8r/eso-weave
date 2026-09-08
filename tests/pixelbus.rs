@@ -607,13 +607,17 @@ fn safe_runtime_samples() -> BlockSamples {
 #[test]
 fn tolerance_update_invalidates_every_cached_safety_observation_before_resampling() {
     let mut reader = PixelBusReader::new(ReaderConfig::default());
-    let safe = safe_runtime_samples();
+    let safe = BlockSamples {
+        fishing: Some(WAITING),
+        ..safe_runtime_samples()
+    };
     let initial = reader.observe(safe, 0);
     assert!(initial.contains(&PixelBusEvent::MenuGate(Some(MenuSurface::None))));
     assert!(initial.contains(&PixelBusEvent::Life(LifeState::Alive)));
     assert!(initial.contains(&PixelBusEvent::World(WorldState::Active)));
     assert!(initial.contains(&PixelBusEvent::RollDodge(RollDodgeState::Inactive)));
     assert!(initial.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+    assert!(initial.contains(&PixelBusEvent::FishingStarted));
 
     let update = LiveReaderConfig {
         tolerance: 3,
@@ -627,6 +631,7 @@ fn tolerance_update_invalidates_every_cached_safety_observation_before_resamplin
             PixelBusEvent::World(WorldState::Unknown),
             PixelBusEvent::RollDodge(RollDodgeState::Unknown),
             PixelBusEvent::Travel(TravelState::Unknown),
+            PixelBusEvent::FishingStopped,
         ])
     );
 
@@ -636,6 +641,7 @@ fn tolerance_update_invalidates_every_cached_safety_observation_before_resamplin
     assert!(refreshed.contains(&PixelBusEvent::World(WorldState::Active)));
     assert!(refreshed.contains(&PixelBusEvent::RollDodge(RollDodgeState::Inactive)));
     assert!(refreshed.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+    assert!(refreshed.contains(&PixelBusEvent::FishingStarted));
 }
 
 #[test]

@@ -65,7 +65,7 @@ No CRITICAL, HIGH, or unresolved ambiguity remains. Implementation may begin und
 - The Settings modal exposes an accessible Interact Key sourced from `Key::ALL`, constrains timing and interval controls to domain bounds, and distinguishes live scalar controls from staged Block Size.
 - AppModel publishes complete `LiveReaderConfig` values without blocking and retains startup geometry when scalar edits are mixed with a Block Size change.
 - The worker's update-aware deadline wait wakes for configuration, drains queued bursts newest-wins, and applies one shared boundary to decoding and poll cadence.
-- Tolerance changes close menu, life, world, roll-dodge, and travel evidence before same-iteration resampling; block size and heartbeat timeout cannot enter the live update type.
+- Tolerance changes close menu, life, world, roll-dodge, travel, and Fishing evidence before same-iteration resampling; block size and heartbeat timeout cannot enter the live update type.
 - Disconnected delivery leaves the runtime snapshot unchanged, logs the failure, and preserves sanitized configuration on disk for next-start recovery.
 - Plan 031 is archived with PR #99 evidence, plan 032 is the sole active plan, and DEF-005 is covered by runtime, UI, test, and canonical documentation evidence.
 
@@ -73,9 +73,10 @@ No CRITICAL, HIGH, or unresolved ambiguity remains. Implementation may begin und
 
 - `cargo fmt --all -- --check` passed.
 - `cargo clippy --all-targets --all-features --locked -- -D warnings` passed.
-- All 652 Rust tests passed under all targets and features with the lockfile enforced.
+- All 653 Rust tests passed under all targets and features with the lockfile enforced.
 - Documentation policy passed all 53 fixture tests and the generated-site check; mdBook test, build, link checking, spelling, release-note, text-hygiene, whitespace, and encoding checks passed.
 - Independent runtime, concurrency, safety, UI, test, documentation, and spec-kit reviews completed. Wake synchronization, first-launch copy, obsolete-claim policy, shared worker application, and disconnected persistence findings were resolved.
+- First-round hosted review identified stale Fishing detector state at a tolerance boundary. The cache is now invalidated after the five safety-closing events, and a regression proves the next safe sample republishes `FishingStarted`.
 
 ## Documentation Outcome
 

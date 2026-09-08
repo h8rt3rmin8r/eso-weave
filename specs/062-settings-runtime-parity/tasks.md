@@ -51,10 +51,10 @@
 
 ## Phase 7: Delivery
 
-- [ ] T032 Commit as `fix(062): apply settings runtime contracts` with attribution.
-- [ ] T033 Push and open an official PR with `Closes #95`.
-- [ ] T034 Move issue #95 to PR Review and monitor every CI check and review.
-- [ ] T035 Resolve every first-round hosted review finding.
+- [x] T032 Commit as `fix(062): apply settings runtime contracts` with attribution.
+- [x] T033 Push and open an official PR with `Closes #95`.
+- [x] T034 Move issue #95 to PR Review and monitor every CI check and review.
+- [x] T035 Resolve every first-round hosted review finding.
 - [ ] T036 Trigger exactly one authorized second `@Codex review` and resolve every result.
 - [ ] T037 Confirm green checks, no unresolved review threads, and merge readiness before requesting the merge ritual.
 
