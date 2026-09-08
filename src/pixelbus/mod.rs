@@ -2561,17 +2561,16 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::Quickslot(quickslot));
             }
 
-            // The menu block gates input, so a sample that does not decode must
-            // clear it rather than hold it: holding a stale gate would leave the
-            // application silently not intercepting long after the menu closed,
-            // which looks exactly like a crash.
+            // The menu block authorizes generated input only through a valid
+            // gameplay observation. A sample that does not decode clears the
+            // observation and therefore closes the fail-safe gate.
             let menu = b5.and_then(|c| decode_menu(c, tolerance));
             if menu != self.menu {
                 self.menu = menu;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
                     surface = ?menu,
-                    gates = menu.is_some_and(MenuSurface::gates),
+                    gates = menu.is_none_or(MenuSurface::gates),
                     "menu surface changed"
                 );
                 events.push(PixelBusEvent::MenuGate(menu));

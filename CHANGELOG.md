@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S061 advertises every supported Linux application control and physical
+  keyboard key before interception, reports pass-through failures, starts menu
+  evidence fail closed, and aligns latency and logging help with runtime behavior
+  (issues #93 and #96).
 - S060 makes input authorization revocable across queue and sequence boundaries,
   cancels suspended Fishing deadlines without replay, and distinguishes unmanaged
   PixelBeacon targets from an absent installation. Managed add-on updates commit
@@ -34,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-07: Derive Linux uinput application capabilities from the canonical
+  key universe, union the selected physical keyboard's keys before grab, and
+  forward only key events with explicit failure reporting. Initialize menu
+  evidence closed for every generated-input controller because the prior open
+  defaults contradicted the documented fail-closed safety boundary.
 - 2026-09-07: Carry a monotonic authorization epoch from physical interception
   through weave execution. Closing any applicable gate invalidates queued and
   running work even if the gate reopens before the worker observes it, while a

@@ -116,6 +116,7 @@ fn active_fishing_controller() -> FishingController {
     controller.set_life_state(LifeState::Alive);
     controller.set_world_state(WorldState::Active);
     controller.set_travel_state(TravelState::Inactive);
+    controller.set_gated(false);
     controller
 }
 
@@ -652,7 +653,7 @@ fn safety_preroute_closes_input_without_waiting_for_controller_access() {
 #[test]
 fn s060_safety_preroute_closes_menu_before_controller_access() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
-    assert!(!input.is_menu_gated());
+    assert!(input.is_menu_gated());
 
     route_reader_safety_gate(
         PixelBusEvent::MenuGate(Some(MenuSurface::ChatEntry)),
@@ -875,6 +876,7 @@ fn model_with_clock_and_potion(
     engine.set_life_gated(false);
     engine.set_world_gated(false);
     engine.set_travel_gated(false);
+    engine.set_menu_gated(false);
     let mut weave_engine = WeaveEngine::new(WeaveConfig::default());
     weave_engine.set_life(LifeState::Alive);
     weave_engine.set_world(WorldState::Active);
@@ -886,6 +888,7 @@ fn model_with_clock_and_potion(
     fishing_controller.set_life_state(LifeState::Alive);
     fishing_controller.set_world_state(WorldState::Active);
     fishing_controller.set_travel_state(TravelState::Inactive);
+    fishing_controller.set_gated(false);
     let fishing = Arc::new(Mutex::new(fishing_controller));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
 
@@ -1341,7 +1344,10 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
 
-    assert!(!input.is_menu_gated(), "the default must be ungated");
+    assert!(
+        input.is_menu_gated(),
+        "missing startup evidence must be gated"
+    );
 
     route_reader_event(
         PixelBusEvent::MenuGate(Some(MenuSurface::Mail)),
@@ -1492,7 +1498,7 @@ fn routing_a_resource_event_stores_it_without_touching_fishing() {
         "resources do not touch fishing"
     );
     assert!(
-        !input.is_menu_gated(),
+        input.is_menu_gated(),
         "resources do not touch the input gate"
     );
 }
@@ -1524,7 +1530,7 @@ fn routing_an_ultimate_event_is_display_only() {
     );
     assert_eq!(weave.ultimate(), ultimate);
     assert_eq!(fishing.state(), FishingState::Armed);
-    assert!(!input.is_menu_gated());
+    assert!(input.is_menu_gated());
 }
 
 // Slice 039: the auto-potion gates reach the controller by the routing path.
@@ -1894,7 +1900,7 @@ fn quickslot_events_reach_the_engine_and_nothing_else() {
         "the quickslot does not touch fishing"
     );
     assert!(
-        !input.is_menu_gated(),
+        input.is_menu_gated(),
         "the quickslot does not touch the input gate"
     );
 }

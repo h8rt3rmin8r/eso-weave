@@ -1456,13 +1456,23 @@
     },
     {
       "id": "030",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-030.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-030.md",
       "specs": [
         "specs/060-safety-boundaries"
       ],
-      "evidence": "Issue #92 and issue #94 track the active S060 delivery."
+      "evidence": "Issues #92 and #94 closed and S060 merged in PR #98."
+    },
+    {
+      "id": "031",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-031.md",
+      "specs": [
+        "specs/061-linux-input-copy-parity"
+      ],
+      "evidence": "Issue #93 and issue #96 track the active S061 delivery."
     }
   ],
   "safetyCrosswalk": [

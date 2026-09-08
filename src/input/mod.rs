@@ -364,11 +364,11 @@ impl InputEngine {
             focused: AtomicBool::new(false),
             game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
-            menu_gated: AtomicBool::new(false),
+            menu_gated: AtomicBool::new(true),
             game_gate: shared_gate(true),
             focus_gate: shared_gate(true),
             suspension_gate: shared_gate(false),
-            menu_gate: shared_gate(false),
+            menu_gate: shared_gate(true),
             life_gate: LifeGate(shared_gate(true)),
             roll_gate: RollGate(AtomicGate::new(true, Some(Arc::clone(&weave_epoch)), None)),
             world_gate: shared_gate(true),
@@ -409,8 +409,8 @@ impl InputEngine {
             self.game_active.store(false, Ordering::Release);
         }
         if !active {
-            self.menu_gated.store(false, Ordering::Relaxed);
-            self.menu_gate.set(false);
+            self.menu_gated.store(true, Ordering::Relaxed);
+            self.menu_gate.set(true);
             self.life_gate.set(true);
             self.roll_gate.set(true);
             self.world_gate.set(true);
@@ -466,10 +466,9 @@ impl InputEngine {
     /// automatic, game-driven form of suspend and carries the same exemption for
     /// the application's own toggle hotkeys.
     ///
-    /// Defaults to `false`, which is the value that reproduces the engine's
-    /// behavior before this gate existed. Every failure mode (an addon too old to
-    /// publish the signal, a sample that does not decode, a lost beacon signal)
-    /// leaves it there, so the gate can never fail closed.
+    /// Defaults to `true`. Every unavailable-evidence mode (an addon too old to
+    /// publish the signal, a sample that does not decode, or a lost beacon signal)
+    /// keeps or returns this gate to its fail-closed state.
     pub fn set_menu_gated(&self, gated: bool) {
         if gated {
             self.menu_gate.set(true);

@@ -94,9 +94,7 @@ blue, purple, or dot color alone.
 The live log uses an always-available in-memory ring buffer, colorizes events by
 level, and autoscrolls while at the bottom. Its level selector currently updates
 and persists the global captured level used by both the ring and optional file
-sink. Older display-only filter wording is tracked in
-[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96). Its panel is
-resizable between a six-line readable minimum and the space
+sink. Its panel is resizable between a six-line readable minimum and the space
 above it, and never covers interactive controls. On every rendered frame,
 including simultaneous splitter drag and window resize, the pane's top edge
 remains at or below the central content's bottom edge. Dragged and restored

@@ -17,6 +17,7 @@ fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
     pair.0.set_roll_gated(false);
     pair.0.set_world_gated(false);
     pair.0.set_travel_gated(false);
+    pair.0.set_menu_gated(false);
     pair
 }
 
@@ -75,7 +76,7 @@ fn inactive_game_never_intercepts_even_when_focused() {
 }
 
 #[test]
-fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
+fn game_exit_closes_menu_gate_and_clears_held_keys_for_restart() {
     let (engine, rx) = engine();
     engine.set_focused(true);
     engine.set_menu_gated(false);
@@ -88,7 +89,7 @@ fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
 
     engine.set_menu_gated(true);
     engine.set_game_active(false);
-    assert!(!engine.is_menu_gated());
+    assert!(engine.is_menu_gated());
     assert_eq!(
         engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real)),
         Decision::Pass
@@ -101,6 +102,7 @@ fn game_exit_clears_menu_gate_and_held_keys_for_restart() {
     engine.set_roll_gated(false);
     engine.set_world_gated(false);
     engine.set_travel_gated(false);
+    engine.set_menu_gated(false);
     assert_eq!(
         engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
         Decision::Suppress
@@ -168,6 +170,7 @@ fn full_channel_drops_without_blocking() {
     engine.set_roll_gated(false);
     engine.set_world_gated(false);
     engine.set_travel_gated(false);
+    engine.set_menu_gated(false);
     engine.set_focused(true);
 
     // First press fills the capacity-1 channel; further distinct presses must not
@@ -424,11 +427,10 @@ fn focus_scoping_is_unconditional_regardless_of_the_gate() {
 }
 
 #[test]
-fn a_fresh_engine_is_ungated() {
-    // FR-013. The default is the value that reproduces the pre-feature behavior,
-    // so an addon too old to publish the signal changes nothing.
-    let (engine, _rx) = engine();
-    assert!(!engine.is_menu_gated());
+fn a_fresh_engine_is_menu_gated_until_valid_evidence_arrives() {
+    // S061 FR-010. Unknown startup evidence cannot authorize synthesis.
+    let (engine, _rx) = InputEngine::new(BindingTable::default(), 64);
+    assert!(engine.is_menu_gated());
 }
 
 #[test]
@@ -475,6 +477,7 @@ fn roll_gate_defaults_closed_passes_physical_weaves_and_exempts_toggles() {
     engine.set_life_gated(false);
     engine.set_world_gated(false);
     engine.set_travel_gated(false);
+    engine.set_menu_gated(false);
     assert!(engine.is_roll_gated());
 
     let skill = engine.bindings().key_for(Action::Skill1);
@@ -594,6 +597,7 @@ fn s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes() {
             input.set_roll_gated(false);
             input.set_world_gated(false);
             input.set_travel_gated(false);
+            input.set_menu_gated(false);
         },
     );
     assert_invalidated(

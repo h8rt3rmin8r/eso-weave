@@ -29,7 +29,7 @@ manifest, so changing a count cannot hide an omission or substitution.
 - Current maintainer records live under `docs/project/`.
 - Plans 001 through 027 and the website announcement live under `docs/archive/`.
 - The post-baseline lifecycle preserves every completed plan with concrete
-  delivery evidence and names plan 030 as the sole active S060 entry. The policy
+  delivery evidence and names plan 031 as the sole active S061 entry. The policy
   requires the matching plan file and index row for every state and rejects
   simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six

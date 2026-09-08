@@ -97,9 +97,9 @@ clamped between the base and base plus 300 ms, and does not change `d_heavy` or
 `global_cooldown`. Without current latency telemetry, base values remain in use.
 
 For example, a 50 ms base delay, 100 ms latency, and `k = 0.25` produce a 75 ms
-effective delay. Latency adaptation adds a bounded allowance; it does not shorten
-the delay. The current in-app help says "shorten" and is tracked for correction
-in [issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+effective delay. Latency adaptation adds a bounded allowance to Light Attack and
+Bash delays; it does not shorten them, and the scaled allowance is capped at
+300 ms.
 
 ## Weapon bars and timing
 

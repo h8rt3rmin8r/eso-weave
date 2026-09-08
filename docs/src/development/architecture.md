@@ -16,7 +16,7 @@ test seams. Platform modules contain operating-system calls.
 | Pixel Bus Reader | Layout negotiation, one-frame sampling, decoding, change detection, freshness, invalidation, and display description | User feature policy |
 | Beacon Manager | AddOns discovery, ownership classification, embedded install files, managed in-place update and removal, block-size redeploy, and API-version upkeep | ESO runtime loading of the addon |
 | Config and Session State | Separate user settings and derived runtime stores, notices, and serialization | Module-specific validation semantics |
-| Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | Live Log presentation filter |
+| Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | UI presentation |
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
 
 ## Thread model
@@ -69,10 +69,8 @@ Logging follows:
 
 `structured event -> global level and input-suppression filter -> bounded in-memory ring -> optional monthly file sink`
 
-The Live Log reads the ring and applies a presentation filter. The current UI
-also persists and applies its dropdown as the global capture level. Earlier
-display-only wording is incorrect and tracked in
-[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+The Live Log reads the ring after its dropdown has applied and persisted the
+global captured level used by both the ring and optional file sink.
 
 ## Ordering rules
 
@@ -94,13 +92,9 @@ deadline.
 These issues describe shipped behavior. They are not fixed by this documentation
 slice:
 
-- [#93](https://github.com/h8rt3rmin8r/eso-weave/issues/93): the Linux uinput
-  capability list omits two shipped mapped keys.
 - [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): saved Fishing and
   PixelBus settings are not propagated to their running owners, and the modal
   does not expose the Fishing Interact Key.
-- [#96](https://github.com/h8rt3rmin8r/eso-weave/issues/96): latency, Live Log,
-  and menu-gate descriptions have stale copies in UI or source text.
 
 See [Action Authorization](../concepts/action-authorization.md) for the complete
 gate comparison, [State Machines](state-machines.md) for transitions, and

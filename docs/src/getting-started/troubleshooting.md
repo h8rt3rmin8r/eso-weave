@@ -49,8 +49,7 @@ evidence. Dropped work is not replayed.
    X window and capture evidence required by the current application.
 4. Confirm the physical keyboard exposes the expected keys and no other program
    has exclusively grabbed it.
-5. Review [issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) if the
-   missing action specifically uses the default Fishing `E` key or `F3`.
+5. Inspect the Live Log for an explicit pass-through emission error.
 
 Do not use recursive permission changes or world-writable device modes.
 
@@ -109,8 +108,6 @@ Use the exact suffix:
   Alive, Active, and Inactive evidence, then make a fresh start as described on
   the [Fishing page](../features/fishing.md#status-meanings).
 
-On Linux, the default generated `E` is also affected by issue #93.
-
 ## Auto Potion is Dormant or Blocked
 
 The Auto Potion line names the first current blocker. Use the
@@ -131,9 +128,8 @@ same `.invalid` preservation guarantee.
 
 Open **View > Live Log**. Select INFO for ordinary lifecycle diagnosis, DEBUG for
 a bounded reproduction, or TRACE only when resource sampling detail is needed.
-The dropdown currently changes and persists the global captured level, despite
-older wording that described it as display-only. This copy mismatch is tracked in
-[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+The dropdown changes and persists the global captured level for both the Live Log
+ring and optional file logging.
 
 Enable **Write Log to File** before reproducing a problem that must survive the
 current session. See [Logging](../reference/logging.md) for paths and privacy.

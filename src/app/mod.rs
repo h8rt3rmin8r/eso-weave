@@ -1230,7 +1230,7 @@ pub enum UiIntent {
     ApplySettings(Box<SettingsForm>),
     /// Attach or detach the live log panel.
     ToggleLogPanel(bool),
-    /// Set the panel-local minimum log level.
+    /// Set and persist the global captured log level.
     SetLogFilter(LevelName),
     /// Persist the live-log panel height (a user layout preference), in points.
     SetLogHeight(u32),
@@ -1475,7 +1475,7 @@ pub struct AppView {
     pub auto_potion: AutoPotionView,
     /// Whether the log panel is attached.
     pub log_panel_open: bool,
-    /// The panel-local minimum log level.
+    /// The global captured log level shared by the ring and optional file sink.
     pub log_filter: LevelName,
 }
 

@@ -36,6 +36,7 @@ fn open_input_safety(input: &InputEngine) {
     input.set_roll_gated(false);
     input.set_world_gated(false);
     input.set_travel_gated(false);
+    input.set_menu_gated(false);
 }
 
 fn open_weave_safety(engine: &mut WeaveEngine) {
@@ -212,6 +213,7 @@ fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
     input.set_life_gated(false);
     input.set_world_gated(false);
     input.set_travel_gated(false);
+    input.set_menu_gated(false);
     engine.set_world(WorldState::Active);
     engine.set_travel(TravelState::Inactive);
 

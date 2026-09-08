@@ -92,21 +92,7 @@ const WEAVE_TYPES: [WeaveType; 4] = [
     WeaveType::BlockCasting,
 ];
 
-const KEYS: [Key; 13] = [
-    Key::Digit1,
-    Key::Digit2,
-    Key::Digit3,
-    Key::Digit4,
-    Key::Digit5,
-    Key::E,
-    Key::R,
-    Key::X,
-    Key::Q,
-    Key::Space,
-    Key::F1,
-    Key::F2,
-    Key::F3,
-];
+const KEYS: [Key; 13] = Key::ALL;
 
 const LEVELS: [LevelName; 6] = [
     LevelName::Off,

@@ -325,7 +325,7 @@ impl FishingController {
             state: FishingState::Disabled,
             deadline: None,
             stop_reason: None,
-            gated: false,
+            gated: true,
             suspended: false,
             suspension_recovery_required: false,
             game_active: false,
@@ -389,6 +389,9 @@ impl FishingController {
                 }
                 if !self.focused {
                     self.stop_reason = Some(StopReason::Unfocused);
+                    return;
+                }
+                if self.gated {
                     return;
                 }
                 if self.block_for_safety() {
@@ -631,7 +634,7 @@ impl FishingController {
         self.game_active = active;
         self.focused = focused;
         if !active {
-            self.gated = false;
+            self.gated = true;
             self.life = LifeState::Unknown;
             self.life_gate.set(true);
             self.world = WorldState::Unknown;
@@ -673,7 +676,7 @@ impl FishingController {
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and
     /// clears any prior stop reason now that a fresh session is starting.
     fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
-        if self.block_for_safety() {
+        if self.gated || self.block_for_safety() {
             return;
         }
         if self.send_interact(sink) {
