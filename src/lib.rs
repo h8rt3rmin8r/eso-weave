@@ -9,6 +9,7 @@
 pub mod app;
 pub mod beacon;
 pub mod config;
+pub mod documentation;
 pub mod fishing;
 pub mod game;
 pub mod input;

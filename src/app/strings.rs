@@ -200,6 +200,9 @@ pub const LOG_FILTER_TOOLTIP: &str =
 // Menu.
 pub const MENU_FILE: &str = "File";
 pub const MENU_VIEW: &str = "View";
+pub const MENU_HELP: &str = "Help";
+pub const MENU_DOCUMENTATION: &str = "Documentation";
+pub const MENU_DOCUMENTATION_TOOLTIP: &str = "Open the complete offline guide in your browser.";
 pub const MENU_SETTINGS: &str = "Settings";
 pub const MENU_SETTINGS_TOOLTIP: &str = "Open settings.";
 pub const MENU_EXIT: &str = "Exit";

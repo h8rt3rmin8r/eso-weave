@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-032.md](plan-032.md) | Active | S062 closes Settings runtime parity and Fishing Interact Key defect #95. |
+| [plan-033.md](plan-033.md) | Active | S063 bundles secure searchable offline documentation and closes #82. |

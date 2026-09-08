@@ -25,6 +25,8 @@ version authority. Before any package build, verification requires:
 2. A non-empty matching section in `CHANGELOG.md`.
 3. Exactly one non-empty Highlights subsection for release notes.
 4. One through six top-level Highlights bullets totaling no more than 120 words.
+5. Exact mdBook 0.5.4 and mdbook-linkcheck2 0.13.0 tools generate and validate
+   the canonical site during each platform production build.
 
 The release body contains that concise Highlights excerpt and a tag-specific
 link to the complete changelog. Detailed engineering records remain in the
@@ -43,6 +45,11 @@ PixelBeacon is embedded in the application binary and installed from the
 application interface. It is not a separate release asset. Container images,
 macOS packages, and Linux aarch64 packages are outside the current artifact
 contract.
+
+The searchable documentation site is also embedded directly in every executable.
+Generated HTML remains ignored build output. A release-profile Cargo build fails
+if the exact documentation tools are absent, mismatched, or cannot produce the
+site, so package jobs cannot silently ship the development fixture.
 
 ## Workflow ownership and permissions
 
@@ -63,6 +70,7 @@ dated decision process. This published explanation does not replace that rule.
 | Tag and Cargo version differ | Verification fails before package builds |
 | Changelog section is absent or empty | Verification fails before package builds |
 | Highlights are missing, duplicated, malformed, too numerous, or too long | Verification fails before package builds |
+| Documentation tools are absent, mismatched, or generation fails | The platform binary and packages are not produced |
 | Either platform build fails | Final release job cannot run |
 | Required artifact or hash is absent | Assembly or publication fails |
 | Release creation lacks permission | Packages remain workflow artifacts; no GitHub Release is created |

@@ -58,6 +58,8 @@ The release workflow performs these as gated steps and fails the release if any 
    (assembled from `packaging/appimage/`), and a plain tarball.
 6. A GitHub Release is created, with notes taken only from Highlights, a tag-specific link to the
    complete changelog, and every asset plus the combined `SHA256SUMS` attached.
+7. Both platform jobs install exact `mdbook 0.5.4` and `mdbook-linkcheck2 0.13.0`; each
+   release-profile Cargo build regenerates and embeds the complete site or fails before packaging.
 
 You are responsible for the version number and that the changelog is current. Everything else is
 the machine's job, and steps 1 through 3 catch the common omissions before any asset is built.

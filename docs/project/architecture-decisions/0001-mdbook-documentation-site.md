@@ -72,6 +72,10 @@ the protected `github-pages` environment and alone receives `pages: write` and
   restrict branches to `main`.
 - Tool upgrades require a reviewed version change, fixture/build evidence, and a
   dated changelog decision when the pinned workflow changes.
+- S063 completes the planned executable delivery. Release-profile Cargo builds
+  run the same exact tools and compile every generated file into an immutable
+  manifest. The application exposes that corpus through one bounded loopback-only
+  GET and HEAD service; debug and test builds use a checked fixture.
 
 ## References
 

@@ -22,6 +22,7 @@ use eso_weave::app::{
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment, MANAGED_MARKER, MANIFEST};
 use eso_weave::config::{LoggingPrefs, Settings, Theme};
+use eso_weave::documentation::BrowserOpener;
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
@@ -106,6 +107,57 @@ fn harness_for_app(app: EsoWeaveApp, size: egui::Vec2) -> Harness<'static, EsoWe
 
 /// Number of frames to settle the two-frame stability gate before reading state.
 const SETTLE: usize = 6;
+
+#[test]
+fn help_menu_exposes_the_offline_documentation_action() {
+    let mut harness = harness_at(egui::vec2(760.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Help")
+        .click_accesskit();
+    harness.step();
+    harness.get_by_role_and_label(
+        egui::accesskit::Role::Button,
+        eso_weave::app::strings::MENU_DOCUMENTATION,
+    );
+}
+
+struct FailingDocumentationOpener;
+
+impl BrowserOpener for FailingDocumentationOpener {
+    fn open(&self, _url: &str) -> std::io::Result<()> {
+        Err(std::io::Error::other("no default browser"))
+    }
+}
+
+#[test]
+fn documentation_launch_failure_is_visible_and_non_fatal() {
+    let app = test_app().with_documentation_opener(Box::new(FailingDocumentationOpener));
+    let mut harness = harness_for_app(app, egui::vec2(760.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Help")
+        .click_accesskit();
+    harness.step();
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            eso_weave::app::strings::MENU_DOCUMENTATION,
+        )
+        .click_accesskit();
+    harness.step();
+    assert!(harness
+        .state()
+        .documentation_error()
+        .unwrap()
+        .contains("no default browser"));
+    harness.get_by_label("Documentation unavailable");
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Close");
+}
 
 #[test]
 fn dashboard_stacks_narrow_and_uses_columns_wide() {
