@@ -60,15 +60,18 @@ fn verify_tool(root: &Path, executable: &str, expected: &str) {
     assert_eq!(actual, expected, "unsupported documentation tool version");
 }
 
+#[cfg(windows)]
 fn command(executable: &str) -> Command {
     let mut command = Command::new(executable);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
     command
+}
+
+#[cfg(not(windows))]
+fn command(executable: &str) -> Command {
+    Command::new(executable)
 }
 
 fn write_manifest(source: &Path, release: bool) {

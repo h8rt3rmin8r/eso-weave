@@ -53,9 +53,9 @@
 
 ## Phase 7: Delivery
 
-- [ ] T034 Commit as `feat(063): bundle offline documentation` with attribution.
-- [ ] T035 Push and open an official PR with `Closes #82`.
-- [ ] T036 Move issue #82 to PR Review and monitor every CI check and review.
+- [x] T034 Commit as `feat(063): bundle offline documentation` with attribution.
+- [x] T035 Push and open an official PR with `Closes #82`.
+- [x] T036 Move issue #82 to PR Review and monitor every CI check and review.
 - [ ] T037 Resolve every first-round hosted review finding.
 - [ ] T038 Trigger exactly one authorized second `@Codex review` and resolve every result.
 - [ ] T039 Confirm green checks, no unresolved review threads, and merge readiness before requesting the merge ritual.
