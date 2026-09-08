@@ -161,18 +161,24 @@ impl BrowserOpener for NativeBrowser {
     fn open(&self, url: &str) -> io::Result<()> {
         use std::process::{Command, Stdio};
 
-        let mut child = Command::new("xdg-open")
+        let status = Command::new("xdg-open")
             .arg(url)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .spawn()?;
-        thread::Builder::new()
-            .name("eso-weave-browser-open".to_owned())
-            .spawn(move || {
-                let _ = child.wait();
-            })?;
+            .status()?;
+        xdg_open_result(status)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn xdg_open_result(status: std::process::ExitStatus) -> io::Result<()> {
+    if status.success() {
         Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "xdg-open could not open the documentation ({status})"
+        )))
     }
 }
 
@@ -413,4 +419,19 @@ fn write_all_before(stream: &mut TcpStream, mut bytes: &[u8], deadline: Instant)
         }
     }
     Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+
+    use super::xdg_open_result;
+
+    #[test]
+    fn xdg_open_status_controls_browser_result() {
+        assert!(xdg_open_result(ExitStatus::from_raw(0)).is_ok());
+        let error = xdg_open_result(ExitStatus::from_raw(4 << 8)).unwrap_err();
+        assert!(error.to_string().contains("exit status: 4"));
+    }
 }
