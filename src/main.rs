@@ -26,7 +26,10 @@ use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::{
     Action, InputBackend, InputEngine, InputError, Key, MouseButton, Transition,
 };
-use eso_weave::pixelbus::{self, poll_interval, PixelBusReader, SurfaceSampler};
+use eso_weave::pixelbus::{
+    self, apply_live_reader_update, poll_interval, wait_for_live_config, LiveReaderConfigWait,
+    PixelBusReader, SurfaceSampler,
+};
 use eso_weave::potion::{AutoPotionConfig, AutoPotionController, RealAutoPotionSink};
 use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
 use eso_weave::{logging, platform, version};
@@ -109,6 +112,7 @@ fn main() {
     for notice in &reader_notices {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
+    let (reader_update_tx, reader_update_rx) = std::sync::mpsc::channel();
 
     // The game's stored video settings, used by the out-of-band display
     // detection as a cross-check against what the operating system reports and
@@ -184,6 +188,7 @@ fn main() {
         let input = input.clone();
         let game = game.clone();
         thread::spawn(move || {
+            let mut reader_config = reader_config;
             let mut reader = PixelBusReader::new(reader_config);
             let mut sink =
                 RealFishingSink::new(SharedBackend(backend.clone()), input.fishing_gates());
@@ -215,8 +220,39 @@ fn main() {
                     before_sleep,
                     next_game_probe_ms,
                 );
-                if sleep_ms > 0 {
-                    thread::sleep(Duration::from_millis(sleep_ms));
+                match wait_for_live_config(&reader_update_rx, Duration::from_millis(sleep_ms)) {
+                    LiveReaderConfigWait::Update(update) => {
+                        if let Some(events) =
+                            apply_live_reader_update(&mut reader_config, &mut reader, update)
+                        {
+                            for event in &events {
+                                route_reader_safety_gate(*event, &input);
+                            }
+                            let now = origin.elapsed().as_millis() as u64;
+                            let mut weave = weave.lock().unwrap();
+                            let mut fishing = fishing.lock().unwrap();
+                            let mut potion = potion.lock().unwrap();
+                            for event in events {
+                                route_reader_event(
+                                    event,
+                                    &mut weave,
+                                    &mut fishing,
+                                    &mut potion,
+                                    &input,
+                                    now,
+                                    &mut sink,
+                                );
+                            }
+                        }
+                    }
+                    LiveReaderConfigWait::TimedOut => {}
+                    LiveReaderConfigWait::Disconnected => {
+                        tracing::debug!(
+                            target: "eso_weave::pixelbus",
+                            "reader settings channel disconnected; reader worker stopping"
+                        );
+                        break;
+                    }
                 }
                 let now = origin.elapsed().as_millis() as u64;
                 let requested_generation = input.safety_refresh_generation();
@@ -409,6 +445,7 @@ fn main() {
         potion.clone(),
         game,
         log.clone(),
+        reader_update_tx,
         settings,
         config_dir,
         clock_origin,

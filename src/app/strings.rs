@@ -60,6 +60,7 @@ pub const FISHING_IDLE_SUSPENDED: &str = "Idle (suspended)";
 pub const FISHING_IDLE_PLAYER_UNAVAILABLE: &str = "Idle (player unavailable)";
 pub const FISHING_IDLE_WORLD_UNAVAILABLE: &str = "Idle (world unavailable)";
 pub const FISHING_IDLE_TRAVEL_PENDING: &str = "Idle (travel pending)";
+pub const FISHING_IDLE_SETTINGS_CHANGED: &str = "Idle (settings changed)";
 
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";
@@ -215,6 +216,10 @@ pub const CLUSTER_FISHING: &str = "Fishing";
 pub const CLUSTER_BEACON: &str = "PixelBeacon and Bus";
 pub const CLUSTER_LOGGING: &str = "Logging";
 pub const CLUSTER_KEYBINDINGS: &str = "Keybindings";
+pub const FISHING_SETTINGS_APPLICATION_HELP: &str =
+    "Fishing changes apply while ESO Weave is running. Changing a setting safely stops a requested or active Fishing session; enable it again to use the new values.";
+pub const READER_SETTINGS_APPLICATION_HELP: &str =
+    "Color Tolerance and sampling intervals apply while ESO Weave is running. Block Size remains staged until ESO reloads PixelBeacon and ESO Weave restarts.";
 pub const ACTION_SKILL_1: &str = "Skill 1";
 pub const ACTION_SKILL_2: &str = "Skill 2";
 pub const ACTION_SKILL_3: &str = "Skill 3";
@@ -282,6 +287,10 @@ pub const SET_RECAST_DELAY: Setting = Setting {
     label: "Recast Delay (ms)",
     help: "Delay before casting the line again after a catch or timeout.",
 };
+pub const SET_FISHING_INTERACT_KEY: Setting = Setting {
+    label: "Interact Key",
+    help: "The key ESO Weave sends to cast, reel, and recast.",
+};
 pub const SET_BEACON_PATH: Setting = Setting {
     label: "AddOns Folder Override",
     help: "Use this AddOns folder instead of the auto-detected one. Leave blank to auto-detect.",
@@ -292,7 +301,7 @@ pub const SET_BEACON_ENV: Setting = Setting {
 };
 pub const SET_BLOCK_PX: Setting = Setting {
     label: "Block Size (px)",
-    help: "Advanced: the physical-pixel size of each beacon square, and the only way to shrink the on-screen overlay (which cannot be moved). Changing it re-deploys PixelBeacon and takes effect after a /reloadui and an app restart.",
+    help: "Advanced: the physical-pixel size of each beacon square, and the only way to shrink the on-screen overlay (which cannot be moved). Changing it re-deploys PixelBeacon and takes effect after /reloadui or relog and an ESO Weave restart.",
 };
 pub const SET_TOLERANCE: Setting = Setting {
     label: "Color Tolerance",
@@ -316,7 +325,7 @@ pub const SET_FILE_LOGGING: Setting = Setting {
 };
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 25] = [
+pub const ALL_SETTINGS: [&Setting; 26] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
     &SET_GLOBAL_COOLDOWN,
@@ -329,6 +338,7 @@ pub const ALL_SETTINGS: [&Setting; 25] = [
     &SET_ARM_TIMEOUT,
     &SET_REEL_DELAY,
     &SET_RECAST_DELAY,
+    &SET_FISHING_INTERACT_KEY,
     &SET_BEACON_PATH,
     &SET_BEACON_ENV,
     &SET_BLOCK_PX,
@@ -413,6 +423,7 @@ pub fn all_labels() -> Vec<&'static str> {
         FISHING_IDLE_GAME_INACTIVE,
         FISHING_IDLE_UNFOCUSED,
         FISHING_IDLE_SUSPENDED,
+        FISHING_IDLE_SETTINGS_CHANGED,
         SUSPEND_LABEL,
         FISHING_TOGGLE_LABEL,
         WEAPON_BAR_TITLE,
@@ -496,6 +507,8 @@ pub fn all_tooltips() -> Vec<&'static str> {
         LOG_FILTER_TOOLTIP,
         MENU_SETTINGS_TOOLTIP,
         MENU_LOG_TOGGLE_TOOLTIP,
+        FISHING_SETTINGS_APPLICATION_HELP,
+        READER_SETTINGS_APPLICATION_HELP,
     ];
     for (_, tip) in SKILL_COLUMNS {
         tips.push(tip);

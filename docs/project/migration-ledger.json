@@ -1466,13 +1466,23 @@
     },
     {
       "id": "031",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-031.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-031.md",
       "specs": [
         "specs/061-linux-input-copy-parity"
       ],
-      "evidence": "Issue #93 and issue #96 track the active S061 delivery."
+      "evidence": "Issues #93 and #96 closed and S061 merged in PR #99."
+    },
+    {
+      "id": "032",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-032.md",
+      "specs": [
+        "specs/062-settings-runtime-parity"
+      ],
+      "evidence": "Issue #95 tracks the active S062 delivery."
     }
   ],
   "safetyCrosswalk": [

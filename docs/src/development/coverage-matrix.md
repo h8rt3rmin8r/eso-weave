@@ -27,6 +27,7 @@ together.
 | LOG-020 through LOG-023 | [Pixel Bus Protocol](../reference/pixel-bus-protocol.md) | Layout decoding, B0 through B28 payload decoding, signal loss, invalidation, and recovery republication |
 | LOG-024, LOG-025 | [PixelBeacon](../features/pixelbeacon.md) | `BeaconStatus::Unmanaged`, ownership-gated lifecycle writers, managed in-place update, and bounded API-version upkeep; `s060_install_refuses_unproven_targets_without_mutation`, `s060_api_refresh_does_not_write_an_unmanaged_manifest`, `s060_lifecycle_operations_do_not_follow_an_unproven_link`, and App Model action tests |
 | CFG-001 through CFG-005 | [Configuration](../reference/configuration.md) | Settings and state ownership, migration, write scheduling, and geometry restoration |
+| DEF-005 | [Settings Reference](../reference/settings.md) | `FishingController::apply_config`, `PixelBusReader::apply_live_config`, `wait_for_live_config`, App Model runtime application, Fishing phase tests, reader update tests, and headless Interact Key coverage |
 | CFG-006, CFG-007 | [Logging](../reference/logging.md) | Global capture level, Live Log projection, ring eviction, files, and sink failure |
 | PLT-001, PLT-002 | [Scope and Platform Support](../concepts/scope-and-platform.md) | Windows, X11, XWayland, and pure Wayland capability boundaries |
 | REL-001 | [Installation](../getting-started/installation.md) | Platform packages, permissions, update, removal, and checksums |
@@ -34,19 +35,8 @@ together.
 | REL-004, REL-006 | [Troubleshooting](../getting-started/troubleshooting.md) | Startup failure handling and ordered user diagnosis |
 | REL-005 | [Test Strategy](test-strategy.md) | Pure engines, deterministic clocks, platform traits, addon contracts, headless interface checks, shell contracts, and CI |
 
-## Recorded implementation discrepancies
-
-These rows describe current limitations. Their presence in documentation does
-not claim that implementation work is complete.
-
-| Issue | Current discrepancy | Documentation treatment |
-| --- | --- | --- |
-| [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) | Some saved settings do not apply live, and Fishing Interact Key is not exposed in Settings. | Runtime application and configuration limits are identified on their canonical pages. |
-
 ## How to use the matrix
 
 Start with the canonical page for the contract. Use the named symbol or test to
-verify implementation details. When implementation and documentation differ,
-the discrepancy remains explicit and linked until its issue is resolved; an
-Unknown or unavailable observation never becomes positive authorization merely
-because prose is incomplete.
+verify implementation details. An Unknown or unavailable observation never
+becomes positive authorization merely because prose is incomplete.

@@ -2,14 +2,15 @@
 
 use eso_weave::config::NoticeKind;
 use eso_weave::pixelbus::{
-    block_center, capture_dims, decode_combat, decode_cooldown, decode_latency,
-    decode_layout_header, decode_life_state, decode_menu, decode_movement, decode_quickslot,
-    decode_resource, decode_resources, decode_roll_dodge, decode_travel_state, decode_ultimate,
-    decode_weapon_bar, decode_world_state, fishing_signal, grid_extent, grid_position, grid_rows,
-    layout_header_colors, load_reader_config, poll_interval, sanitize_block_px, status_present,
-    store_reader_config, strip_pixel, ActiveBar, BlockSamples, BusLayout, CombatSignal,
-    CooldownSet, FishingSignal, LayoutFailure, LayoutHeaderSamples, LayoutMode, LayoutState,
-    LifeState, MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
+    apply_live_reader_update, block_center, capture_dims, decode_combat, decode_cooldown,
+    decode_latency, decode_layout_header, decode_life_state, decode_menu, decode_movement,
+    decode_quickslot, decode_resource, decode_resources, decode_roll_dodge, decode_travel_state,
+    decode_ultimate, decode_weapon_bar, decode_world_state, fishing_signal, grid_extent,
+    grid_position, grid_rows, layout_header_colors, load_reader_config, poll_interval,
+    sanitize_block_px, status_present, store_reader_config, strip_pixel, wait_for_live_config,
+    ActiveBar, BlockSamples, BusLayout, CombatSignal, CooldownSet, FishingSignal, LayoutFailure,
+    LayoutHeaderSamples, LayoutMode, LayoutState, LifeState, LiveReaderConfig,
+    LiveReaderConfigWait, MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, RollDodgeState,
     Size, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponBarSignal,
@@ -552,6 +553,211 @@ fn safety_invalidation_fails_closed_and_republishes_unchanged_values() {
     let refreshed = reader.observe(safe, 1);
     assert!(refreshed.contains(&PixelBusEvent::World(WorldState::Active)));
     assert!(refreshed.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+}
+
+#[test]
+fn live_reader_config_updates_only_live_fields_and_reports_tolerance_changes() {
+    let mut running = ReaderConfig {
+        tolerance: 2,
+        heartbeat_timeout_ms: 2_345,
+        block_px: 8,
+        interval_fishing_ms: 100,
+        interval_idle_ms: 1_000,
+    };
+    let requested = ReaderConfig {
+        tolerance: 6,
+        heartbeat_timeout_ms: 9_999,
+        block_px: 32,
+        interval_fishing_ms: 75,
+        interval_idle_ms: 750,
+    };
+
+    assert!(running.apply_live(LiveReaderConfig::from(requested)));
+    assert_eq!(running.tolerance, 6);
+    assert_eq!(running.interval_fishing_ms, 75);
+    assert_eq!(running.interval_idle_ms, 750);
+    assert_eq!(running.block_px, 8, "live updates must not change geometry");
+    assert_eq!(
+        running.heartbeat_timeout_ms, 2_345,
+        "live updates must not change the internal heartbeat timeout"
+    );
+
+    let interval_only = LiveReaderConfig {
+        tolerance: running.tolerance,
+        interval_fishing_ms: 60,
+        interval_idle_ms: 600,
+    };
+    assert!(!running.apply_live(interval_only));
+    assert_eq!(running.interval_fishing_ms, 60);
+    assert_eq!(running.interval_idle_ms, 600);
+}
+
+fn safe_runtime_samples() -> BlockSamples {
+    BlockSamples {
+        status: Some(MAGENTA),
+        menu: Some(menu(0)),
+        life: Some(life(0x20)),
+        world: Some(world(0xE0)),
+        roll_dodge: Some(roll_dodge(0x80)),
+        travel: Some(travel(0x80)),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn tolerance_update_invalidates_every_cached_safety_observation_before_resampling() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let safe = safe_runtime_samples();
+    let initial = reader.observe(safe, 0);
+    assert!(initial.contains(&PixelBusEvent::MenuGate(Some(MenuSurface::None))));
+    assert!(initial.contains(&PixelBusEvent::Life(LifeState::Alive)));
+    assert!(initial.contains(&PixelBusEvent::World(WorldState::Active)));
+    assert!(initial.contains(&PixelBusEvent::RollDodge(RollDodgeState::Inactive)));
+    assert!(initial.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+
+    let update = LiveReaderConfig {
+        tolerance: 3,
+        ..LiveReaderConfig::from(ReaderConfig::default())
+    };
+    assert_eq!(
+        reader.apply_live_config(update),
+        Some([
+            PixelBusEvent::MenuGate(None),
+            PixelBusEvent::Life(LifeState::Unknown),
+            PixelBusEvent::World(WorldState::Unknown),
+            PixelBusEvent::RollDodge(RollDodgeState::Unknown),
+            PixelBusEvent::Travel(TravelState::Unknown),
+        ])
+    );
+
+    let refreshed = reader.observe(safe, 1);
+    assert!(refreshed.contains(&PixelBusEvent::MenuGate(Some(MenuSurface::None))));
+    assert!(refreshed.contains(&PixelBusEvent::Life(LifeState::Alive)));
+    assert!(refreshed.contains(&PixelBusEvent::World(WorldState::Active)));
+    assert!(refreshed.contains(&PixelBusEvent::RollDodge(RollDodgeState::Inactive)));
+    assert!(refreshed.contains(&PixelBusEvent::Travel(TravelState::Inactive)));
+}
+
+#[test]
+fn interval_only_live_update_preserves_cached_observations_and_startup_values() {
+    let config = ReaderConfig {
+        heartbeat_timeout_ms: 4_321,
+        block_px: 8,
+        ..ReaderConfig::default()
+    };
+    let mut reader = PixelBusReader::new(config);
+    let safe = safe_runtime_samples();
+    reader.observe(safe, 0);
+
+    let update = LiveReaderConfig {
+        tolerance: config.tolerance,
+        interval_fishing_ms: 50,
+        interval_idle_ms: 500,
+    };
+    assert_eq!(reader.apply_live_config(update), None);
+    assert_eq!(reader.config().block_px, 8);
+    assert_eq!(reader.config().heartbeat_timeout_ms, 4_321);
+    assert_eq!(reader.config().interval_fishing_ms, 50);
+    assert_eq!(reader.config().interval_idle_ms, 500);
+
+    let unchanged = reader.observe(safe, 1);
+    assert!(!unchanged.iter().any(|event| matches!(
+        event,
+        PixelBusEvent::MenuGate(_)
+            | PixelBusEvent::Life(_)
+            | PixelBusEvent::World(_)
+            | PixelBusEvent::RollDodge(_)
+            | PixelBusEvent::Travel(_)
+    )));
+}
+
+#[test]
+fn worker_update_boundary_keeps_polling_and_decoding_on_one_live_config() {
+    let startup = ReaderConfig {
+        heartbeat_timeout_ms: 4_321,
+        block_px: 8,
+        ..ReaderConfig::default()
+    };
+    let mut poll_config = startup;
+    let mut reader = PixelBusReader::new(startup);
+    let update = LiveReaderConfig {
+        tolerance: 6,
+        interval_fishing_ms: 60,
+        interval_idle_ms: 600,
+    };
+
+    assert!(apply_live_reader_update(&mut poll_config, &mut reader, update).is_some());
+    assert_eq!(LiveReaderConfig::from(poll_config), update);
+    assert_eq!(LiveReaderConfig::from(reader.config()), update);
+    assert_eq!(poll_config.block_px, 8);
+    assert_eq!(reader.config().block_px, 8);
+    assert_eq!(poll_config.heartbeat_timeout_ms, 4_321);
+    assert_eq!(reader.config().heartbeat_timeout_ms, 4_321);
+}
+
+#[test]
+fn live_reader_wait_wakes_before_the_old_deadline() {
+    let (tx, rx) = std::sync::mpsc::sync_channel(0);
+    let sender = std::thread::spawn(move || {
+        tx.send(LiveReaderConfig {
+            tolerance: 3,
+            interval_fishing_ms: 30,
+            interval_idle_ms: 300,
+        })
+        .unwrap();
+    });
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        wait_for_live_config(&rx, std::time::Duration::from_secs(2)),
+        LiveReaderConfigWait::Update(LiveReaderConfig {
+            tolerance: 3,
+            interval_fishing_ms: 30,
+            interval_idle_ms: 300,
+        })
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(1),
+        "the update should interrupt the old two-second wait"
+    );
+    sender.join().unwrap();
+}
+
+#[test]
+fn live_reader_wait_coalesces_a_queued_burst_to_the_latest_complete_update() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    for tolerance in [3, 4, 5] {
+        tx.send(LiveReaderConfig {
+            tolerance,
+            interval_fishing_ms: u64::from(tolerance) * 10,
+            interval_idle_ms: u64::from(tolerance) * 100,
+        })
+        .unwrap();
+    }
+
+    assert_eq!(
+        wait_for_live_config(&rx, std::time::Duration::from_secs(1)),
+        LiveReaderConfigWait::Update(LiveReaderConfig {
+            tolerance: 5,
+            interval_fishing_ms: 50,
+            interval_idle_ms: 500,
+        })
+    );
+}
+
+#[test]
+fn live_reader_wait_distinguishes_timeout_from_disconnect() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    assert_eq!(
+        wait_for_live_config(&rx, std::time::Duration::ZERO),
+        LiveReaderConfigWait::TimedOut
+    );
+
+    drop(tx);
+    assert_eq!(
+        wait_for_live_config(&rx, std::time::Duration::from_secs(1)),
+        LiveReaderConfigWait::Disconnected
+    );
 }
 
 /// A sample set carrying only the status block, so the reader sees a live beacon

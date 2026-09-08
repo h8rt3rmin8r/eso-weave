@@ -23,6 +23,8 @@ pub use windows::GdiSampler;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -1309,7 +1311,77 @@ pub struct ReaderConfig {
     pub interval_idle_ms: u64,
 }
 
+/// The complete subset of reader settings that can change while the worker runs.
+///
+/// Block geometry remains fixed for the process lifetime because the reader and
+/// PixelBeacon must agree on the physical square size. The heartbeat timeout is
+/// internal rather than user-configurable, so neither value can enter this update
+/// path accidentally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveReaderConfig {
+    /// Per-channel color match tolerance.
+    pub tolerance: u8,
+    /// Sampling interval while fishing is enabled.
+    pub interval_fishing_ms: u64,
+    /// Sampling interval otherwise.
+    pub interval_idle_ms: u64,
+}
+
+impl From<ReaderConfig> for LiveReaderConfig {
+    fn from(config: ReaderConfig) -> Self {
+        Self {
+            tolerance: config.tolerance,
+            interval_fishing_ms: config.interval_fishing_ms,
+            interval_idle_ms: config.interval_idle_ms,
+        }
+    }
+}
+
+/// Outcome from waiting for a live reader configuration update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveReaderConfigWait {
+    /// One or more complete updates arrived; this is the newest queued value.
+    Update(LiveReaderConfig),
+    /// The current worker deadline arrived before a configuration update.
+    TimedOut,
+    /// Every sender was dropped before an update arrived.
+    Disconnected,
+}
+
+/// Waits for a reader update or the current worker deadline, coalescing a burst
+/// of complete messages so the newest immediately available value wins.
+pub fn wait_for_live_config(
+    receiver: &Receiver<LiveReaderConfig>,
+    timeout: Duration,
+) -> LiveReaderConfigWait {
+    let mut newest = match receiver.recv_timeout(timeout) {
+        Ok(config) => config,
+        Err(RecvTimeoutError::Timeout) => return LiveReaderConfigWait::TimedOut,
+        Err(RecvTimeoutError::Disconnected) => return LiveReaderConfigWait::Disconnected,
+    };
+
+    loop {
+        match receiver.try_recv() {
+            Ok(config) => newest = config,
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => {
+                return LiveReaderConfigWait::Update(newest);
+            }
+        }
+    }
+}
+
 impl ReaderConfig {
+    /// Applies runtime-safe reader fields and reports whether color tolerance
+    /// changed. Startup block geometry and the internal heartbeat timeout remain
+    /// untouched by construction.
+    pub fn apply_live(&mut self, update: LiveReaderConfig) -> bool {
+        let tolerance_changed = self.tolerance != update.tolerance;
+        self.tolerance = update.tolerance;
+        self.interval_fishing_ms = update.interval_fishing_ms;
+        self.interval_idle_ms = update.interval_idle_ms;
+        tolerance_changed
+    }
+
     /// The legacy status block (B0) sample point.
     pub fn status_point(&self) -> (u32, u32) {
         block_center(self.block_px, 0)
@@ -2200,6 +2272,17 @@ pub struct PixelBusReader {
     had_heartbeat: bool,
 }
 
+/// Applies one worker update boundary to both cadence selection and pixel
+/// decoding, returning fail-closed events when tolerance changed.
+pub fn apply_live_reader_update(
+    poll_config: &mut ReaderConfig,
+    reader: &mut PixelBusReader,
+    update: LiveReaderConfig,
+) -> Option<[PixelBusEvent; 5]> {
+    poll_config.apply_live(update);
+    reader.apply_live_config(update)
+}
+
 impl PixelBusReader {
     /// Creates a reader with the given configuration.
     pub fn new(config: ReaderConfig) -> Self {
@@ -2223,6 +2306,34 @@ impl PixelBusReader {
             travel: TravelState::Unknown,
             had_heartbeat: false,
         }
+    }
+
+    /// The effective configuration used by the running reader.
+    pub fn config(&self) -> ReaderConfig {
+        self.config
+    }
+
+    /// Applies the runtime-safe reader subset. A color-tolerance boundary clears
+    /// every cached observation that can authorize generated input and returns the
+    /// fail-closed events the worker must route before taking a fresh sample.
+    /// Interval-only and identical updates preserve all observations.
+    pub fn apply_live_config(&mut self, update: LiveReaderConfig) -> Option<[PixelBusEvent; 5]> {
+        if !self.config.apply_live(update) {
+            return None;
+        }
+
+        self.menu = None;
+        self.life = LifeState::Unknown;
+        self.world = WorldState::Unknown;
+        self.roll_dodge = RollDodgeState::Unknown;
+        self.travel = TravelState::Unknown;
+        Some([
+            PixelBusEvent::MenuGate(None),
+            PixelBusEvent::Life(LifeState::Unknown),
+            PixelBusEvent::World(WorldState::Unknown),
+            PixelBusEvent::RollDodge(RollDodgeState::Unknown),
+            PixelBusEvent::Travel(TravelState::Unknown),
+        ])
     }
 
     /// Whether the signal is currently lost.

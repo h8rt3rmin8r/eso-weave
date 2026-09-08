@@ -40,6 +40,7 @@ device capability set before interception begins.
 | Idle (player unavailable) | Alive is not authoritatively observed |
 | Idle (world unavailable) | World State is loading or Unknown |
 | Idle (travel pending) | A recall or jump is pending or cannot be ruled out |
+| Idle (settings changed) | Fishing settings changed; start Fishing explicitly to use them |
 
 The request is retained through game inactivity, focus loss, and life, world, or
 travel safety cancellation, but no generated input is retained for replay. After
@@ -64,14 +65,11 @@ ticks. It never blocks a worker and never sends input after losing the beacon.
 After start, the controller sends the interact key once and waits up to
 `arm_timeout_ms` (8000 ms by default) for a cast. A bite schedules the reel after
 `reel_delay_ms` (100 ms), then the next cast after `recast_delay_ms` (3000 ms).
-All three values and the interact key are configurable.
-
-**Current Settings limitation:** The modal exposes Arm Timeout, Reel Delay, and
-Recast Delay, but no interact-key control. The stored interact key defaults to
-`E` and can exist in `config.json`; there is no supported in-app editor for it in
-this release. Fishing and Pixel Bus changes are saved but are not propagated to
-their running components, so restart ESO Weave after changing them. These gaps
-are tracked in [issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95).
+All three values and the Interact Key are configurable in Settings and apply to
+the running controller. A changed Fishing configuration stops requested or
+active work without emitting another interact, clears its pending deadline, and
+shows **Idle (settings changed)**. Start Fishing explicitly to use the new
+configuration. An identical settings application preserves the current state.
 
 If a native game menu opens, autonomous reel and recast actions are deferred and
 retried. The state cannot advance past an interact that ESO did not receive. The

@@ -39,6 +39,7 @@ fn test_app_with_settings(settings: Settings) -> EsoWeaveApp {
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
     let fishing = Arc::new(Mutex::new(FishingController::new(FishingConfig::default())));
     let (_dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
+    let (reader_update_tx, _reader_updates) = mpsc::channel();
     let model = AppModel::new(
         Arc::new(engine),
         weave,
@@ -48,6 +49,7 @@ fn test_app_with_settings(settings: Settings) -> EsoWeaveApp {
             eso_weave::potion::AutoPotionConfig::default(),
         ))),
         log,
+        reader_update_tx,
         settings,
         None,
         std::time::Instant::now(),
@@ -58,6 +60,7 @@ fn test_app_with_settings(settings: Settings) -> EsoWeaveApp {
     // disconnected channel changing behavior mid-test.
     std::mem::forget(toggle_tx);
     std::mem::forget(api_tx);
+    std::mem::forget(_reader_updates);
     EsoWeaveApp::new(model, toggle_rx, api_rx, None)
 }
 
@@ -1171,6 +1174,21 @@ fn render_modal_at(size: egui::Vec2) -> EsoWeaveApp {
         harness.step();
     }
     harness.into_state()
+}
+
+#[test]
+fn s062_settings_modal_exposes_fishing_key_and_application_boundaries() {
+    let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
+    harness.step();
+    harness.state_mut().set_settings_open(true);
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+
+    harness.get_by_label("Interact Key");
+    harness.get_by_value("E");
+    harness.get_by_label(eso_weave::app::strings::FISHING_SETTINGS_APPLICATION_HELP);
+    harness.get_by_label(eso_weave::app::strings::READER_SETTINGS_APPLICATION_HELP);
 }
 
 /// C5 (FR-014): the modal's rendered rectangle matches the size its growth rule

@@ -106,6 +106,7 @@ fn model_with_dir(dir: Option<PathBuf>, root: &Path) -> AppModel {
         beacon: beacon::prefs_to_value(&prefs),
         ..Settings::default()
     };
+    let (reader_update_tx, _reader_update_rx) = std::sync::mpsc::channel();
     AppModel::new(
         Arc::new(engine),
         weave,
@@ -115,6 +116,7 @@ fn model_with_dir(dir: Option<PathBuf>, root: &Path) -> AppModel {
             eso_weave::potion::AutoPotionConfig::default(),
         ))),
         log,
+        reader_update_tx,
         settings,
         dir,
         std::time::Instant::now(),

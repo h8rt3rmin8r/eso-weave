@@ -42,6 +42,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [028](plan-028.md) | Complete, Archived | [S058 documentation corpus](../../../specs/058-documentation-corpus/spec.md), merged in [PR #88](https://github.com/h8rt3rmin8r/eso-weave/pull/88) and closed issue #80 |
 | [029](plan-029.md) | Complete, Archived | [S059 documentation completeness](../../../specs/059-documentation-completeness/spec.md), merged in [PR #97](https://github.com/h8rt3rmin8r/eso-weave/pull/97) and closed issue #81 |
 | [030](plan-030.md) | Complete, Archived | [S060 safety boundaries](../../../specs/060-safety-boundaries/spec.md), merged in [PR #98](https://github.com/h8rt3rmin8r/eso-weave/pull/98) and closed issues #92 and #94 |
+| [031](plan-031.md) | Complete, Archived | [S061 Linux input and copy parity](../../../specs/061-linux-input-copy-parity/spec.md), merged in [PR #99](https://github.com/h8rt3rmin8r/eso-weave/pull/99) and closed issues #93 and #96 |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

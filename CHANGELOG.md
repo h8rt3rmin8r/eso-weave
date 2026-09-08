@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S062 applies Fishing timing and Interact Key changes to the running controller,
+  safely stops requested work across configuration changes, and live-updates
+  Pixel Bus tolerance and cadence while preserving staged block geometry
+  (issue #95).
 - S061 advertises every supported Linux application control and physical
   keyboard key before interception, reports pass-through failures, starts menu
   evidence fail closed, and aligns latency and logging help with runtime behavior
@@ -38,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-07: Apply scalar Fishing and Pixel Bus settings live, but keep PixelBeacon
+  Block Size staged until ESO reload or relog and ESO Weave restart. Cancel a
+  requested Fishing session without input when its configuration changes so an
+  old deadline cannot emit a newly selected key.
 - 2026-09-07: Derive Linux uinput application capabilities from the canonical
   key universe, union the selected physical keyboard's keys before grab, and
   forward only key events with explicit failure reporting. Initialize menu

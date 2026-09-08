@@ -106,10 +106,9 @@ The Settings modal grows sub-linearly with the window on both axes, so its
 absolute size increases while it occupies a progressively smaller fraction of a
 larger window. It never exceeds 1040 by 1120 logical points or 92 percent of the
 window. Settings are persisted through a coalesced save without a separate Save
-action. Most settings apply to their running subsystem. Fishing and Pixel Bus
-settings currently take effect after restart, and the PixelBeacon block size also
-requires addon redeploy plus `/reloadui`; see
-[issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) and the
+action. Fishing controls and scalar Pixel Bus reader controls apply to their
+running subsystems. PixelBeacon Block Size remains staged and requires managed
+addon redeploy, `/reloadui` or relog, and ESO Weave restart; see the
 [Settings Reference](../reference/settings.md#application-timing).
 
 Its rendered rectangle equals its computed extent. The room above the body is
@@ -117,13 +116,10 @@ measured from the laid-out heading, separator, and close row rather than assumed
 At maximum size, at least half of the body remains visible without scrolling.
 
 Settings cover keybindings; global and per-slot delays; weapon-aware timing and
-weapon presets; latency adaptation and `k`; fishing timing;
+weapon presets; latency adaptation and `k`; Fishing timing and Interact Key;
 Auto Potion watches, quickslot binding, and retry interval; pixel-bus block size,
 tolerance, and sampling intervals; AddOns override and environment; logging;
 theme; and always-on-top behavior.
-
-The current modal does not expose Fishing's stored interact key. See the
-[Fishing limitation](fishing.md#state-and-safety-behavior) and issue #95.
 
 Open **File > Settings** to edit configuration, **View > Live Log** to diagnose
 events, and **File > Exit** to close after pending geometry is flushed. The

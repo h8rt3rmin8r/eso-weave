@@ -79,6 +79,8 @@ pub enum StopReason {
     WorldUnavailable,
     /// A cancellable travel attempt is pending or cannot be ruled out.
     TravelPending,
+    /// Runtime fishing settings changed while a session was requested or active.
+    SettingsChanged,
 }
 
 /// The kind of the controller's single pending deadline.
@@ -370,6 +372,25 @@ impl FishingController {
     /// The controller's configuration.
     pub fn config(&self) -> &FishingConfig {
         &self.config
+    }
+
+    /// Applies a new runtime configuration without synthesizing input.
+    ///
+    /// An identical configuration is a strict no-op. Changing configuration
+    /// while fishing is requested or active clears that request, the current
+    /// state, transient recovery, and any pending deadline. The operator must
+    /// explicitly re-enable fishing before the new configuration can synthesize
+    /// an interact.
+    pub fn apply_config(&mut self, config: FishingConfig) {
+        if self.config == config {
+            return;
+        }
+        self.config = config;
+        if self.requested_enabled || self.state != FishingState::Disabled {
+            self.requested_enabled = false;
+            self.suspension_recovery_required = false;
+            self.disable(StopReason::SettingsChanged);
+        }
     }
 
     /// Enables or disables fishing. Enabling from Disabled arms and casts once;

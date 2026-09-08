@@ -112,9 +112,11 @@ healthy, first use [PixelBeacon signal troubleshooting](../getting-started/troub
 
 Block Size choices are 2, 4, 8, 16, or 32 physical pixels, with 16 as the
 default. After changing it, reload or relog ESO and restart ESO Weave. Color
-Tolerance and sampling intervals are also saved for the next application start
-in the current release. Live reconfiguration is tracked in
-[issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95).
+Tolerance and both sampling intervals apply live through a wakeable reader
+update. Rapid edits coalesce to the newest complete value. Changing tolerance
+closes cached menu, life, world, roll-dodge, and travel evidence before a fresh
+sample can authorize generated input. Running Block Size and the internal
+heartbeat timeout never enter that live update path.
 
 Older layouts remain bounded to the fields they draw. Missing newer fields become
 unavailable and are never guessed.

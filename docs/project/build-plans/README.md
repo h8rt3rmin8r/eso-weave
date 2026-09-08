@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-031.md](plan-031.md) | Active | S061 closes Linux input capability and runtime-copy parity defects #93 and #96. |
+| [plan-032.md](plan-032.md) | Active | S062 closes Settings runtime parity and Fishing Interact Key defect #95. |
