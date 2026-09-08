@@ -16,6 +16,7 @@ layer proves and what it does not prove.
 | Logging and startup | `tests/logging.rs`, `tests/app_log_view.rs`, unit tests in `src/startup/mod.rs` | Runtime filtering, ring eviction, file format, input suppression, log presentation, and pre-GUI notification gating |
 | Packaging and release scripts | `scripts/release-notes.test.sh` and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, and asset gating |
 | Documentation policy | `.github/scripts/docs-policy.test.mjs` | Navigation, links, offline assets, lifecycle boundaries, preservation, coverage, aliases, and prose constraints |
+| Bundled documentation | `tests/documentation.rs`, `build.rs`, and release-profile CI builds | Immutable lookup, content types, strict routing, HTTP bounds, reuse, concurrent reads, shutdown, browser seams, and production embedding |
 
 ## Deterministic seams
 
@@ -67,6 +68,12 @@ Platform modules therefore require narrow source review and, where possible,
 contract tests over exported tables and translation helpers. A passing mock test
 must never be described as live-game verification.
 
+Bundled-documentation tests use only loopback sockets and compiled fixture bytes.
+They prove hostile paths cannot become filesystem reads and service lifetime is
+bounded. Windows and Linux CI also run the production Cargo build after installing
+exact mdBook tools, while documentation policy proves generated local references
+resolve before embedding.
+
 ## Settings runtime coverage
 
 S062 tests Fishing configuration changes in every active phase, including
@@ -90,6 +97,7 @@ git diff --check
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --all --locked
+cargo build --release --locked --bin eso-weave
 ```
 
 The release-note shell contract also runs in Linux CI. A missing local tool is a

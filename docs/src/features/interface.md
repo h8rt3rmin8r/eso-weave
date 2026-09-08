@@ -5,7 +5,7 @@ region, and optional live log panel.
 
 | Region | Contents |
 | --- | --- |
-| Menu bar | Settings, Exit, and Live Log |
+| Menu bar | Settings, Exit, Live Log, and the offline Documentation action |
 | Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, and one composed Quickslot classification, availability, and cooldown row |
 | System and State | Game/provider state, World State, ESO Weave state, PixelBeacon Status and Signal, Fishing, Auto Potion, and lifecycle actions |
 | Skills | Slot label, enablement, weave type, timing override, effective delay, and cooldown |
@@ -58,6 +58,19 @@ focus, which is a safety prerequisite for generated input.
 
 Hovering an interactive control changes its color but never its size, so hover
 cannot cause layout reflow.
+
+## Offline documentation
+
+Choose **Help > Documentation** to open the complete bundled guide in the
+operating system browser. ESO Weave starts one local address on `127.0.0.1`,
+reuses it for later opens, and stops it when the application exits. Navigation,
+search, themes, fonts, and images are included in the executable, so the guide
+does not require internet access. If the browser cannot be opened, the interface
+shows an error and continues running.
+
+The local service is read-only. It serves only immutable documentation compiled
+into the executable and exposes no settings, logs, game state, filesystem paths,
+directory listings, or mutation routes.
 
 When ESO is inactive, Live HUD values say **Game not active**. When ESO is active
 but current telemetry is unavailable, they say **Signal unavailable**. Neither

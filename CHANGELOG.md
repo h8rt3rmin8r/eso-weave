@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S059 adds complete task-oriented user and developer documentation, backed by
   a source-and-test coverage manifest, terminology aliases, and policy checks
   for content dimensions and accessible visuals (issue #81).
+- S063 bundles the complete searchable documentation site in production
+  executables and adds Help > Documentation backed by a read-only, loopback-only
+  service that is reused until application exit (issue #82).
 
 ### Changed
 
@@ -41,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status, state-machine, testing, packaging, release-flow, and coverage guidance.
 
 ### Decisions
+
+- 2026-09-07: Generate the canonical mdBook inside every release-profile Cargo
+  build with exact mdbook 0.5.4 and mdbook-linkcheck2 0.13.0 prerequisites, then
+  compile its sorted files directly into the executable. Debug and test profiles
+  use a checked fixture. Serve the production corpus only through a bounded
+  `127.0.0.1` GET and HEAD service with no filesystem or application-state access.
+  Update the pinned CI and release workflows plus maintainer release guidance so
+  Windows and Linux package builds fail rather than ship missing documentation.
+  The Windows executable grew from 12,802,048 to 17,332,736 bytes, a 4,530,688
+  byte (35.4 percent) increase for a 4,525,155 byte generated site.
 
 - 2026-09-07: Apply scalar Fishing and Pixel Bus settings live, but keep PixelBeacon
   Block Size staged until ESO reload or relog and ESO Weave restart. Cancel a

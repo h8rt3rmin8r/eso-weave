@@ -34,6 +34,7 @@ use crate::app::{
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
+use crate::documentation::{BrowserOpener, DocumentationService, NativeBrowser};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
 
@@ -249,6 +250,9 @@ pub struct EsoWeaveApp {
     /// One-frame guard for disclosure-driven dashboard reflow. The bottom panel
     /// must wait until the new stacked extent has been measured directly.
     dashboard_state_reflow_pending: bool,
+    documentation: DocumentationService,
+    documentation_opener: Box<dyn BrowserOpener>,
+    documentation_error: Option<String>,
 }
 
 impl EsoWeaveApp {
@@ -296,7 +300,23 @@ impl EsoWeaveApp {
             previous_frame_available_width: None,
             pending_responsive_content_height: None,
             dashboard_state_reflow_pending: false,
+            documentation: DocumentationService::new(),
+            documentation_opener: Box::new(NativeBrowser),
+            documentation_error: None,
         }
+    }
+
+    /// Replaces the operating-system browser adapter. Production uses
+    /// [`NativeBrowser`]; deterministic UI tests provide a recording or failing
+    /// adapter without launching an external process.
+    pub fn with_documentation_opener(mut self, opener: Box<dyn BrowserOpener>) -> Self {
+        self.documentation_opener = opener;
+        self
+    }
+
+    /// Latest documentation start or browser-launch error, if one is visible.
+    pub fn documentation_error(&self) -> Option<&str> {
+        self.documentation_error.as_deref()
     }
 
     /// The height of the settings body visible without scrolling on the last frame
@@ -759,6 +779,30 @@ impl EsoWeaveApp {
                     })
                     .response
                     .clickable();
+                    ui.menu_button(strings::MENU_HELP, |ui| {
+                        if ui
+                            .button(strings::MENU_DOCUMENTATION)
+                            .on_hover_text(strings::MENU_DOCUMENTATION_TOOLTIP)
+                            .clickable()
+                            .clicked()
+                        {
+                            ui.close();
+                            match self
+                                .documentation
+                                .open_with(self.documentation_opener.as_ref())
+                            {
+                                Ok(_) => self.documentation_error = None,
+                                Err(err) => {
+                                    tracing::warn!(target: "eso_weave::documentation", "{err}");
+                                    self.documentation_error = Some(format!(
+                                        "ESO Weave could not open the offline guide. {err}"
+                                    ));
+                                }
+                            }
+                        }
+                    })
+                    .response
+                    .clickable();
                 });
                 // The menu bar spans the available width (measured, not assumed: it
                 // reports 1168 in a 1200 point window), so like the separator it is
@@ -869,6 +913,20 @@ impl EsoWeaveApp {
 
         if self.settings_open {
             self.settings_modal(&ctx, &mut intents);
+        }
+
+        if let Some(message) = self.documentation_error.clone() {
+            egui::Window::new("Documentation unavailable")
+                .id(egui::Id::new("documentation_error"))
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .show(&ctx, |ui| {
+                    ui.label(message);
+                    if ui.button("Close").clickable().clicked() {
+                        self.documentation_error = None;
+                    }
+                });
         }
 
         for intent in intents {

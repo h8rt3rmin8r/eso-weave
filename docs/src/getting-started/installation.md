@@ -98,5 +98,10 @@ The Linux virtual input device advertises every supported application key and
 mouse control plus every key reported by the selected physical keyboard before
 the keyboard is grabbed.
 
+Every release executable contains the complete searchable documentation site.
+After launch, choose **Help > Documentation** to open it locally without a network
+connection. The `127.0.0.1` address belongs to the running ESO Weave process and
+stops when the application exits.
+
 Continue to [Responsible Use](responsible-use.md) before running automation with
 a live account, then [complete first launch](first-launch.md).

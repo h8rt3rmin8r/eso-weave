@@ -48,6 +48,11 @@ jobs:
           rustc --version --verbose
           cargo --version
 
+      - name: Install pinned documentation tools
+        run: |
+          cargo install mdbook --version '=0.5.4' --locked
+          cargo install mdbook-linkcheck2 --version '=0.13.0' --locked
+
       - name: Format
         if: runner.os == 'Linux'
         run: cargo fmt --all -- --check
@@ -57,6 +62,9 @@ jobs:
 
       - name: Test
         run: cargo test --all --locked
+
+      - name: Build release binary with bundled documentation
+        run: cargo build --release --locked --bin eso-weave
 
   dependency-review:
     name: dependency review

@@ -18,6 +18,7 @@ test seams. Platform modules contain operating-system calls.
 | Config and Session State | Separate user settings and derived runtime stores, notices, and serialization | Module-specific validation semantics |
 | Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | UI presentation |
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
+| Documentation Service | Immutable embedded-site lookup, bounded loopback GET and HEAD responses, browser handoff, and worker lifetime | Filesystem serving, application state, remote content, and mutation |
 
 ## Thread model
 
@@ -31,6 +32,7 @@ async runtime.
 | Weave worker | Actions from the bounded input channel | Application-toggle forwarding and `WeaveEngine::handle` through `RealSink` | Touch the interception callback |
 | Pixel Bus worker | Clock deadlines, process probes, display and pixel samples | Game observations, safety pre-routing, controller routing, fishing ticks, Auto Potion ticks | Sample through another thread or treat stale data as current |
 | API version check | Stored API cache, addon root, one bounded HTTP result | Monotonic API-version resolution and managed manifest update | Delay the first window or guess a numeric ESO API version |
+| Documentation worker | Bounded loopback requests after Help > Documentation is chosen | Exact embedded asset lookup and read-only HTTP responses | Read request-derived filesystem paths or access application state |
 
 Five ownership contracts are load-bearing:
 
@@ -71,6 +73,17 @@ Logging follows:
 
 The Live Log reads the ring after its dropdown has applied and persisted the
 global captured level used by both the ring and optional file sink.
+
+Documentation follows a separate read-only path:
+
+`Help action -> one application-owned 127.0.0.1 listener -> exact embedded asset lookup -> default browser`
+
+Release-profile `build.rs` runs the pinned mdBook and link-check renderer, then
+emits a sorted Rust manifest into Cargo's output directory. The executable
+contains those bytes directly. Debug and test profiles use a small checked
+fixture so ordinary Rust compilation does not require documentation tools. The
+worker accepts only GET and HEAD, rejects ambiguous paths, never consults the
+filesystem, and terminates with the interface owner.
 
 ## Ordering rules
 
