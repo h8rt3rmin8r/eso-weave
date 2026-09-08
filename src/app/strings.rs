@@ -194,7 +194,7 @@ pub const SKILL_COLUMNS: [(&str, &str); 6] = [
 pub const LOG_TITLE: &str = "Live Log";
 pub const LOG_TOOLTIP: &str = "Recent application events. Drag the divider above to resize.";
 pub const LOG_FILTER_TOOLTIP: &str =
-    "Show only events at or above this level. Does not change what is captured.";
+    "Capture and show events at or above this level. The saved choice also applies to file logging.";
 
 // Menu.
 pub const MENU_FILE: &str = "File";
@@ -264,11 +264,11 @@ pub const SET_AUTO_TIMING: Setting = Setting {
 };
 pub const SET_LATENCY_ENABLED: Setting = Setting {
     label: "Adapt to Latency",
-    help: "Shorten delays automatically as measured latency rises.",
+    help: "Add a bounded latency allowance to Light Attack and Bash delays, capped at 300 ms.",
 };
 pub const SET_LATENCY_K: Setting = Setting {
     label: "Latency Factor",
-    help: "How strongly latency shortens the delays (higher adapts more).",
+    help: "Scale the latency allowance; higher values add more delay, capped at 300 ms.",
 };
 pub const SET_ARM_TIMEOUT: Setting = Setting {
     label: "Arm Timeout (ms)",

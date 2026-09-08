@@ -41,9 +41,7 @@ not claim that implementation work is complete.
 
 | Issue | Current discrepancy | Documentation treatment |
 | --- | --- | --- |
-| [#93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) | Linux uinput capabilities omit shipped `E` and `F3` mappings. | Linux parity is qualified in Scope and Platform Support and Test Strategy. |
 | [#95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) | Some saved settings do not apply live, and Fishing Interact Key is not exposed in Settings. | Runtime application and configuration limits are identified on their canonical pages. |
-| [#96](https://github.com/h8rt3rmin8r/eso-weave/issues/96) | Shipped latency help, Live Log prose, and menu-evidence comments contain stale descriptions. | Published behavior follows current implementation and labels the stale shipped text as a defect. |
 
 ## How to use the matrix
 

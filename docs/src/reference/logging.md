@@ -21,11 +21,8 @@ failure does not remove an event already placed in the ring.
 
 ## Live Log
 
-Open **View > Live Log**. The level selector currently changes and persists the
-global captured level, so it affects both the Live Log ring and optional file
-sink. This corrects older display-only documentation; the remaining in-app and
-source wording is tracked in
-[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+Open **View > Live Log**. The level selector changes and persists the global
+captured level, so it affects both the Live Log ring and optional file sink.
 
 Use INFO for ordinary lifecycle diagnosis, DEBUG for a bounded reproduction, and
 TRACE only when detailed observations are necessary. OFF prevents subsequent

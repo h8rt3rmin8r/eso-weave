@@ -69,18 +69,13 @@ must never be described as live-game verification.
 
 ## Known coverage gaps
 
-- [Issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) requires a
-  contract proving every supported Linux mapping and shipped default is
-  advertised to uinput.
 - [Issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95) requires
   application-timing tests for Fishing and PixelBus settings and the Interact Key
   surface decision.
-- [Issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96) requires string
-  and behavior anchors that prevent latency, Live Log, and menu-gate prose from
-  drifting again.
 
-These gaps are not green coverage. S059 documents them and makes no claim that
-their required runtime changes have landed.
+This gap is not green coverage. S059 documents it and makes no claim that its
+required runtime changes have landed. S061 adds exhaustive Linux mapping and
+capability tests plus string and menu-evidence behavior anchors.
 
 ## Local verification sequence
 

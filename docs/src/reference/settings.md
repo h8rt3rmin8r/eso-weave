@@ -23,9 +23,9 @@ period; there is no Save button. Exact labels below match the interface.
 | Latency Factor | 0.25; finite 0 through 4 | Multiplies current latency before the allowance is rounded and capped at 300 ms |
 
 When Auto Timing is off, the modal also shows separate back-bar Light Attack,
-Heavy Attack, and Bash delays. The active bar selects the profile. The current
-help text incorrectly says latency adaptation shortens delays; the additive
-behavior is tracked in [issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+Heavy Attack, and Bash delays. The active bar selects the profile. Latency
+adaptation adds its scaled allowance to Light Attack and Bash only, with a
+300 ms cap.
 
 ## Fishing
 
@@ -74,8 +74,8 @@ its own threshold can qualify after all earlier safety checks pass.
 | Log Level | OFF, ERROR, WARN, INFO (default), DEBUG, TRACE | Changes the global captured level immediately and persists it |
 | Write Log to File | Off by default | Adds or removes the monthly file sink immediately |
 
-The Live Log level selector controls the same persisted global capture level,
-despite older display-only wording tracked in issue #96.
+The Live Log level selector controls this same persisted global capture level
+for both the in-memory ring and optional file logging.
 
 ## Keybindings
 
@@ -90,8 +90,8 @@ despite older display-only wording tracked in issue #96.
 
 Supported choices are `1` through `5`, `E`, `R`, `X`, `Q`, Space, `F1`, `F2`,
 and `F3`. A binding conflict is rejected and the previous assignment remains.
-All bindings remain scoped to the focused ESO window. Linux `E` and `F3` output
-is affected by [issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93).
+All bindings remain scoped to the focused ESO window. Linux advertises every
+supported binding and preserves the selected physical keyboard's other keys.
 
 ## Main-window controls
 

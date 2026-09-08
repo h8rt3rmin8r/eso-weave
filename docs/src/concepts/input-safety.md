@@ -37,17 +37,11 @@ original key later.
 
 The menu gate can only relax interception. It is an additional early pass, so
 for every combination of inputs the gated result is either identical to the
-ungated result or more permissive. An addon too old to publish the gate leaves
-this optional gate absent. After the reader has received menu evidence, a sample
-that fails validation or a lost beacon signal makes menu evidence unavailable.
-Unavailable menu evidence fails closed: bound physical input passes through and
-autonomous features remain gated until a positively decoded Gameplay surface
-returns.
-
-Current routing, rather than older comments in the input module and one protocol
-test, is authoritative for unavailable menu evidence. Correcting those stale
-comments and related interface wording is tracked in
-[issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96).
+ungated result or more permissive. It starts closed. An addon too old to publish
+the gate, a sample that fails validation, or a lost beacon signal keeps or
+returns it to that fail-closed state. Unavailable menu evidence fails closed:
+bound physical input passes through and autonomous features remain gated until a
+positively decoded Gameplay surface returns.
 
 ## Worker boundary and cancellation
 
@@ -99,11 +93,10 @@ Wayland. The shared safety decision remains platform-independent. Focus still
 depends on an X11 or XWayland active-window observation, so pure Wayland cannot
 positively authorize interception.
 
-**Known Linux defect**: the current uinput capability set omits `E` and `F3`
-even though the mappings and defaults use them. Default fishing interaction and
-Auto Potion toggle forwarding are therefore not verified to work on Linux.
-[Issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) tracks capability
-parity and its missing contract tests.
+The Linux virtual device derives application capabilities from the canonical key
+universe, includes both mouse controls, and unions every key reported by the
+selected physical keyboard before grabbing it. Only key events cross this
+virtual-device boundary; a failed forwarded-key emission is reported explicitly.
 
 ## Keybindings
 

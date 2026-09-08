@@ -23,7 +23,43 @@ fn controller() -> FishingController {
     controller.set_life_state(LifeState::Alive);
     controller.set_world_state(WorldState::Active);
     controller.set_travel_state(TravelState::Inactive);
+    controller.set_gated(false, 0, &mut sink);
     controller
+}
+
+#[test]
+fn a_fresh_controller_is_menu_gated_until_valid_evidence_arrives() {
+    let mut controller = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    controller.set_game_environment(true, true, 0, &mut sink);
+    controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
+
+    controller.set_enabled(true, 0, &mut sink);
+
+    assert!(controller.enabled());
+    assert_eq!(controller.state(), FishingState::Disabled);
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn a_pending_startup_request_casts_when_gameplay_evidence_arrives() {
+    let mut controller = FishingController::new(FishingConfig::default());
+    let mut sink = MockFishingSink::new();
+    controller.set_game_environment(true, true, 0, &mut sink);
+    controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
+    controller.set_enabled(true, 0, &mut sink);
+
+    controller.set_gated(false, 10, &mut sink);
+
+    assert_eq!(controller.state(), FishingState::Armed);
+    assert_eq!(
+        sink.ops,
+        press_release(FishingConfig::default().interact_key)
+    );
 }
 
 #[test]
@@ -82,6 +118,7 @@ fn shared_life_gate_blocks_enable_before_controller_routing_catches_up() {
     let mut sink = MockFishingSink::new();
     c.set_game_environment(true, true, 0, &mut sink);
     c.set_life_state(LifeState::Alive);
+    c.set_gated(false, 0, &mut sink);
 
     input.set_life_gated(true);
     c.set_enabled(true, 10, &mut sink);
@@ -107,6 +144,7 @@ fn shared_travel_gate_blocks_enable_before_controller_routing_catches_up() {
     c.set_life_state(LifeState::Alive);
     c.set_world_state(WorldState::Active);
     c.set_travel_state(TravelState::Inactive);
+    c.set_gated(false, 0, &mut sink);
 
     input.set_travel_gated(true);
     c.set_enabled(true, 10, &mut sink);
@@ -487,6 +525,7 @@ fn real_sink_drives_the_input_backend() {
     input.set_life_gated(false);
     input.set_world_gated(false);
     input.set_travel_gated(false);
+    input.set_menu_gated(false);
     let mut sink = RealFishingSink::new(backend, input.fishing_gates());
 
     let mut c = controller();
@@ -558,8 +597,8 @@ fn a_gated_controller_defers_the_reel_instead_of_sending_it() {
     sink.clear();
 
     // A surface opens before the reel is due.
-    c.set_gated(true);
     let reel_at = 20 + u64::from(cfg.reel_delay_ms);
+    c.set_gated(true, reel_at - 1, &mut sink);
     c.tick(reel_at, &mut sink);
     assert!(
         sink.ops.is_empty(),
@@ -577,7 +616,7 @@ fn a_gated_controller_defers_the_reel_instead_of_sending_it() {
     assert_eq!(c.state(), FishingState::Reeling);
 
     // The surface closes and the deferred reel goes through on its own.
-    c.set_gated(false);
+    c.set_gated(false, reel_at + 2_000, &mut sink);
     c.tick(reel_at + 2_000, &mut sink);
     assert_eq!(sink.ops, press_release(cfg.interact_key));
     assert_eq!(c.state(), FishingState::Recast);
@@ -596,12 +635,12 @@ fn a_gated_controller_defers_the_recast_too() {
     c.tick(reel_at, &mut sink);
     sink.clear();
 
-    c.set_gated(true);
     let recast_at = reel_at + u64::from(cfg.recast_delay_ms);
+    c.set_gated(true, recast_at - 1, &mut sink);
     c.tick(recast_at, &mut sink);
     assert!(sink.ops.is_empty(), "recast must be deferred while gated");
 
-    c.set_gated(false);
+    c.set_gated(false, recast_at + 500, &mut sink);
     c.tick(recast_at + 500, &mut sink);
     assert_eq!(sink.ops, press_release(cfg.interact_key));
 }
@@ -623,14 +662,14 @@ fn s060_fishing_stopped_while_gated_defers_and_retries_the_recast() {
     recorded.lock().unwrap().clear();
 
     input.set_menu_gated(true);
-    c.set_gated(true);
+    c.set_gated(true, 19, &mut sink);
     c.on_event(DetectorEvent::FishingStopped, 20, &mut sink);
 
     assert_eq!(c.state(), FishingState::Recast);
     assert!(recorded.lock().unwrap().is_empty());
 
     input.set_menu_gated(false);
-    c.set_gated(false);
+    c.set_gated(false, 120, &mut sink);
     c.tick(120, &mut sink);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
@@ -639,9 +678,9 @@ fn s060_fishing_stopped_while_gated_defers_and_retries_the_recast() {
 }
 
 #[test]
-fn an_ungated_controller_is_unchanged() {
-    // The default is ungated, so every other test in this file already asserts
-    // the pre-feature behavior. This states it explicitly.
+fn explicit_gameplay_evidence_preserves_the_normal_cast_path() {
+    // The helper explicitly opens the startup menu gate, representing valid
+    // Gameplay evidence while preserving the established cast behavior.
     let mut c = controller();
     let mut sink = MockFishingSink::new();
     c.set_enabled(true, 0, &mut sink);
@@ -662,7 +701,7 @@ fn the_arm_timeout_still_fires_while_gated() {
 
     c.set_enabled(true, 0, &mut sink);
     sink.clear();
-    c.set_gated(true);
+    c.set_gated(true, 1, &mut sink);
     c.tick(u64::from(cfg.arm_timeout_ms), &mut sink);
     assert_eq!(c.state(), FishingState::Disabled);
     assert!(sink.ops.is_empty());
@@ -679,6 +718,32 @@ fn game_exit_disables_an_active_session_without_emitting() {
     assert_eq!(c.stop_reason(), Some(StopReason::GameInactive));
     assert!(c.enabled(), "runtime exit must preserve requested fishing");
     assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn game_return_cannot_cast_before_fresh_gameplay_menu_evidence() {
+    let mut controller = controller();
+    let mut sink = MockFishingSink::new();
+    controller.set_enabled(true, 0, &mut sink);
+    sink.clear();
+
+    controller.set_game_environment(false, false, 10, &mut sink);
+    controller.set_game_environment(true, true, 20, &mut sink);
+    controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
+    controller.set_game_environment(true, true, 30, &mut sink);
+    assert!(sink.ops.is_empty());
+    assert_eq!(controller.state(), FishingState::Disabled);
+
+    controller.set_gated(false, 39, &mut sink);
+    controller.set_enabled(false, 40, &mut sink);
+    controller.set_enabled(true, 41, &mut sink);
+    assert_eq!(controller.state(), FishingState::Armed);
+    assert_eq!(
+        sink.ops,
+        press_release(FishingConfig::default().interact_key)
+    );
 }
 
 #[test]
@@ -713,6 +778,7 @@ fn game_return_waits_for_fresh_safety_and_manual_cast_evidence() {
     );
     c.set_world_state(WorldState::Active);
     c.set_travel_state(TravelState::Inactive);
+    c.set_gated(false, 39, &mut sink);
     assert!(
         sink.ops.is_empty(),
         "safe telemetry must not replay the old cast"
@@ -783,7 +849,7 @@ fn s060_menu_gate_blocks_manual_recovery_after_suspension() {
     c.set_enabled(true, 0, &mut sink);
     c.set_suspended(true);
     c.set_suspended(false);
-    c.set_gated(true);
+    c.set_gated(true, 9, &mut sink);
     sink.clear();
 
     c.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
@@ -838,6 +904,7 @@ fn s060_environment_changes_cannot_clear_suspension_recovery() {
     assert!(c.enabled());
     assert!(sink.ops.is_empty());
 
+    c.set_gated(false, 39, &mut sink);
     c.on_event(DetectorEvent::FishingStarted, 40, &mut sink);
     assert_eq!(c.state(), FishingState::Waiting);
     assert!(sink.ops.is_empty());

@@ -40,6 +40,23 @@ pub enum Key {
 }
 
 impl Key {
+    /// Every key recognized by the application, in stable presentation order.
+    pub const ALL: [Key; 13] = [
+        Key::Digit1,
+        Key::Digit2,
+        Key::Digit3,
+        Key::Digit4,
+        Key::Digit5,
+        Key::E,
+        Key::R,
+        Key::X,
+        Key::Q,
+        Key::Space,
+        Key::F1,
+        Key::F2,
+        Key::F3,
+    ];
+
     /// The canonical lowercase string used in settings.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -111,25 +128,9 @@ impl fmt::Display for Key {
 mod tests {
     use super::*;
 
-    const ALL: [Key; 13] = [
-        Key::Digit1,
-        Key::Digit2,
-        Key::Digit3,
-        Key::Digit4,
-        Key::Digit5,
-        Key::E,
-        Key::R,
-        Key::X,
-        Key::Q,
-        Key::Space,
-        Key::F1,
-        Key::F2,
-        Key::F3,
-    ];
-
     #[test]
     fn display_name_is_present_and_clean_for_every_key() {
-        for key in ALL {
+        for key in Key::ALL {
             let name = key.display_name();
             assert!(!name.trim().is_empty(), "display name empty for {key:?}");
             assert!(
@@ -151,8 +152,16 @@ mod tests {
 
     #[test]
     fn canonical_round_trip_is_unchanged() {
-        for key in ALL {
+        for key in Key::ALL {
             assert_eq!(Key::parse(key.as_str()), Some(key));
         }
+    }
+
+    #[test]
+    fn canonical_universe_contains_every_supported_key_once() {
+        assert_eq!(Key::ALL.len(), 13);
+        let unique: std::collections::HashSet<_> = Key::ALL.into_iter().collect();
+        assert_eq!(unique.len(), Key::ALL.len());
+        assert_eq!(unique, Key::ALL.into_iter().collect());
     }
 }

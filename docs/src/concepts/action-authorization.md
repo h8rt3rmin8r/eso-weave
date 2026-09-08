@@ -33,7 +33,7 @@ present. Application toggles are `F1`, `F2`, and `F3`, or their rebound keys.
 | ESO inactive | Pass through | Pass through | Life, world, and travel gates close; remaining shared-gated work cancels | Disable, retain request, emit nothing | Dormant, retain request, emit nothing |
 | ESO unfocused | Pass through | Pass through | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Disable, retain request; refocus can arm a new cast | Dormant, retain request, emit nothing |
 | Suspended | Pass through | Suppress and hand off the toggle | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Cancel the deadline, retain the request, emit nothing on resume; require a fresh manual cast or off-on recovery | Blocked, retain request, emit nothing |
-| Menu or unavailable menu evidence | Pass through | Suppress and hand off the toggle | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Defer autonomous reel or recast; the operator's initial toggle cast is not deferred | Blocked, retain request, emit nothing |
+| Menu or unavailable menu evidence | Pass through | Suppress and hand off the toggle | Invalidate the authorization epoch; drop queued work or cancel remaining steps; release held output | Block an initial cast; defer an active session's autonomous reel or recast | Blocked, retain request, emit nothing |
 | Life not positively Alive | Pass through | Suppress and hand off the toggle | Drop queued work or cancel remaining steps; release held output | Disable, retain request, require fresh manual cast evidence | Blocked, retain request, emit nothing |
 | World not positively Active | Pass through | Suppress and hand off the toggle | Drop queued work or cancel remaining steps; release held output | Disable, retain request, require fresh evidence | Blocked, retain request, emit nothing |
 | Travel not positively Inactive | Pass through | Suppress and hand off the toggle | Drop queued work or cancel remaining steps; release held output | Disable, retain request, require fresh evidence | Blocked, retain request, emit nothing |
@@ -66,13 +66,14 @@ operation for output the sink already holds. Cancelled work is never replayed.
 
 ### Fishing
 
-`operator request or detector event -> runtime and focus -> life -> world -> travel -> state and deadline -> interact`
+`operator request or detector event -> runtime and focus -> menu -> life -> world -> travel -> state and deadline -> interact`
 
-Menu state defers autonomous Reel Due and Recast Due deadlines by a bounded
-interval. SignalLost disables the state and clears the request. Life, world, or
-travel loss disables the active state but preserves the request, and no pending
-interact is replayed. Runtime and focus loss preserve the request under their
-controller-specific recovery rules.
+Menu state starts fail closed and blocks an initial cast until valid Gameplay
+evidence arrives. During an active session it defers autonomous Reel Due and
+Recast Due deadlines by a bounded interval. SignalLost disables the state and
+clears the request. Life, world, or travel loss disables the active state but
+preserves the request, and no pending interact is replayed. Runtime and focus
+loss preserve the request under their controller-specific recovery rules.
 
 Suspension is a direct Fishing Controller input. Entering suspension cancels the
 current deadline and active state while retaining the operator's request. A
@@ -94,14 +95,9 @@ Key Up and records the attempt time, not a confirmed drink.
 
 ## Known defects and current limits
 
-- [Issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93): Linux uinput
-  does not advertise every shipped key mapping.
 - [Issue #95](https://github.com/h8rt3rmin8r/eso-weave/issues/95): some saved
   settings do not apply to running components and the Fishing Interact Key is not
   exposed by Settings.
-- [Issue #96](https://github.com/h8rt3rmin8r/eso-weave/issues/96): shipped help
-  and internal comments contain stale descriptions of latency, Live Log, and
-  menu evidence.
 
 For the exact hook ordering, see [Input Safety](input-safety.md). For observation
 entry and recovery, see [Game Observation and Safety State](game-observation.md).

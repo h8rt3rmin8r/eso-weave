@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-030.md](plan-030.md) | Active | S060 closes queued automation and unmanaged PixelBeacon ownership safety defects #92 and #94. |
+| [plan-031.md](plan-031.md) | Active | S061 closes Linux input capability and runtime-copy parity defects #93 and #96. |

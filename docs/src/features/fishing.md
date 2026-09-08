@@ -20,9 +20,8 @@ If ESO Weave is suspended, enabling Fishing retains the request but sends no
 cast. Resume also sends nothing. Face the fishing hole and make a fresh manual
 cast, or turn Fishing off and on after resuming, to recover deliberately.
 
-On Linux, the default generated `E` interact key is affected by
-[issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93) until the virtual
-input capability list is corrected.
+On Linux, the default generated `E` interact key is included in the virtual
+device capability set before interception begins.
 
 ## Status meanings
 

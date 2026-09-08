@@ -126,3 +126,19 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
         );
     }
 }
+
+#[test]
+fn behavior_help_matches_latency_and_logging_runtime_contracts() {
+    let latency = strings::SET_LATENCY_ENABLED.help;
+    assert!(latency.to_ascii_lowercase().contains("add"));
+    assert!(latency.contains("Light Attack"));
+    assert!(latency.contains("Bash"));
+    assert!(latency.contains("300 ms"));
+    assert!(!latency.contains("Shorten"));
+
+    let logging = strings::LOG_FILTER_TOOLTIP;
+    assert!(logging.contains("Capture"));
+    assert!(logging.contains("file logging"));
+    assert!(logging.contains("saved"));
+    assert!(!logging.contains("Does not change what is captured"));
+}

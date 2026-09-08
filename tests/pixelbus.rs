@@ -1378,6 +1378,24 @@ fn every_surface_except_gameplay_gates() {
 }
 
 #[test]
+fn first_valid_gameplay_sample_is_published_after_unavailable_startup_evidence() {
+    let mut reader = reader();
+    assert!(!reader
+        .observe(alive(), 0)
+        .iter()
+        .any(|event| matches!(event, PixelBusEvent::MenuGate(_))));
+
+    let events = reader.observe(
+        BlockSamples {
+            menu: Some(menu(0)),
+            ..alive()
+        },
+        100,
+    );
+    assert!(events.contains(&PixelBusEvent::MenuGate(Some(MenuSurface::None))));
+}
+
+#[test]
 fn decode_menu_rejects_invalid_samples() {
     let t = ReaderConfig::default().tolerance;
     // Wrong marker (the combat block's).
@@ -1453,11 +1471,11 @@ fn menu_event_only_on_change_and_clears_on_loss() {
         .iter()
         .any(|e| matches!(e, PixelBusEvent::MenuGate(_))));
 
-    // A block that stops decoding opens the gate, never closes it.
+    // A block that stops decoding removes authorization and closes the gate.
     let gone = r.observe(alive(), 200);
     assert!(gone.contains(&PixelBusEvent::MenuGate(None)));
 
-    // And so does losing the signal entirely.
+    // Losing the signal entirely also removes authorization.
     r.observe(
         BlockSamples {
             menu: Some(menu(1)),

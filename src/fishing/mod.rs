@@ -325,7 +325,7 @@ impl FishingController {
             state: FishingState::Disabled,
             deadline: None,
             stop_reason: None,
-            gated: false,
+            gated: true,
             suspended: false,
             suspension_recovery_required: false,
             game_active: false,
@@ -389,6 +389,10 @@ impl FishingController {
                 }
                 if !self.focused {
                     self.stop_reason = Some(StopReason::Unfocused);
+                    return;
+                }
+                if self.gated {
+                    self.stop_reason = None;
                     return;
                 }
                 if self.block_for_safety() {
@@ -567,17 +571,33 @@ impl FishingController {
 
     /// Sets whether a native game UI surface is gating input.
     ///
-    /// While set, the controller defers the reel and recast interacts rather than
-    /// sending them, so an autonomous keypress cannot land in a chat message the
-    /// operator is composing. A deferred interact retries shortly, so a session
-    /// resumes on its own when the surface closes; the state machine is never
+    /// While set, the controller defers the initial cast, reel, and recast
+    /// interacts rather than sending them, so an autonomous keypress cannot land
+    /// in a chat message the operator is composing. A requested initial cast
+    /// starts when the first valid Gameplay observation opens the startup gate.
+    /// Deferred session interacts retry shortly; the state machine is never
     /// advanced past an interact that was not actually sent, so its state always
     /// matches what the game received.
     ///
-    /// Defaults to `false`, the value that reproduces the controller's behavior
-    /// before this gate existed.
-    pub fn set_gated(&mut self, gated: bool) {
+    /// Defaults to `true` so unavailable startup evidence is fail closed.
+    pub fn set_gated(&mut self, gated: bool, now_ms: u64, sink: &mut dyn FishingSink) {
+        let was_gated = self.gated;
         self.gated = gated;
+        if was_gated
+            && !gated
+            && self.requested_enabled
+            && self.state == FishingState::Disabled
+            && self.stop_reason.is_none()
+            && self.game_active
+            && self.focused
+            && !self.suspended
+            && !self.suspension_recovery_required
+            && !self.block_for_safety()
+        {
+            tracing::debug!(target: "eso_weave::fishing", "fishing started after gameplay menu evidence arrived");
+            sink.arm_authorization();
+            self.cast(now_ms, sink);
+        }
     }
 
     /// Applies the application suspension gate.
@@ -631,7 +651,7 @@ impl FishingController {
         self.game_active = active;
         self.focused = focused;
         if !active {
-            self.gated = false;
+            self.gated = true;
             self.life = LifeState::Unknown;
             self.life_gate.set(true);
             self.world = WorldState::Unknown;
@@ -673,7 +693,7 @@ impl FishingController {
     /// Enters Armed, emits one interact (the cast), arms the arm timeout, and
     /// clears any prior stop reason now that a fresh session is starting.
     fn cast(&mut self, now_ms: u64, sink: &mut dyn FishingSink) {
-        if self.block_for_safety() {
+        if self.gated || self.block_for_safety() {
             return;
         }
         if self.send_interact(sink) {

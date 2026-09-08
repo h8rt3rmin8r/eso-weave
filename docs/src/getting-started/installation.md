@@ -94,11 +94,9 @@ Linux releases include a `.deb`, AppImage, and tarball. Release assets include a
 combined `SHA256SUMS` file. Release binaries are produced by CI from tagged
 versions, and the version is sourced from `Cargo.toml`.
 
-**Current Linux limitation:** The virtual input device does not advertise the
-default Fishing `E` key or the `F3` Auto Potion toggle even though the application
-maps them. This is tracked in [issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93).
-Do not interpret a missing generated `E` or forwarded `F3` event as a permission
-failure until that issue is resolved.
+The Linux virtual input device advertises every supported application key and
+mouse control plus every key reported by the selected physical keyboard before
+the keyboard is grabbed.
 
 Continue to [Responsible Use](responsible-use.md) before running automation with
 a live account, then [complete first launch](first-launch.md).

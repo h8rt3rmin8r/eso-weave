@@ -48,10 +48,10 @@ membership in the `input` group or equivalent udev permissions. Pure Wayland can
 provide evdev and uinput access but cannot supply the X11 focus and capture facts
 that authorize operation, so an XWayland ESO surface is required.
 
-**Known defect**: the advertised Linux uinput keys do not currently include `E`
-or `F3`, despite both being shipped mappings. This prevents a verified claim of
-complete Windows and Linux key parity. See
-[issue #93](https://github.com/h8rt3rmin8r/eso-weave/issues/93).
+The advertised Linux uinput keys include every supported application mapping,
+including `E` and `F3`. The virtual device also advertises every key reported by
+the selected physical keyboard, preserving ordinary key pass-through after the
+grab.
 
 PixelBeacon lifecycle writes are ownership gated on every platform. An existing
 target that cannot be proven managed is reported as Unmanaged, offers no
