@@ -1,6 +1,6 @@
 # Plan 034: v0.15.0 Release Preparation
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -17,3 +17,6 @@ Sequence:
 
 This slice prepares v0.15.0 but does not roll versions, create a tag, publish a
 release, upload assets, or close verification issues #77 and #84.
+
+Completion evidence: issue #102 closed, PR #103 merged, and the prepared
+candidate shipped in [v0.15.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.15.0).

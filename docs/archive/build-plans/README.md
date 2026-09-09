@@ -45,6 +45,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [031](plan-031.md) | Complete, Archived | [S061 Linux input and copy parity](../../../specs/061-linux-input-copy-parity/spec.md), merged in [PR #99](https://github.com/h8rt3rmin8r/eso-weave/pull/99) and closed issues #93 and #96 |
 | [032](plan-032.md) | Complete, Archived | [S062 settings runtime parity](../../../specs/062-settings-runtime-parity/spec.md), merged in [PR #100](https://github.com/h8rt3rmin8r/eso-weave/pull/100) and closed issue #95 |
 | [033](plan-033.md) | Complete, Archived | [S063 bundled offline documentation](../../../specs/063-bundled-offline-docs/spec.md), merged in [PR #101](https://github.com/h8rt3rmin8r/eso-weave/pull/101) and closed issue #82 |
+| [034](plan-034.md) | Complete, Archived | [S064 v0.15 release preparation](../../../specs/064-v015-release-prep/spec.md), merged in [PR #103](https://github.com/h8rt3rmin8r/eso-weave/pull/103) and shipped in [v0.15.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.15.0) |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.
