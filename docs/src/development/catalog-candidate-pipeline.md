@@ -19,12 +19,15 @@ Remote acquisition is optional. The request and command must both enable it.
 Only HTTPS raw content from the approved repository host at an immutable
 40-character commit revision is admitted. Redirects are denied, reads have a
 timeout and byte limit, and content is cached only after its declared SHA-256
-matches. Refresh
-failure is fatal unless the request explicitly allows a verified stale cache;
+matches. Refresh failure is fatal unless the request explicitly allows a
+verified stale cache;
 `sources.json` records that choice. Cold and warm non-refresh retrieval both use
 the stable `pinned-remote` provenance value, so cache temperature cannot change
 candidate identity. New source objects remain staged until the complete
-candidate verifies.
+candidate verifies and installs. Icon generations are built in the same run
+staging area, then copied into the user-local cache only after installation.
+An allowed stale-cache fallback also appears as a stable warning in
+`validation.json`.
 
 Live and PTS remain independent. The request, every applicable source, normalized
 bundle, optional baseline, compiled catalog, and manifest must agree on channel.
@@ -46,7 +49,8 @@ icon bytes. The candidate ID is the SHA-256 of its canonical manifest. Existing
 candidates are verified and reused, never replaced.
 
 Coverage completeness downgrades are explicit regressions and consume the same
-configured threshold as removed coverage rows.
+configured threshold as removed coverage rows. Any localized-text redistribution
+change blocks publication.
 
 `pipeline-verify` checks the exact file allowlist, canonical manifest, artifact
 sizes and hashes, directory identity, catalog integrity, channel, and semantic
@@ -55,7 +59,8 @@ checksum. Removal thresholds and baseline channel checks run before publication.
 ## Automation boundary
 
 The pinned `catalog-candidate` workflow runs manually or on a schedule with
-read-only repository permission. It builds and verifies invented Live and PTS
-candidates and uploads them for review. It contains no repository write,
-installation, promotion, or release step. Active catalog selection, rollback,
-and end-user update behavior belong to the later update-orchestration slice.
+read-only repository permission and a 30 minute matrix-job timeout. It builds
+and verifies invented Live and PTS candidates and uploads them for review. It
+contains no repository write, installation, promotion, or release step. Active
+catalog selection, rollback, and end-user update behavior belong to the later
+update-orchestration slice.

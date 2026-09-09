@@ -2008,6 +2008,9 @@ export function validateCatalogCandidateWorkflow(text) {
   if (!hasExactPermissions(text, 0, new Map([["contents", "read"]]))) {
     errors.push("catalog candidate workflow requires only contents: read");
   }
+  if (!/^    timeout-minutes: 30\s*$/mu.test(text)) {
+    errors.push("catalog candidate workflow requires a 30 minute job timeout");
+  }
   for (const action of ["actions/checkout", "actions/upload-artifact"]) {
     const use = new RegExp(`uses:\\s*${escapeRegExp(action)}@([^\\s#]+)`, "gu");
     const matches = [...text.matchAll(use)];

@@ -204,11 +204,22 @@ fn remote_sources_require_both_network_gates_and_support_explicit_stale_cache() 
     let report = fs::read_to_string(
         sandbox
             .candidates
-            .join(stale.relative_path)
+            .join(&stale.relative_path)
             .join("sources.json"),
     )
     .unwrap();
     assert!(report.contains("stale-cache"));
+    let validation: Value = serde_json::from_slice(
+        &fs::read(
+            sandbox
+                .candidates
+                .join(&stale.relative_path)
+                .join("validation.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(validation["findings"], json!(["stale-cache-reuse:bundle"]));
 }
 
 #[test]
@@ -344,6 +355,47 @@ fn coverage_completeness_regressions_consume_the_removal_threshold() {
     let error = build_candidate(&sandbox.run(&path, false)).unwrap_err();
     assert!(error.to_string().contains("coverage removal count 1"));
     assert!(!sandbox.candidates.exists());
+}
+
+#[test]
+fn localized_text_redistribution_changes_block_publication() {
+    let sandbox = offline_live_sandbox();
+    let baseline = sandbox.workspace.join("baseline-live.sqlite");
+    build_catalog(&BuildRequest::new(LIVE_BUNDLE, &baseline, Channel::Live)).unwrap();
+
+    let input = sandbox.workspace.join("input.json");
+    let mut bundle: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+    bundle["localized_text"][0]["redistribution"] = json!("user-generated-only");
+    let bundle = serde_json::to_vec_pretty(&bundle).unwrap();
+    fs::write(&input, &bundle).unwrap();
+
+    let path = sandbox.request_path();
+    let mut request: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    request["sources"][0]["sha256"] = json!(sha256(&bundle));
+    request["baseline"] = json!("baseline-live.sqlite");
+    fs::write(&path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+
+    let error = build_candidate(&sandbox.run(&path, false)).unwrap_err();
+    assert!(error.to_string().contains("redistribution change"));
+    assert!(!sandbox.candidates.exists());
+}
+
+#[test]
+fn failed_final_install_publishes_neither_source_nor_icon_cache() {
+    let oracle = offline_live_sandbox();
+    let candidate_sha256 = build_candidate(&oracle.run(&oracle.request_path(), false))
+        .unwrap()
+        .candidate_sha256;
+
+    let sandbox = offline_live_sandbox();
+    let channel = sandbox.candidates.join("live");
+    fs::create_dir_all(&channel).unwrap();
+    fs::write(channel.join(&candidate_sha256), b"occupied").unwrap();
+
+    assert!(build_candidate(&sandbox.run(&sandbox.request_path(), false)).is_err());
+    assert!(sandbox.sources.is_dir());
+    assert_eq!(fs::read_dir(&sandbox.sources).unwrap().count(), 0);
+    assert!(!sandbox.icons.exists());
 }
 
 #[test]

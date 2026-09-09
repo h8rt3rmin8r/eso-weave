@@ -85,3 +85,10 @@ identity and rights, uses stable provenance for cold and warm pinned-remote
 inputs, counts completeness downgrades as coverage removals, and delays source
 cache publication until the staged candidate verifies. Focused regression
 tests cover each defect, including failure without a new cache object.
+
+The authorized final review found five additional boundary gaps. Localized-text
+redistribution changes now block independently of count thresholds, source and
+icon cache publication follows successful candidate installation, stale-cache
+reuse appears in validation findings, and the scheduled job has a policy-tested
+30 minute timeout. A final-install collision test proves that neither cache is
+published when the immutable candidate destination is invalid.

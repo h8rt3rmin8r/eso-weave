@@ -36,9 +36,10 @@ identity. Non-collector snapshots also match the source ID and canonical URI.
 Collector snapshots use the importer's fixed `user-local-savedvariables` URI
 and must retain `user-generated-local-only` / `user-generated-only` rights.
 
-New cache objects remain inside the run staging directory until the complete
-candidate has passed verification. Failed parsing, validation, diff,
-threshold, icon, or candidate checks therefore publish no source cache entry.
+New source and icon cache objects remain inside the run staging directory until
+the complete candidate has passed verification and installation. Failed
+parsing, validation, diff, threshold, icon, candidate checks, or final install
+therefore publish neither source entries nor icon generations.
 
 ## Version tuple
 
@@ -80,7 +81,8 @@ The manifest does not hash itself. Its canonical SHA-256 names the directory.
 - redacted message.
 
 Any blocking finding prevents publication. Successful candidates may carry
-warnings, including explicit stale-cache reuse and placeholder-only icons.
+warnings, including one stable `stale-cache-reuse:<source-id>` finding for every
+explicit stale-cache reuse and placeholder-only icons.
 
 ## State transitions
 

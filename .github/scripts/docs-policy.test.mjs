@@ -33,6 +33,8 @@ test("S073 keeps catalog candidate automation pinned and read-only", async () =>
   assert.match(validateCatalogCandidateWorkflow(escalated).join("\n"), /contents: read/i);
   const mutable = workflow.replace(/actions\/checkout@[0-9a-f]{40}/u, "actions/checkout@v7");
   assert.match(validateCatalogCandidateWorkflow(mutable).join("\n"), /exact commit SHA/i);
+  const unbounded = workflow.replace(/^    timeout-minutes: 30\r?\n/mu, "");
+  assert.match(validateCatalogCandidateWorkflow(unbounded).join("\n"), /timeout/i);
 });
 
 const requiredEncounterKinds = [

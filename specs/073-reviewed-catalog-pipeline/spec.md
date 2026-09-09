@@ -109,7 +109,8 @@ mismatched, redirected, unapproved-host, unavailable, and stale-cache cases.
    rejected and no cache entry or candidate is published.
 4. **Given** a network failure and an exact previously verified cache entry,
    **When** stale-cache reuse was explicitly allowed, **Then** the candidate
-   records that reuse visibly; otherwise the run fails.
+   records that reuse in both the source inventory and validation findings;
+   otherwise the run fails.
 
 ---
 
@@ -201,8 +202,8 @@ release, or commit step exists.
   an allowlisted immutable host and revision path, bounded redirect-free reads,
   timeouts, and exact SHA-256 verification before caching.
 - **FR-008**: Source cache entries MUST be content-addressed, immutable,
-  verified on reuse, staged until all candidate checks pass, and published
-  without replacing existing content.
+  verified on reuse, staged until the candidate is installed, and published
+  without replacing existing content only after installation succeeds.
 - **FR-009**: Stale source reuse MUST require an explicit per-request decision
   and MUST appear in the source inventory and validation summary.
 - **FR-010**: User-capture mode MUST call the existing S071 restricted importer
@@ -220,10 +221,12 @@ release, or commit step exists.
   as regressions that consume the configured coverage-removal threshold.
 - **FR-015**: Configured schema incompatibility, integrity failure, suspicious
   removals, coverage regression, source-rights change, or count threshold breach
-  MUST block candidate publication with a stage-specific finding.
+  MUST block candidate publication with a stage-specific finding. Any changed
+  localized-text redistribution class is a blocking source-rights change.
 - **FR-016**: Optional S072 resolution MUST operate only on an explicit local
-  source root, keep its cache outside the review candidate, and degrade missing
-  images to the project placeholder.
+  source root, stage its generation until candidate installation succeeds, keep
+  its cache outside the review candidate, and degrade missing images to the
+  project placeholder.
 - **FR-017**: The review candidate MUST contain only an allowlisted catalog,
   canonical manifest, build report, verification report, semantic diff, source
   inventory, validation report, checksums, and redacted icon receipt.

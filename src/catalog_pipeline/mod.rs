@@ -15,7 +15,9 @@ use crate::catalog::model::{CatalogBundle, SourceChannel, MAX_INPUT_BYTES};
 use crate::catalog::version::parse_commit_message_version;
 use crate::catalog::{CatalogError, Channel};
 use crate::collector::{import_capture, CollectorError, ImportRequest};
-use crate::icon_cache::{build_generation, IconCacheError, IconCacheRequest};
+use crate::icon_cache::{
+    build_generation, publish_staged_generation, IconCacheError, IconCacheRequest,
+};
 
 mod acquire;
 mod manifest;
@@ -110,6 +112,7 @@ pub fn build_candidate_with_fetcher(
     let request_bytes = read(&workspace, &request_path, REQUEST_LIMIT)?;
     let request: PipelineRequest = serde_json::from_slice(&request_bytes)?;
     validate_request(&request, &workspace)?;
+    validate_channel_output(&run.candidates, request.version.channel)?;
     validate_input_output_separation(&request, &request_path, run, &workspace)?;
     validate_policy(&request, &workspace)?;
 
@@ -182,9 +185,10 @@ pub fn build_candidate_with_fetcher(
         .filter(|reference| reference.virtual_path.starts_with('/'))
         .map(|reference| reference.virtual_path.clone())
         .collect::<Vec<_>>();
+    let staged_icon_cache = staging.path().join("icon-cache");
     let icon_receipt = build_generation(&IconCacheRequest::new(
         icon_source,
-        &run.icon_cache,
+        &staged_icon_cache,
         &verify_report.semantic_sha256,
         references,
     ))?;
@@ -204,6 +208,11 @@ pub fn build_candidate_with_fetcher(
         candidate_stage.join("sources.json"),
         &source_inventory_bytes,
     )?;
+    let validation_findings = acquired
+        .values()
+        .filter(|source| source.inventory.acquisition == "stale-cache")
+        .map(|source| format!("stale-cache-reuse:{}", source.inventory.id))
+        .collect();
     write_json(
         &candidate_stage.join("validation.json"),
         &ValidationSummary {
@@ -212,7 +221,7 @@ pub fn build_candidate_with_fetcher(
             game_version: request.version.game_version.clone(),
             api_version: request.version.api_version,
             catalog_version: request.version.catalog_version.clone(),
-            findings: Vec::new(),
+            findings: validation_findings,
         },
     )?;
     write_json(
@@ -251,7 +260,7 @@ pub fn build_candidate_with_fetcher(
         catalog_semantic_sha256: verify_report.semantic_sha256.clone(),
         catalog_artifact_sha256: verify_report.artifact_sha256.clone(),
         baseline_semantic_sha256,
-        icon_generation_sha256: icon_receipt.generation_sha256,
+        icon_generation_sha256: icon_receipt.generation_sha256.clone(),
         thresholds: request.thresholds,
         artifacts,
     };
@@ -267,8 +276,6 @@ pub fn build_candidate_with_fetcher(
     if staged_verification.candidate_sha256 != candidate_sha256 {
         return validation("staged candidate does not match its manifest identity");
     }
-    publish_source_cache(&acquired)?;
-
     fs::create_dir_all(run.candidates.join(manifest.version.channel.as_str()))?;
     let destination = run
         .candidates
@@ -285,6 +292,16 @@ pub fn build_candidate_with_fetcher(
         }
         verify_candidate(&destination)?;
     }
+    let installed = verify_candidate(&destination)?;
+    if installed.candidate_sha256 != candidate_sha256 {
+        return validation("installed candidate does not match its manifest identity");
+    }
+    publish_staged_generation(
+        &staged_icon_cache,
+        &run.icon_cache,
+        &icon_receipt.generation_sha256,
+    )?;
+    publish_source_cache(&acquired)?;
     Ok(CandidateReceipt {
         relative_path: PathBuf::from(manifest.version.channel.as_str()).join(&candidate_sha256),
         candidate_sha256,
@@ -643,6 +660,12 @@ fn baseline_diff(
 }
 
 fn enforce_thresholds(thresholds: &Thresholds, diff: &CatalogDiff) -> Result<(), PipelineError> {
+    if !diff.localized_text_redistribution_changes.is_empty() {
+        return validation(format!(
+            "localized text redistribution change count {} blocks publication",
+            diff.localized_text_redistribution_changes.len()
+        ));
+    }
     let checks = [
         (
             "entities",
@@ -689,8 +712,11 @@ fn canonical_real_directory(path: &Path, name: &str) -> Result<PathBuf, Pipeline
 
 fn validate_output_roots(run: &PipelineRun) -> Result<(), PipelineError> {
     for root in [&run.source_cache, &run.icon_cache, &run.candidates] {
-        if root.exists() && is_link_like(&fs::symlink_metadata(root)?) {
-            return validation("pipeline output roots must not be link-like");
+        if root.exists() {
+            let metadata = fs::symlink_metadata(root)?;
+            if !metadata.is_dir() || is_link_like(&metadata) {
+                return validation("pipeline output roots must be real directories");
+            }
         }
     }
     let roots = [
@@ -703,6 +729,17 @@ fn validate_output_roots(run: &PipelineRun) -> Result<(), PipelineError> {
             if is_same_or_nested(left, right) || is_same_or_nested(right, left) {
                 return validation("pipeline output roots must be distinct and unnested");
             }
+        }
+    }
+    Ok(())
+}
+
+fn validate_channel_output(root: &Path, channel: Channel) -> Result<(), PipelineError> {
+    let path = root.join(channel.as_str());
+    if path.exists() {
+        let metadata = fs::symlink_metadata(path)?;
+        if !metadata.is_dir() || is_link_like(&metadata) {
+            return validation("candidate channel output must be a real directory");
         }
     }
     Ok(())

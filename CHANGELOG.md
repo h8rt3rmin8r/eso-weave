@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   immutable source and icon caches, removal thresholds, canonical redacted
   reports, deterministic no-clobber candidates, and a pinned read-only
   scheduled workflow. Candidate review additionally enforces exact source
-  rights, cache-independent provenance, coverage downgrade gates, and staged
-  source-cache publication (issue #117).
+  rights, cache-independent provenance, coverage and redistribution downgrade
+  gates, visible stale-cache warnings, post-install source and icon cache
+  publication, and a bounded scheduled job (issue #117).
 - S072 adds a placeholder-first local icon cache with explicit virtual-path
   mappings, bounded PNG and DDS decoding, deterministic content-addressed PNG
   objects, immutable verified manifests, and no network or distributable game
@@ -45,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicit stale-cache reporting. Publish only the catalog and canonical
   review reports, never source bundles, collector captures, or icon bytes. The
   pinned scheduled workflow has read-only repository permission and no install,
-  promotion, release, or repository-write authority.
+  promotion, release, or repository-write authority, with a 30 minute job
+  timeout for unattended runs.
 - 2026-09-09: Keep catalog icon references independent from user-local image
   bytes and use an immutable manifest as their explicit association authority.
   Resolve only selected paths beneath an explicit user-owned directory, reject
