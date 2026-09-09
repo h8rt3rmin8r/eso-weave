@@ -82,3 +82,11 @@ gates pass.
 No CRITICAL conflict, unresolved clarification, acceptance gap, unrelated edit,
 or constitution violation remains. The user-owned untracked project-management
 document was preserved and excluded from this slice.
+
+PR #138 completed two Codex review rounds. The first round identified rollback
+generation durability and report-path aliasing risks. The authorized follow-up
+round identified hash-aware failure-report and Windows Unicode path-aliasing
+edges. All four findings received regression-backed fixes, descriptive replies,
+and resolved review threads. The final Ubuntu, Windows, dependency review,
+documentation, issue-linkage, CodeQL analysis, and CodeQL publication checks
+passed on commit `c7518d1`.
