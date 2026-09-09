@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-09",
+  "source_snapshots": [
+    {
+      "id": "eso-api-live",
+      "channel": "live",
+      "revision": "f76cf16c4e5be7b234d15dc7f676febffa64c5bb",
+      "license": "technical-reference-only",
+      "uri": "https://github.com/esoui/esoui/blob/f76cf16c4e5be7b234d15dc7f676febffa64c5bb/ESOUIDocumentation.txt"
+    },
+    {
+      "id": "libcombat",
+      "channel": "not-applicable",
+      "revision": "80817e6929c7626832f9b9114d3b12bad8d642c1",
+      "license": "Artistic-2.0",
+      "uri": "https://github.com/Solinur/LibCombat/tree/80817e6929c7626832f9b9114d3b12bad8d642c1"
+    },
+    {
+      "id": "combat-metrics",
+      "channel": "not-applicable",
+      "revision": "6ec1deea4ef8801800dfe88ec79b1f94d0d6303b",
+      "license": "Artistic-2.0",
+      "uri": "https://github.com/Solinur/CombatMetrics/tree/6ec1deea4ef8801800dfe88ec79b1f94d0d6303b"
+    }
+  ],
+  "storage_planes": {
+    "catalog": "catalog.sqlite",
+    "raw": "user-owned-append-only",
+    "derived": "user-owned-rebuildable"
+  },
+  "capture_envelope": {
+    "identity": ["session_id", "sequence"],
+    "duration_clock": "monotonic_ms",
+    "actor_identity": "encounter-local-opaque"
+  },
+  "ordering_policy": {
+    "authority": "sequence",
+    "reject_duplicates": true,
+    "reject_undeclared_gaps": true,
+    "reject_backward_monotonic_time": true
+  },
+  "loss_policy": {
+    "marker": "discontinuity",
+    "degrade_spanning_metrics": true,
+    "expose_ranges": true
+  },
+  "privacy_policy": {
+    "local_only_default": true,
+    "upload_default": false,
+    "omitted_by_default": ["account-name", "character-name", "chat", "guild", "location"]
+  },
+  "integrity_policy": {
+    "raw_immutable": true,
+    "derived_rebuildable": true,
+    "execute_input": false,
+    "bounded_import": true,
+    "atomic_import": true,
+    "provisional_max_file_bytes": 67108864,
+    "provisional_max_events": 500000,
+    "provisional_max_string_bytes": 65536
+  },
+  "catalog_join_policy": {
+    "retain_unknown_ids": true,
+    "rejoin_without_raw_mutation": true,
+    "preserve_channel": true
+  },
+  "actor_policy": {
+    "identity": "encounter-local-opaque",
+    "roles": ["player", "pet", "npc", "boss"],
+    "pet_owner_relationship": "encounter-local-actor-id",
+    "ability_aliases": "derived-versioned-catalog-relationship"
+  },
+  "build_snapshot_policy": {
+    "retention": "derived-versioned",
+    "catalog_version_required": true,
+    "consent_required_for_personal_identity": true,
+    "candidate_fields": ["class-id", "race-id", "attributes", "stats", "equipped-entity-ids", "traits", "enchantments", "champion-allocation", "skill-bars", "mundus-id", "food-id"]
+  },
+  "retention_policy": {
+    "export": "explicit-user-action",
+    "delete": "user-controlled-by-encounter-or-all",
+    "backup": "user-owned-with-schema-and-hash",
+    "corruption_recovery": "reject-invalid-import-and-preserve-last-valid-store",
+    "compression": "optional-local-gzip",
+    "production_budget": "verification-required"
+  },
+  "recommendation_policy": {
+    "requires_encounter_version": true,
+    "requires_catalog_version": true,
+    "requires_metric_quality": true,
+    "correlation_is_not_causation": true,
+    "action_automation_coupling": false
+  },
+  "catalog_schema_requirements": {
+    "entities": ["ability", "effect", "item", "item-set", "champion-skill", "mundus-effect", "class", "race", "food", "trait", "enchantment"],
+    "relationships": ["ability-alias", "effect-source-ability", "pet-owner-kind", "item-set-membership", "skill-line-membership"],
+    "join_key": "stable-numeric-source-id-plus-channel-and-api-version",
+    "unknown_id_supported": true
+  },
+  "transport_policy": {
+    "pixel_bus_bulk_transport": false,
+    "automation_independent": true,
+    "future_transport": "bounded-saved-variables-import"
+  },
+  "event_kinds": [
+    {"id": "encounter-start", "raw": true},
+    {"id": "encounter-end", "raw": true},
+    {"id": "damage", "raw": true},
+    {"id": "healing", "raw": true},
+    {"id": "effect", "raw": true},
+    {"id": "resource", "raw": true},
+    {"id": "cast", "raw": true},
+    {"id": "bar-change", "raw": true},
+    {"id": "death", "raw": true},
+    {"id": "resurrection", "raw": true},
+    {"id": "boss-health", "raw": true},
+    {"id": "performance", "raw": true},
+    {"id": "quickslot", "raw": true},
+    {"id": "discontinuity", "raw": true}
+  ],
+  "metrics": [
+    {"id": "observed-dps", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true},
+    {"id": "observed-hps", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true},
+    {"id": "ability-damage-share", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true},
+    {"id": "effect-uptime", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true},
+    {"id": "ordered-cast-sequence", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true}
+  ],
+  "parity_roadmap": [
+    {"capability": "encounter-boundaries", "source_event": "encounter-start and encounter-end", "calculation": "duration from clipped monotonic bounds", "confidence": "synthetic-proved", "privacy_impact": "none", "combat_metrics_evidence": "FightData combat-log start and end", "state": "fixture-proved", "target_phase": "capture", "acceptance": "synthetic boundary projection", "owner": "issue #113", "risk": "low"},
+    {"capability": "damage-and-healing", "source_event": "damage and healing", "calculation": "outgoing totals divided by encounter seconds and grouped by ability", "confidence": "synthetic-proved", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "combat and healing rows", "state": "fixture-proved", "target_phase": "calculation", "acceptance": "deterministic DPS and HPS", "owner": "issue #134", "risk": "medium"},
+    {"capability": "effect-uptime", "source_event": "effect gained and faded", "calculation": "union clipped active intervals", "confidence": "synthetic-proved", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "effect change rows", "state": "fixture-proved", "target_phase": "calculation", "acceptance": "clipped interval union", "owner": "issue #134", "risk": "medium"},
+    {"capability": "resource-and-bars", "source_event": "resource, cast, and bar-change", "calculation": "ordered snapshots and deltas", "confidence": "design-only", "privacy_impact": "build inference", "combat_metrics_evidence": "power and skill timing rows", "state": "modeled", "target_phase": "capture", "acceptance": "live capture sample", "owner": "issue #132", "risk": "medium"},
+    {"capability": "death-and-resurrection", "source_event": "death and resurrection", "calculation": "ordered life-state intervals", "confidence": "design-only", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "death and resurrection rows", "state": "modeled", "target_phase": "capture", "acceptance": "live capture sample", "owner": "issue #132", "risk": "medium"},
+    {"capability": "boss-health-performance-quickslot", "source_event": "boss-health, performance, and quickslot", "calculation": "time-aligned samples", "confidence": "design-only", "privacy_impact": "performance samples", "combat_metrics_evidence": "boss HP, performance, and quickslot rows", "state": "modeled", "target_phase": "capture", "acceptance": "live capture sample", "owner": "issue #132", "risk": "medium"},
+    {"capability": "same-parse-combat-metrics-parity", "source_event": "representative live capture", "calculation": "metric-by-metric comparison with tolerances", "confidence": "verification-required", "privacy_impact": "local-only parse", "combat_metrics_evidence": "representative exported fight", "state": "verification-required", "target_phase": "verification", "acceptance": "same-parse comparison with declared tolerances", "owner": "issue #131", "risk": "high"},
+    {"capability": "recommendations", "source_event": "versioned metric projections", "calculation": "separate evidence-scoped consumer", "confidence": "deferred", "privacy_impact": "build and performance inference", "combat_metrics_evidence": "not a capture parity feature", "state": "deferred", "target_phase": "recommendations", "acceptance": "separate product acceptance criteria", "owner": "issue #136", "risk": "high"}
+  ],
+  "follow_up_order": ["capture", "import", "calculation", "ui", "recommendations"],
+  "follow_up_issues": {
+    "capture": 132,
+    "import": 133,
+    "calculation": 134,
+    "ui": 135,
+    "recommendations": 136,
+    "live_parity_verification": 131
+  },
+  "synthetic_fixture": {
+    "encounter": "specs/069-encounter-model/fixtures/dummy-encounter.json",
+    "projection": "specs/069-encounter-model/fixtures/dummy-projection.json",
+    "proves_live_parity": false
+  }
+}

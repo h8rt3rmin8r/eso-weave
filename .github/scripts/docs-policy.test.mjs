@@ -9,6 +9,10 @@ import {
   validateBrandCss,
   validateBrandJavascript,
   validateCatalogSourceContract,
+  projectEncounterMetrics,
+  validateEncounterEvidence,
+  validateEncounterFixture,
+  validateEncounterModelContract,
   validateContentCoverage,
   validateContentCoverageRepository,
   validateCorpusSnapshot,
@@ -19,6 +23,68 @@ import {
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const requiredEncounterKinds = [
+  "encounter-start", "encounter-end", "damage", "healing", "effect", "resource", "cast",
+  "bar-change", "death", "resurrection", "boss-health", "performance", "quickslot", "discontinuity",
+];
+const requiredEncounterMetrics = [
+  "observed-dps", "observed-hps", "ability-damage-share", "effect-uptime", "ordered-cast-sequence",
+];
+
+function validEncounterContract() {
+  return {
+    schema_version: 1,
+    as_of: "2026-09-09",
+    source_snapshots: [
+      { id: "eso-api-live", channel: "live", revision: "f76cf16c4e5be7b234d15dc7f676febffa64c5bb", license: "technical-reference-only", uri: "https://github.com/esoui/esoui" },
+      { id: "libcombat", channel: "not-applicable", revision: "80817e6929c7626832f9b9114d3b12bad8d642c1", license: "Artistic-2.0", uri: "https://github.com/solinur/LibCombat" },
+      { id: "combat-metrics", channel: "not-applicable", revision: "6ec1deea4ef8801800dfe88ec79b1f94d0d6303b", license: "Artistic-2.0", uri: "https://github.com/solinur/CombatMetrics" },
+    ],
+    storage_planes: { catalog: "catalog.sqlite", raw: "user-owned-append-only", derived: "user-owned-rebuildable" },
+    capture_envelope: { identity: ["session_id", "sequence"], duration_clock: "monotonic_ms", actor_identity: "encounter-local-opaque" },
+    ordering_policy: { authority: "sequence", reject_duplicates: true, reject_undeclared_gaps: true, reject_backward_monotonic_time: true },
+    loss_policy: { marker: "discontinuity", degrade_spanning_metrics: true, expose_ranges: true },
+    privacy_policy: { local_only_default: true, upload_default: false, omitted_by_default: ["account-name", "character-name", "chat", "guild", "location"] },
+    integrity_policy: { raw_immutable: true, derived_rebuildable: true, execute_input: false, bounded_import: true, atomic_import: true },
+    catalog_join_policy: { retain_unknown_ids: true, rejoin_without_raw_mutation: true, preserve_channel: true },
+    actor_policy: { identity: "encounter-local-opaque", roles: ["player", "pet", "npc", "boss"], pet_owner_relationship: "encounter-local-actor-id", ability_aliases: "derived-versioned-catalog-relationship" },
+    build_snapshot_policy: { retention: "derived-versioned", catalog_version_required: true, consent_required_for_personal_identity: true },
+    retention_policy: { export: "explicit-user-action", delete: "user-controlled-by-encounter-or-all", backup: "user-owned-with-schema-and-hash", corruption_recovery: "reject-invalid-import-and-preserve-last-valid-store", compression: "optional-local-gzip", production_budget: "verification-required" },
+    recommendation_policy: { requires_encounter_version: true, requires_catalog_version: true, requires_metric_quality: true, correlation_is_not_causation: true, action_automation_coupling: false },
+    catalog_schema_requirements: { entities: ["ability"], relationships: ["ability-alias"], join_key: "stable-numeric-source-id-plus-channel-and-api-version", unknown_id_supported: true },
+    transport_policy: { pixel_bus_bulk_transport: false, automation_independent: true, future_transport: "bounded-saved-variables-import" },
+    event_kinds: requiredEncounterKinds.map((id) => ({ id, raw: true })),
+    metrics: requiredEncounterMetrics.map((id) => ({ id, algorithm_version: "s069-v1", source_range_required: true, quality_required: true })),
+    parity_roadmap: requiredEncounterKinds.map((id, index) => ({ capability: id, source_event: id, calculation: "deterministic", confidence: "design-only", privacy_impact: "none", state: index === 0 ? "fixture-proved" : "verification-required", target_phase: "capture", acceptance: "evidence", owner: index === 0 ? "issue #113" : "issue #132", risk: "medium" })),
+    follow_up_order: ["capture", "import", "calculation", "ui", "recommendations"],
+    follow_up_issues: { capture: 132, import: 133, calculation: 134, ui: 135, recommendations: 136, live_parity_verification: 131 },
+    synthetic_fixture: { encounter: "specs/069-encounter-model/fixtures/dummy-encounter.json", projection: "specs/069-encounter-model/fixtures/dummy-projection.json", proves_live_parity: false },
+  };
+}
+
+function validEncounterFixture() {
+  const base = { session_id: "s1", encounter_id: "e1" };
+  const event = (sequence, monotonic_ms, kind, payload = {}) => ({ ...base, sequence, monotonic_ms, kind, payload });
+  const events = [
+    event(1, 0, "encounter-start"), event(2, 900, "cast", { actor_id: "a1", ability_id: 100 }),
+    event(3, 1000, "damage", { source_actor_id: "a1", target_actor_id: "a2", ability_id: 100, amount: 1000, direction: "outgoing" }),
+    event(4, 2000, "effect", { target_actor_id: "a1", ability_id: 200, change: "gained" }),
+    event(5, 2500, "resource", { actor_id: "a1", resource: "magicka", value: 8000 }),
+    event(6, 2800, "cast", { actor_id: "a1", ability_id: 999999 }),
+    event(7, 3000, "damage", { source_actor_id: "a1", target_actor_id: "a2", ability_id: 999999, amount: 1500, direction: "outgoing" }),
+    event(8, 4000, "healing", { source_actor_id: "a1", target_actor_id: "a1", ability_id: 300, effective_amount: 800, direction: "outgoing" }),
+    event(9, 4500, "bar-change", { actor_id: "a1", bar: 2 }),
+    event(12, 6000, "discontinuity", { missing_sequence_from: 10, missing_sequence_to: 11, reason: "capture-overflow" }),
+    event(13, 6900, "cast", { actor_id: "a1", ability_id: 100 }),
+    event(14, 7000, "damage", { source_actor_id: "a1", target_actor_id: "a2", ability_id: 100, amount: 500, direction: "outgoing" }),
+    event(15, 7200, "boss-health", { actor_id: "a2", percent: 42 }), event(16, 7500, "death", { actor_id: "a1" }),
+    event(17, 8000, "effect", { target_actor_id: "a1", ability_id: 200, change: "faded" }),
+    event(18, 8500, "performance", { fps: 60, latency_ms: 70 }), event(19, 8800, "quickslot", { actor_id: "a1", slot: 1 }),
+    event(20, 9000, "resurrection", { actor_id: "a1" }), event(21, 10000, "encounter-end"),
+  ];
+  return { envelope: { schema_version: 1, session_id: "s1", encounter_id: "e1", started_monotonic_ms: 0, ended_monotonic_ms: 10000, first_sequence: 1, last_sequence: 21, privacy_profile: "minimal-local" }, events };
+}
 
 const requiredCatalogCategories = [
   "player-skills",
@@ -1368,4 +1434,179 @@ test("rejects executable, unbounded, non-atomic, or uploaded collector input", (
   ]) {
     assert.ok(errors.some((error) => error.includes(phrase)), phrase);
   }
+});
+
+test("accepts the complete external encounter model contract", () => {
+  assert.deepEqual(validateEncounterModelContract(validEncounterContract()), []);
+});
+
+test("rejects unsafe encounter transport, privacy, storage, and derivation policies", () => {
+  const contract = validEncounterContract();
+  contract.storage_planes.raw = "catalog.sqlite";
+  contract.privacy_policy.upload_default = true;
+  contract.integrity_policy.raw_immutable = false;
+  contract.transport_policy.pixel_bus_bulk_transport = true;
+  contract.transport_policy.automation_independent = false;
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /raw observations.*separate/i);
+  assert.match(errors, /uploaded by default/i);
+  assert.match(errors, /raw observations must be immutable/i);
+  assert.match(errors, /Pixel Bus/i);
+  assert.match(errors, /automation/i);
+});
+
+test("requires every encounter family, metric traceability, and synthetic evidence boundary", () => {
+  const contract = validEncounterContract();
+  contract.event_kinds.pop();
+  contract.metrics[0].quality_required = false;
+  contract.synthetic_fixture.proves_live_parity = true;
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /missing required event kind discontinuity/i);
+  assert.match(errors, /metric observed-dps.*quality/i);
+  assert.match(errors, /synthetic.*live parity/i);
+});
+
+test("requires a complete parity matrix and concrete ordered owners", () => {
+  const contract = validEncounterContract();
+  delete contract.parity_roadmap[0].privacy_impact;
+  contract.follow_up_issues.calculation = "later";
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /parity row encounter-start requires privacy_impact/i);
+  assert.match(errors, /follow-up calculation requires an issue number/i);
+});
+
+test("requires complete, traceable metric receipts", () => {
+  const fixture = validEncounterFixture();
+  const projected = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
+  const expected = {
+    schema_version: 1,
+    algorithm_version: "s069-v1",
+    raw_content_sha256: projected.raw_content_sha256,
+    metrics: structuredClone(projected.metrics),
+    loss_ranges: structuredClone(projected.metrics["observed-dps"].loss_ranges),
+    catalog_receipts: [
+      { ...projected.catalog_receipt, catalog_snapshot: "v1" },
+      { ...projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999])).catalog_receipt, catalog_snapshot: "v2" },
+    ],
+    storage: { production_retention_recommendation: "verification-required" },
+    parity_claim: "synthetic-determinism-only",
+  };
+  delete expected.metrics["observed-dps"].value;
+  delete expected.metrics["observed-dps"].first_sequence;
+  delete expected.metrics["observed-hps"].unit;
+  delete expected.metrics["effect-uptime"].quality;
+  const errors = validateEncounterEvidence(fixture, expected).join("\n");
+  assert.match(errors, /observed-dps.*value/i);
+  assert.match(errors, /observed-dps.*first_sequence/i);
+  assert.match(errors, /observed-hps.*unit/i);
+  assert.match(errors, /effect-uptime.*quality/i);
+});
+
+test("requires complete catalog join receipts", () => {
+  const fixture = validEncounterFixture();
+  const initial = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
+  const resolved = projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999]));
+  const expected = {
+    schema_version: 1,
+    algorithm_version: "s069-v1",
+    raw_content_sha256: initial.raw_content_sha256,
+    metrics: structuredClone(initial.metrics),
+    loss_ranges: structuredClone(initial.metrics["observed-dps"].loss_ranges),
+    catalog_receipts: [
+      { ...initial.catalog_receipt, catalog_snapshot: "v1" },
+      { ...resolved.catalog_receipt, catalog_snapshot: "v2" },
+    ],
+    storage: { production_retention_recommendation: "verification-required" },
+    parity_claim: "synthetic-determinism-only",
+  };
+  delete expected.catalog_receipts[0].known_ids;
+  delete expected.catalog_receipts[1].catalog_snapshot;
+  const errors = validateEncounterEvidence(fixture, expected).join("\n");
+  assert.match(errors, /initial catalog receipt requires known_ids/i);
+  assert.match(errors, /resolved catalog receipt requires catalog_snapshot/i);
+});
+
+test("projects deterministic metrics and catalog receipts from the dummy encounter", () => {
+  const fixture = validEncounterFixture();
+  assert.deepEqual(validateEncounterFixture(fixture), []);
+  const projected = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
+  assert.equal(projected.metrics["observed-dps"].value, 300);
+  assert.equal(projected.metrics["observed-hps"].value, 80);
+  assert.equal(projected.metrics["ability-damage-share"].values["100"], 0.5);
+  assert.equal(projected.metrics["ability-damage-share"].values["999999"], 0.5);
+  assert.equal(projected.metrics["effect-uptime"].values["200"], 0.6);
+  assert.deepEqual(projected.metrics["ordered-cast-sequence"].values, [100, 999999, 100]);
+  assert.deepEqual(projected.catalog_receipt.unknown_ids, [999999]);
+  assert.ok(Object.values(projected.metrics).every((metric) => metric.quality === "degraded"));
+
+  const shuffled = structuredClone(fixture);
+  shuffled.events.reverse();
+  assert.deepEqual(projectEncounterMetrics(shuffled, new Set([100, 200, 300])), projected);
+  const resolved = projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999]));
+  assert.deepEqual(resolved.catalog_receipt.unknown_ids, []);
+  assert.equal(resolved.raw_content_sha256, projected.raw_content_sha256);
+});
+
+test("rejects duplicate sequences, undeclared gaps, and backward monotonic time", () => {
+  const duplicate = validEncounterFixture();
+  duplicate.events[1].sequence = 1;
+  assert.match(validateEncounterFixture(duplicate).join("\n"), /duplicate sequence/i);
+
+  const gap = validEncounterFixture();
+  gap.events = gap.events.filter((event) => event.kind !== "discontinuity");
+  assert.match(validateEncounterFixture(gap).join("\n"), /undeclared sequence gap/i);
+
+  const backwards = validEncounterFixture();
+  backwards.events.find((event) => event.sequence === 13).monotonic_ms = 5000;
+  assert.match(validateEncounterFixture(backwards).join("\n"), /backward monotonic time/i);
+});
+
+test("rejects malformed discontinuities and private fixture fields", () => {
+  const malformed = validEncounterFixture();
+  for (const event of malformed.events.filter((event) => event.sequence >= 12)) event.sequence -= 2;
+  malformed.envelope.last_sequence -= 2;
+  const marker = malformed.events.find((event) => event.kind === "discontinuity");
+  marker.payload.missing_sequence_from = 50;
+  marker.payload.missing_sequence_to = 60;
+  assert.match(validateEncounterFixture(malformed).join("\n"), /discontinuity.*preceding missing range/i);
+
+  const privateFixture = validEncounterFixture();
+  privateFixture.events[2].payload.subject = { account_name: "private" };
+  assert.match(validateEncounterFixture(privateFixture).join("\n"), /prohibited private field account_name/i);
+
+  const privateEnvelope = validEncounterFixture();
+  privateEnvelope.envelope.metadata = { character_name: "private" };
+  assert.match(validateEncounterFixture(privateEnvelope).join("\n"), /prohibited private field character_name/i);
+
+  const missingReason = validEncounterFixture();
+  missingReason.events.find((event) => event.kind === "discontinuity").payload.reason = "";
+  assert.match(validateEncounterFixture(missingReason).join("\n"), /discontinuity.*non-empty reason/i);
+});
+
+test("unions overlapping effect intervals across actor instances", () => {
+  const fixture = validEncounterFixture();
+  for (const event of fixture.events.filter((event) => event.sequence >= 12)) event.sequence += 3;
+  fixture.envelope.last_sequence += 3;
+  const marker = fixture.events.find((event) => event.kind === "discontinuity");
+  marker.payload.missing_sequence_from = 12;
+  marker.payload.missing_sequence_to = 14;
+  fixture.events.push(
+    { session_id: "s1", encounter_id: "e1", sequence: 10, monotonic_ms: 5000, kind: "effect", payload: { target_actor_id: "a2", ability_id: 200, effect_instance_id: "other", change: "gained" } },
+    { session_id: "s1", encounter_id: "e1", sequence: 11, monotonic_ms: 5500, kind: "effect", payload: { target_actor_id: "a2", ability_id: 200, effect_instance_id: "other", change: "faded" } },
+  );
+  assert.equal(projectEncounterMetrics(fixture).metrics["effect-uptime"].values["200"], 0.6);
+});
+
+test("preserves the earliest active time across repeated effect gains", () => {
+  const fixture = validEncounterFixture();
+  for (const event of fixture.events.filter((event) => event.sequence >= 5)) event.sequence += 1;
+  fixture.envelope.last_sequence += 1;
+  const marker = fixture.events.find((event) => event.kind === "discontinuity");
+  marker.payload.missing_sequence_from += 1;
+  marker.payload.missing_sequence_to += 1;
+  fixture.events.push({
+    session_id: "s1", encounter_id: "e1", sequence: 5, monotonic_ms: 2200, kind: "effect",
+    payload: { target_actor_id: "a1", ability_id: 200, change: "gained" },
+  });
+  assert.equal(projectEncounterMetrics(fixture).metrics["effect-uptime"].values["200"], 0.6);
 });

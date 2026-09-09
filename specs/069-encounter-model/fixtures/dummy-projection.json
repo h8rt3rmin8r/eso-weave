@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "algorithm_version": "s069-v1",
+  "raw_content_sha256": "4e510a251cbf65b71681fd36ad68c541ac7260c28d17f695e289ca730602e298",
+  "metrics": {
+    "observed-dps": {"value": 300, "unit": "damage-per-second", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "observed-hps": {"value": 80, "unit": "effective-healing-per-second", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "ability-damage-share": {"values": {"100": 0.5, "999999": 0.5}, "unit": "ratio", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "effect-uptime": {"values": {"200": 0.6}, "unit": "ratio", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "ordered-cast-sequence": {"values": [100, 999999, 100], "unit": "ability-id-sequence", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]}
+  },
+  "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}],
+  "catalog_receipts": [
+    {
+      "catalog_snapshot": "dummy-catalog-v1",
+      "known_ids": [100, 200, 300],
+      "unknown_ids": [999999],
+      "raw_content_sha256": "4e510a251cbf65b71681fd36ad68c541ac7260c28d17f695e289ca730602e298"
+    },
+    {
+      "catalog_snapshot": "dummy-catalog-v2",
+      "known_ids": [100, 200, 300, 999999],
+      "unknown_ids": [],
+      "raw_content_sha256": "4e510a251cbf65b71681fd36ad68c541ac7260c28d17f695e289ca730602e298"
+    }
+  ],
+  "storage": {
+    "exact": {"raw_bytes": 4281, "gzip_bytes": 775},
+    "linear_estimates": {
+      "one_hour_at_fixture_rate": {"raw_bytes": 1541160, "gzip_bytes": 279000},
+      "one_hundred_fixture_encounters": {"raw_bytes": 428100, "gzip_bytes": 77500}
+    },
+    "production_retention_recommendation": "verification-required"
+  },
+  "parity_claim": "synthetic-determinism-only"
+}

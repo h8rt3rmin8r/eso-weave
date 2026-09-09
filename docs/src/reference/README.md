@@ -10,6 +10,7 @@ Focused migrated references include:
 - [Pixel Bus Protocol](pixel-bus-protocol.md)
 - [Weave Delay Defaults](weave-delay-defaults.md)
 - [ESO Catalog Sources and Rights](catalog-sources-and-rights.md)
+- [Encounter Data and Metrics](encounter-data-and-metrics.md)
 - [External and Project Sources](external-sources.md)
 
 Continue to [Development](../development/) or return to the
