@@ -131,6 +131,8 @@ jobs:
           chmod +x appimagetool
           appdir="packaging/appimage/AppDir"
           install -Dm755 "target/release/${BIN_NAME}" "${appdir}/usr/bin/${BIN_NAME}"
+          install -Dm644 assets/catalog/catalog.sqlite \
+            packaging/appimage/AppDir/usr/share/eso-weave/catalog/catalog.sqlite
           ./appimagetool "$appdir" "${BIN_NAME}-${ver}-x86_64.AppImage"
 
       - name: Package
@@ -139,6 +141,8 @@ jobs:
           dist="${BIN_NAME}-${ver}-x86_64-linux"
           mkdir -p "$dist"
           cp "target/release/${BIN_NAME}" "$dist/"
+          mkdir -p "$dist/catalog"
+          cp assets/catalog/catalog.sqlite "$dist/catalog/catalog.sqlite"
           cp README.md LICENSE "$dist/" 2>/dev/null || true
           tar -czf "${dist}.tar.gz" "$dist"
           cp target/debian/*.deb "${BIN_NAME}-${ver}-x86_64.deb"

@@ -39,6 +39,8 @@ Observed numeric zero is different from all four states.
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
 | PixelBeacon Signal: **Not detected** | Active game, no heartbeat seen | Enable/reload addon and expose overlay |
+| Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
+| Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
 ## Game Context and player state
 

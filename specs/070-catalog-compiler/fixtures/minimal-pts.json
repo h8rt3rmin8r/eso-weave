@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "release": {
+    "catalog_version": "s070-pts-1",
+    "channel": "pts",
+    "game_version": "12.1.4",
+    "api_version": 101051,
+    "created_at": "2026-09-09T00:00:00Z",
+    "locales": ["en-US"],
+    "tool_version": "s070-v1"
+  },
+  "source_snapshots": [
+    {
+      "snapshot_id": "synthetic-pts",
+      "family": "project-fixture",
+      "channel": "pts",
+      "game_version": "12.1.4",
+      "api_version": 101051,
+      "locale": "en-US",
+      "revision": "s070-fixture-pts-1",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "uri": "project://specs/070/minimal-pts",
+      "acquired_at": "2026-09-09T00:00:00Z",
+      "license_scope": "project-authored-synthetic",
+      "acquisition_method": "project-fixture",
+      "redistribution": "allowed"
+    }
+  ],
+  "source_records": [],
+  "coverage": [],
+  "entities": [],
+  "attributes": [],
+  "relations": [],
+  "aliases": [],
+  "localized_text": [],
+  "icon_references": [],
+  "icon_assets": []
+}

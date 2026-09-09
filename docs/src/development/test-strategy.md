@@ -17,6 +17,8 @@ layer proves and what it does not prove.
 | Packaging and release scripts | `scripts/release-notes.test.sh`, `scripts/validate-debian-package.test.sh`, and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, required Debian control fields, and asset gating |
 | Documentation policy | `.github/scripts/docs-policy.test.mjs` | Navigation, links, offline assets, lifecycle boundaries, preservation, coverage, aliases, and prose constraints |
 | Bundled documentation | `tests/documentation.rs`, `build.rs`, and release-profile CI builds | Immutable lookup, content types, strict routing, HTTP bounds, reuse, concurrent reads, shutdown, browser seams, and production embedding |
+| Catalog compiler and runtime | `tests/catalog_compiler.rs`, `tests/catalog_runtime.rs` | Strict data-only input, provenance, constraints, deterministic hashes and bytes, atomic rollback, typed read-only queries, and graceful degradation |
+| Catalog packaging | `tests/catalog_packaging.rs` | MSI, Debian, AppImage, and tarball catalog paths plus baseline rights boundaries |
 
 ## Deterministic seams
 

@@ -10,9 +10,9 @@ Sequence:
 2. S069 defined the external encounter model, deterministic synthetic
    projection, and Combat Metrics parity roadmap. It merged in PR #137 and
    closed issue #113.
-3. S070 is the recommended next slice. It implements the deterministic,
-   versioned SQLite catalog compiler tracked by issue #114, which is now
-   unblocked by the completed source contract and encounter model.
+3. S070 is in progress and implements the deterministic, versioned SQLite
+   catalog compiler tracked by issue #114, including atomic publication,
+   rollback evidence, typed read-only access, and supported package layouts.
 4. Later slices continue the catalog foundation through issues #115 through
    #118 and the encounter pipeline through issues #132 through #136 according
    to their native dependency order. Issue #131 verifies live Combat Metrics

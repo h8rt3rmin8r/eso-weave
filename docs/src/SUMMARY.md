@@ -31,6 +31,7 @@
   - [External and Project Sources](reference/external-sources.md)
 - [Development](development/README.md)
   - [Architecture and Ownership](development/architecture.md)
+  - [Catalog Compiler and Runtime](development/catalog-compiler.md)
   - [State Machines](development/state-machines.md)
   - [Test Strategy](development/test-strategy.md)
   - [Release and Packaging](development/release-and-packaging.md)

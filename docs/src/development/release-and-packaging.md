@@ -51,6 +51,14 @@ Generated HTML remains ignored build output. A release-profile Cargo build fails
 if the exact documentation tools are absent, mismatched, or cannot produce the
 site, so package jobs cannot silently ship the development fixture.
 
+Every package also carries the same reviewed `catalog/catalog.sqlite` baseline.
+The MSI and portable archive place it relative to the executable, while Debian
+and AppImage place it under `/usr/share/eso-weave/catalog`. The application opens
+the file read-only, verifies its schema and semantic SHA-256, and surfaces an
+empty-catalog diagnostic rather than blocking startup if package contents are
+missing or invalid. See [Catalog Compiler and Runtime](catalog-compiler.md) for
+rebuild, diff, approval, and rollback rules.
+
 Before the Linux build copies, hashes, or uploads the `.deb`, the release
 workflow queries its actual control record and requires non-empty Package,
 Version, Architecture, Maintainer, and Description fields. The reusable

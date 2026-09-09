@@ -15,6 +15,9 @@ tracing-subscriber = "0.3"
 dirs = "6"
 time = { version = "0.3", features = ["formatting"] }
 thiserror = "2"
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"] }
+sha2 = "0.10"
+tempfile = "3"
 eframe = { version = "0.36", default-features = false, features = [
     "glow",
     "default_fonts",
@@ -36,6 +39,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Gdi",
     "Win32_Media",
+    "Win32_Storage_FileSystem",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Registry",
 ] }
@@ -55,7 +59,6 @@ winresource = "0.1"
 # test build; the version tracks the eframe/egui release. Recorded as a dated
 # decision in CHANGELOG.md.
 egui_kittest = { version = "0.36.1", default-features = false }
-tempfile = "3"
 
 # Debian package metadata for cargo-deb (built by the pinned release pipeline with
 # `cargo deb --no-build`). Pinned packaging config: changes are recorded as dated
@@ -80,5 +83,6 @@ assets = [
     ["packaging/linux/eso-weave.desktop", "usr/share/applications/", "644"],
     ["packaging/linux/eso-weave.png", "usr/share/icons/hicolor/256x256/apps/eso-weave.png", "644"],
     ["packaging/linux/70-eso-weave-uinput.rules", "usr/lib/udev/rules.d/70-eso-weave-uinput.rules", "644"],
+    ["assets/catalog/catalog.sqlite", "usr/share/eso-weave/catalog/catalog.sqlite", "644"],
     ["README.md", "usr/share/doc/eso-weave/README.md", "644"],
 ]

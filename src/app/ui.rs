@@ -1445,6 +1445,8 @@ impl EsoWeaveApp {
                                 |_| {},
                             );
 
+                            dashboard_status_row(ui, palette, &view.catalog_line, 0.0, |_| {});
+
                             let mut fishing_on = view.fishing_active;
                             dashboard_status_row(
                                 ui,

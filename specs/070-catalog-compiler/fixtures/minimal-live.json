@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "release": {
+    "catalog_version": "s070-live-1",
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "created_at": "2026-09-09T00:00:00Z",
+    "locales": ["en-US"],
+    "tool_version": "s070-v1"
+  },
+  "source_snapshots": [
+    {
+      "snapshot_id": "synthetic-live",
+      "family": "project-fixture",
+      "channel": "live",
+      "game_version": "12.0.8",
+      "api_version": 101050,
+      "locale": "en-US",
+      "revision": "s070-fixture-1",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "uri": "project://specs/070/minimal-live",
+      "acquired_at": "2026-09-09T00:00:00Z",
+      "license_scope": "project-authored-synthetic",
+      "acquisition_method": "project-fixture",
+      "redistribution": "allowed"
+    }
+  ],
+  "source_records": [
+    {
+      "record_id": "live-skill-line-10",
+      "snapshot_id": "synthetic-live",
+      "category": "player-skills",
+      "source_key": "skill-line:10",
+      "content_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "acquisition_method": "project-fixture",
+      "import_result": "accepted"
+    },
+    {
+      "record_id": "live-ability-100",
+      "snapshot_id": "synthetic-live",
+      "category": "player-skills",
+      "source_key": "ability:100",
+      "content_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "acquisition_method": "project-fixture",
+      "import_result": "accepted"
+    },
+    {
+      "record_id": "live-effect-200",
+      "snapshot_id": "synthetic-live",
+      "category": "effects-and-status",
+      "source_key": "effect:200",
+      "content_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "acquisition_method": "project-fixture",
+      "import_result": "observed-only"
+    }
+  ],
+  "coverage": [
+    {
+      "category": "player-skills",
+      "snapshot_id": "synthetic-live",
+      "locale": "en-US",
+      "scope": "synthetic-fixture",
+      "completeness": "bounded",
+      "limits": "three project-authored fixture records only"
+    },
+    {
+      "category": "effects-and-status",
+      "snapshot_id": "synthetic-live",
+      "locale": "en-US",
+      "scope": "synthetic-fixture",
+      "completeness": "opportunistic",
+      "limits": "one observed-only synthetic effect"
+    }
+  ],
+  "entities": [
+    {
+      "entity": { "kind": "skill-line", "stable_id": 10 },
+      "observed_only": false,
+      "source_records": ["live-skill-line-10"]
+    },
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "observed_only": false,
+      "source_records": ["live-ability-100"]
+    },
+    {
+      "entity": { "kind": "effect", "stable_id": 200 },
+      "observed_only": true,
+      "source_records": ["live-effect-200"]
+    }
+  ],
+  "attributes": [
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "name": "cost",
+      "value": 42,
+      "source_record": "live-ability-100"
+    },
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "name": "version-scoped-order",
+      "value": 2,
+      "source_record": "live-ability-100"
+    }
+  ],
+  "relations": [
+    {
+      "kind": "skill-line-membership",
+      "from": { "kind": "ability", "stable_id": 100 },
+      "to": { "kind": "skill-line", "stable_id": 10 },
+      "source_record": "live-ability-100"
+    },
+    {
+      "kind": "effect-source-ability",
+      "from": { "kind": "effect", "stable_id": 200 },
+      "to": { "kind": "ability", "stable_id": 100 },
+      "source_record": "live-effect-200"
+    }
+  ],
+  "aliases": [],
+  "localized_text": [
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "locale": "en-US",
+      "text_kind": "name",
+      "value": "Training Pulse",
+      "normalized_search": "training pulse",
+      "source_version": "s070-fixture-1",
+      "redistribution": "allowed",
+      "source_record": "live-ability-100"
+    }
+  ],
+  "icon_references": [
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "virtual_path": "project://placeholder/ability",
+      "availability": "placeholder",
+      "source_record": "live-ability-100"
+    }
+  ],
+  "icon_assets": []
+}

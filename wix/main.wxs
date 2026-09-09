@@ -52,6 +52,16 @@
               Source="$(var.CargoTargetBinDir)\eso-weave.exe"
               KeyPath="yes" />
           </Component>
+          <Directory Id="CatalogFolder" Name="catalog">
+            <Component Id="CatalogDatabase" Guid="*" Win64="yes">
+              <File
+                Id="CatalogSqlite"
+                Name="catalog.sqlite"
+                DiskId="1"
+                Source="assets\catalog\catalog.sqlite"
+                KeyPath="yes" />
+            </Component>
+          </Directory>
         </Directory>
       </Directory>
 
@@ -150,6 +160,7 @@
       ConfigurableDirectory="APPLICATIONFOLDER"
       Description="The ESO Weave application and its Start Menu shortcut.">
       <ComponentRef Id="ApplicationBinary" />
+      <ComponentRef Id="CatalogDatabase" />
       <ComponentRef Id="ApplicationShortcut" />
       <!--
         The desktop shortcut is opt-in: a child feature at Level 2 is not installed
