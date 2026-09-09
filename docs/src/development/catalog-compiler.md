@@ -70,12 +70,15 @@ database enters a package.
 ## Publication and rollback
 
 A candidate is built in the destination directory and never modifies the open or
-existing database. Before replacement, a valid destination is copied to
-`catalog.sqlite.rollback`, synced, hashed, and described by
-`catalog.sqlite.rollback.json`. The verified candidate then replaces the
-destination atomically. A parse, constraint, verification, sync, backup, or
-replacement failure leaves the destination unchanged and writes a failure report
-when `--report` was supplied.
+existing database. Before replacement, a valid destination is copied, synced,
+and verified under a content-addressed name such as
+`catalog.sqlite.rollback.SHA256.sqlite`. The atomically updated
+`catalog.sqlite.rollback.json` names that exact generation. Older generations
+remain valid if preparing a later rollback or manifest fails. The verified
+candidate then replaces the destination atomically. A parse, constraint,
+verification, sync, backup, or replacement failure leaves the destination
+unchanged and writes a failure report when `--report` was supplied. Report paths
+that alias an input, catalog, rollback generation, or manifest are rejected.
 
 Stop the application before a manual rollback. Confirm the manifest hash, copy
 the rollback file over the destination, and run `verify` before restarting. User

@@ -6,6 +6,12 @@ use catalog_support::{bytes, CatalogSandbox, CHANGED_LIVE_FIXTURE, LIVE_FIXTURE,
 use eso_weave::catalog::compiler::{build_catalog, diff_catalogs, verify_catalog, BuildRequest};
 use eso_weave::catalog::Channel;
 
+fn rollback_from_manifest(destination: &std::path::Path) -> std::path::PathBuf {
+    let manifest = destination.with_extension("sqlite.rollback.json");
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(manifest).unwrap()).unwrap();
+    std::path::PathBuf::from(value["rollback"].as_str().unwrap())
+}
+
 #[test]
 fn repeated_builds_are_byte_and_semantically_deterministic() {
     let sandbox = CatalogSandbox::new();
@@ -275,6 +281,101 @@ fn failure_report_and_publish_gate_preserve_last_known_good() {
 }
 
 #[test]
+fn report_paths_cannot_alias_inputs_or_catalog_artifacts() {
+    let sandbox = CatalogSandbox::new();
+    let input = sandbox.path("input.json");
+    fs::copy(LIVE_FIXTURE, &input).unwrap();
+    let input_before = fs::read(&input).unwrap();
+    let alias_directory = sandbox.path("alias");
+    fs::create_dir(&alias_directory).unwrap();
+    let mut request = BuildRequest::new(&input, sandbox.path("first.sqlite"), Channel::Live);
+    request.report_path = Some(alias_directory.join("..").join("input.json"));
+    let error = build_catalog(&request).expect_err("relative input alias must fail");
+    assert!(error.to_string().contains("alias the catalog input"));
+    assert_eq!(fs::read(input).unwrap(), input_before);
+
+    let destination = sandbox.path("catalog.sqlite");
+    build_catalog(&BuildRequest::new(
+        LIVE_FIXTURE,
+        &destination,
+        Channel::Live,
+    ))
+    .unwrap();
+    let before = bytes(&destination);
+    let mut request = BuildRequest::new(CHANGED_LIVE_FIXTURE, &destination, Channel::Live);
+    request.report_path = Some(destination.clone());
+    let error = build_catalog(&request).expect_err("output alias must fail");
+    assert!(error.to_string().contains("alias the catalog output"));
+    assert_eq!(bytes(&destination), before);
+
+    build_catalog(&BuildRequest::new(
+        CHANGED_LIVE_FIXTURE,
+        &destination,
+        Channel::Live,
+    ))
+    .unwrap();
+    let rollback = rollback_from_manifest(&destination);
+    let rollback_before = bytes(&rollback);
+    let mut request = BuildRequest::new(CHANGED_LIVE_FIXTURE, &destination, Channel::Live);
+    request.report_path = Some(rollback.clone());
+    let error = build_catalog(&request).expect_err("rollback alias must fail");
+    assert!(error.to_string().contains("rollback artifact"));
+    assert_eq!(bytes(rollback), rollback_before);
+
+    let manifest = destination.with_extension("sqlite.rollback.json");
+    let manifest_before = bytes(&manifest);
+    let mut request = BuildRequest::new(CHANGED_LIVE_FIXTURE, &destination, Channel::Live);
+    request.report_path = Some(manifest.clone());
+    let error = build_catalog(&request).expect_err("manifest alias must fail");
+    assert!(error
+        .to_string()
+        .contains("alias the catalog rollback manifest"));
+    assert_eq!(bytes(manifest), manifest_before);
+}
+
+#[test]
+fn failed_rollback_generation_preserves_prior_recovery_evidence() {
+    let sandbox = CatalogSandbox::new();
+    let destination = sandbox.path("catalog.sqlite");
+    build_catalog(&BuildRequest::new(
+        LIVE_FIXTURE,
+        &destination,
+        Channel::Live,
+    ))
+    .unwrap();
+    build_catalog(&BuildRequest::new(
+        CHANGED_LIVE_FIXTURE,
+        &destination,
+        Channel::Live,
+    ))
+    .unwrap();
+    let destination_before = bytes(&destination);
+    let manifest = destination.with_extension("sqlite.rollback.json");
+    let manifest_before = bytes(&manifest);
+    let prior_rollback = rollback_from_manifest(&destination);
+    let prior_rollback_before = bytes(&prior_rollback);
+
+    let current = verify_catalog(&destination).unwrap();
+    let file_name = destination.file_name().unwrap().to_string_lossy();
+    let blocked_generation = destination.with_file_name(format!(
+        "{file_name}.rollback.{}.sqlite",
+        current.artifact_sha256
+    ));
+    fs::write(&blocked_generation, b"interrupted rollback generation").unwrap();
+
+    let error = build_catalog(&BuildRequest::new(
+        CHANGED_LIVE_FIXTURE,
+        &destination,
+        Channel::Live,
+    ))
+    .expect_err("invalid new rollback generation must stop publication");
+    assert!(error.to_string().contains("does not match"));
+    assert_eq!(bytes(&destination), destination_before);
+    assert_eq!(bytes(&manifest), manifest_before);
+    assert_eq!(bytes(prior_rollback), prior_rollback_before);
+}
+
+#[test]
 fn changed_catalog_produces_stable_categorized_diff_and_rollback() {
     let sandbox = CatalogSandbox::new();
     let destination = sandbox.path("catalog.sqlite");
@@ -291,10 +392,8 @@ fn changed_catalog_produces_stable_categorized_diff_and_rollback() {
     request.report_path = Some(report_path.clone());
     let report = build_catalog(&request).expect("publish changed catalog");
 
-    assert_eq!(
-        bytes(destination.with_extension("sqlite.rollback")),
-        previous
-    );
+    let rollback = rollback_from_manifest(&destination);
+    assert_eq!(bytes(&rollback), previous);
     assert!(destination.with_extension("sqlite.rollback.json").is_file());
     assert!(report
         .diff
@@ -321,8 +420,7 @@ fn changed_catalog_produces_stable_categorized_diff_and_rollback() {
         "published"
     );
 
-    let direct = diff_catalogs(destination.with_extension("sqlite.rollback"), &destination)
-        .expect("diff catalogs");
+    let direct = diff_catalogs(rollback, &destination).expect("diff catalogs");
     assert_eq!(direct, report.diff);
 }
 

@@ -154,8 +154,8 @@ generated artifact beside its reviewable JSON source.
    Treat the file hash as artifact evidence, not the cross-SQLite semantic
    authority.
 5. Build into a sibling temporary file, validate after a read-only reopen, copy
-   the prior file to a stable rollback path, write the rollback manifest, then
-   atomically persist the candidate.
+   the prior file to a verified content-addressed rollback generation,
+   atomically update its manifest, then atomically persist the candidate.
 6. Store the catalog beside the executable on Windows and portable Linux, under
    `/usr/share/eso-weave/catalog` for Debian, and under AppDir
    `/usr/share/eso-weave/catalog` for AppImage. The locator checks only these

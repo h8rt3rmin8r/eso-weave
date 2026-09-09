@@ -23,11 +23,13 @@ hash, integrity status, and grouped entity counts.
 ## Compare two catalogs
 
 ```powershell
-cargo run --locked --bin catalog-compiler -- diff --old target/catalog/live/catalog.sqlite.rollback --new target/catalog/live/catalog.sqlite --output target/catalog/live/diff.json
+cargo run --locked --bin catalog-compiler -- diff --old ROLLBACK_FROM_MANIFEST.sqlite --new target/catalog/live/catalog.sqlite --output target/catalog/live/diff.json
 ```
 
-The diff names added, removed, and changed entity, localized-text, relation,
-coverage, and icon-reference keys in stable order.
+Read the exact content-addressed rollback path from
+`target/catalog/live/catalog.sqlite.rollback.json`. The diff names added,
+removed, and changed entity, localized-text, relation, coverage, and
+icon-reference keys in stable order.
 
 ## Build PTS separately
 

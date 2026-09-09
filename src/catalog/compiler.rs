@@ -1,9 +1,10 @@
 //! Deterministic catalog construction, verification, diffing, and publication.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use rusqlite::{params, Connection, Transaction};
 use serde::{Deserialize, Serialize};
@@ -119,14 +120,16 @@ pub fn build_catalog(request: &BuildRequest) -> Result<BuildReport, CatalogError
     match build_catalog_inner(request) {
         Ok(report) => Ok(report),
         Err(error) => {
-            if let Some(path) = &request.report_path {
-                let report = FailureReport {
-                    status: "failed",
-                    input: request.input_path.display().to_string(),
-                    output: request.output_path.display().to_string(),
-                    errors: vec![error.to_string()],
-                };
-                let _ = write_json_atomic(path, &report);
+            if validate_artifact_paths(request, None).is_ok() {
+                if let Some(path) = &request.report_path {
+                    let report = FailureReport {
+                        status: "failed",
+                        input: request.input_path.display().to_string(),
+                        output: request.output_path.display().to_string(),
+                        errors: vec![error.to_string()],
+                    };
+                    let _ = write_json_atomic(path, &report);
+                }
             }
             Err(error)
         }
@@ -134,6 +137,7 @@ pub fn build_catalog(request: &BuildRequest) -> Result<BuildReport, CatalogError
 }
 
 fn build_catalog_inner(request: &BuildRequest) -> Result<BuildReport, CatalogError> {
+    validate_artifact_paths(request, None)?;
     let metadata = fs::metadata(&request.input_path)?;
     if metadata.len() > MAX_INPUT_BYTES {
         return Err(CatalogError::Validation(format!(
@@ -152,6 +156,22 @@ fn build_catalog_inner(request: &BuildRequest) -> Result<BuildReport, CatalogErr
     }
     let input_sha256 = sha256_json(&bundle)?;
     let source_set_sha256 = sha256_json(&bundle.source_snapshots)?;
+
+    let existing = if request.output_path.is_file() {
+        let existing = verify_catalog(&request.output_path)?;
+        if existing.channel != bundle.release.channel {
+            return Err(CatalogError::Validation(format!(
+                "refusing to replace {} catalog with {} catalog at {}",
+                existing.channel,
+                bundle.release.channel,
+                request.output_path.display()
+            )));
+        }
+        validate_artifact_paths(request, Some(&existing.artifact_sha256))?;
+        Some(existing)
+    } else {
+        None
+    };
 
     let output_parent = request
         .output_path
@@ -187,18 +207,9 @@ fn build_catalog_inner(request: &BuildRequest) -> Result<BuildReport, CatalogErr
     drop(candidate_connection);
     let candidate_artifact_sha256 = artifact_sha256(&candidate)?;
 
-    let diff = if request.output_path.is_file() {
-        let existing = verify_catalog(&request.output_path)?;
-        if existing.channel != bundle.release.channel {
-            return Err(CatalogError::Validation(format!(
-                "refusing to replace {} catalog with {} catalog at {}",
-                existing.channel,
-                bundle.release.channel,
-                request.output_path.display()
-            )));
-        }
+    let diff = if let Some(existing) = &existing {
         let diff = diff_catalogs(&request.output_path, &candidate)?;
-        preserve_rollback(&request.output_path, &existing)?;
+        preserve_rollback(&request.output_path, existing)?;
         diff
     } else {
         CatalogDiff::default()
@@ -493,31 +504,38 @@ fn attribute_columns(value: &serde_json::Value) -> Result<AttributeColumns, Cata
 }
 
 fn preserve_rollback(destination: &Path, existing: &VerifyReport) -> Result<(), CatalogError> {
-    let rollback = destination.with_extension(format!(
-        "{}.rollback",
-        destination
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("sqlite")
-    ));
-    let manifest = destination.with_extension(format!(
-        "{}.rollback.json",
-        destination
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("sqlite")
-    ));
-    fs::copy(destination, &rollback)?;
-    OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&rollback)?
-        .sync_all()?;
-    let rollback_hash = artifact_sha256(&rollback)?;
-    if rollback_hash != existing.artifact_sha256 {
-        return Err(CatalogError::Validation(
-            "rollback copy hash differs from the last known-good catalog".to_string(),
-        ));
+    let rollback = rollback_generation_path(destination, &existing.artifact_sha256);
+    let manifest = rollback_manifest_path(destination);
+    if rollback.exists() {
+        let rollback_hash = artifact_sha256(&rollback)?;
+        if rollback_hash != existing.artifact_sha256 {
+            return Err(CatalogError::Validation(format!(
+                "rollback generation {} does not match the last known-good catalog",
+                rollback.display()
+            )));
+        }
+    } else {
+        let parent = rollback
+            .parent()
+            .filter(|value| !value.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let temporary = tempfile::Builder::new()
+            .prefix(".catalog-rollback-")
+            .tempfile_in(parent)?
+            .into_temp_path();
+        fs::copy(destination, &temporary)?;
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&temporary)?
+            .sync_all()?;
+        let rollback_hash = artifact_sha256(&temporary)?;
+        if rollback_hash != existing.artifact_sha256 {
+            return Err(CatalogError::Validation(
+                "rollback copy hash differs from the last known-good catalog".to_string(),
+            ));
+        }
+        persist_candidate(temporary, &rollback)?;
     }
     write_json_atomic(
         &manifest,
@@ -530,6 +548,152 @@ fn preserve_rollback(destination: &Path, existing: &VerifyReport) -> Result<(), 
             catalog_version: existing.catalog_version.clone(),
         },
     )
+}
+
+fn rollback_manifest_path(destination: &Path) -> PathBuf {
+    suffixed_path(destination, ".rollback.json")
+}
+
+fn rollback_generation_path(destination: &Path, artifact_sha256: &str) -> PathBuf {
+    suffixed_path(destination, &format!(".rollback.{artifact_sha256}.sqlite"))
+}
+
+fn suffixed_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut file_name = path
+        .file_name()
+        .unwrap_or_else(|| std::ffi::OsStr::new("catalog.sqlite"))
+        .to_os_string();
+    file_name.push(suffix);
+    path.with_file_name(file_name)
+}
+
+fn validate_artifact_paths(
+    request: &BuildRequest,
+    rollback_sha256: Option<&str>,
+) -> Result<(), CatalogError> {
+    let input = comparable_path(&request.input_path)?;
+    let output = comparable_path(&request.output_path)?;
+    if same_path(&input, &output) {
+        return Err(CatalogError::Validation(
+            "catalog input and output paths must be distinct".to_string(),
+        ));
+    }
+    let Some(report_path) = &request.report_path else {
+        return Ok(());
+    };
+    let report = comparable_path(report_path)?;
+    let mut reserved = vec![
+        ("input", input),
+        ("output", output.clone()),
+        (
+            "rollback manifest",
+            comparable_path(&rollback_manifest_path(&request.output_path))?,
+        ),
+    ];
+    if let Some(artifact_sha256) = rollback_sha256 {
+        reserved.push((
+            "rollback generation",
+            comparable_path(&rollback_generation_path(
+                &request.output_path,
+                artifact_sha256,
+            ))?,
+        ));
+    }
+    for (label, path) in reserved {
+        if same_path(&report, &path) {
+            return Err(CatalogError::Validation(format!(
+                "report path must not alias the catalog {label}"
+            )));
+        }
+    }
+    if same_path(
+        report.parent().unwrap_or_else(|| Path::new(".")),
+        output.parent().unwrap_or_else(|| Path::new(".")),
+    ) {
+        let output_name = comparable_name(
+            output
+                .file_name()
+                .unwrap_or_else(|| std::ffi::OsStr::new("catalog.sqlite")),
+        );
+        let report_name = comparable_name(
+            report
+                .file_name()
+                .unwrap_or_else(|| std::ffi::OsStr::new("")),
+        );
+        if report_name.starts_with(&format!("{output_name}.rollback")) {
+            return Err(CatalogError::Validation(
+                "report path must not use a catalog rollback artifact path".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn comparable_path(path: &Path) -> Result<PathBuf, CatalogError> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    if absolute.exists() {
+        return Ok(fs::canonicalize(absolute)?);
+    }
+    let mut ancestor = absolute.as_path();
+    let mut suffix = Vec::<OsString>::new();
+    while !ancestor.exists() {
+        let name = ancestor.file_name().ok_or_else(|| {
+            CatalogError::Validation(format!("path has no existing ancestor: {}", path.display()))
+        })?;
+        suffix.push(name.to_os_string());
+        ancestor = ancestor.parent().ok_or_else(|| {
+            CatalogError::Validation(format!("path has no existing ancestor: {}", path.display()))
+        })?;
+    }
+    let mut resolved = fs::canonicalize(ancestor)?;
+    for component in suffix.into_iter().rev() {
+        resolved.push(component);
+    }
+    Ok(normalize_lexically(resolved))
+}
+
+fn normalize_lexically(path: PathBuf) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                normalized.push(component.as_os_str());
+            }
+        }
+    }
+    normalized
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        left.to_string_lossy()
+            .eq_ignore_ascii_case(&right.to_string_lossy())
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
+    }
+}
+
+fn comparable_name(value: &std::ffi::OsStr) -> String {
+    let value = value.to_string_lossy();
+    #[cfg(windows)]
+    {
+        value.to_ascii_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        value.into_owned()
+    }
 }
 
 pub fn verify_catalog(path: impl AsRef<Path>) -> Result<VerifyReport, CatalogError> {

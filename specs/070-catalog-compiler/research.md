@@ -82,12 +82,15 @@ version.
 ## Decision 5: Atomic publication and rollback
 
 **Decision**: Build a sibling temporary database, commit once, sync and close,
-reopen read-only for complete verification, preserve the old bytes and manifest,
-then use tempfile atomic persistence for the candidate.
+reopen read-only for complete verification, preserve the old bytes under a
+content-addressed generation, atomically update its manifest, then use tempfile
+atomic persistence for the candidate.
 
 **Rationale**: Candidate work never touches the current destination. SQLite's
 rollback journal and full synchronization protect the construction transaction;
 filesystem replacement prevents readers from seeing a partial candidate.
+Content-addressed rollback generations keep prior recovery evidence valid when
+a later copy, verification, or manifest update fails.
 
 **Alternatives considered**:
 
