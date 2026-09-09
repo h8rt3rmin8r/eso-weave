@@ -12,3 +12,6 @@
 10. Report assistive-technology limitations honestly; test output alone cannot be described as a manual screen-reader result.
 11. Name every temporary installation or extraction location and its cleanup disposition.
 12. A fail or blocker keeps #84 and #83 open; a product failure links a separate implementation issue.
+13. If the release operator explicitly waives an incomplete criterion and
+    directs closure, label it `Operator-waived`, record the exact gap and
+    deviation, and never relabel it as a pass.

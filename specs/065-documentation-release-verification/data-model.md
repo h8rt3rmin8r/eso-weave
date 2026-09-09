@@ -40,5 +40,10 @@
 - `Pass`: direct or bounded supporting evidence satisfies the criterion.
 - `Fail`: observed behavior contradicts the criterion and requires a defect issue.
 - `Blocked`: the criterion cannot be observed in the available environment and prevents closure.
+- `Operator-waived`: evidence is incomplete, the exact gap is recorded, and the
+  release operator explicitly accepts it and directs closure.
 
-Only an all-Pass completion matrix permits #84 and #83 to close.
+The original policy permits closure only for an all-Pass matrix. For this run,
+the operator explicitly superseded that rule for the recorded package gaps,
+ended further desktop interaction, and directed #84 and #83 to close. The
+receipt must preserve that deviation rather than relabeling it as a pass.

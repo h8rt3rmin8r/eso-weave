@@ -54,8 +54,9 @@
 - T007 blocks artifact work.
 - T008 through T010 block platform execution.
 - T011 through T017 block a passing completion matrix.
-- An unresolved bundled-documentation failure prevents closing #84 and #83;
-  the operator's explicit acceptance decision and any recorded non-documentation
-  variance remain part of the durable evidence.
+- An unresolved bundled-documentation failure prevents closing #84 and #83.
+  For this run, the operator explicitly superseded the exhaustive matrix,
+  accepted three recorded package gaps, ended desktop interaction, and directed
+  closure. Those gaps remain `Operator-waived`, not passes.
 - T023 through T025 block commit and publication.
 - T031 ends with operator review; S065 never merges its own pull request.

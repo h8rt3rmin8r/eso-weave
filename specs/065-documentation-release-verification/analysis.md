@@ -24,6 +24,8 @@ Status: PASS
 - The release operator's direct documentation acceptance and instruction to
   stop desktop interaction are recorded as the closure decision without
   inventing a manual screen-reader result.
+- MSI installation, installed-deb documentation activation, and portable Linux
+  execution are explicitly `Operator-waived`, not mislabeled as passes.
 - Debian metadata defect #105 is separate from bundled-documentation behavior
   and does not alter the S065 runtime-free boundary.
 - Issue #84 and epic #83 may close through the official S065 pull request.

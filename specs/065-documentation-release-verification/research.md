@@ -30,6 +30,16 @@
 
 **Rationale**: Project governance deliberately separates implementation from release verification because they close at different times.
 
+## Decision 6: Preserve the operator's closure decision honestly
+
+**Decision**: Stop all desktop interaction after the operator's instruction,
+record incomplete package criteria as `Operator-waived`, and close #84 and #83
+as directed without calling the incomplete observations passes.
+
+**Rationale**: The later operator direction supersedes the original exhaustive
+matrix for this run. The durable record must expose that deviation so a future
+reader can distinguish acceptance from completed verification.
+
 ## Alternatives Rejected
 
 - Test a local release build: rejected because it is not the downloadable artifact under review.

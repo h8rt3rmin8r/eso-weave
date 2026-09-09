@@ -83,7 +83,9 @@ As a maintainer, I can review one durable receipt that distinguishes observed pa
 - **FR-012**: A product mismatch MUST create a linked implementation issue and MUST keep #84 and #83 open pending a fixed release and complete rerun.
 - **FR-013**: S065 MUST make no runtime, packaging, release-workflow, or pinned-tooling change unless a separately scoped defect requires it.
 - **FR-014**: S065 MUST archive completed plan 034 with v0.15.0 publication evidence, establish active plan 035, and update the plan indexes and migration ledger consistently.
-- **FR-015**: The official pull request MUST close #84 and #83 only if every completion criterion is satisfied.
+- **FR-015**: The official pull request MUST close #84 and #83 only if every
+  completion criterion is satisfied or the release operator explicitly waives
+  a recorded gap and directs closure; waived criteria MUST NOT be called passes.
 - **FR-016**: Spec-kit analysis, applicable documentation policy, text hygiene, receipt checks, and hosted CI MUST pass before merge readiness.
 
 ## Key Entities
