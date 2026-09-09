@@ -59,8 +59,11 @@ Review added explicit rejection for link-like cache directories and objects in
 addition to the planned source-tree checks. First-round automated review then
 identified two further gaps: a check/read race and APNG default-frame
 acceptance. S072 now verifies one stable no-follow source handle before a hard-
-capped read and rejects APNG before decoding. These proportional changes close
-all material findings from implementation and external analysis.
+capped read and rejects APNG before decoding. Second-round review found the
+same check/read pattern remained on cache manifests and objects. Those reads
+now share the stable, root-confined, hard-capped handle primitive. These
+proportional changes close all material findings from implementation and
+external analysis.
 
 Focused cache, catalog, packaging, and documentation-policy tests pass. Full
 format, strict all-feature Clippy, locked tests, optimized binary builds, mdBook

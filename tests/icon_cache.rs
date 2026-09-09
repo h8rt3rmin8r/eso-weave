@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use eso_weave::icon_cache::{
     build_generation, open_generation, FallbackReason, IconCacheRequest, IconLookupState,
-    MAX_ICON_DIMENSION, MAX_SOURCE_BYTES, TRANSFORMATION_ID,
+    MAX_ICON_DIMENSION, MAX_MANIFEST_BYTES, MAX_SOURCE_BYTES, TRANSFORMATION_ID,
 };
 use image::{ImageFormat, Rgba, RgbaImage};
 use sha2::{Digest, Sha256};
@@ -479,6 +479,68 @@ fn generation_loading_rejects_linked_cache_objects() {
         return;
     }
 
+    assert!(open_generation(&sandbox.cache(), &receipt.generation_sha256).is_err());
+}
+
+#[test]
+fn generation_loading_rejects_linked_and_oversized_cache_files() {
+    let sandbox = Sandbox::new();
+    write_png(
+        &sandbox.source_path("esoui/art/icons/linked-manifest.png"),
+        1,
+        1,
+        [5, 6, 7, 255],
+    );
+    let receipt = build_generation(&request(
+        &sandbox,
+        &["/esoui/art/icons/linked-manifest.png"],
+    ))
+    .unwrap();
+    let manifest = sandbox.cache().join(&receipt.manifest_path);
+    let outside = sandbox.root.path().join("outside-cache-manifest.json");
+    fs::copy(&manifest, &outside).unwrap();
+    fs::remove_file(&manifest).unwrap();
+    if create_file_symlink(&outside, &manifest).is_ok() {
+        assert!(open_generation(&sandbox.cache(), &receipt.generation_sha256).is_err());
+    }
+
+    let sandbox = Sandbox::new();
+    write_png(
+        &sandbox.source_path("esoui/art/icons/large-manifest.png"),
+        1,
+        1,
+        [5, 6, 7, 255],
+    );
+    let receipt =
+        build_generation(&request(&sandbox, &["/esoui/art/icons/large-manifest.png"])).unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(sandbox.cache().join(&receipt.manifest_path))
+        .unwrap()
+        .set_len(MAX_MANIFEST_BYTES + 1)
+        .unwrap();
+    assert!(open_generation(&sandbox.cache(), &receipt.generation_sha256).is_err());
+
+    let sandbox = Sandbox::new();
+    write_png(
+        &sandbox.source_path("esoui/art/icons/large-object.png"),
+        1,
+        1,
+        [5, 6, 7, 255],
+    );
+    let receipt =
+        build_generation(&request(&sandbox, &["/esoui/art/icons/large-object.png"])).unwrap();
+    let object = open_generation(&sandbox.cache(), &receipt.generation_sha256)
+        .unwrap()
+        .resolve("/esoui/art/icons/large-object.png")
+        .unwrap()
+        .object_path;
+    fs::OpenOptions::new()
+        .write(true)
+        .open(object)
+        .unwrap()
+        .set_len(MAX_SOURCE_BYTES + 1)
+        .unwrap();
     assert!(open_generation(&sandbox.cache(), &receipt.generation_sha256).is_err());
 }
 

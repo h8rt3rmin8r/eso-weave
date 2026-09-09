@@ -97,6 +97,11 @@ canonical manifest in a temporary generation directory beneath the cache root,
 verify it, then rename the directory to its manifest SHA-256. Existing matching
 objects and generations are verified and reused, never replaced.
 
+Manifest and object verification reads use the same stable no-follow,
+root-confined, bounded handle primitive as source acquisition. This prevents a
+metadata/read swap from redirecting cache verification and prevents concurrent
+growth from allocating beyond the manifest or object limit.
+
 **Rationale**: Readers can open one immutable generation without observing a
 partially written manifest. A failed candidate may leave an unreferenced object
 but cannot damage a prior generation. Cleanup remains explicit later work.

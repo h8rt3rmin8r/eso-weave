@@ -1,17 +1,11 @@
-use std::fs::{File, OpenOptions};
-use std::io::{Cursor, Read};
-use std::path::{Path, PathBuf};
+use std::io::Cursor;
+use std::path::Path;
 
 use image::codecs::png::{CompressionType, FilterType, PngDecoder, PngEncoder};
 use image::{DynamicImage, ImageDecoder, ImageEncoder, Rgba, RgbaImage};
 use sha2::{Digest, Sha256};
 
-#[cfg(windows)]
-use std::ffi::OsString;
-#[cfg(target_os = "linux")]
-use std::fs;
-
-use super::path::{is_link_like, is_same_or_nested};
+use super::path::{read_bounded_stable, StableReadError};
 use super::{FallbackReason, MAX_ICON_DIMENSION, MAX_ICON_PIXELS, MAX_SOURCE_BYTES};
 
 pub struct TransformedIcon {
@@ -25,23 +19,13 @@ pub fn transform_source(
     canonical_root: &Path,
     path: &Path,
 ) -> Result<TransformedIcon, FallbackReason> {
-    let mut file = open_no_follow(path).map_err(map_io)?;
-    let metadata = file.metadata().map_err(map_io)?;
-    if !metadata.is_file() || is_link_like(&metadata) || metadata.len() > MAX_SOURCE_BYTES {
-        return Err(FallbackReason::Invalid);
-    }
-    let opened_path = opened_file_path(&file).map_err(map_io)?;
-    if !is_same_or_nested(&opened_path, canonical_root) {
-        return Err(FallbackReason::Invalid);
-    }
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.by_ref()
-        .take(MAX_SOURCE_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(map_io)?;
-    if bytes.len() as u64 > MAX_SOURCE_BYTES {
-        return Err(FallbackReason::Invalid);
-    }
+    let bytes =
+        read_bounded_stable(canonical_root, path, MAX_SOURCE_BYTES).map_err(
+            |error| match error {
+                StableReadError::Io(error) => map_io(error),
+                StableReadError::Invalid(_) => FallbackReason::Invalid,
+            },
+        )?;
     let source_sha256 = sha256(&bytes);
     let extension = path
         .extension()
@@ -148,75 +132,4 @@ fn map_io(error: std::io::Error) -> FallbackReason {
     } else {
         FallbackReason::IoFailed
     }
-}
-
-#[cfg(target_os = "linux")]
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
-    use std::os::unix::fs::OpenOptionsExt;
-
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
-}
-
-#[cfg(target_os = "linux")]
-fn opened_file_path(file: &File) -> std::io::Result<PathBuf> {
-    use std::os::fd::AsRawFd;
-
-    fs::canonicalize(Path::new("/proc/self/fd").join(file.as_raw_fd().to_string()))
-}
-
-#[cfg(windows)]
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
-    use std::os::windows::fs::OpenOptionsExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
-
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(path)
-}
-
-#[cfg(windows)]
-fn opened_file_path(file: &File) -> std::io::Result<PathBuf> {
-    use std::os::windows::ffi::OsStringExt;
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Foundation::HANDLE;
-    use windows_sys::Win32::Storage::FileSystem::{
-        GetFinalPathNameByHandleW, FILE_NAME_NORMALIZED, VOLUME_NAME_DOS,
-    };
-
-    let mut buffer = vec![0_u16; 32_768];
-    // SAFETY: the file owns a valid handle for the duration of the call, and
-    // buffer is writable for the length passed to the Windows API.
-    let written = unsafe {
-        GetFinalPathNameByHandleW(
-            file.as_raw_handle() as HANDLE,
-            buffer.as_mut_ptr(),
-            buffer.len() as u32,
-            FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
-        )
-    };
-    if written == 0 || written as usize >= buffer.len() {
-        return Err(std::io::Error::last_os_error());
-    }
-    buffer.truncate(written as usize);
-    Ok(PathBuf::from(OsString::from_wide(&buffer)))
-}
-
-#[cfg(not(any(target_os = "linux", windows)))]
-fn open_no_follow(_path: &Path) -> std::io::Result<File> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "icon cache source handles support only Windows and Linux",
-    ))
-}
-
-#[cfg(not(any(target_os = "linux", windows)))]
-fn opened_file_path(_file: &File) -> std::io::Result<PathBuf> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "icon cache source handles support only Windows and Linux",
-    ))
 }

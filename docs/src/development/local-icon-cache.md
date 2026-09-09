@@ -44,7 +44,10 @@ The manifest hash names `generations/<manifest-sha256>/manifest.json`. A
 generation becomes visible only after its complete candidate and every object
 have passed verification. Opening a generation rechecks the manifest identity,
 schema, ordering, provenance, file types, object hashes, dimensions, and PNG
-decodability. Link-like cache directories and files are rejected.
+decodability. Manifest and object reads use stable no-follow handles, verify the
+opened path remains inside the canonical cache root, and enforce 64 MiB and
+8 MiB hard caps respectively. Link-like cache directories and files are
+rejected.
 
 There is no mutable `current` pointer, cleanup policy, or implicit application
 selection in S072. Later update orchestration may select a verified generation

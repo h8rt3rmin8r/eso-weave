@@ -163,7 +163,9 @@ redistribution classification without personal paths.
 - **FR-017**: Generation identity and serialized output MUST be byte-stable for
   equivalent normalized inputs.
 - **FR-018**: Candidate generation content MUST be complete and verified before
-  it is published under its immutable generation identity.
+  it is published under its immutable generation identity. Manifest and object
+  reads used for verification or reuse MUST use stable no-follow handles,
+  remain within the canonical cache root, and enforce their byte limits.
 - **FR-019**: Existing source files and published generation objects MUST never
   be overwritten or deleted by generation building.
 - **FR-020**: The resolver MUST expose `Ready`, `Placeholder`, `Missing`,

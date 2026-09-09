@@ -14,7 +14,8 @@ pub use manifest::{
     MANIFEST_SCHEMA_VERSION,
 };
 use path::{
-    is_link_like, normalize_virtual_path, resolve_local, validate_distinct_roots, LocalResolution,
+    is_link_like, normalize_virtual_path, read_bounded_stable, resolve_local,
+    validate_distinct_roots, LocalResolution, StableReadError,
 };
 use transform::{placeholder_png, sha256, transform_source, verify_png};
 
@@ -159,10 +160,16 @@ pub fn build_generation(request: &IconCacheRequest) -> Result<IconCacheReceipt, 
     ensure_real_directory(&request.cache_root)?;
     ensure_real_directory(&objects_directory)?;
     ensure_real_directory(&generations_directory)?;
+    let canonical_cache = fs::canonicalize(&request.cache_root)?;
 
     let (placeholder_bytes, placeholder_width, placeholder_height) = placeholder_png();
     let placeholder_sha256 = sha256(&placeholder_bytes);
-    publish_object(&objects_directory, &placeholder_sha256, &placeholder_bytes)?;
+    publish_object(
+        &canonical_cache,
+        &objects_directory,
+        &placeholder_sha256,
+        &placeholder_bytes,
+    )?;
 
     let mut entries = Vec::with_capacity(references.len());
     let mut object_hashes = BTreeSet::from([placeholder_sha256.clone()]);
@@ -175,7 +182,12 @@ pub fn build_generation(request: &IconCacheRequest) -> Result<IconCacheReceipt, 
         match transformed {
             Ok(transformed) => {
                 let object_sha256 = sha256(&transformed.png);
-                publish_object(&objects_directory, &object_sha256, &transformed.png)?;
+                publish_object(
+                    &canonical_cache,
+                    &objects_directory,
+                    &object_sha256,
+                    &transformed.png,
+                )?;
                 object_hashes.insert(object_sha256.clone());
                 entries.push(IconCacheEntry {
                     canonical_path: reference.canonical,
@@ -227,8 +239,7 @@ pub fn build_generation(request: &IconCacheRequest) -> Result<IconCacheReceipt, 
 
     if generation_directory.exists() {
         ensure_real_directory(&generation_directory)?;
-        ensure_real_file(&manifest_path)?;
-        let existing = fs::read(&manifest_path)?;
+        let existing = read_cache_file(&canonical_cache, &manifest_path, MAX_MANIFEST_BYTES)?;
         if existing != manifest_bytes {
             return invalid("existing generation does not match its identity");
         }
@@ -241,8 +252,8 @@ pub fn build_generation(request: &IconCacheRequest) -> Result<IconCacheReceipt, 
         file.write_all(&manifest_bytes)?;
         file.sync_all()?;
         drop(file);
-        ensure_real_file(&candidate_manifest)?;
-        let candidate_bytes = fs::read(&candidate_manifest)?;
+        let candidate_bytes =
+            read_cache_file(&canonical_cache, &candidate_manifest, MAX_MANIFEST_BYTES)?;
         if candidate_bytes != manifest_bytes || sha256(&candidate_bytes) != generation_sha256 {
             return invalid("candidate manifest changed before publication");
         }
@@ -250,7 +261,7 @@ pub fn build_generation(request: &IconCacheRequest) -> Result<IconCacheReceipt, 
         if candidate_model != manifest {
             return invalid("candidate manifest does not match the requested generation");
         }
-        verify_manifest_objects(&request.cache_root, &manifest)?;
+        verify_manifest_objects(&request.cache_root, &canonical_cache, &manifest)?;
         fs::rename(candidate.path(), &generation_directory)?;
     }
 
@@ -285,11 +296,8 @@ pub fn open_generation(
     ensure_real_directory(&cache_root.join("objects"))?;
     ensure_real_directory(&cache_root.join("generations"))?;
     ensure_real_directory(&cache_root.join("generations").join(generation_sha256))?;
-    let metadata = ensure_real_file(&manifest_path)?;
-    if metadata.len() > MAX_MANIFEST_BYTES {
-        return invalid("icon cache manifest exceeds the byte limit");
-    }
-    let bytes = fs::read(&manifest_path)?;
+    let canonical_cache = fs::canonicalize(cache_root)?;
+    let bytes = read_cache_file(&canonical_cache, &manifest_path, MAX_MANIFEST_BYTES)?;
     if sha256(&bytes) != generation_sha256 {
         return invalid("icon cache manifest hash does not match its generation");
     }
@@ -298,7 +306,7 @@ pub fn open_generation(
     if manifest.canonical_bytes()? != bytes {
         return invalid("icon cache manifest is not canonical");
     }
-    verify_manifest_objects(cache_root, &manifest)?;
+    verify_manifest_objects(cache_root, &canonical_cache, &manifest)?;
     let entries = manifest
         .entries
         .iter()
@@ -313,6 +321,7 @@ pub fn open_generation(
 
 fn verify_manifest_objects(
     cache_root: &Path,
+    canonical_cache: &Path,
     manifest: &IconCacheManifest,
 ) -> Result<(), IconCacheError> {
     let mut dimensions = BTreeMap::new();
@@ -335,11 +344,7 @@ fn verify_manifest_objects(
     }
     for (hash, expected_dimensions) in dimensions {
         let path = object_path(cache_root, hash);
-        let metadata = ensure_real_file(&path)?;
-        if metadata.len() > MAX_SOURCE_BYTES {
-            return invalid("icon cache object exceeds the byte limit");
-        }
-        let bytes = fs::read(path)?;
+        let bytes = read_cache_file(canonical_cache, &path, MAX_SOURCE_BYTES)?;
         if sha256(&bytes) != hash || verify_png(&bytes, expected_dimensions).is_err() {
             return invalid("icon cache object failed content verification");
         }
@@ -347,11 +352,15 @@ fn verify_manifest_objects(
     Ok(())
 }
 
-fn publish_object(directory: &Path, hash: &str, bytes: &[u8]) -> Result<(), IconCacheError> {
+fn publish_object(
+    canonical_cache: &Path,
+    directory: &Path,
+    hash: &str,
+    bytes: &[u8],
+) -> Result<(), IconCacheError> {
     let destination = directory.join(format!("{hash}.png"));
     if destination.exists() {
-        ensure_real_file(&destination)?;
-        if fs::read(&destination)? == bytes {
+        if read_cache_file(canonical_cache, &destination, MAX_SOURCE_BYTES)? == bytes {
             return Ok(());
         }
         return invalid("existing icon object does not match its content hash");
@@ -362,13 +371,25 @@ fn publish_object(directory: &Path, hash: &str, bytes: &[u8]) -> Result<(), Icon
     match candidate.persist_noclobber(&destination) {
         Ok(_) => Ok(()),
         Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-            if fs::read(destination)? == bytes {
+            if read_cache_file(canonical_cache, &destination, MAX_SOURCE_BYTES)? == bytes {
                 Ok(())
             } else {
                 invalid("raced icon object does not match its content hash")
             }
         }
         Err(error) => Err(IconCacheError::Io(error.error)),
+    }
+}
+
+fn read_cache_file(
+    canonical_cache: &Path,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<Vec<u8>, IconCacheError> {
+    match read_bounded_stable(canonical_cache, path, max_bytes) {
+        Ok(bytes) => Ok(bytes),
+        Err(StableReadError::Io(error)) => Err(IconCacheError::Io(error)),
+        Err(StableReadError::Invalid(message)) => invalid(format!("icon cache {message}")),
     }
 }
 
@@ -380,14 +401,6 @@ fn ensure_real_directory(path: &Path) -> Result<fs::Metadata, IconCacheError> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.is_dir() || is_link_like(&metadata) {
         return invalid("icon cache directory must not be link-like");
-    }
-    Ok(metadata)
-}
-
-fn ensure_real_file(path: &Path) -> Result<fs::Metadata, IconCacheError> {
-    let metadata = fs::symlink_metadata(path)?;
-    if !metadata.is_file() || is_link_like(&metadata) {
-        return invalid("icon cache file must not be link-like");
     }
     Ok(metadata)
 }

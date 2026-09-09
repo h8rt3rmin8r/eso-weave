@@ -42,11 +42,12 @@ node .github/scripts/docs-policy.mjs docs target/docs-site/html
   same verified placeholder with distinct reasons;
 - repeated input produces the same manifest and generation hash;
 - aliasing and cache publication failures preserve existing generations;
+- manifest and object reads reject links and enforce their hard byte caps;
 - manifests contain no user root and packages contain no user or game bytes.
 
 ## Completed evidence
 
-All commands above passed on 2026-09-09. The focused suite contains 11
+All commands above passed on 2026-09-09. The focused suite contains 12
 synthetic tests, the catalog and packaging regression set contains 23 tests,
 and documentation policy contains 74 tests. Both optimized binaries built from
 the locked dependency graph, whose `image_dds` feature set contains only
