@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S068 adds a validated ESO catalog source contract with category-specific
+  stable identities, honest completeness classes, immutable live and PTS
+  evidence, explicit redistribution decisions, and compiler, collector, and
+  icon handoffs (issue #112).
+
+### Decisions
+
+- 2026-09-09: Keep API 101050 live and API 101051 PTS as independent immutable
+  source snapshots, forbid automatic promotion, and extend documentation policy
+  so transient keys, unsupported exhaustive claims, unsafe collector input, and
+  distributable game icon bytes fail review. Permit stable IDs, normalized
+  numeric facts, virtual texture paths, and project-created placeholders while
+  keeping localized collector records and image bytes local. Track live game
+  experiments separately in issue #129 so missing field access cannot block the
+  bounded compiler, collector, or placeholder architecture.
+
 ## [0.15.1] - 2026-09-09
 
 ### Highlights

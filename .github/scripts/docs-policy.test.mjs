@@ -8,6 +8,7 @@ import {
   contrastRatio,
   validateBrandCss,
   validateBrandJavascript,
+  validateCatalogSourceContract,
   validateContentCoverage,
   validateContentCoverageRepository,
   validateCorpusSnapshot,
@@ -18,6 +19,107 @@ import {
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const requiredCatalogCategories = [
+  "player-skills",
+  "crafted-abilities",
+  "ability-metadata",
+  "effects-and-status",
+  "items-and-gear",
+  "item-sets",
+  "champion-skills",
+  "consumables",
+  "mundus-effects",
+  "companions-races-classes",
+  "combat-statistics",
+  "constants",
+  "localized-text",
+  "icon-references",
+  "icon-bytes",
+];
+
+function validCatalogContract() {
+  const category = (id) => ({
+    id,
+    category: id,
+    stable_key: `${id}-id`,
+    enumeration_method: "api-iterator",
+    visibility: ["channel"],
+    completeness: "bounded",
+    source_ids: ["live-api"],
+    redistribution: id === "icon-bytes" ? "prohibited" : "allowed",
+    failure_modes: ["partial"],
+    validation: ["stable IDs are unique"],
+    field_verification: "issue #129",
+  });
+  return {
+    schema_version: 1,
+    as_of: "2026-09-09",
+    project_facts: {
+      noncommercial: true,
+      educational: true,
+      telemetry: false,
+      placeholders_allowed: true,
+    },
+    completeness_values: ["exhaustive", "bounded", "opportunistic", "unknown"],
+    redistribution_values: ["allowed", "attribution-required", "user-generated-only", "prohibited", "unresolved"],
+    source_snapshots: [
+      {
+        id: "live-api",
+        family: "stock-ui",
+        channel: "live",
+        game_version: "12.0.8",
+        api_version: 101050,
+        locale: "all",
+        revision: "f76cf16c4e5be7b234d15dc7f676febffa64c5bb",
+        sha256: "f9faa484d8f2d875d00ab78b32e9e236e06922101b25e356f2101591db2e3d83",
+        uri: "https://github.com/esoui/esoui/blob/f76cf16c4e5be7b234d15dc7f676febffa64c5bb/ESOUIDocumentation.txt",
+        acquired_at: "2026-09-09",
+        license_scope: "technical-reference-only",
+        recommended: true,
+      },
+      {
+        id: "pts-api",
+        family: "stock-ui",
+        channel: "pts",
+        game_version: "12.1.4",
+        api_version: 101051,
+        locale: "all",
+        revision: "1baf1131560c2bcd38ffd2bd070728273b25f934",
+        sha256: "baf4e5173ce9ac478e76a5b81820b55bfe6525dfa45830b4dbc706916ba48055",
+        uri: "https://github.com/esoui/esoui/blob/1baf1131560c2bcd38ffd2bd070728273b25f934/ESOUIDocumentation.txt",
+        acquired_at: "2026-09-09",
+        license_scope: "technical-reference-only",
+        recommended: true,
+      },
+    ],
+    promotion_policy: {
+      automatic: false,
+      requires_live_api_version: true,
+      requires_live_revision: true,
+      requires_content_hash: true,
+      requires_reviewer: true,
+      preserve_original_channel: true,
+    },
+    collector_policy: {
+      format: "restricted-data-envelope",
+      execute_lua: false,
+      byte_limit_required: true,
+      record_limit_required: true,
+      atomic_import: true,
+      upload_default: false,
+      user_data_separate: true,
+      provisional_max_snapshot_bytes: 67108864,
+      provisional_max_records: 500000,
+      provisional_max_string_bytes: 65536,
+    },
+    redistribution_decisions: {
+      zenimax_icon_bytes: "prohibited",
+      prebuilt_extracted_icon_pack: "prohibited",
+    },
+    categories: requiredCatalogCategories.map(category),
+  };
+}
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
 
@@ -754,13 +856,30 @@ test("requires the table of contents unit to map to SUMMARY", async () => {
 
 test("derives post-baseline lifecycle and permits an evidenced archive followed by a new active plan", async () => {
   const ledger = await migrationLedger();
-  const active = virtualCorpus(ledger);
-  assert.deepEqual(validateMigrationLedger(ledger, active), []);
-  assert.deepEqual(validateCorpusSnapshot(ledger, active), []);
+  const baseline = virtualCorpus(ledger);
+  assert.deepEqual(validateMigrationLedger(ledger, baseline), []);
+  assert.deepEqual(validateCorpusSnapshot(ledger, baseline), []);
 
-  const transitioned = structuredClone(ledger);
-  const activeIndex = transitioned.postBaselinePlans.findIndex((plan) => plan.lifecycle === "Active");
-  assert.notEqual(activeIndex, -1);
+  const withActive = structuredClone(ledger);
+  let activeIndex = withActive.postBaselinePlans.findIndex((plan) => plan.lifecycle === "Active");
+  if (activeIndex === -1) {
+    const latestId = withActive.postBaselinePlans.at(-1).id;
+    const activeId = String(Number(latestId) + 1).padStart(3, "0");
+    withActive.postBaselinePlans.push({
+      id: activeId,
+      completion: "In Progress",
+      lifecycle: "Active",
+      destination: `docs/project/build-plans/plan-${activeId}.md`,
+      specs: [`specs/${activeId}-active-slice`],
+      evidence: "Issue #100 tracks the active delivery.",
+    });
+    activeIndex = withActive.postBaselinePlans.length - 1;
+  }
+  const active = virtualCorpus(withActive);
+  assert.deepEqual(validateMigrationLedger(withActive, active), []);
+  assert.deepEqual(validateCorpusSnapshot(withActive, active), []);
+
+  const transitioned = structuredClone(withActive);
   const activeId = transitioned.postBaselinePlans[activeIndex].id;
   transitioned.postBaselinePlans[activeIndex] = {
     ...transitioned.postBaselinePlans[activeIndex],
@@ -820,12 +939,27 @@ test("derives post-baseline lifecycle and permits an evidenced archive followed 
 
 test("does not accept plan index rows hidden in code or comments", async () => {
   const ledger = await migrationLedger();
-  const active = virtualCorpus(ledger);
+  const activeLedger = structuredClone(ledger);
+  let activePlan = activeLedger.postBaselinePlans.find((plan) => plan.lifecycle === "Active");
+  if (activePlan === undefined) {
+    const latestId = activeLedger.postBaselinePlans.at(-1).id;
+    const activeId = String(Number(latestId) + 1).padStart(3, "0");
+    activePlan = {
+      id: activeId,
+      completion: "In Progress",
+      lifecycle: "Active",
+      destination: `docs/project/build-plans/plan-${activeId}.md`,
+      specs: [`specs/${activeId}-active-slice`],
+      evidence: "Issue #100 tracks the active delivery.",
+    };
+    activeLedger.postBaselinePlans.push(activePlan);
+  }
+  const active = virtualCorpus(activeLedger);
   active.textFiles.set(
     "docs/project/build-plans/README.md",
-    "# Current Build Plans\n\n```markdown\n| [plan-028.md](plan-028.md) | Active | Hidden |\n```\n",
+    `# Current Build Plans\n\n\`\`\`markdown\n| [plan-${activePlan.id}.md](plan-${activePlan.id}.md) | Active | Hidden |\n\`\`\`\n`,
   );
-  assert.match(validateCorpusSnapshot(ledger, active).join("\n"), /missing its Active index row/);
+  assert.match(validateCorpusSnapshot(activeLedger, active).join("\n"), /missing its Active index row/);
 
   const archivedLedger = structuredClone(ledger);
   archivedLedger.postBaselinePlans[0] = {
@@ -1128,4 +1262,110 @@ test("S059 requires every frozen alias or a directly linked glossary explanation
     `# Glossary\n\n\`\`\`text\n${entry.aliases[0]} [${entry.canonical}](../README.md)\n\`\`\`\n`,
   );
   assert.match(validateContentCoverage(manifest, snapshot).join("\n"), /required search alias/);
+});
+
+test("accepts the complete ESO catalog source contract", () => {
+  assert.deepEqual(validateCatalogSourceContract(validCatalogContract()), []);
+});
+
+test("rejects missing catalog categories and transient durable keys", () => {
+  const contract = validCatalogContract();
+  contract.categories = contract.categories.filter((row) => row.id !== "items-and-gear");
+  contract.categories[0].stable_key = "luaindex";
+  const errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("missing required category items-and-gear")));
+  assert.ok(errors.some((error) => error.includes("transient stable_key")));
+});
+
+test("rejects unsupported exhaustive claims and unresolved source references", () => {
+  const contract = validCatalogContract();
+  contract.categories[0].completeness = "exhaustive";
+  contract.categories[0].field_verification = "issue #129";
+  contract.categories[1].source_ids = ["missing-source"];
+  const errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("cannot be exhaustive while field verification is pending")));
+  assert.ok(errors.some((error) => error.includes("unknown source missing-source")));
+});
+
+test("requires reproducible provenance for every declared source snapshot", () => {
+  const contract = validCatalogContract();
+  contract.source_snapshots.push({ id: "community-reference", channel: "not-applicable", recommended: false });
+  contract.categories[0].source_ids = ["community-reference"];
+  const errors = validateCatalogSourceContract(contract);
+  for (const field of ["family", "locale", "revision", "uri", "acquired_at", "license_scope"]) {
+    assert.ok(errors.some((error) => error.includes(`requires ${field}`)), field);
+  }
+});
+
+test("requires exhaustive categories to use enumerable evidence with relationship or count checks", () => {
+  const contract = validCatalogContract();
+  const category = contract.categories[0];
+  category.completeness = "exhaustive";
+  category.field_verification = "none";
+  category.enumeration_method = "known-id";
+  let errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("requires an enumerable method")));
+
+  category.enumeration_method = "api-iterator";
+  errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("requires count or relationship validation")));
+
+  category.validation.push("enumerated count matches the declared source relationship");
+  assert.deepEqual(validateCatalogSourceContract(contract), []);
+});
+
+test("rejects position-based durable keys regardless of separator", () => {
+  for (const stableKey of ["iterator_position", "array-position", "mutable_position"]) {
+    const contract = validCatalogContract();
+    contract.categories[0].stable_key = stableKey;
+    assert.ok(
+      validateCatalogSourceContract(contract).some((error) => error.includes("transient stable_key")),
+      `${stableKey} must be rejected`,
+    );
+  }
+});
+
+test("rejects implicit PTS promotion and distributable game icon bytes", () => {
+  const contract = validCatalogContract();
+  contract.promotion_policy.automatic = true;
+  contract.promotion_policy.preserve_original_channel = false;
+  contract.categories.find((row) => row.id === "icon-bytes").redistribution = "allowed";
+  contract.project_facts.placeholders_allowed = false;
+  const errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.includes("catalog contract must forbid automatic PTS promotion"));
+  assert.ok(errors.includes("catalog promotion policy must preserve original channel provenance"));
+  assert.ok(errors.includes("catalog contract must prohibit redistribution of game icon bytes"));
+  assert.ok(errors.includes("catalog contract must retain project-created placeholders"));
+});
+
+test("keeps authoritative icon redistribution decisions prohibited", () => {
+  for (const decision of ["zenimax_icon_bytes", "prebuilt_extracted_icon_pack"]) {
+    const contract = validCatalogContract();
+    contract.redistribution_decisions[decision] = "allowed";
+    assert.ok(
+      validateCatalogSourceContract(contract).some((error) => error.includes(`must prohibit ${decision}`)),
+      `${decision} must remain prohibited`,
+    );
+  }
+});
+
+test("rejects executable, unbounded, non-atomic, or uploaded collector input", () => {
+  const contract = validCatalogContract();
+  contract.collector_policy.execute_lua = true;
+  contract.collector_policy.byte_limit_required = false;
+  contract.collector_policy.record_limit_required = false;
+  contract.collector_policy.atomic_import = false;
+  contract.collector_policy.upload_default = true;
+  contract.collector_policy.user_data_separate = false;
+  contract.collector_policy.provisional_max_snapshot_bytes = 0;
+  contract.collector_policy.provisional_max_records = -1;
+  contract.collector_policy.provisional_max_string_bytes = 1.5;
+  const errors = validateCatalogSourceContract(contract);
+  for (const phrase of [
+    "execute Lua", "byte limit", "record limit", "atomic", "uploaded by default", "user data separate",
+    "positive integer provisional_max_snapshot_bytes", "positive integer provisional_max_records",
+    "positive integer provisional_max_string_bytes",
+  ]) {
+    assert.ok(errors.some((error) => error.includes(phrase)), phrase);
+  }
 });

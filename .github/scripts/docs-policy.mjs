@@ -961,6 +961,148 @@ export async function validateContentCoverageRepository(repositoryRoot, manifest
   return [...repositoryErrors, ...validateContentCoverage(manifest, { existingPaths, summaryEntries, textFiles })];
 }
 
+export function validateCatalogSourceContract(contract) {
+  const errors = [];
+  const requiredCategories = new Set([
+    "player-skills", "crafted-abilities", "ability-metadata", "effects-and-status",
+    "items-and-gear", "item-sets", "champion-skills", "consumables", "mundus-effects",
+    "companions-races-classes", "combat-statistics", "constants", "localized-text",
+    "icon-references", "icon-bytes",
+  ]);
+  const completenessValues = new Set(["exhaustive", "bounded", "opportunistic", "unknown"]);
+  const redistributionValues = new Set([
+    "allowed", "attribution-required", "user-generated-only", "prohibited", "unresolved",
+  ]);
+  const methods = new Set([
+    "api-iterator", "known-id", "observed-event", "item-link", "constant-file", "local-file", "none",
+  ]);
+  const enumerableMethods = new Set(["api-iterator", "constant-file", "local-file"]);
+  const sourceFamilies = new Set(["zos-api", "stock-ui", "collector", "community-code", "archive", "remote"]);
+  const sourceChannels = new Set(["live", "pts", "not-applicable"]);
+  if (!contract || typeof contract !== "object") return ["catalog contract must be an object"];
+  if (contract.schema_version !== 1) errors.push("catalog contract schema_version must be 1");
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(contract.as_of ?? "")) errors.push("catalog contract as_of must be an ISO date");
+  if (!contract.project_facts?.placeholders_allowed) errors.push("catalog contract must retain project-created placeholders");
+  if (contract.project_facts?.telemetry !== false) errors.push("catalog contract must record telemetry as disabled");
+  if (!Array.isArray(contract.completeness_values) ||
+      completenessValues.size !== contract.completeness_values.length ||
+      [...completenessValues].some((value) => !contract.completeness_values.includes(value))) {
+    errors.push("catalog contract completeness_values must declare the exact supported vocabulary");
+  }
+  if (!Array.isArray(contract.redistribution_values) ||
+      redistributionValues.size !== contract.redistribution_values.length ||
+      [...redistributionValues].some((value) => !contract.redistribution_values.includes(value))) {
+    errors.push("catalog contract redistribution_values must declare the exact supported vocabulary");
+  }
+
+  const snapshots = Array.isArray(contract.source_snapshots) ? contract.source_snapshots : [];
+  const snapshotIds = new Set();
+  for (const snapshot of snapshots) {
+    if (!snapshot?.id || snapshotIds.has(snapshot.id)) errors.push(`catalog contract has invalid or duplicate source id ${snapshot?.id ?? "<missing>"}`);
+    else snapshotIds.add(snapshot.id);
+    const sourceLabel = snapshot?.id ?? "<missing>";
+    for (const key of ["family", "locale", "revision", "uri", "license_scope"]) {
+      if (typeof snapshot?.[key] !== "string" || snapshot[key].trim() === "") {
+        errors.push(`source ${sourceLabel} requires ${key}`);
+      }
+    }
+    if (!sourceFamilies.has(snapshot?.family)) errors.push(`source ${sourceLabel} requires a supported family`);
+    if (!sourceChannels.has(snapshot?.channel)) errors.push(`source ${sourceLabel} requires a supported channel`);
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(snapshot?.acquired_at ?? "")) {
+      errors.push(`source ${sourceLabel} requires acquired_at as an ISO date`);
+    }
+    if (snapshot?.recommended) {
+      if (!/^[0-9a-f]{40}$/u.test(snapshot.revision ?? "")) {
+        errors.push(`recommended source ${snapshot.id} requires an immutable 40-character revision`);
+      }
+      if (!/^[0-9a-f]{64}$/u.test(snapshot.sha256 ?? "")) {
+        errors.push(`recommended source ${snapshot.id} requires a lowercase SHA-256`);
+      }
+    }
+    if (["live", "pts"].includes(snapshot?.channel) &&
+        (!Number.isInteger(snapshot.api_version) || !snapshot.game_version)) {
+      errors.push(`channel source ${snapshot.id} requires game and API versions`);
+    }
+  }
+  const live = snapshots.find((snapshot) => snapshot.channel === "live" && snapshot.recommended);
+  const pts = snapshots.find((snapshot) => snapshot.channel === "pts" && snapshot.recommended);
+  if (!live || !pts) errors.push("catalog contract requires recommended live and PTS snapshots");
+  else if (live.id === pts.id || live.revision === pts.revision || live.api_version === pts.api_version) {
+    errors.push("catalog contract live and PTS snapshots must remain distinct");
+  }
+
+  const categories = Array.isArray(contract.categories) ? contract.categories : [];
+  const categoryIds = new Set();
+  for (const category of categories) {
+    if (!category?.id || categoryIds.has(category.id)) errors.push(`catalog contract has invalid or duplicate category ${category?.id ?? "<missing>"}`);
+    else categoryIds.add(category.id);
+    for (const key of ["category", "stable_key", "enumeration_method", "completeness", "redistribution", "field_verification"]) {
+      if (typeof category?.[key] !== "string" || category[key].trim() === "") {
+        errors.push(`catalog category ${category?.id ?? "<missing>"} requires ${key}`);
+      }
+    }
+    for (const key of ["visibility", "source_ids", "failure_modes", "validation"]) {
+      if (!Array.isArray(category?.[key]) || category[key].length === 0) {
+        errors.push(`catalog category ${category?.id ?? "<missing>"} requires non-empty ${key}`);
+      }
+    }
+    const stableKeyTerms = String(category?.stable_key ?? "").toLowerCase().split(/[^a-z0-9]+/u);
+    const transientKeyTerms = /^(?:(?:array|iterator|lua|mutable|bag|slot|ordinal|sequence|list)?(?:index|position|offset))$/u;
+    if (stableKeyTerms.some((term) => transientKeyTerms.test(term))) {
+      errors.push(`catalog category ${category.id} has a transient stable_key`);
+    }
+    if (!methods.has(category?.enumeration_method)) errors.push(`catalog category ${category?.id} has invalid enumeration method`);
+    if (!completenessValues.has(category?.completeness)) errors.push(`catalog category ${category?.id} has invalid completeness`);
+    if (!redistributionValues.has(category?.redistribution)) errors.push(`catalog category ${category?.id} has invalid redistribution`);
+    if (category?.completeness === "exhaustive" && category.field_verification !== "none") {
+      errors.push(`catalog category ${category.id} cannot be exhaustive while field verification is pending`);
+    }
+    if (category?.completeness === "exhaustive" && !enumerableMethods.has(category.enumeration_method)) {
+      errors.push(`catalog category ${category.id} requires an enumerable method for exhaustive coverage`);
+    }
+    if (category?.completeness === "exhaustive" &&
+        !(category.validation ?? []).some((check) => /\b(?:count|relationship)s?\b/iu.test(check))) {
+      errors.push(`catalog category ${category.id} requires count or relationship validation for exhaustive coverage`);
+    }
+    for (const sourceId of category?.source_ids ?? []) {
+      if (!snapshotIds.has(sourceId)) errors.push(`catalog category ${category?.id} references unknown source ${sourceId}`);
+    }
+  }
+  for (const id of requiredCategories) {
+    if (!categoryIds.has(id)) errors.push(`catalog contract is missing required category ${id}`);
+  }
+  const iconBytes = categories.find((category) => category.id === "icon-bytes");
+  if (iconBytes?.redistribution !== "prohibited") {
+    errors.push("catalog contract must prohibit redistribution of game icon bytes");
+  }
+  for (const decision of ["zenimax_icon_bytes", "prebuilt_extracted_icon_pack"]) {
+    if (contract.redistribution_decisions?.[decision] !== "prohibited") {
+      errors.push(`catalog contract must prohibit ${decision}`);
+    }
+  }
+
+  if (contract.promotion_policy?.automatic !== false) errors.push("catalog contract must forbid automatic PTS promotion");
+  if (contract.promotion_policy?.preserve_original_channel !== true) {
+    errors.push("catalog promotion policy must preserve original channel provenance");
+  }
+  for (const key of ["requires_live_api_version", "requires_live_revision", "requires_content_hash", "requires_reviewer"]) {
+    if (contract.promotion_policy?.[key] !== true) errors.push(`catalog promotion policy requires ${key}`);
+  }
+  const collector = contract.collector_policy ?? {};
+  if (collector.execute_lua !== false) errors.push("catalog collector must never execute Lua");
+  if (collector.byte_limit_required !== true) errors.push("catalog collector requires a byte limit");
+  if (collector.record_limit_required !== true) errors.push("catalog collector requires a record limit");
+  if (collector.atomic_import !== true) errors.push("catalog collector import must be atomic");
+  if (collector.upload_default !== false) errors.push("catalog collector data must not be uploaded by default");
+  if (collector.user_data_separate !== true) errors.push("catalog collector must keep user data separate");
+  for (const key of ["provisional_max_snapshot_bytes", "provisional_max_records", "provisional_max_string_bytes"]) {
+    if (!Number.isInteger(collector[key]) || collector[key] <= 0) {
+      errors.push(`catalog collector requires positive integer ${key}`);
+    }
+  }
+  return [...new Set(errors)];
+}
+
 export function validateMigrationLedger(ledger, snapshot) {
   const errors = [];
   if (ledger.baselineCommit !== MIGRATION_BASELINE) {
@@ -1613,8 +1755,10 @@ async function run() {
   const cssPath = path.join(docsRoot, "theme", "eso-weave.css");
   const ledgerPath = path.join(docsRoot, "project", "migration-ledger.json");
   const coveragePath = path.join(docsRoot, "project", "content-coverage.json");
+  const catalogPath = path.join(docsRoot, "project", "catalog-sources.json");
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   const coverage = JSON.parse(await readFile(coveragePath, "utf8"));
+  const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const errors = [
     ...(await validateSourceTree(docsRoot)),
     ...(await validateGeneratedSite(outputRoot)),
@@ -1622,6 +1766,7 @@ async function run() {
     ...validateWorkflowText(await readFile(workflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
+    ...validateCatalogSourceContract(catalog),
   ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`docs policy: ${error}`);

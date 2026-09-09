@@ -11,6 +11,9 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plan
 
-| Plan | Status | Scope |
+| Plan | Status | Current slice |
 | --- | --- | --- |
-| [plan-037.md](plan-037.md) | Active | S067 keeps all automation blocked through death recovery and resets stale controller work for #109. |
+| [038](plan-038.md) | Active | [S068 ESO catalog source contract](../../../specs/068-eso-catalog-contract/spec.md), issue #112 |
+
+Installed v0.15.1 field verification remains independently tracked by issue
+#110 and does not block Plan 038.
