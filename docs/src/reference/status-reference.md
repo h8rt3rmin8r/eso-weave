@@ -43,8 +43,15 @@ Observed numeric zero is different from all four states.
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
 Maintainer review candidates have no application status row. Candidate generation
-cannot activate a catalog, so only a separately installed and verified package
-catalog appears here.
+cannot authenticate its origin. A user-approved candidate appears here only after
+the Catalog Update worker verifies, installs, opens, and atomically selects it.
+Invalid user selections visibly fall back to the separately verified package
+catalog.
+
+The Catalog Update notice distinguishes Catalog current, New Live data
+available, Update ready to import, Collector capture required, Offline or stale
+check, Unsupported schema, and catalog unavailable. PTS previews are labeled
+separately and never participate in Live selection.
 
 The command-line discovery collector has separate lifecycle values:
 

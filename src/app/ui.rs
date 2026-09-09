@@ -32,6 +32,12 @@ use crate::app::{
     ResourceTheme, SkillEdit, StatusLine, UiIntent,
 };
 use crate::beacon::api_check::ApiCheckOutcome;
+use crate::catalog::Channel;
+use crate::catalog_pipeline::CandidateSummary;
+use crate::catalog_update::{
+    resolve_availability, AvailabilityInput, CaptureFingerprint, CatalogUpdateService,
+    CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateProgress, UpdateStage, WorkerEvent,
+};
 use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
 use crate::documentation::{BrowserOpener, DocumentationService, NativeBrowser};
@@ -253,6 +259,21 @@ pub struct EsoWeaveApp {
     documentation: DocumentationService,
     documentation_opener: Box<dyn BrowserOpener>,
     documentation_error: Option<String>,
+    catalog_worker: Option<CatalogUpdateWorker>,
+    catalog_update_open: bool,
+    catalog_candidates: Vec<CandidateSummary>,
+    catalog_selected: Option<String>,
+    catalog_origin_acknowledged: bool,
+    catalog_progress: Option<UpdateProgress>,
+    catalog_update_message: Option<String>,
+    catalog_notice_dismissed: bool,
+    catalog_observed_live: Option<crate::catalog::version::GameVersion>,
+    catalog_check_freshness: CheckFreshness,
+    catalog_live_state: LiveUpdateState,
+    catalog_status_ready: bool,
+    collector_waiting_fingerprint: Option<CaptureFingerprint>,
+    collector_status: Option<crate::collector::lifecycle::CollectorStatus>,
+    collector_status_requested: bool,
 }
 
 impl EsoWeaveApp {
@@ -303,7 +324,30 @@ impl EsoWeaveApp {
             documentation: DocumentationService::new(),
             documentation_opener: Box::new(NativeBrowser),
             documentation_error: None,
+            catalog_worker: None,
+            catalog_update_open: false,
+            catalog_candidates: Vec::new(),
+            catalog_selected: None,
+            catalog_origin_acknowledged: false,
+            catalog_progress: None,
+            catalog_update_message: None,
+            catalog_notice_dismissed: false,
+            catalog_observed_live: None,
+            catalog_check_freshness: CheckFreshness::Offline,
+            catalog_live_state: LiveUpdateState::OfflineStaleCheck,
+            catalog_status_ready: false,
+            collector_waiting_fingerprint: None,
+            collector_status: None,
+            collector_status_requested: false,
         }
+    }
+
+    /// Enables the background catalog status and user-initiated update worker.
+    pub fn with_catalog_updates(mut self, service: CatalogUpdateService) -> Self {
+        let worker = CatalogUpdateWorker::spawn(service);
+        let _ = worker.startup();
+        self.catalog_worker = Some(worker);
+        self
     }
 
     /// Replaces the operating-system browser adapter. Production uses
@@ -427,8 +471,16 @@ impl EsoWeaveApp {
     /// coalesced session save path.
     fn drain_api_checks(&mut self) {
         while let Ok(outcome) = self.api_rx.try_recv() {
+            self.catalog_status_ready = true;
+            self.catalog_observed_live = outcome.last_seen_game_version;
+            self.catalog_check_freshness = if outcome.fresh {
+                CheckFreshness::Fresh
+            } else {
+                CheckFreshness::Offline
+            };
             self.model.apply_api_check(outcome);
         }
+        self.refresh_catalog_availability();
     }
 
     fn apply_prefs(&mut self, ctx: &egui::Context) {
@@ -545,6 +597,225 @@ impl EsoWeaveApp {
         self.settings_open = open;
     }
 
+    /// Opens or closes the catalog update modal for interaction tests.
+    pub fn set_catalog_update_open(&mut self, open: bool) {
+        self.catalog_update_open = open;
+    }
+
+    pub fn catalog_update_open(&self) -> bool {
+        self.catalog_update_open
+    }
+
+    fn drain_catalog_updates(&mut self) {
+        loop {
+            let event = match self
+                .catalog_worker
+                .as_ref()
+                .map(CatalogUpdateWorker::try_recv)
+            {
+                Some(Ok(event)) => event,
+                _ => break,
+            };
+            match event {
+                WorkerEvent::StartupComplete {
+                    candidates,
+                    resolution,
+                    recovered_staging,
+                } => {
+                    self.catalog_status_ready = true;
+                    self.catalog_candidates = candidates;
+                    self.choose_default_catalog_candidate();
+                    self.model.set_catalog(resolution.access);
+                    if let Some(warning) = resolution.warning {
+                        self.catalog_update_message = Some(warning);
+                    } else if recovered_staging > 0 {
+                        self.catalog_update_message = Some(format!(
+                            "Recovered {recovered_staging} interrupted catalog staging operation(s)."
+                        ));
+                    }
+                }
+                WorkerEvent::DiscoveryComplete(candidates) => {
+                    self.catalog_status_ready = true;
+                    self.catalog_candidates = candidates;
+                    self.choose_default_catalog_candidate();
+                    self.catalog_update_message = Some(if self.catalog_candidates.is_empty() {
+                        "No verified candidates were found in the catalog import folders.".into()
+                    } else {
+                        "Catalog candidate review refreshed.".into()
+                    });
+                }
+                WorkerEvent::CaptureBoundaryRecorded(fingerprint) => {
+                    self.collector_waiting_fingerprint = Some(fingerprint);
+                    self.catalog_progress = Some(UpdateProgress {
+                        stage: UpdateStage::WaitingForCapture,
+                        completed_bytes: 0,
+                        total_bytes: 0,
+                        elapsed_millis: 0,
+                        message: "Waiting for user/game. In ESO, run /reloadui, log out, or exit to flush SavedVariables."
+                            .into(),
+                    });
+                    self.catalog_update_message = Some(
+                        "Capture boundary recorded privately. ESO Weave is not reading in-memory game state."
+                            .into(),
+                    );
+                }
+                WorkerEvent::CollectorCandidateBuilt(candidate) => {
+                    if !self
+                        .catalog_candidates
+                        .iter()
+                        .any(|existing| existing.candidate_sha256 == candidate.candidate_sha256)
+                    {
+                        self.catalog_candidates.push(candidate.clone());
+                    }
+                    self.catalog_selected = Some(candidate.candidate_sha256);
+                    self.catalog_origin_acknowledged = true;
+                    self.catalog_progress = Some(UpdateProgress {
+                        stage: UpdateStage::Complete,
+                        completed_bytes: candidate.total_bytes,
+                        total_bytes: candidate.total_bytes,
+                        elapsed_millis: 0,
+                        message: "Local collector candidate built and verified. Review it before installation."
+                            .into(),
+                    });
+                    self.catalog_update_message = Some(
+                        "The local candidate passed S073 verification. Installation remains a separate explicit action."
+                            .into(),
+                    );
+                }
+                WorkerEvent::CollectorState { status, message } => {
+                    if let Some(status) = status {
+                        self.collector_status = Some(status);
+                    }
+                    self.catalog_update_message = Some(message);
+                }
+                WorkerEvent::Progress(progress) => {
+                    self.catalog_progress = Some(progress);
+                }
+                WorkerEvent::InstallComplete {
+                    outcome,
+                    resolution,
+                } => {
+                    self.model.set_catalog(resolution.access);
+                    self.catalog_progress = Some(UpdateProgress {
+                        stage: UpdateStage::Complete,
+                        completed_bytes: outcome.candidate.total_bytes,
+                        total_bytes: outcome.candidate.total_bytes,
+                        elapsed_millis: 0,
+                        message: "Catalog installed and selected. Restart safety verified.".into(),
+                    });
+                    self.catalog_update_message = outcome.receipt_warning.or_else(|| {
+                        Some(format!(
+                            "Installed Live catalog {}. The previous catalog remains available for rollback.",
+                            outcome.candidate.catalog_version
+                        ))
+                    });
+                }
+                WorkerEvent::RollbackComplete {
+                    outcome,
+                    resolution,
+                } => {
+                    self.model.set_catalog(resolution.access);
+                    self.catalog_progress = Some(UpdateProgress {
+                        stage: UpdateStage::Complete,
+                        completed_bytes: 0,
+                        total_bytes: 0,
+                        elapsed_millis: 0,
+                        message: "Previous verified catalog restored.".into(),
+                    });
+                    self.catalog_update_message = outcome
+                        .receipt_warning
+                        .or_else(|| Some("Catalog rollback completed.".into()));
+                }
+                WorkerEvent::Failed(failure) => {
+                    self.catalog_progress = Some(UpdateProgress {
+                        stage: failure.stage,
+                        completed_bytes: 0,
+                        total_bytes: 0,
+                        elapsed_millis: 0,
+                        message: failure.message.clone(),
+                    });
+                    self.catalog_update_message =
+                        Some(format!("{}: {}", failure.code, failure.message));
+                }
+                WorkerEvent::ReceiptWriteFailed => {
+                    self.catalog_update_message = Some(
+                        "receipt-write-failed: The operation stayed safe, but its redacted receipt could not be stored."
+                            .into(),
+                    );
+                }
+                WorkerEvent::Cancelled => {
+                    self.catalog_progress = Some(UpdateProgress {
+                        stage: UpdateStage::Cancelled,
+                        completed_bytes: 0,
+                        total_bytes: 0,
+                        elapsed_millis: 0,
+                        message: "Catalog operation cancelled. The prior selection is unchanged."
+                            .into(),
+                    });
+                    self.catalog_update_message = Some(
+                        "Catalog operation cancelled. The prior catalog remains active.".into(),
+                    );
+                }
+            }
+        }
+        if self.catalog_update_open
+            && !self.collector_status_requested
+            && self
+                .catalog_worker
+                .as_ref()
+                .is_some_and(|worker| !worker.is_busy())
+        {
+            if let (Some(worker), Some(root)) = (
+                self.catalog_worker.as_ref(),
+                self.model.catalog_collector_addons_root(),
+            ) {
+                self.collector_status_requested = worker.inspect_collector(root);
+            }
+        }
+        self.refresh_catalog_availability();
+    }
+
+    fn refresh_catalog_availability(&mut self) {
+        let active = self.model.catalog().release().ok().flatten();
+        let live_candidates = self
+            .catalog_candidates
+            .iter()
+            .filter(|candidate| candidate.channel == Channel::Live)
+            .cloned()
+            .collect();
+        let pts_candidates = self
+            .catalog_candidates
+            .iter()
+            .filter(|candidate| candidate.channel == Channel::Pts)
+            .cloned()
+            .collect();
+        self.catalog_live_state = resolve_availability(AvailabilityInput {
+            active,
+            observed_live: self.catalog_observed_live,
+            freshness: self.catalog_check_freshness,
+            live_candidates,
+            pts_candidates,
+            collector_capture_required: false,
+            supported_schema: crate::catalog::schema::SCHEMA_VERSION,
+        })
+        .live_state;
+    }
+
+    fn choose_default_catalog_candidate(&mut self) {
+        let selected_exists = self.catalog_selected.as_ref().is_some_and(|selected| {
+            self.catalog_candidates
+                .iter()
+                .any(|candidate| &candidate.candidate_sha256 == selected)
+        });
+        if !selected_exists {
+            self.catalog_selected = self
+                .catalog_candidates
+                .iter()
+                .find(|candidate| candidate.channel == Channel::Live)
+                .map(|candidate| candidate.candidate_sha256.clone());
+        }
+    }
+
     /// Renders one frame. Reachable without an `eframe::Frame`, a window, or a
     /// GPU, so `tests/app_ui_sizing.rs` can assert the rendered geometry that the
     /// pure sizing helpers alone never proved (slice 030).
@@ -555,6 +826,14 @@ impl EsoWeaveApp {
         // frame is reflected immediately.
         self.drain_hotkey_toggles();
         self.drain_api_checks();
+        self.drain_catalog_updates();
+        if self
+            .catalog_worker
+            .as_ref()
+            .is_some_and(CatalogUpdateWorker::is_busy)
+        {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
         let extreme_bg = ui.visuals().extreme_bg_color;
 
         let mut intents: Vec<UiIntent> = Vec::new();
@@ -735,6 +1014,15 @@ impl EsoWeaveApp {
                             self.settings_draft = Some(form);
                             self.settings_open = true;
                         }
+                        if ui
+                            .button(strings::MENU_CATALOG_UPDATE)
+                            .on_hover_text(strings::MENU_CATALOG_UPDATE_TOOLTIP)
+                            .clickable()
+                            .clicked()
+                        {
+                            self.catalog_update_open = true;
+                            ui.close();
+                        }
                         if ui.button(strings::MENU_EXIT).clickable().clicked() {
                             exit = true;
                         }
@@ -811,6 +1099,25 @@ impl EsoWeaveApp {
                 // it (FR-007).
                 let _ = menu_bar;
                 ui.separator();
+
+                if !self.catalog_notice_dismissed
+                    && self.catalog_status_ready
+                    && (self.catalog_live_state != LiveUpdateState::CatalogCurrent
+                        || !self.catalog_candidates.is_empty()
+                        || self.catalog_update_message.is_some())
+                {
+                    ui.horizontal_wrapped(|ui| {
+                        let text = live_state_label(self.catalog_live_state);
+                        ui.label(text);
+                        if ui.button("Review").clickable().clicked() {
+                            self.catalog_update_open = true;
+                        }
+                        if ui.button("Dismiss").clickable().clicked() {
+                            self.catalog_notice_dismissed = true;
+                        }
+                    });
+                    ui.separator();
+                }
 
                 self.main_view(ui, &mut intents);
             });
@@ -913,6 +1220,10 @@ impl EsoWeaveApp {
 
         if self.settings_open {
             self.settings_modal(&ctx, &mut intents);
+        }
+
+        if self.catalog_update_open {
+            self.catalog_update_modal(&ctx);
         }
 
         if let Some(message) = self.documentation_error.clone() {
@@ -1548,6 +1859,303 @@ impl EsoWeaveApp {
             });
     }
 
+    fn catalog_update_modal(&mut self, ctx: &egui::Context) {
+        let busy = self
+            .catalog_worker
+            .as_ref()
+            .is_some_and(CatalogUpdateWorker::is_busy);
+        let selected = self.catalog_selected.clone();
+        let selected_summary = selected.as_ref().and_then(|hash| {
+            self.catalog_candidates
+                .iter()
+                .find(|candidate| &candidate.candidate_sha256 == hash)
+                .cloned()
+        });
+        let modal = egui::Modal::new(egui::Id::new("eso_weave_catalog_update")).show(ctx, |ui| {
+            let modal_width = 620.0_f32.min(ctx.content_rect().width() * 0.90).max(280.0);
+            let modal_height = (ctx.content_rect().height() * 0.88).max(260.0);
+            ui.set_min_width(modal_width);
+            ui.set_max_width(modal_width);
+            ui.heading("Catalog Update");
+            egui::ScrollArea::vertical()
+                .max_height(modal_height)
+                .show(ui, |ui| {
+            ui.label(
+                "Updates are always user initiated. Imported hashes prove integrity, not who supplied the files.",
+            );
+            ui.separator();
+
+            let (catalog_status, available) = self.model.catalog().status();
+            ui.label(format!("Current Live catalog: {catalog_status}"));
+            ui.label(format!(
+                "Update status: {}",
+                live_state_label(self.catalog_live_state)
+            ));
+            if !available {
+                ui.colored_label(ui.visuals().warn_fg_color, "The bundled catalog is unavailable.");
+            }
+
+            ui.add_space(6.0);
+            ui.strong("Reviewed import candidates");
+            if self.catalog_candidates.is_empty() {
+                ui.label(
+                    "No verified candidates found. Place a complete S073 candidate under the application data catalog/import/live or catalog/import/pts folder, then refresh.",
+                );
+            }
+            for candidate in &self.catalog_candidates {
+                if candidate.channel == Channel::Live {
+                    let label = format!(
+                        "Live {} (API {}, {:.1} MiB)",
+                        candidate.game_version,
+                        candidate.api_version,
+                        candidate.total_bytes as f64 / (1024.0 * 1024.0)
+                    );
+                    ui.radio_value(
+                        &mut self.catalog_selected,
+                        Some(candidate.candidate_sha256.clone()),
+                        label,
+                    );
+                } else {
+                    ui.label(format!(
+                        "PTS preview only: {} (API {})",
+                        candidate.game_version, candidate.api_version
+                    ));
+                }
+            }
+
+            if let Some(candidate) = &selected_summary {
+                ui.group(|ui| {
+                    ui.label(format!(
+                        "Catalog {} | schema {} | {} sources",
+                        candidate.catalog_version, candidate.catalog_schema, candidate.source_count
+                    ));
+                    ui.label(format!(
+                        "Changes: {} added, {} changed, {} removed; icons: {} ready, {} placeholders",
+                        candidate.diff.entities_added,
+                        candidate.diff.entities_changed,
+                        candidate.diff.entities_removed,
+                        candidate.ready_icons,
+                        candidate.placeholder_icons
+                    ));
+                    ui.label(format!(
+                        "Integrity identity: {}...",
+                        &candidate.candidate_sha256[..12]
+                    ));
+                });
+            }
+
+            ui.checkbox(
+                &mut self.catalog_origin_acknowledged,
+                "I obtained this candidate from a review or release source I trust.",
+            );
+            ui.label(
+                "Collector-assisted builds are local-only. ESO saves addon data only after /reloadui, logout, or exit. Captures are parsed as restricted data, never executed or uploaded.",
+            );
+            ui.label(
+                "Collected categories: player skills, crafted abilities, item sets, champion skills, companions, races, and classes. Account and character names are excluded or represented only by a one-way scope key.",
+            );
+            let collector_status = match self.collector_status {
+                Some(crate::collector::lifecycle::CollectorStatus::NotInstalled) => "not installed",
+                Some(crate::collector::lifecycle::CollectorStatus::ManagedUpToDate) => "managed and current",
+                Some(crate::collector::lifecycle::CollectorStatus::ManagedVersionMismatch) => {
+                    "managed update available"
+                }
+                Some(crate::collector::lifecycle::CollectorStatus::Unmanaged) => {
+                    "unmanaged (will not be modified)"
+                }
+                None => "AddOns directory unavailable",
+            };
+            ui.label(format!("Local collector: {collector_status}"));
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .add_enabled(!busy, egui::Button::new("Install/update collector"))
+                    .clickable()
+                    .clicked()
+                {
+                    match (
+                        self.catalog_worker.as_ref(),
+                        self.model.catalog_collector_addons_root(),
+                    ) {
+                        (Some(worker), Some(root)) => {
+                            let _ = worker.install_collector(
+                                root,
+                                self.model.catalog_collector_running_state(),
+                                self.model.effective_api_version(),
+                            );
+                        }
+                        _ => {
+                            self.catalog_update_message =
+                                Some("The ESO AddOns directory could not be resolved.".into());
+                        }
+                    }
+                }
+                let wait_label = if self.collector_waiting_fingerprint.is_some() {
+                    "Build from flushed capture"
+                } else {
+                    "Begin capture wait"
+                };
+                if ui
+                    .add_enabled(!busy, egui::Button::new(wait_label))
+                    .clickable()
+                    .clicked()
+                {
+                    match (
+                        self.catalog_worker.as_ref(),
+                        self.model.catalog_collector_capture_path(),
+                        self.collector_waiting_fingerprint.clone(),
+                    ) {
+                        (Some(worker), Some(path), Some(fingerprint)) => {
+                            self.catalog_progress = None;
+                            self.catalog_update_message = None;
+                            let _ = worker.build_collector(path, fingerprint);
+                        }
+                        (Some(worker), Some(path), None) => {
+                            self.catalog_progress = None;
+                            self.catalog_update_message = None;
+                            let _ = worker.observe_capture(path);
+                        }
+                        _ => {
+                            self.catalog_update_message = Some(
+                                "The collector capture location is unavailable until ESO's AddOns directory is configured."
+                                    .into(),
+                            );
+                        }
+                    }
+                }
+                if ui
+                    .add_enabled(!busy, egui::Button::new("Delete capture"))
+                    .clickable()
+                    .clicked()
+                {
+                    if let (Some(worker), Some(path)) = (
+                        self.catalog_worker.as_ref(),
+                        self.model.catalog_collector_capture_path(),
+                    ) {
+                        let _ = worker.delete_capture(path);
+                    } else {
+                        self.catalog_update_message =
+                            Some("The collector capture location could not be resolved.".into());
+                    }
+                    self.collector_waiting_fingerprint = None;
+                }
+                if ui
+                    .add_enabled(!busy, egui::Button::new("Uninstall collector"))
+                    .clickable()
+                    .clicked()
+                {
+                    match (
+                        self.catalog_worker.as_ref(),
+                        self.model.catalog_collector_addons_root(),
+                    ) {
+                        (Some(worker), Some(root)) => {
+                            let _ = worker.uninstall_collector(
+                                root,
+                                self.model.catalog_collector_running_state(),
+                            );
+                        }
+                        _ => {
+                            self.catalog_update_message =
+                                Some("The ESO AddOns directory could not be resolved.".into());
+                        }
+                    }
+                }
+            });
+
+            if let Some(progress) = &self.catalog_progress {
+                ui.separator();
+                ui.strong(stage_label(progress.stage));
+                ui.label(&progress.message);
+                ui.label(format!(
+                    "Elapsed: {:.1} seconds",
+                    progress.elapsed_millis as f64 / 1000.0
+                ));
+                if progress.total_bytes > 0 {
+                    let fraction = progress.completed_bytes as f32 / progress.total_bytes as f32;
+                    ui.add(
+                        egui::ProgressBar::new(fraction.clamp(0.0, 1.0)).text(format!(
+                            "{} / {} bytes",
+                            progress.completed_bytes, progress.total_bytes
+                        )),
+                    );
+                } else if busy {
+                    ui.label("Progress total is not yet known.");
+                }
+            }
+            if let Some(message) = &self.catalog_update_message {
+                ui.label(message);
+            }
+
+            ui.separator();
+            ui.horizontal_wrapped(|ui| {
+                let can_install = !busy
+                    && selected_summary
+                        .as_ref()
+                        .is_some_and(|candidate| candidate.channel == Channel::Live)
+                    && self.catalog_origin_acknowledged;
+                if ui
+                    .add_enabled(can_install, egui::Button::new("Install selected Live catalog"))
+                    .clickable()
+                    .clicked()
+                {
+                    if let (Some(worker), Some(hash)) =
+                        (self.catalog_worker.as_ref(), self.catalog_selected.clone())
+                    {
+                        self.catalog_progress = None;
+                        self.catalog_update_message = None;
+                        let _ = worker.install(hash, true);
+                    }
+                }
+                if ui
+                    .add_enabled(!busy, egui::Button::new("Refresh candidates"))
+                    .clickable()
+                    .clicked()
+                {
+                    if let Some(worker) = &self.catalog_worker {
+                        let _ = worker.discover();
+                    }
+                }
+                if ui
+                    .add_enabled(!busy, egui::Button::new("Roll back"))
+                    .clickable()
+                    .clicked()
+                {
+                    if let Some(worker) = &self.catalog_worker {
+                        self.catalog_progress = None;
+                        self.catalog_update_message = None;
+                        let _ = worker.rollback();
+                    }
+                }
+                if busy {
+                    let cancellable = self
+                        .catalog_progress
+                        .as_ref()
+                        .is_none_or(|progress| progress.stage != UpdateStage::Committing);
+                    if ui
+                        .add_enabled(cancellable, egui::Button::new("Cancel"))
+                        .clickable()
+                        .clicked()
+                    {
+                        if let Some(worker) = &self.catalog_worker {
+                            worker.cancel();
+                        }
+                    }
+                } else if ui.button("Close").clickable().clicked() {
+                    self.catalog_update_open = false;
+                }
+            });
+                });
+        });
+        if modal.should_close() {
+            if busy {
+                if let Some(worker) = &self.catalog_worker {
+                    worker.cancel();
+                }
+            } else {
+                self.catalog_update_open = false;
+            }
+        }
+    }
+
     /// Renders settings as a full-frame modal over a dimmed backdrop. Changes are
     /// submitted to each setting's runtime contract and persisted automatically
     /// (coalesced), with no explicit save.
@@ -2133,5 +2741,50 @@ fn level_name(level: LevelName) -> &'static str {
         LevelName::Info => "INFO",
         LevelName::Debug => "DEBUG",
         LevelName::Trace => "TRACE",
+    }
+}
+
+fn stage_label(stage: UpdateStage) -> &'static str {
+    match stage {
+        UpdateStage::Checking => "Checking",
+        UpdateStage::LocatingSources => "Locating sources",
+        UpdateStage::WaitingForCapture => "Waiting for capture",
+        UpdateStage::Validating => "Validating",
+        UpdateStage::Normalizing => "Normalizing",
+        UpdateStage::Building => "Building",
+        UpdateStage::ResolvingIcons => "Resolving icons",
+        UpdateStage::IntegrityChecking => "Integrity checking",
+        UpdateStage::WaitingForLock => "Waiting for another catalog operation",
+        UpdateStage::Installing => "Installing",
+        UpdateStage::Opening => "Opening",
+        UpdateStage::Committing => "Selecting catalog",
+        UpdateStage::RollingBack => "Rolling back",
+        UpdateStage::Complete => "Complete",
+        UpdateStage::Cancelled => "Cancelled",
+        UpdateStage::Failed => "Failed",
+    }
+}
+
+fn live_state_label(state: LiveUpdateState) -> &'static str {
+    match state {
+        LiveUpdateState::CatalogCurrent => "Catalog current.",
+        LiveUpdateState::NewLiveDataAvailable => {
+            "New Live game data is available; no reviewed candidate is installed automatically."
+        }
+        LiveUpdateState::UpdateReadyToImport => {
+            "A verified Live catalog candidate is ready for review."
+        }
+        LiveUpdateState::CollectorCaptureRequired => {
+            "A local collector capture is required before building this update."
+        }
+        LiveUpdateState::UnsupportedSchema => {
+            "An imported candidate uses an unsupported catalog schema."
+        }
+        LiveUpdateState::OfflineStaleCheck => {
+            "The Live version check is offline or stale; the accepted catalog remains active."
+        }
+        LiveUpdateState::CatalogUnavailable => {
+            "No usable active catalog is available; review the bundled catalog or imports."
+        }
     }
 }

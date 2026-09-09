@@ -16,7 +16,28 @@ pub(crate) fn read_bounded_stable(
     path: &Path,
     max_bytes: u64,
 ) -> Result<Vec<u8>, StableReadError> {
-    let mut file = open_no_follow(path).map_err(StableReadError::Io)?;
+    let mut file = open_bounded_stable(canonical_root, path, max_bytes)?;
+    let metadata = file.metadata().map_err(StableReadError::Io)?;
+    let read_limit = max_bytes
+        .checked_add(1)
+        .ok_or(StableReadError::Invalid("file byte limit is invalid"))?;
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.by_ref()
+        .take(read_limit)
+        .read_to_end(&mut bytes)
+        .map_err(StableReadError::Io)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(StableReadError::Invalid("file exceeds its byte limit"));
+    }
+    Ok(bytes)
+}
+
+pub(crate) fn open_bounded_stable(
+    canonical_root: &Path,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<File, StableReadError> {
+    let file = open_no_follow(path).map_err(StableReadError::Io)?;
     let metadata = file.metadata().map_err(StableReadError::Io)?;
     if !metadata.is_file() || is_link_like(&metadata) {
         return Err(StableReadError::Invalid("file must not be link-like"));
@@ -30,18 +51,7 @@ pub(crate) fn read_bounded_stable(
             "opened file escaped its approved root",
         ));
     }
-    let read_limit = max_bytes
-        .checked_add(1)
-        .ok_or(StableReadError::Invalid("file byte limit is invalid"))?;
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.by_ref()
-        .take(read_limit)
-        .read_to_end(&mut bytes)
-        .map_err(StableReadError::Io)?;
-    if bytes.len() as u64 > max_bytes {
-        return Err(StableReadError::Invalid("file exceeds its byte limit"));
-    }
-    Ok(bytes)
+    Ok(file)
 }
 
 pub(crate) fn is_same_or_nested(candidate: &Path, root: &Path) -> bool {

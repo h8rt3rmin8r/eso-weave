@@ -268,58 +268,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), CollectorError> {
     temporary.as_file_mut().write_all(bytes)?;
     temporary.as_file().sync_all()?;
     let temporary = temporary.into_temp_path();
-    persist_candidate(temporary, path)
-}
-
-#[cfg(windows)]
-fn persist_candidate(
-    candidate: tempfile::TempPath,
-    destination: &Path,
-) -> Result<(), CollectorError> {
-    if !destination.exists() {
-        candidate
-            .persist(destination)
-            .map_err(|error| error.error)?;
-        return Ok(());
-    }
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{ReplaceFileW, REPLACEFILE_WRITE_THROUGH};
-    let destination_wide: Vec<u16> = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let candidate_wide: Vec<u16> = candidate
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    // SAFETY: both owned path buffers are NUL-terminated and live for the call.
-    let replaced = unsafe {
-        ReplaceFileW(
-            destination_wide.as_ptr(),
-            candidate_wide.as_ptr(),
-            std::ptr::null(),
-            REPLACEFILE_WRITE_THROUGH,
-            std::ptr::null(),
-            std::ptr::null(),
-        )
-    };
-    if replaced == 0 {
-        return Err(std::io::Error::last_os_error().into());
-    }
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn persist_candidate(
-    candidate: tempfile::TempPath,
-    destination: &Path,
-) -> Result<(), CollectorError> {
-    candidate
-        .persist(destination)
-        .map_err(|error| error.error)?;
-    Ok(())
+    crate::atomic_file::persist(temporary, path).map_err(Into::into)
 }
 
 fn validate_distinct_paths(input: &Path, output: &Path) -> Result<(), CollectorError> {

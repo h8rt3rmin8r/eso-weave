@@ -7,10 +7,12 @@
 //! addon.
 
 pub mod app;
+mod atomic_file;
 pub mod beacon;
 mod bounded_file;
 pub mod catalog;
 pub mod catalog_pipeline;
+pub mod catalog_update;
 pub mod collector;
 pub mod config;
 pub mod documentation;

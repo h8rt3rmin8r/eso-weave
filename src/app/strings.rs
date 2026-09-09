@@ -209,6 +209,9 @@ pub const MENU_HELP: &str = "Help";
 pub const MENU_DOCUMENTATION: &str = "Documentation";
 pub const MENU_DOCUMENTATION_TOOLTIP: &str = "Open the complete offline guide in your browser.";
 pub const MENU_SETTINGS: &str = "Settings";
+pub const MENU_CATALOG_UPDATE: &str = "Catalog Update...";
+pub const MENU_CATALOG_UPDATE_TOOLTIP: &str =
+    "Review imported Live catalog candidates, install one explicitly, or roll back.";
 pub const MENU_SETTINGS_TOOLTIP: &str = "Open settings.";
 pub const MENU_EXIT: &str = "Exit";
 pub const MENU_LOG_TOGGLE: &str = "Live Log";

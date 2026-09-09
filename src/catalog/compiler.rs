@@ -230,7 +230,7 @@ fn build_catalog_inner(request: &BuildRequest) -> Result<BuildReport, CatalogErr
     if let Some(path) = &request.report_path {
         write_json_atomic(path, &report)?;
     }
-    persist_candidate(candidate, &request.output_path)?;
+    crate::atomic_file::persist(candidate, &request.output_path)?;
     Ok(report)
 }
 
@@ -539,7 +539,7 @@ fn preserve_rollback(destination: &Path, existing: &VerifyReport) -> Result<(), 
                 "rollback copy hash differs from the last known-good catalog".to_string(),
             ));
         }
-        persist_candidate(temporary, &rollback)?;
+        crate::atomic_file::persist(temporary, &rollback)?;
     }
     write_json_atomic(
         &manifest,
@@ -1059,59 +1059,5 @@ fn write_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), CatalogE
     temporary.as_file_mut().write_all(b"\n")?;
     temporary.as_file().sync_all()?;
     temporary.persist(path).map_err(|error| error.error)?;
-    Ok(())
-}
-
-#[cfg(windows)]
-fn persist_candidate(
-    candidate: tempfile::TempPath,
-    destination: &Path,
-) -> Result<(), CatalogError> {
-    if !destination.exists() {
-        candidate
-            .persist(destination)
-            .map_err(|error| error.error)?;
-        return Ok(());
-    }
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{ReplaceFileW, REPLACEFILE_WRITE_THROUGH};
-
-    let destination_wide: Vec<u16> = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let candidate_wide: Vec<u16> = candidate
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    // SAFETY: both paths are owned, NUL-terminated UTF-16 buffers that remain
-    // alive for the call. Null optional pointers request no OS-created backup;
-    // the verified rollback copy was already synced separately.
-    let replaced = unsafe {
-        ReplaceFileW(
-            destination_wide.as_ptr(),
-            candidate_wide.as_ptr(),
-            std::ptr::null(),
-            REPLACEFILE_WRITE_THROUGH,
-            std::ptr::null(),
-            std::ptr::null(),
-        )
-    };
-    if replaced == 0 {
-        return Err(std::io::Error::last_os_error().into());
-    }
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn persist_candidate(
-    candidate: tempfile::TempPath,
-    destination: &Path,
-) -> Result<(), CatalogError> {
-    candidate
-        .persist(destination)
-        .map_err(|error| error.error)?;
     Ok(())
 }

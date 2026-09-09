@@ -119,6 +119,28 @@ hash to bypass verification. A failed source refresh uses cached bytes only when
 the request explicitly permits stale fallback, and the resulting source report
 labels that choice. Existing immutable candidates remain unchanged.
 
+## A user catalog update or rollback fails
+
+Open **File > Catalog Update...** and read the named failing stage. A malformed,
+linked, incomplete, wrong-channel, unsupported-schema, older, checksum-invalid,
+or policy-invalid candidate is intentionally unavailable for Live installation.
+Replace the complete hash directory in `catalog/import/live` from the trusted
+review source, then choose **Refresh candidates**. Do not edit manifests or
+checksums to bypass verification.
+
+Cancellation before selection preserves the preceding target. During the short
+Selecting catalog stage, allow the atomic operation to finish. On restart, the
+worker removes only abandoned `.update-*` staging and never accepted versions.
+If a user selection is invalid, the status visibly identifies the bundled
+fallback. A receipt warning means the selection itself succeeded but redacted
+receipt storage failed, commonly because the application-data volume is full.
+
+For a collector-assisted build, choose **Begin capture wait** before the ESO save
+boundary. Then run `/reloadui`, log out, or exit and choose **Build from flushed
+capture**. Unchanged, unstable, incomplete, PTS, or coverage-reducing captures
+remain unaccepted. The cleanup controls refuse unmanaged collector files and do
+not modify PixelBeacon.
+
 ## A skill passes through or a weave is dropped
 
 Check the Skills row first. It must be enabled, bound to the physical key, and

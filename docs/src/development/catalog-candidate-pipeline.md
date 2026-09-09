@@ -62,5 +62,7 @@ The pinned `catalog-candidate` workflow runs manually or on a schedule with
 read-only repository permission and a 30 minute matrix-job timeout. It builds
 and verifies invented Live and PTS candidates and uploads them for review. It
 contains no repository write, installation, promotion, or release step. Active
-catalog selection, rollback, and end-user update behavior belong to the later
-update-orchestration slice.
+catalog selection, rollback, and end-user update behavior are provided by the
+[user-initiated catalog update workflow](catalog-updates.md). Candidate integrity
+does not authenticate its download origin, so installation keeps a separate
+trusted-source acknowledgement.

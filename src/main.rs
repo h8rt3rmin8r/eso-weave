@@ -73,6 +73,9 @@ fn main() {
         cfg!(debug_assertions).then_some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")));
     let catalog_path = eso_weave::catalog::locate_catalog(&executable, debug_root);
     let catalog = eso_weave::catalog::CatalogAccess::open_or_empty(&catalog_path);
+    let catalog_updates = config_dir
+        .as_ref()
+        .map(|dir| eso_weave::catalog_update::CatalogUpdateService::new(dir, &catalog_path));
     if let Some(diagnostic) = catalog.diagnostic() {
         tracing::warn!(target: "eso_weave::catalog", "{}", diagnostic.message);
     } else if let Ok(Some(release)) = catalog.release() {
@@ -566,12 +569,11 @@ fn main() {
         native_options,
         Box::new(|cc| {
             eso_weave::app::theme::install_fonts(&cc.egui_ctx);
-            Ok(Box::new(EsoWeaveApp::new(
-                model,
-                toggle_rx,
-                api_rx,
-                restored_geometry,
-            )))
+            let app = EsoWeaveApp::new(model, toggle_rx, api_rx, restored_geometry);
+            Ok(Box::new(match catalog_updates {
+                Some(service) => app.with_catalog_updates(service),
+                None => app,
+            }))
         }),
     ) {
         tracing::error!(target: "eso_weave", "GUI exited with error: {err}");
