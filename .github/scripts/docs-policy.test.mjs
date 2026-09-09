@@ -1479,9 +1479,11 @@ test("requires complete, traceable metric receipts", () => {
   const fixture = validEncounterFixture();
   const projected = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
   const expected = {
+    schema_version: 1,
     algorithm_version: "s069-v1",
     raw_content_sha256: projected.raw_content_sha256,
     metrics: structuredClone(projected.metrics),
+    loss_ranges: structuredClone(projected.metrics["observed-dps"].loss_ranges),
     catalog_receipts: [
       { ...projected.catalog_receipt, catalog_snapshot: "v1" },
       { ...projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999])).catalog_receipt, catalog_snapshot: "v2" },
@@ -1498,6 +1500,30 @@ test("requires complete, traceable metric receipts", () => {
   assert.match(errors, /observed-dps.*first_sequence/i);
   assert.match(errors, /observed-hps.*unit/i);
   assert.match(errors, /effect-uptime.*quality/i);
+});
+
+test("requires complete catalog join receipts", () => {
+  const fixture = validEncounterFixture();
+  const initial = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
+  const resolved = projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999]));
+  const expected = {
+    schema_version: 1,
+    algorithm_version: "s069-v1",
+    raw_content_sha256: initial.raw_content_sha256,
+    metrics: structuredClone(initial.metrics),
+    loss_ranges: structuredClone(initial.metrics["observed-dps"].loss_ranges),
+    catalog_receipts: [
+      { ...initial.catalog_receipt, catalog_snapshot: "v1" },
+      { ...resolved.catalog_receipt, catalog_snapshot: "v2" },
+    ],
+    storage: { production_retention_recommendation: "verification-required" },
+    parity_claim: "synthetic-determinism-only",
+  };
+  delete expected.catalog_receipts[0].known_ids;
+  delete expected.catalog_receipts[1].catalog_snapshot;
+  const errors = validateEncounterEvidence(fixture, expected).join("\n");
+  assert.match(errors, /initial catalog receipt requires known_ids/i);
+  assert.match(errors, /resolved catalog receipt requires catalog_snapshot/i);
 });
 
 test("projects deterministic metrics and catalog receipts from the dummy encounter", () => {
@@ -1547,6 +1573,14 @@ test("rejects malformed discontinuities and private fixture fields", () => {
   const privateFixture = validEncounterFixture();
   privateFixture.events[2].payload.subject = { account_name: "private" };
   assert.match(validateEncounterFixture(privateFixture).join("\n"), /prohibited private field account_name/i);
+
+  const privateEnvelope = validEncounterFixture();
+  privateEnvelope.envelope.metadata = { character_name: "private" };
+  assert.match(validateEncounterFixture(privateEnvelope).join("\n"), /prohibited private field character_name/i);
+
+  const missingReason = validEncounterFixture();
+  missingReason.events.find((event) => event.kind === "discontinuity").payload.reason = "";
+  assert.match(validateEncounterFixture(missingReason).join("\n"), /discontinuity.*non-empty reason/i);
 });
 
 test("unions overlapping effect intervals across actor instances", () => {
@@ -1560,5 +1594,19 @@ test("unions overlapping effect intervals across actor instances", () => {
     { session_id: "s1", encounter_id: "e1", sequence: 10, monotonic_ms: 5000, kind: "effect", payload: { target_actor_id: "a2", ability_id: 200, effect_instance_id: "other", change: "gained" } },
     { session_id: "s1", encounter_id: "e1", sequence: 11, monotonic_ms: 5500, kind: "effect", payload: { target_actor_id: "a2", ability_id: 200, effect_instance_id: "other", change: "faded" } },
   );
+  assert.equal(projectEncounterMetrics(fixture).metrics["effect-uptime"].values["200"], 0.6);
+});
+
+test("preserves the earliest active time across repeated effect gains", () => {
+  const fixture = validEncounterFixture();
+  for (const event of fixture.events.filter((event) => event.sequence >= 5)) event.sequence += 1;
+  fixture.envelope.last_sequence += 1;
+  const marker = fixture.events.find((event) => event.kind === "discontinuity");
+  marker.payload.missing_sequence_from += 1;
+  marker.payload.missing_sequence_to += 1;
+  fixture.events.push({
+    session_id: "s1", encounter_id: "e1", sequence: 5, monotonic_ms: 2200, kind: "effect",
+    payload: { target_actor_id: "a1", ability_id: 200, change: "gained" },
+  });
   assert.equal(projectEncounterMetrics(fixture).metrics["effect-uptime"].values["200"], 0.6);
 });

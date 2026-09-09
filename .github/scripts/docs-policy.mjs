@@ -1224,14 +1224,15 @@ export function validateEncounterFixture(fixture) {
     "accountid", "accountname", "characterid", "charactername", "chat", "chattext",
     "guild", "guildid", "guildname", "location", "locationname",
   ]);
-  const scanPrivateFields = (value, sequence) => {
+  const scanPrivateFields = (value, location) => {
     if (!value || typeof value !== "object") return;
     for (const [key, nested] of Object.entries(value)) {
       const normalized = key.toLowerCase().replace(/[^a-z0-9]/gu, "");
-      if (prohibitedPrivateFields.has(normalized)) errors.push(`event ${sequence} contains prohibited private field ${key}`);
-      scanPrivateFields(nested, sequence);
+      if (prohibitedPrivateFields.has(normalized)) errors.push(`${location} contains prohibited private field ${key}`);
+      scanPrivateFields(nested, location);
     }
   };
+  scanPrivateFields(fixture.envelope, "encounter envelope");
   for (const event of events) {
     if (!Number.isInteger(event.sequence) || seen.has(event.sequence)) errors.push(`duplicate sequence ${event.sequence}`);
     seen.add(event.sequence);
@@ -1248,7 +1249,8 @@ export function validateEncounterFixture(fixture) {
       if (event.kind === "discontinuity" && !declaresGap) errors.push(`discontinuity ${event.sequence} must exactly describe the preceding missing range`);
     }
     if (!previous && event.kind === "discontinuity") errors.push(`discontinuity ${event.sequence} cannot be the first event`);
-    scanPrivateFields(event, event.sequence);
+    if (event.kind === "discontinuity" && (typeof event.payload?.reason !== "string" || event.payload.reason.trim() === "")) errors.push(`discontinuity ${event.sequence} requires a non-empty reason`);
+    scanPrivateFields(event, `event ${event.sequence}`);
     previous = event;
   }
   const kinds = new Set(events.map((event) => event.kind));
@@ -1277,7 +1279,7 @@ export function projectEncounterMetrics(fixture, knownCatalogIds = new Set()) {
     const id = event.payload.ability_id;
     const instance = event.payload.effect_instance_id ?? event.payload.effect_slot ?? "default";
     const instanceKey = `${event.payload.target_actor_id ?? "unknown"}:${id}:${instance}`;
-    if (event.payload.change === "gained") effectStarts.set(instanceKey, { id, started: event.monotonic_ms });
+    if (event.payload.change === "gained" && !effectStarts.has(instanceKey)) effectStarts.set(instanceKey, { id, started: event.monotonic_ms });
     else if (event.payload.change === "faded" && effectStarts.has(instanceKey)) {
       const started = effectStarts.get(instanceKey).started;
       if (!effectIntervals.has(id)) effectIntervals.set(id, []);
@@ -1333,8 +1335,11 @@ export function validateEncounterEvidence(fixture, expected, rawBytes) {
   if (errors.length > 0) return errors;
   const initial = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
   const resolved = projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999]));
+  if (expected?.schema_version !== 1) errors.push("encounter projection schema_version must be 1");
+  if (expected?.algorithm_version !== "s069-v1") errors.push("encounter projection algorithm_version must be s069-v1");
   if (expected?.raw_content_sha256 !== initial.raw_content_sha256) errors.push("encounter projection raw_content_sha256 is stale");
   if (fixture.envelope.content_sha256 !== initial.raw_content_sha256) errors.push("encounter envelope content_sha256 is stale");
+  if (JSON.stringify(expected?.loss_ranges) !== JSON.stringify(initial.metrics["observed-dps"].loss_ranges)) errors.push("encounter projection loss_ranges are stale");
   for (const metricId of REQUIRED_ENCOUNTER_METRICS) {
     const actual = initial.metrics[metricId];
     const receipt = expected?.metrics?.[metricId];
@@ -1348,12 +1353,27 @@ export function validateEncounterEvidence(fixture, expected, rawBytes) {
     }
   }
   const receipts = Array.isArray(expected?.catalog_receipts) ? expected.catalog_receipts : [];
-  if (JSON.stringify(receipts[0]?.unknown_ids) !== JSON.stringify(initial.catalog_receipt.unknown_ids)) errors.push("initial catalog receipt does not preserve unknown IDs");
-  if (JSON.stringify(receipts[1]?.unknown_ids) !== JSON.stringify(resolved.catalog_receipt.unknown_ids)) errors.push("resolved catalog receipt is stale");
-  if (receipts.some((receipt) => receipt.raw_content_sha256 !== initial.raw_content_sha256)) errors.push("catalog rejoin must preserve the raw-content hash");
+  for (const [index, label, actual] of [[0, "initial", initial.catalog_receipt], [1, "resolved", resolved.catalog_receipt]]) {
+    const receipt = receipts[index];
+    if (!receipt) {
+      errors.push(`${label} catalog receipt is missing`);
+      continue;
+    }
+    if (typeof receipt.catalog_snapshot !== "string" || receipt.catalog_snapshot.trim() === "") errors.push(`${label} catalog receipt requires catalog_snapshot`);
+    for (const field of ["known_ids", "unknown_ids"]) {
+      if (!Array.isArray(receipt[field])) errors.push(`${label} catalog receipt requires ${field}`);
+      else if (JSON.stringify(receipt[field]) !== JSON.stringify(actual[field])) errors.push(`${label} catalog receipt has stale ${field}`);
+    }
+    if (receipt.raw_content_sha256 !== initial.raw_content_sha256) errors.push(`${label} catalog receipt must preserve the raw-content hash`);
+  }
   if (rawBytes) {
     if (expected?.storage?.exact?.raw_bytes !== rawBytes.byteLength) errors.push("encounter fixture exact raw byte receipt is stale");
     if (expected?.storage?.exact?.gzip_bytes !== gzipSync(rawBytes, { mtime: 0 }).byteLength) errors.push("encounter fixture exact gzip byte receipt is stale");
+    const rawSize = rawBytes.byteLength;
+    const gzipSize = gzipSync(rawBytes, { mtime: 0 }).byteLength;
+    const estimates = expected?.storage?.linear_estimates ?? {};
+    if (estimates.one_hour_at_fixture_rate?.raw_bytes !== rawSize * 360 || estimates.one_hour_at_fixture_rate?.gzip_bytes !== gzipSize * 360) errors.push("encounter fixture one-hour linear estimate is stale");
+    if (estimates.one_hundred_fixture_encounters?.raw_bytes !== rawSize * 100 || estimates.one_hundred_fixture_encounters?.gzip_bytes !== gzipSize * 100) errors.push("encounter fixture 100-encounter linear estimate is stale");
   }
   if (expected?.storage?.production_retention_recommendation !== "verification-required") errors.push("production retention guidance must remain verification-required");
   if (expected?.parity_claim !== "synthetic-determinism-only") errors.push("synthetic evidence must remain a determinism-only parity claim");

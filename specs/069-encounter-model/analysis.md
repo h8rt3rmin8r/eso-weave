@@ -58,7 +58,7 @@ test-first discipline.
   stable cross-encounter actor identity.
 - Issue #131 owns live same-parse Combat Metrics verification. Issues #132
   through #136 own the native dependency chain from capture through recommendations.
-- The 71 documentation policy fixtures, production policy, mdBook test and
+- The 73 documentation policy fixtures, production policy, mdBook test and
   link-checked build, spelling, JSON parsing, UTF-8, punctuation, and mojibake
   gates pass.
 - No Rust source changed, so Constitution IV does not require Cargo formatting,
