@@ -96,9 +96,9 @@
 
 ## Phase 9: Delivery
 
-- [ ] T032 Commit as `feat(070): build deterministic SQLite catalogs` with the
+- [x] T032 Commit as `feat(070): build deterministic SQLite catalogs` with the
   required co-author trailer.
-- [ ] T033 Push the authorized branch, open the official PR with `Closes #114`,
+- [x] T033 Push the authorized branch, open the official PR with `Closes #114`,
   and move the issue to PR review.
 - [ ] T034 Resolve every CI and external review finding, optionally request only
   the one authorized second `@Codex` round, and stop when all checks and reviews
