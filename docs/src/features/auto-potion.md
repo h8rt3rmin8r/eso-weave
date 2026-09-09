@@ -93,7 +93,7 @@ The interface displays the first current blocker in evaluation order.
 | **Blocked: beacon unavailable** | Restore a fresh PixelBeacon Signal |
 | **Blocked: input suspended** | Resume ESO Weave with `F1` or the Running toggle |
 | **Blocked: game context** | Close native menus and text entry, then return to Gameplay |
-| **Blocked: life state unavailable**, **player dead**, or **reincarnating** | Wait for a fresh Alive observation |
+| **Blocked: life state unavailable**, **player dead**, or a named **recovery** path | Wait for the recovery evidence and a later coherent Alive observation |
 | **Blocked (world unavailable)** | Wait until World State is Active |
 | **Blocked (travel pending)** | Finish or cancel travel and wait for Inactive |
 | **Blocked: sprinting** | Stop explicit on-foot sprinting; Unknown movement is not treated as Sprinting |
@@ -118,7 +118,10 @@ potion, its cooldown is ready, and every earlier gate is safe, one press and one
 release of the configured Quickslot Key are submitted. The 1500 ms retry floor
 then blocks another attempt while the displayed cooldown catches up. After any
 failure recovers, the controller evaluates current readings; it does not replay a
-stored trigger.
+previous request. After a death episode specifically, the coherent Alive tick
+starts a complete new retry interval even when the previous interval had already
+expired. The first post-recovery attempt therefore uses current recovery-capture
+or later observations.
 
 Generated input uses the established platform input backend, including
 injected-input recursion tagging.

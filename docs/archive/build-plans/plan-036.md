@@ -1,6 +1,6 @@
 # Plan 036: Release Governance and Debian Metadata
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -18,3 +18,5 @@ Sequence:
 This slice changes no application runtime or package payload layout. It updates
 pinned workflow, script, and release-guidance surfaces under a dated changelog
 decision.
+
+Completion evidence: issues #104 and #105 closed when S066 merged in PR #108.

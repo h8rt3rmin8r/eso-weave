@@ -12,10 +12,10 @@ use eso_weave::pixelbus::{
     LayoutHeaderSamples, LayoutMode, LayoutState, LifeState, LiveReaderConfig,
     LiveReaderConfigWait, MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, Rgb, RollDodgeState,
-    Size, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponBarSignal,
-    WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX, LAYOUT_HEADER_BLOCKS,
-    LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE, LAYOUT_VERSION_FOUR_BLOCKS,
+    QuickslotUnavailableReason, ReaderConfig, RecoveryPath, ResourceLevel, ResourceSet, Rgb,
+    RollDodgeState, Size, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue,
+    WeaponBarSignal, WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX,
+    LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE, LAYOUT_VERSION_FOUR_BLOCKS,
     LAYOUT_VERSION_FOUR_CODE, LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE,
     LAYOUT_VERSION_THREE_BLOCKS, LAYOUT_VERSION_THREE_CODE, LAYOUT_VERSION_TWO_BLOCKS,
     LAYOUT_VERSION_TWO_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
@@ -2580,8 +2580,16 @@ fn life_state_decodes_all_authoritative_values_and_rejects_invalid_evidence() {
     assert_eq!(decode_life_state(life(0x20), tolerance), LifeState::Alive);
     assert_eq!(decode_life_state(life(0x80), tolerance), LifeState::Dead);
     assert_eq!(
+        decode_life_state(life(0x50), tolerance),
+        LifeState::Recovering(RecoveryPath::NoLoad)
+    );
+    assert_eq!(
+        decode_life_state(life(0xB0), tolerance),
+        LifeState::Recovering(RecoveryPath::WorldActivation)
+    );
+    assert_eq!(
         decode_life_state(life(0xE0), tolerance),
-        LifeState::Reincarnating
+        LifeState::Recovering(RecoveryPath::Ghost)
     );
     assert_eq!(
         decode_life_state(Rgb::new(0x20, 0x00, 0xDF), tolerance),
@@ -2591,7 +2599,149 @@ fn life_state_decodes_all_authoritative_values_and_rejects_invalid_evidence() {
         decode_life_state(Rgb::new(0x20, 0x89, 0x00), tolerance),
         LifeState::Unknown
     );
-    assert_eq!(decode_life_state(life(0x50), tolerance), LifeState::Unknown);
+    assert_eq!(decode_life_state(life(0x68), tolerance), LifeState::Unknown);
+}
+
+#[test]
+fn ambiguous_life_state_payloads_fail_closed_at_any_tolerance() {
+    let codes = [
+        (0x20u8, LifeState::Alive),
+        (0x50, LifeState::Recovering(RecoveryPath::NoLoad)),
+        (0x80, LifeState::Dead),
+        (0xB0, LifeState::Recovering(RecoveryPath::WorldActivation)),
+        (0xE0, LifeState::Recovering(RecoveryPath::Ghost)),
+    ];
+    for tolerance in 0..=u8::MAX {
+        for red in 0..=u8::MAX {
+            let matching: Vec<_> = codes
+                .iter()
+                .filter(|(code, _)| red.abs_diff(*code) <= tolerance)
+                .collect();
+            let expected = if matching.len() == 1 {
+                matching[0].1
+            } else {
+                LifeState::Unknown
+            };
+            assert_eq!(
+                decode_life_state(Rgb::new(red, 0x89, 255 - red), tolerance),
+                expected,
+                "red {red:#04X} with tolerance {tolerance} matched {} codes",
+                matching.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn recovered_alive_is_last_after_a_forced_actionable_baseline() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
+    let samples = |life_red| BlockSamples {
+        status: Some(MAGENTA),
+        weapon: Some(weapon(1, 2, 1)),
+        menu: Some(menu(0)),
+        health: Some(resource(HEALTH_MARKER, 10)),
+        stamina: Some(resource(STAMINA_MARKER, 90)),
+        magicka: Some(resource(MAGICKA_MARKER, 90)),
+        movement: Some(movement(0x20)),
+        cooldown_skill_1: Some(cooldown(0, COOLDOWN_MARKS[0].1)),
+        cooldown_skill_2: Some(cooldown(0, COOLDOWN_MARKS[1].1)),
+        cooldown_skill_3: Some(cooldown(0, COOLDOWN_MARKS[2].1)),
+        cooldown_skill_4: Some(cooldown(0, COOLDOWN_MARKS[3].1)),
+        cooldown_skill_5: Some(cooldown(0, COOLDOWN_MARKS[4].1)),
+        cooldown_ultimate: Some(cooldown(0, COOLDOWN_MARKS[5].1)),
+        quickslot_status: Some(quickslot(0)),
+        quickslot_id_hi: hi,
+        quickslot_id_mid: mid,
+        quickslot_id_lo: lo,
+        quickslot_state: Some(quickslot_state(0xD0)),
+        life: Some(life(life_red)),
+        world: Some(world(0xE0)),
+        travel: Some(travel(0x80)),
+        ..Default::default()
+    };
+
+    reader.observe(samples(0x80), 100);
+    let recovery = reader.observe(samples(0x20), 200);
+    let alive_index = recovery
+        .iter()
+        .position(|event| matches!(event, PixelBusEvent::Life(LifeState::Alive)))
+        .expect("recovery emits Alive");
+
+    for required in [
+        "world",
+        "menu",
+        "weapon",
+        "travel",
+        "roll_dodge",
+        "movement",
+        "cooldowns",
+        "quickslot",
+        "resources",
+    ] {
+        let index = recovery
+            .iter()
+            .position(|event| match required {
+                "world" => matches!(event, PixelBusEvent::World(_)),
+                "menu" => matches!(event, PixelBusEvent::MenuGate(_)),
+                "weapon" => matches!(event, PixelBusEvent::WeaponBar(_)),
+                "travel" => matches!(event, PixelBusEvent::Travel(_)),
+                "roll_dodge" => matches!(event, PixelBusEvent::RollDodge(_)),
+                "movement" => matches!(event, PixelBusEvent::Movement(_)),
+                "cooldowns" => matches!(event, PixelBusEvent::Cooldowns(_)),
+                "quickslot" => matches!(event, PixelBusEvent::Quickslot(_)),
+                "resources" => matches!(event, PixelBusEvent::Resources(_)),
+                _ => false,
+            })
+            .unwrap_or_else(|| panic!("recovery must refresh {required}"));
+        assert!(index < alive_index, "{required} must precede Alive");
+    }
+    assert_eq!(alive_index + 1, recovery.len(), "Alive must open last");
+    assert_eq!(reader.sample_generation(), 2);
+}
+
+#[test]
+fn recovered_alive_clears_a_stale_weapon_before_reopening_input() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let observed = WeaponBarSignal {
+        bar: ActiveBar::Front,
+        front: WeaponClass::DualWield,
+        back: WeaponClass::TwoHanded,
+    };
+    let initial = reader.observe(
+        BlockSamples {
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        0,
+    );
+    assert!(initial.contains(&PixelBusEvent::WeaponBar(observed)));
+
+    reader.observe(
+        BlockSamples {
+            life: Some(life(0x80)),
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        100,
+    );
+    let recovery = reader.observe(
+        BlockSamples {
+            life: Some(life(0x20)),
+            ..alive()
+        },
+        200,
+    );
+    let cleared = recovery
+        .iter()
+        .position(|event| *event == PixelBusEvent::WeaponBar(WeaponBarSignal::new_unknown()))
+        .expect("recovery clears a stale B3 observation");
+    let alive = recovery
+        .iter()
+        .position(|event| *event == PixelBusEvent::Life(LifeState::Alive))
+        .expect("recovery reopens life");
+
+    assert!(cleared < alive, "B3 must clear before Alive");
 }
 
 #[test]
@@ -2667,8 +2817,8 @@ fn life_state_transitions_precede_same_sample_fishing_edges() {
         .position(|event| *event == PixelBusEvent::FishingStarted)
         .unwrap();
     assert!(
-        life_index < fishing_index,
-        "recovery must open the gate before the fresh cast edge"
+        fishing_index < life_index,
+        "recovery must refresh the cast edge before opening the gate"
     );
 }
 
@@ -2795,7 +2945,7 @@ fn negotiated_version_one_never_samples_a_screen_pixel_as_b22() {
 }
 
 #[test]
-fn world_state_precedes_other_same_sample_transitions() {
+fn unsafe_life_state_precedes_other_same_sample_transitions() {
     let mut reader = reader();
     reader.observe(
         BlockSamples {
@@ -2827,7 +2977,7 @@ fn world_state_precedes_other_same_sample_transitions() {
         .iter()
         .position(|event| *event == PixelBusEvent::FishingStopped)
         .unwrap();
-    assert!(world_index < life_index);
+    assert!(life_index < world_index);
     assert!(world_index < fishing_index);
 }
 

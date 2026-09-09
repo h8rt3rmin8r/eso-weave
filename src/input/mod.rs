@@ -65,7 +65,7 @@ impl AtomicGate {
         }
     }
 
-    fn set(&self, gated: bool) {
+    fn set(&self, gated: bool) -> bool {
         let was_gated = self.gated.swap(gated, Ordering::AcqRel);
         if gated && !was_gated {
             if let Some(epoch) = &self.weave_epoch {
@@ -75,6 +75,7 @@ impl AtomicGate {
                 epoch.fetch_add(1, Ordering::AcqRel);
             }
         }
+        was_gated != gated
     }
 
     fn is_gated(&self) -> bool {
@@ -87,8 +88,8 @@ pub struct LifeGate(AtomicGate);
 
 impl LifeGate {
     /// Changes the gate. Only a validated Alive signal sets this to false.
-    pub fn set(&self, gated: bool) {
-        self.0.set(gated);
+    pub fn set(&self, gated: bool) -> bool {
+        self.0.set(gated)
     }
 
     /// Whether new synthesized presses are currently forbidden.
@@ -338,6 +339,7 @@ pub struct InputEngine {
     travel_gate: AtomicGate,
     weave_authorization_epoch: Arc<AtomicU64>,
     fishing_authorization_epoch: Arc<AtomicU64>,
+    death_epoch: AtomicU64,
     safety_refresh_generation: AtomicU64,
     held: Mutex<HashSet<Key>>,
     passed_through: Mutex<HashSet<Key>>,
@@ -375,6 +377,7 @@ impl InputEngine {
             travel_gate: shared_gate(true),
             weave_authorization_epoch: weave_epoch,
             fishing_authorization_epoch: fishing_epoch,
+            death_epoch: AtomicU64::new(0),
             safety_refresh_generation: AtomicU64::new(0),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
@@ -490,12 +493,33 @@ impl InputEngine {
     /// menu gate it can only make a bound physical key pass through, and it keeps
     /// application toggle hotkeys available.
     pub fn set_life_gated(&self, gated: bool) {
-        self.life_gate.set(gated);
+        let changed = self.life_gate.set(gated);
+        if changed && gated {
+            let death_epoch = self.death_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+            tracing::info!(
+                target: "eso_weave::input",
+                death_epoch,
+                gated,
+                "life authorization gate closed"
+            );
+        } else if changed {
+            tracing::info!(
+                target: "eso_weave::input",
+                death_epoch = self.death_epoch.load(Ordering::Acquire),
+                gated,
+                "life authorization gate opened"
+            );
+        }
     }
 
     /// Whether player life state currently blocks synthesized work.
     pub fn is_life_gated(&self) -> bool {
         self.life_gate.is_gated()
+    }
+
+    /// Monotonic count of open-to-closed life authorization transitions.
+    pub fn death_epoch(&self) -> u64 {
+        self.death_epoch.load(Ordering::Acquire)
     }
 
     /// A shared handle for synthesis workers that must observe life transitions

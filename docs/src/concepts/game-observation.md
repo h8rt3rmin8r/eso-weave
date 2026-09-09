@@ -56,8 +56,11 @@ cancellation, failure, loading, or watchdog recovery. Generated input requires
 World State Active and Travel Inactive. Physical input passes through and blocked
 automation is discarded rather than replayed.
 
-Life State is Alive, Dead, Reincarnating, or Unknown. Reincarnating takes
-precedence over Dead. Missing, invalid, loading, or lost evidence becomes Unknown
+Life State is Alive, Dead, Recovering, or Unknown. Recovering identifies a ghost,
+world-activation, or no-load path. A player-alive event begins or continues
+recovery but does not authorize input. Alive requires the path's completion
+evidence and a later coherent baseline that confirms the player is neither dead
+nor reincarnating. Missing, invalid, loading, or lost evidence becomes Unknown
 and blocks synthesis.
 
 Roll Dodge is Active from the player-scoped dodge event until its matching fade.
@@ -82,6 +85,10 @@ sample republishes them even when their values match the pre-suspend values.
 After game exit, the reader is reset and all game-derived values start Unknown.
 After signal loss, action-driving observations clear instead of retaining stale
 values.
+
+After a death episode, the recovery capture republishes current world, menu,
+travel, roll-dodge, movement, cooldown, quickslot, and resource observations
+before Life becomes Alive. Fishing requires a later fresh cast observation.
 
 The source-backed transition tables are in
 [State Machines](../development/state-machines.md).

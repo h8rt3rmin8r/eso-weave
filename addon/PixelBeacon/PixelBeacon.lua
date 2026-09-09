@@ -104,16 +104,28 @@ local sprintCandidate = nil
 local sprintCandidateSince = nil
 local sprintLastQualified = nil
 
--- The authoritative player life state. Red carries one of three discrete states,
+-- The authoritative player life state. Red carries one of five discrete states,
 -- green identifies B21, and blue is the complement checksum. The marker is the
 -- midpoint of the widest remaining gap in the companion's marker registry.
 local LIFE_MARKER = 0x89
 local LIFE_ALIVE_RED = 0x20
+local LIFE_RECOVERING_NO_LOAD_RED = 0x50
 local LIFE_DEAD_RED = 0x80
-local LIFE_REINCARNATING_RED = 0xE0
+local LIFE_RECOVERING_WORLD_RED = 0xB0
+local LIFE_RECOVERING_GHOST_RED = 0xE0
 
 -- Last rendered state, nil until the first render.
 local lifeState = nil
+local deathEpisodeActive = false
+local lifeRecoveryPath = nil
+local lifeBaselineGeneration = 0
+local recoveryReadyGeneration = nil
+local lifeSawAlive = false
+local lifeSawReincarnated = false
+local lifeSawDeactivated = false
+local lifeSawActivated = false
+local ghostClearBaselines = 0
+local restoreRecoveredLifecycle
 
 -- The world lifecycle. Unknown is published from addon construction until the
 -- first complete player-activation baseline. Deactivation enters Transitioning,
@@ -610,18 +622,131 @@ end
 
 -- B21 Player life state ------------------------------------------------------
 
-local function computeLifeState()
-    local nextState
-    if IsUnitReincarnating("player") then
-        nextState = LIFE_REINCARNATING_RED
-    elseif IsUnitDead("player") then
-        nextState = LIFE_DEAD_RED
-    else
-        nextState = LIFE_ALIVE_RED
-    end
+local function setLifeState(nextState)
     local changed = nextState ~= lifeState
     lifeState = nextState
     return changed
+end
+
+local function advanceLifeBaselineGeneration()
+    lifeBaselineGeneration = lifeBaselineGeneration + 1
+end
+
+local function resetDeathEpisode()
+    deathEpisodeActive = false
+    lifeRecoveryPath = nil
+    recoveryReadyGeneration = nil
+    lifeSawAlive = false
+    lifeSawReincarnated = false
+    lifeSawDeactivated = false
+    lifeSawActivated = false
+    ghostClearBaselines = 0
+end
+
+local function beginDeathEpisode()
+    if not deathEpisodeActive or lifeState ~= LIFE_DEAD_RED then
+        deathEpisodeActive = true
+        lifeRecoveryPath = nil
+        recoveryReadyGeneration = nil
+        lifeSawAlive = false
+        lifeSawReincarnated = false
+        lifeSawDeactivated = false
+        lifeSawActivated = false
+        ghostClearBaselines = 0
+    end
+    return setLifeState(LIFE_DEAD_RED)
+end
+
+local function recoveryState(path)
+    if path == "ghost" then
+        return LIFE_RECOVERING_GHOST_RED
+    elseif path == "world" then
+        return LIFE_RECOVERING_WORLD_RED
+    end
+    return LIFE_RECOVERING_NO_LOAD_RED
+end
+
+local function beginLifeRecovery(path)
+    if not deathEpisodeActive then
+        return false
+    end
+    if lifeSawDeactivated then
+        path = "world"
+    elseif lifeRecoveryPath == "ghost" and path ~= "world" then
+        path = "ghost"
+    end
+    lifeRecoveryPath = path
+    return setLifeState(recoveryState(path))
+end
+
+local function makeLifeRecoveryReady()
+    if recoveryReadyGeneration == nil then
+        recoveryReadyGeneration = lifeBaselineGeneration + 1
+    end
+end
+
+local function completeLifeRecovery()
+    if not deathEpisodeActive or recoveryReadyGeneration == nil then
+        return false
+    end
+    if IsUnitDead("player") then
+        return beginDeathEpisode()
+    end
+    if IsUnitReincarnating("player") then
+        lifeRecoveryPath = "ghost"
+        return setLifeState(LIFE_RECOVERING_GHOST_RED)
+    end
+    if worldState ~= WORLD_ACTIVE_RED then
+        return false
+    end
+    if lifeRecoveryPath == "ghost" and not lifeSawReincarnated then
+        return false
+    end
+    if lifeRecoveryPath == "world" and (not lifeSawActivated or worldState ~= WORLD_ACTIVE_RED) then
+        return false
+    end
+    if lifeRecoveryPath == "no-load" and not lifeSawAlive then
+        return false
+    end
+    if lifeBaselineGeneration < recoveryReadyGeneration then
+        return false
+    end
+    restoreRecoveredLifecycle()
+    local changed = setLifeState(LIFE_ALIVE_RED)
+    resetDeathEpisode()
+    return changed
+end
+
+local function observeLifeState(allowCompletion)
+    if IsUnitReincarnating("player") then
+        if not deathEpisodeActive then
+            beginDeathEpisode()
+        end
+        lifeRecoveryPath = "ghost"
+        ghostClearBaselines = 0
+        return setLifeState(LIFE_RECOVERING_GHOST_RED)
+    end
+    if IsUnitDead("player") then
+        return beginDeathEpisode()
+    end
+    if not deathEpisodeActive then
+        return setLifeState(LIFE_ALIVE_RED)
+    end
+
+    if lifeRecoveryPath == "ghost" and not lifeSawReincarnated then
+        if allowCompletion then
+            ghostClearBaselines = ghostClearBaselines + 1
+            if ghostClearBaselines >= 2 then
+                lifeSawReincarnated = true
+                recoveryReadyGeneration = lifeBaselineGeneration + 1
+            end
+        end
+        setLifeState(LIFE_RECOVERING_GHOST_RED)
+    end
+    if allowCompletion then
+        return completeLifeRecovery()
+    end
+    return false
 end
 
 local function renderLifeState()
@@ -631,12 +756,6 @@ local function renderLifeState()
     end
     blocks.life:SetCenterColor(channel(lifeState), channel(LIFE_MARKER), channel(255 - lifeState), 1)
     blocks.life:SetHidden(false)
-end
-
-local function onLifeStateChanged()
-    if computeLifeState() then
-        renderLifeState()
-    end
 end
 
 -- B22 World transition state -----------------------------------------------
@@ -1582,6 +1701,21 @@ local function onFastTick()
     onFishingTick()
 end
 
+-- Recovery reaches this boundary only after current queries and world state are
+-- coherent. Publish fresh Inactive lifecycle observations before Alive so the
+-- companion receives one actionable baseline rather than permanent Unknowns.
+restoreRecoveredLifecycle = function()
+    rollDodgeLifecycleValid = true
+    rollDodgeDeadline = nil
+    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    travelLifecycleValid = true
+    lastRecallRemaining = GetRecallCooldown()
+    travelSource = nil
+    travelStartedAt = nil
+    travelDeadline = nil
+    setTravelState(TRAVEL_INACTIVE_RED)
+end
+
 -- Recompute and render every player-derived payload before the world block can
 -- claim Active. Keep this as one named boundary so new payloads cannot be added
 -- after the Active write by accident.
@@ -1603,7 +1737,7 @@ local function rebaselinePlayerState()
     renderCooldowns()
     updateQuickslot()
     renderQuickslot()
-    computeLifeState()
+    observeLifeState(false)
     renderLifeState()
     if lifeState == LIFE_ALIVE_RED then
         rollDodgeLifecycleValid = true
@@ -1626,6 +1760,16 @@ local function rebaselinePlayerState()
 end
 
 local function onPlayerDeactivated()
+    if deathEpisodeActive then
+        lifeSawDeactivated = true
+        lifeSawActivated = false
+        lifeRecoveryPath = "world"
+        recoveryReadyGeneration = nil
+        if not IsUnitDead("player") then
+            beginLifeRecovery("world")
+            renderLifeState()
+        end
+    end
     invalidateSprintState()
     invalidateTravelState()
     invalidateRollDodgeState()
@@ -1634,29 +1778,74 @@ local function onPlayerDeactivated()
 end
 
 local function onPlayerActivated()
+    local completingDeathEpisode = deathEpisodeActive
     rebaselinePlayerState()
     setWorldState(WORLD_ACTIVE_RED)
+    if completingDeathEpisode and deathEpisodeActive then
+        if not lifeSawActivated then
+            recoveryReadyGeneration = nil
+        end
+        lifeSawActivated = true
+        lifeRecoveryPath = "world"
+        makeLifeRecoveryReady()
+        if not IsUnitDead("player") then
+            beginLifeRecovery("world")
+        end
+        renderLifeState()
+    end
 end
 
 local function onPlayerDead()
-    onLifeStateChanged()
+    if beginDeathEpisode() then
+        renderLifeState()
+    end
     invalidateSprintState()
     invalidateTravelState()
     invalidateRollDodgeState()
 end
 
 local function onPlayerAlive()
-    onLifeStateChanged()
-    invalidateSprintState()
-    if worldState ~= WORLD_ACTIVE_RED or lifeState ~= LIFE_ALIVE_RED then
+    if not deathEpisodeActive then
+        if observeLifeState(false) then
+            renderLifeState()
+        end
         return
     end
-    rollDodgeLifecycleValid = true
-    rollDodgeDeadline = nil
-    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
-    travelLifecycleValid = true
-    lastRecallRemaining = GetRecallCooldown()
-    clearTravelState()
+    local firstAliveEvidence = not lifeSawAlive
+    lifeSawAlive = true
+    local path = "no-load"
+    if lifeSawDeactivated then
+        path = "world"
+    elseif IsUnitReincarnating("player") or lifeRecoveryPath == "ghost" then
+        path = "ghost"
+    end
+    local changed = beginLifeRecovery(path)
+    if path == "no-load" and firstAliveEvidence then
+        recoveryReadyGeneration = nil
+        makeLifeRecoveryReady()
+    end
+    if observeLifeState(false) or changed then
+        renderLifeState()
+    end
+    invalidateSprintState()
+    invalidateTravelState()
+    invalidateRollDodgeState()
+end
+
+local function onPlayerReincarnated()
+    if not deathEpisodeActive then
+        return
+    end
+    local firstReincarnatedEvidence = not lifeSawReincarnated
+    lifeSawReincarnated = true
+    ghostClearBaselines = 0
+    local changed = beginLifeRecovery("ghost")
+    if firstReincarnatedEvidence then
+        recoveryReadyGeneration = lifeBaselineGeneration + 1
+    end
+    if changed then
+        renderLifeState()
+    end
 end
 
 -- The sole bite signal: the equipped bait's stack decreases by one while a cast
@@ -1782,7 +1971,7 @@ local function buildBlocks()
     renderCooldowns()
     updateQuickslot()
     renderQuickslot()
-    computeLifeState()
+    observeLifeState(false)
     renderLifeState()
     renderWorldState()
     renderRollDodgeState()
@@ -1818,7 +2007,8 @@ local function onLatencyTick()
     if updateQuickslot() then
         renderQuickslot()
     end
-    if computeLifeState() then
+    advanceLifeBaselineGeneration()
+    if observeLifeState(true) then
         renderLifeState()
     end
     -- A low-frequency full Ultimate refresh is the stale-data backstop for both
@@ -1901,6 +2091,7 @@ local function onAddOnLoaded(_, name)
     )
     em:RegisterForEvent(ADDON_NAME .. "Dead", EVENT_PLAYER_DEAD, onPlayerDead)
     em:RegisterForEvent(ADDON_NAME .. "Alive", EVENT_PLAYER_ALIVE, onPlayerAlive)
+    em:RegisterForEvent(ADDON_NAME .. "Reincarnated", EVENT_PLAYER_REINCARNATED, onPlayerReincarnated)
     em:RegisterForEvent(ADDON_NAME .. "Deactivated", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
     em:RegisterForEvent(ADDON_NAME .. "PrepareForJump", EVENT_PREPARE_FOR_JUMP, onPrepareForJump)
     em:RegisterForEvent(ADDON_NAME .. "JumpFailed", EVENT_JUMP_FAILED, onJumpFailed)

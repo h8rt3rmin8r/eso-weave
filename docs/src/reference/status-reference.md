@@ -55,7 +55,7 @@ Observed numeric zero is different from all four states.
 | Roll Dodge: **Inactive** | No active player dodge | Required for weaving |
 | Roll Dodge: **Active** or **Not detected** | Dodge active or unavailable | Physical skill passes through and weave synthesis is blocked |
 | Life State: **Alive** | Fresh authoritative alive observation | Required for generated features |
-| Life State: **Dead**, **Reincarnating**, or **Not detected** | Player cannot be authoritatively treated as alive | Generated input is blocked |
+| Life State: **Dead**, **Recovering (ghost)**, **Recovering (world activation)**, **Recovering (no load)**, or **Not detected** | Player cannot yet be authoritatively treated as alive | Generated input is blocked |
 | Weapon Bar: **Front** or **Back** with classes | Active bar and both weapon classes were decoded | Selects timing and Ultimate cost |
 | Weapon Bar: **Not detected** or class **Unknown** | Bar evidence is absent or partial | Configured timing fallback applies; Ultimate cost may hide |
 

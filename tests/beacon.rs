@@ -65,17 +65,16 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_twenty() {
-    // Slice 055 adds exact Ultimate telemetry. Version 19 remains readable
-    // without the new fields and with an addon update affordance.
-    assert_eq!(embedded_version(), 20);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(20));
+fn embedded_manifest_version_is_twenty_one() {
+    // Slice 067 adds the death-episode arbiter while retaining every block.
+    assert_eq!(embedded_version(), 21);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(21));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 20);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(20));
+    assert_eq!(embedded_version(), 21);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(21));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -918,8 +917,10 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     for (name, expected) in [
         ("LIFE_MARKER", 0x89),
         ("LIFE_ALIVE_RED", 0x20),
+        ("LIFE_RECOVERING_NO_LOAD_RED", 0x50),
         ("LIFE_DEAD_RED", 0x80),
-        ("LIFE_REINCARNATING_RED", 0xE0),
+        ("LIFE_RECOVERING_WORLD_RED", 0xB0),
+        ("LIFE_RECOVERING_GHOST_RED", 0xE0),
     ] {
         assert_eq!(
             beacon::parse_lua_constant(lua, name),
@@ -1048,8 +1049,11 @@ fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
         "IsUnitReincarnating(\"player\")",
         "EVENT_PLAYER_DEAD",
         "EVENT_PLAYER_ALIVE",
+        "EVENT_PLAYER_REINCARNATED",
         "EVENT_PLAYER_ACTIVATED",
-        "computeLifeState()",
+        "observeLifeState(",
+        "beginDeathEpisode(",
+        "completeLifeRecovery(",
         "renderLifeState()",
     ] {
         assert!(
@@ -1057,7 +1061,69 @@ fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
             "life-state pipeline is missing {required}"
         );
     }
-    assert!(beacon::embedded_version() >= 15);
+    assert!(beacon::embedded_version() >= 21);
+}
+
+#[test]
+fn alive_event_cannot_publish_alive_without_a_later_coherent_baseline() {
+    let lua = beacon::LUA;
+    let alive_handler = lua
+        .split("local function onPlayerAlive()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function onPlayerReincarnated()").next())
+        .expect("bounded Alive handler");
+    assert!(alive_handler.contains("beginLifeRecovery("));
+    assert!(!alive_handler.contains("LIFE_ALIVE_RED"));
+
+    let tick = lua
+        .split("local function onLatencyTick()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function onScreenResized()").next())
+        .expect("bounded latency tick");
+    assert!(tick.contains("advanceLifeBaselineGeneration()"));
+    assert!(tick.contains("observeLifeState(true)"));
+}
+
+#[test]
+fn coherent_life_recovery_restores_roll_and_travel_before_alive() {
+    let lua = beacon::LUA;
+    let completion = lua
+        .split("local function completeLifeRecovery()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function observeLifeState").next())
+        .expect("bounded completion function");
+    let restore = completion
+        .find("restoreRecoveredLifecycle()")
+        .expect("completion restores dependent lifecycle observations");
+    let alive = completion
+        .find("setLifeState(LIFE_ALIVE_RED)")
+        .expect("completion publishes Alive");
+    assert!(
+        restore < alive,
+        "dependent lifecycle state must precede Alive"
+    );
+
+    let lifecycle = lua
+        .split("restoreRecoveredLifecycle = function()")
+        .nth(1)
+        .and_then(|suffix| {
+            suffix
+                .split("local function rebaselinePlayerState()")
+                .next()
+        })
+        .expect("bounded recovery lifecycle helper");
+    for required in [
+        "rollDodgeLifecycleValid = true",
+        "setRollDodgeState(ROLL_DODGE_INACTIVE_RED)",
+        "travelLifecycleValid = true",
+        "lastRecallRemaining = GetRecallCooldown()",
+        "setTravelState(TRAVEL_INACTIVE_RED)",
+    ] {
+        assert!(
+            lifecycle.contains(required),
+            "recovery is missing {required}"
+        );
+    }
 }
 
 #[test]
@@ -1103,7 +1169,7 @@ fn addon_world_state_uses_authoritative_events_and_a_complete_activation_baselin
         "computeMovement()",
         "updateCooldowns()",
         "updateQuickslot()",
-        "computeLifeState()",
+        "observeLifeState(false)",
         "onFishingTick()",
     ] {
         assert!(
@@ -1152,7 +1218,7 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 20);
+    assert_eq!(beacon::embedded_version(), 21);
 }
 
 #[test]
@@ -1188,7 +1254,7 @@ fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
         baseline < active,
         "recall must be rebaselined before world activation"
     );
-    assert_eq!(beacon::embedded_version(), 20);
+    assert_eq!(beacon::embedded_version(), 21);
 }
 
 #[test]
@@ -1322,7 +1388,7 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
         "the addon references a sprint API that does not exist"
     );
-    assert_eq!(beacon::embedded_version(), 20);
+    assert_eq!(beacon::embedded_version(), 21);
 
     let detector = lua
         .split("local function allActiveSlotsHaveNonCostFailure()")

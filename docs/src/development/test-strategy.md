@@ -49,8 +49,10 @@ These seams make negative properties reviewable:
 | Mid-sequence cancellation | `RealSink::emit`, `RealSink::wait` | `real_sink_observes_roll_gate_closure_during_a_wait` |
 | Runtime authorization epoch | `InputEngine::authorization_epoch`, `WeaveGates::admits`, focus, suspension, and menu setters | `s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes`, `s060_transient_suspend_closure_cancels_an_admitted_sequence`, `s060_focus_closure_stops_new_presses_but_releases_held_output` |
 | Recovery ordering | `route_reader_safety_gate`, `route_reader_event` | `safety_preroute_defers_recovery_until_worker_state_is_synchronized` |
+| Death episode ordering | `PixelBusReader::observe`, `InputEngine::death_epoch` | `recovered_alive_is_last_after_a_forced_actionable_baseline`, `s067_death_epoch_advances_once_per_open_to_closed_life_transition` |
 | Fishing signal loss | `FishingController::on_event` | `signal_lost_from_every_active_state_disables_without_emitting` |
 | Auto Potion first blocker | `potion::evaluate` | `s043_effective_state_distinguishes_ready_triggered_and_every_runtime_family` |
+| Auto Potion death retry | `AutoPotionController::tick` | `s067_recovery_starts_a_complete_new_retry_episode` |
 | Managed removal | `beacon::uninstall` | `uninstall_refuses_unmanaged_folder` |
 | Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | `s060_install_refuses_unproven_targets_without_mutation`, `s060_api_refresh_does_not_write_an_unmanaged_manifest`, `s060_lifecycle_operations_do_not_follow_an_unproven_link` |
 | Fishing suspension | `FishingController::set_suspended` | `s060_suspension_refuses_initial_cast_and_preserves_request`, `s060_suspension_cancels_pending_reel_without_replay`, `s060_suspension_cancels_recast_and_timeout_paths` |

@@ -92,7 +92,7 @@ pub const ULTIMATE_TOOLTIP: &str =
 pub const MOVEMENT_TOOLTIP: &str =
     "Whether the character is on foot, mounted, or inferred to be sprinting. Sprint detection requires Pixel Beacon version 19 and keyboard mode; unsupported modes remain truthful rather than guessed. Explicit sprinting defers auto-potion.";
 pub const LIFE_TOOLTIP: &str =
-    "Whether the character is alive, dead, or reincarnating. Only a fresh Alive signal permits automated input; unavailable evidence blocks safely.";
+    "Whether the character is alive, dead, or recovering through a named path. Only a coherent Alive signal permits automated input; unavailable evidence blocks safely.";
 
 // Menu-gate section.
 pub const MENU_TITLE: &str = "Game Context";
@@ -128,7 +128,9 @@ pub const AUTO_POTION_BLOCKED_CONTEXT: &str = "Blocked: game context";
 pub const AUTO_POTION_BLOCKED_SPRINTING: &str = "Blocked: sprinting";
 pub const AUTO_POTION_BLOCKED_PLAYER_UNKNOWN: &str = "Blocked: life state unavailable";
 pub const AUTO_POTION_BLOCKED_PLAYER_DEAD: &str = "Blocked: player dead";
-pub const AUTO_POTION_BLOCKED_PLAYER_REINCARNATING: &str = "Blocked: reincarnating";
+pub const AUTO_POTION_BLOCKED_PLAYER_RECOVERING_GHOST: &str = "Blocked: ghost recovery";
+pub const AUTO_POTION_BLOCKED_PLAYER_RECOVERING_WORLD: &str = "Blocked: world-activation recovery";
+pub const AUTO_POTION_BLOCKED_PLAYER_RECOVERING_NO_LOAD: &str = "Blocked: no-load recovery";
 pub const AUTO_POTION_BLOCKED_NO_WATCH: &str = "Blocked: no watched resource";
 pub const AUTO_POTION_BLOCKED_RESOURCES: &str = "Blocked: resources unavailable";
 pub const AUTO_POTION_BLOCKED_QUICKSLOT: &str = "Blocked: quickslot unavailable";

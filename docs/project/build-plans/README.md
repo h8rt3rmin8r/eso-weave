@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-036.md](plan-036.md) | Active | S066 clarifies release verification and fixes Debian control metadata for #104 and #105. |
+| [plan-037.md](plan-037.md) | Active | S067 keeps all automation blocked through death recovery and resets stale controller work for #109. |

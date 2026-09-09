@@ -56,6 +56,11 @@ deadline and retains the request. Leaving suspension never emits or restores the
 cancelled action. A fresh manual cast or an off-on Fishing toggle is required
 after the other safety gates permit output.
 
+Dead, Unknown, and all three Recovering paths cancel the current Fishing
+deadline without replay. Life becoming Alive emits no Fishing input and does not
+restore the cancelled timer. The reader requires a later fresh cast observation
+after death recovery.
+
 ## State and safety behavior
 
 The controller consumes `Heartbeat`, `FishingStarted`, `BiteDetected`,
