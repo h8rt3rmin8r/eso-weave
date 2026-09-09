@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Automation remains fail closed through death, ghost or reincarnation,
+  load-based respawn, and instant resurrection. Pre-death weave, Fishing, and
+  Auto Potion work is discarded, and fresh game observations must arrive before
+  generated input can resume.
+
 ### Changed
 
 - S067 keeps every generated-input path closed through ghost, world-activation,
