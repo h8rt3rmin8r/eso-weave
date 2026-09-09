@@ -976,6 +976,7 @@ export function validateCatalogSourceContract(contract) {
   const methods = new Set([
     "api-iterator", "known-id", "observed-event", "item-link", "constant-file", "local-file", "none",
   ]);
+  const enumerableMethods = new Set(["api-iterator", "constant-file", "local-file"]);
   if (!contract || typeof contract !== "object") return ["catalog contract must be an object"];
   if (contract.schema_version !== 1) errors.push("catalog contract schema_version must be 1");
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(contract.as_of ?? "")) errors.push("catalog contract as_of must be an ISO date");
@@ -1032,7 +1033,9 @@ export function validateCatalogSourceContract(contract) {
         errors.push(`catalog category ${category?.id ?? "<missing>"} requires non-empty ${key}`);
       }
     }
-    if (/(?:^|[\s_-])(?:array-?index|index|luaindex)(?:$|[\s_+-])/iu.test(category?.stable_key ?? "")) {
+    const stableKeyTerms = String(category?.stable_key ?? "").toLowerCase().split(/[^a-z0-9]+/u);
+    const transientKeyTerms = /^(?:(?:array|iterator|lua|mutable|bag|slot|ordinal|sequence|list)?(?:index|position|offset))$/u;
+    if (stableKeyTerms.some((term) => transientKeyTerms.test(term))) {
       errors.push(`catalog category ${category.id} has a transient stable_key`);
     }
     if (!methods.has(category?.enumeration_method)) errors.push(`catalog category ${category?.id} has invalid enumeration method`);
@@ -1040,6 +1043,13 @@ export function validateCatalogSourceContract(contract) {
     if (!redistributionValues.has(category?.redistribution)) errors.push(`catalog category ${category?.id} has invalid redistribution`);
     if (category?.completeness === "exhaustive" && category.field_verification !== "none") {
       errors.push(`catalog category ${category.id} cannot be exhaustive while field verification is pending`);
+    }
+    if (category?.completeness === "exhaustive" && !enumerableMethods.has(category.enumeration_method)) {
+      errors.push(`catalog category ${category.id} requires an enumerable method for exhaustive coverage`);
+    }
+    if (category?.completeness === "exhaustive" &&
+        !(category.validation ?? []).some((check) => /\b(?:count|relationship)s?\b/iu.test(check))) {
+      errors.push(`catalog category ${category.id} requires count or relationship validation for exhaustive coverage`);
     }
     for (const sourceId of category?.source_ids ?? []) {
       if (!snapshotIds.has(sourceId)) errors.push(`catalog category ${category?.id} references unknown source ${sourceId}`);
@@ -1051,6 +1061,11 @@ export function validateCatalogSourceContract(contract) {
   const iconBytes = categories.find((category) => category.id === "icon-bytes");
   if (iconBytes?.redistribution !== "prohibited") {
     errors.push("catalog contract must prohibit redistribution of game icon bytes");
+  }
+  for (const decision of ["zenimax_icon_bytes", "prebuilt_extracted_icon_pack"]) {
+    if (contract.redistribution_decisions?.[decision] !== "prohibited") {
+      errors.push(`catalog contract must prohibit ${decision}`);
+    }
   }
 
   if (contract.promotion_policy?.automatic !== false) errors.push("catalog contract must forbid automatic PTS promotion");

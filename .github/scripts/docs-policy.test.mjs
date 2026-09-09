@@ -109,6 +109,10 @@ function validCatalogContract() {
       upload_default: false,
       user_data_separate: true,
     },
+    redistribution_decisions: {
+      zenimax_icon_bytes: "prohibited",
+      prebuilt_extracted_icon_pack: "prohibited",
+    },
     categories: requiredCatalogCategories.map(category),
   };
 }
@@ -1279,6 +1283,34 @@ test("rejects unsupported exhaustive claims and unresolved source references", (
   assert.ok(errors.some((error) => error.includes("unknown source missing-source")));
 });
 
+test("requires exhaustive categories to use enumerable evidence with relationship or count checks", () => {
+  const contract = validCatalogContract();
+  const category = contract.categories[0];
+  category.completeness = "exhaustive";
+  category.field_verification = "none";
+  category.enumeration_method = "known-id";
+  let errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("requires an enumerable method")));
+
+  category.enumeration_method = "api-iterator";
+  errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("requires count or relationship validation")));
+
+  category.validation.push("enumerated count matches the declared source relationship");
+  assert.deepEqual(validateCatalogSourceContract(contract), []);
+});
+
+test("rejects position-based durable keys regardless of separator", () => {
+  for (const stableKey of ["iterator_position", "array-position", "mutable_position"]) {
+    const contract = validCatalogContract();
+    contract.categories[0].stable_key = stableKey;
+    assert.ok(
+      validateCatalogSourceContract(contract).some((error) => error.includes("transient stable_key")),
+      `${stableKey} must be rejected`,
+    );
+  }
+});
+
 test("rejects implicit PTS promotion and distributable game icon bytes", () => {
   const contract = validCatalogContract();
   contract.promotion_policy.automatic = true;
@@ -1288,6 +1320,17 @@ test("rejects implicit PTS promotion and distributable game icon bytes", () => {
   assert.ok(errors.includes("catalog contract must forbid automatic PTS promotion"));
   assert.ok(errors.includes("catalog contract must prohibit redistribution of game icon bytes"));
   assert.ok(errors.includes("catalog contract must retain project-created placeholders"));
+});
+
+test("keeps authoritative icon redistribution decisions prohibited", () => {
+  for (const decision of ["zenimax_icon_bytes", "prebuilt_extracted_icon_pack"]) {
+    const contract = validCatalogContract();
+    contract.redistribution_decisions[decision] = "allowed";
+    assert.ok(
+      validateCatalogSourceContract(contract).some((error) => error.includes(`must prohibit ${decision}`)),
+      `${decision} must remain prohibited`,
+    );
+  }
 });
 
 test("rejects executable, unbounded, non-atomic, or uploaded collector input", () => {

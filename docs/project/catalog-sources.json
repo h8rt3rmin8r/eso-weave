@@ -353,7 +353,7 @@
       "source_ids": ["live-api", "pts-api"],
       "redistribution": "allowed",
       "failure_modes": ["renamed", "deprecated", "removed", "channel-drift"],
-      "validation": ["constant names are unique within family", "numeric aliases are retained", "live and PTS files hash independently"],
+      "validation": ["parsed constant count matches source declarations", "constant names are unique within family", "numeric aliases are retained", "live and PTS files hash independently"],
       "field_verification": "none",
       "api_entry_points": ["ESOUIDocumentation.txt constants section"]
     },
