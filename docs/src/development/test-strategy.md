@@ -21,6 +21,7 @@ layer proves and what it does not prove.
 | Catalog packaging | `tests/catalog_packaging.rs` | MSI, Debian, AppImage, and tarball catalog paths plus baseline rights boundaries |
 | Discovery collector | `tests/collector_addon.rs`, `tests/collector_lifecycle.rs`, `tests/collector_import.rs` | Dedicated addon identity, explicit bounded collection, hostile non-executing parsing, truthful coverage, atomic staging, and marker-gated lifecycle isolation |
 | Local icon cache | `tests/icon_cache.rs` | Synthetic PNG/DDS decode, hostile paths and links, source preservation, deterministic objects, explicit fallback mappings, immutable publication, tamper rejection, and manifest privacy |
+| Catalog candidate pipeline | `tests/catalog_pipeline.rs`, `tests/catalog_pipeline_workflow.rs` | Exact channel and version identity, dual network gates, source-cache integrity, deterministic allowlisted reports, failed-publication preservation, and read-only automation authority |
 
 ## Deterministic seams
 

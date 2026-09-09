@@ -42,6 +42,10 @@ Observed numeric zero is different from all four states.
 | Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
+Maintainer review candidates have no application status row. Candidate generation
+cannot activate a catalog, so only a separately installed and verified package
+catalog appears here.
+
 The command-line discovery collector has separate lifecycle values:
 
 | Collector value | Meaning | Recovery or effect |

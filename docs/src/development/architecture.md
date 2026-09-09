@@ -20,6 +20,7 @@ test seams. Platform modules contain operating-system calls.
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
 | Documentation Service | Immutable embedded-site lookup, bounded loopback GET and HEAD responses, browser handoff, and worker lifetime | Filesystem serving, application state, remote content, and mutation |
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
+| Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active catalog installation, Live or PTS promotion, releases, source redistribution, or application update UX |
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic local SavedVariables records, restricted staging, and an independent managed addon lifecycle | PixelBeacon, combat capture, input generation, network transfer, direct SQLite publication, or distributable game art |
 
 ## Thread model
@@ -83,6 +84,13 @@ Documentation follows a separate read-only path:
 Catalog data follows another read-only application path:
 
 `reviewed normalized JSON -> explicit catalog-compiler command -> verified catalog.sqlite -> package path -> typed read-only application queries`
+
+Maintainer candidate generation precedes package publication:
+
+`pinned request -> bounded verified sources -> normalize/import -> build/verify/diff -> local icon receipt -> immutable review candidate`
+
+Candidate generation cannot update the package path. Human-controlled selection,
+rollback, and application update behavior remain separate work.
 
 User-local API discovery precedes that path when explicitly requested:
 

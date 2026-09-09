@@ -1,0 +1,54 @@
+# Read-only catalog candidate generation for maintainer review.
+# Pinned artifact. Changes require a dated CHANGELOG.md decision.
+
+name: catalog-candidate
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "19 9 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        request: [live-request, pts-request]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build maintainer command
+        run: cargo build --locked --release --bin catalog-compiler
+
+      - name: Build review candidate
+        id: build
+        run: |
+          target/release/catalog-compiler pipeline-build \
+            --request "specs/073-reviewed-catalog-pipeline/fixtures/${{ matrix.request }}.json" \
+            --workspace . \
+            --source-cache target/catalog-pipeline/sources \
+            --icon-cache target/catalog-pipeline/icons \
+            --candidates target/catalog-pipeline/candidates \
+            > target/catalog-pipeline/receipt.json
+          candidate_hash="$(jq -r .candidate_sha256 target/catalog-pipeline/receipt.json)"
+          channel="$(jq -r '.relative_path | split("/")[0]' target/catalog-pipeline/receipt.json)"
+          echo "path=target/catalog-pipeline/candidates/${channel}/${candidate_hash}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify review candidate
+        run: target/release/catalog-compiler pipeline-verify --candidate "${{ steps.build.outputs.path }}"
+
+      - name: Upload review reports and catalog
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: catalog-candidate-${{ matrix.request }}
+          path: ${{ steps.build.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14

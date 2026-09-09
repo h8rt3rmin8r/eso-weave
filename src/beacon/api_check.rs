@@ -10,59 +10,15 @@
 //! [`GameVersionSource`] seam; [`run_check`] and the parser are pure and tested
 //! against a mock source and an injected AddOns root, and never panic.
 
-use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+pub use crate::catalog::version::{parse_commit_message_version, GameVersion};
 
 use super::{
     has_managed_marker, parse_api_version_primary, rewrite_api_version, status, BeaconStatus,
     DEFAULT_API_VERSION, DEFAULT_GAME_VERSION, MANIFEST_FILE, SUBFOLDER,
 };
-
-/// A parsed, comparable ESO game client version, held as four numeric components
-/// (left-aligned, zero-padded) so it stays `Copy` for the session-state cache.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct GameVersion([u16; 4]);
-
-impl GameVersion {
-    /// Constructs a version from its four components.
-    pub const fn new(parts: [u16; 4]) -> Self {
-        Self(parts)
-    }
-}
-
-impl fmt::Display for GameVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut end = 3;
-        while end > 1 && self.0[end] == 0 {
-            end -= 1;
-        }
-        let parts: Vec<String> = self.0[..=end].iter().map(|p| p.to_string()).collect();
-        write!(f, "{}", parts.join("."))
-    }
-}
-
-/// Parses the leading version token of a commit message (for example `"12.0.6"`
-/// from `"12.0.6"` or `"12.0.0 Season Zero Pt.2"`). Returns `None` for an empty
-/// token or any non-numeric component.
-pub fn parse_commit_message_version(message: &str) -> Option<GameVersion> {
-    let token = message.split_whitespace().next()?;
-    let mut parts = [0u16; 4];
-    let mut count = 0;
-    for component in token.split('.') {
-        if count >= 4 {
-            break;
-        }
-        parts[count] = component.parse::<u16>().ok()?;
-        count += 1;
-    }
-    if count == 0 {
-        return None;
-    }
-    Some(GameVersion(parts))
-}
 
 /// A non-fatal failure of the network version source.
 #[derive(thiserror::Error, Debug)]

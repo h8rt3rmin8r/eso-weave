@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "mode": "user-capture",
+  "version": {
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "catalog_version": "s073-capture",
+    "catalog_schema": 1,
+    "locales": ["en"],
+    "tool_version": "0.15.1"
+  },
+  "input_source": "invented-capture",
+  "source_policy": "docs/project/catalog-sources.json",
+  "sources": [{
+    "id": "invented-capture",
+    "role": "collector-capture",
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "locale": "en",
+    "revision": "s071-fixture-1",
+    "sha256": "0c58f2af866e5e8d29471c360d59500f20b75885cd4a0fdff5b8d77b2662c016",
+    "max_bytes": 67108864,
+    "uri": "project://specs/071/live-capture",
+    "local_path": "specs/071-bounded-discovery-exporter/fixtures/live.lua",
+    "license_scope": "project-authored-synthetic",
+    "redistribution": "allowed"
+  }],
+  "network": {"enabled": false, "refresh": false, "allow_stale_cache": false},
+  "baseline": null,
+  "icon_source": null,
+  "thresholds": {"entities_removed": 0, "localized_text_removed": 0, "relations_removed": 0, "coverage_removed": 0, "icon_references_removed": 0}
+}

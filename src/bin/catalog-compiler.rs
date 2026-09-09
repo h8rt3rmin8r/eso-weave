@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use eso_weave::catalog::compiler::{build_catalog, diff_catalogs, verify_catalog, BuildRequest};
 use eso_weave::catalog::{CatalogError, Channel};
+use eso_weave::catalog_pipeline::{build_candidate, verify_candidate, PipelineError, PipelineRun};
 use eso_weave::collector::lifecycle::{
     install as install_collector, status as collector_status, uninstall as remove_collector,
     RunningState as CollectorRunningState,
@@ -17,6 +18,8 @@ enum CliError {
     Catalog(#[from] CatalogError),
     #[error("{0}")]
     Collector(#[from] CollectorError),
+    #[error("{0}")]
+    Pipeline(#[from] PipelineError),
 }
 
 fn main() {
@@ -59,6 +62,31 @@ fn run(arguments: Vec<String>) -> Result<(), CliError> {
             let catalog_version = required(&flags, "--catalog-version")?;
             let report =
                 import_capture(&ImportRequest::new(input, output, channel, catalog_version))?;
+            print_json(&report)?;
+        }
+        "pipeline-build" => {
+            let network = flags
+                .get("--network")
+                .map(String::as_str)
+                .unwrap_or("disabled");
+            if !matches!(network, "enabled" | "disabled") {
+                return Err(CatalogError::Validation(
+                    "--network must be enabled or disabled".to_string(),
+                )
+                .into());
+            }
+            let report = build_candidate(&PipelineRun::new(
+                required(&flags, "--request")?,
+                required(&flags, "--workspace")?,
+                required(&flags, "--source-cache")?,
+                required(&flags, "--icon-cache")?,
+                required(&flags, "--candidates")?,
+                network == "enabled",
+            ))?;
+            print_json(&report)?;
+        }
+        "pipeline-verify" => {
+            let report = verify_candidate(required(&flags, "--candidate")?)?;
             print_json(&report)?;
         }
         "collector-status" => {
@@ -121,8 +149,11 @@ fn parse_channel(value: &str) -> Result<Channel, CatalogError> {
     }
 }
 
-fn print_json(value: &impl serde::Serialize) -> Result<(), CatalogError> {
-    println!("{}", serde_json::to_string_pretty(value)?);
+fn print_json(value: &impl serde::Serialize) -> Result<(), CliError> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).map_err(CatalogError::from)?
+    );
     Ok(())
 }
 
@@ -146,7 +177,7 @@ fn write_json(path: PathBuf, value: &impl serde::Serialize) -> Result<(), Catalo
 
 fn usage() -> CatalogError {
     CatalogError::Validation(
-        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
+        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler pipeline-build --request PATH --workspace PATH --source-cache PATH --icon-cache PATH --candidates PATH [--network enabled|disabled]; catalog-compiler pipeline-verify --candidate PATH; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
             .to_string(),
     )
 }

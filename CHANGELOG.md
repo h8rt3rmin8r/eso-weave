@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S073 adds a reviewed catalog candidate pipeline with exact Live and PTS
+  version tuples, bounded local or explicitly opted-in HTTPS acquisition,
+  immutable source and icon caches, removal thresholds, canonical redacted
+  reports, deterministic no-clobber candidates, and a pinned read-only
+  scheduled workflow (issue #117).
 - S072 adds a placeholder-first local icon cache with explicit virtual-path
   mappings, bounded PNG and DDS decoding, deterministic content-addressed PNG
   objects, immutable verified manifests, and no network or distributable game
@@ -32,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Keep catalog candidate generation maintainer-only and separate
+  from active catalog selection. Require request and command network gates,
+  immutable raw GitHub revisions, bounded streamed reads, exact SHA-256, and
+  explicit stale-cache reporting. Publish only the catalog and canonical
+  review reports, never source bundles, collector captures, or icon bytes. The
+  pinned scheduled workflow has read-only repository permission and no install,
+  promotion, release, or repository-write authority.
 - 2026-09-09: Keep catalog icon references independent from user-local image
   bytes and use an immutable manifest as their explicit association authority.
   Resolve only selected paths beneath an explicit user-owned directory, reject

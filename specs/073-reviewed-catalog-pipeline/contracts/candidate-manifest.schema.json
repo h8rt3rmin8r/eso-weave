@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/h8rt3rmin8r/eso-weave/specs/073/candidate-manifest.schema.json",
+  "title": "ESO Weave reviewed catalog candidate manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "state",
+    "version",
+    "request_sha256",
+    "source_inventory_sha256",
+    "catalog_semantic_sha256",
+    "catalog_artifact_sha256",
+    "baseline_semantic_sha256",
+    "icon_generation_sha256",
+    "thresholds",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "state": { "const": "ready-for-review" },
+    "version": {
+      "$ref": "pipeline-request.schema.json#/$defs/version"
+    },
+    "request_sha256": { "$ref": "#/$defs/sha256" },
+    "source_inventory_sha256": { "$ref": "#/$defs/sha256" },
+    "catalog_semantic_sha256": { "$ref": "#/$defs/sha256" },
+    "catalog_artifact_sha256": { "$ref": "#/$defs/sha256" },
+    "baseline_semantic_sha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "icon_generation_sha256": { "$ref": "#/$defs/sha256" },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entities_removed",
+        "localized_text_removed",
+        "relations_removed",
+        "coverage_removed",
+        "icon_references_removed"
+      ],
+      "properties": {
+        "entities_removed": { "type": "integer", "minimum": 0 },
+        "localized_text_removed": { "type": "integer", "minimum": 0 },
+        "relations_removed": { "type": "integer", "minimum": 0 },
+        "coverage_removed": { "type": "integer", "minimum": 0 },
+        "icon_references_removed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "bytes"],
+        "properties": {
+          "path": {
+            "enum": [
+              "catalog.sqlite",
+              "build-report.json",
+              "verify-report.json",
+              "diff.json",
+              "sources.json",
+              "validation.json",
+              "icons.json",
+              "checksums.json"
+            ]
+          },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

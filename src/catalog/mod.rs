@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub mod compiler;
 pub mod model;
 pub mod schema;
+pub mod version;
 
 pub use model::{Channel, EntityKind};
 

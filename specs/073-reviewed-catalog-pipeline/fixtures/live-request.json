@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "mode": "live",
+  "version": {
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "catalog_version": "s070-live-1",
+    "catalog_schema": 1,
+    "locales": ["en-US"],
+    "tool_version": "s070-v1"
+  },
+  "input_source": "invented-live-bundle",
+  "source_policy": "docs/project/catalog-sources.json",
+  "sources": [{
+    "id": "invented-live-bundle",
+    "role": "normalized-bundle",
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "locale": "en-US",
+    "revision": "s070-fixture-1",
+    "sha256": "1b6f781802df092f09f2601215dea0536b1376774f3eb2823a7d775fad9ee119",
+    "max_bytes": 67108864,
+    "uri": "project://specs/070/minimal-live",
+    "local_path": "specs/070-catalog-compiler/fixtures/minimal-live.json",
+    "license_scope": "project-authored-synthetic",
+    "redistribution": "allowed"
+  }, {
+    "id": "synthetic-live",
+    "role": "provenance",
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "locale": "en-US",
+    "revision": "s070-fixture-1",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "max_bytes": 1,
+    "uri": "project://specs/070/minimal-live-source",
+    "local_path": "specs/073-reviewed-catalog-pipeline/fixtures/empty-source.bin",
+    "license_scope": "project-authored-synthetic",
+    "redistribution": "allowed"
+  }],
+  "network": {"enabled": false, "refresh": false, "allow_stale_cache": false},
+  "baseline": null,
+  "icon_source": null,
+  "thresholds": {"entities_removed": 0, "localized_text_removed": 0, "relations_removed": 0, "coverage_removed": 0, "icon_references_removed": 0}
+}

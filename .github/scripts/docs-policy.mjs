@@ -2000,6 +2000,33 @@ export function validateWorkflowText(workflow) {
   return errors;
 }
 
+export function validateCatalogCandidateWorkflow(text) {
+  const errors = [];
+  if (!/^  workflow_dispatch:\s*$/mu.test(text) || !/^  schedule:\s*$/mu.test(text)) {
+    errors.push("catalog candidate workflow requires manual and scheduled triggers");
+  }
+  if (!hasExactPermissions(text, 0, new Map([["contents", "read"]]))) {
+    errors.push("catalog candidate workflow requires only contents: read");
+  }
+  for (const action of ["actions/checkout", "actions/upload-artifact"]) {
+    const use = new RegExp(`uses:\\s*${escapeRegExp(action)}@([^\\s#]+)`, "gu");
+    const matches = [...text.matchAll(use)];
+    if (matches.length === 0 || matches.some((match) => !/^[0-9a-f]{40}$/u.test(match[1]))) {
+      errors.push(`${action} must use an exact commit SHA`);
+    }
+  }
+  for (const required of ["pipeline-build", "pipeline-verify", "if-no-files-found: error"]) {
+    if (!text.includes(required)) errors.push(`catalog candidate workflow requires ${required}`);
+  }
+  for (const forbidden of [
+    "contents: write", "pull-requests: write", "git push", "gh pr", "gh release",
+    "cargo release", "pipeline-promote", "pipeline-install",
+  ]) {
+    if (text.includes(forbidden)) errors.push(`catalog candidate workflow forbids ${forbidden}`);
+  }
+  return errors;
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -2053,6 +2080,7 @@ async function run() {
   const repositoryRoot = path.dirname(docsRoot);
   const outputRoot = path.resolve(process.argv[3] ?? path.join("target", "docs-site", "html"));
   const workflowPath = path.resolve(".github", "workflows", "docs.yml");
+  const catalogWorkflowPath = path.resolve(".github", "workflows", "catalog-candidate.yml");
   const cssPath = path.join(docsRoot, "theme", "eso-weave.css");
   const ledgerPath = path.join(docsRoot, "project", "migration-ledger.json");
   const coveragePath = path.join(docsRoot, "project", "content-coverage.json");
@@ -2072,6 +2100,7 @@ async function run() {
     ...(await validateGeneratedSite(outputRoot)),
     ...validateBrandCss(await readFile(cssPath, "utf8")),
     ...validateWorkflowText(await readFile(workflowPath, "utf8")),
+    ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
     ...validateCatalogSourceContract(catalog),
