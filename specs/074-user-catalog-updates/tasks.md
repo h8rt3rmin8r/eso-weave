@@ -102,8 +102,8 @@ phase begins with a failing focused test.
 - [x] T059 Run mdBook test/build, generated-site policy, typo, JSON, UTF-8, BOM, dash, and mojibake checks.
 - [x] T060 Verify the final diff contains no unrelated user files or sensitive fixture values.
 - [x] T061 Commit, push, open the closing PR for #118, and move the delivery item to PR review.
-- [ ] T062 Address every CI and review finding with no more than the authorized second Codex round.
-- [ ] T063 Stop for the operator's final review and merge ritual.
+- [x] T062 Address every CI and review finding with no more than the authorized second Codex round.
+- [x] T063 Stop for the operator's final review and merge ritual.
 
 ## Dependencies and Execution Order
 
