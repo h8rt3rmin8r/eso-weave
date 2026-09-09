@@ -14,7 +14,7 @@ layer proves and what it does not prove.
 | Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, settings and state persist, and visible states remain truthful |
 | Headless interface geometry | `tests/app_ui_sizing.rs` through `egui_kittest` | Responsive cards, controls, meter geometry, disclosure, text allocation, scaling, and layout boundaries without a GPU |
 | Logging and startup | `tests/logging.rs`, `tests/app_log_view.rs`, unit tests in `src/startup/mod.rs` | Runtime filtering, ring eviction, file format, input suppression, log presentation, and pre-GUI notification gating |
-| Packaging and release scripts | `scripts/release-notes.test.sh` and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, and asset gating |
+| Packaging and release scripts | `scripts/release-notes.test.sh`, `scripts/validate-debian-package.test.sh`, and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, required Debian control fields, and asset gating |
 | Documentation policy | `.github/scripts/docs-policy.test.mjs` | Navigation, links, offline assets, lifecycle boundaries, preservation, coverage, aliases, and prose constraints |
 | Bundled documentation | `tests/documentation.rs`, `build.rs`, and release-profile CI builds | Immutable lookup, content types, strict routing, HTTP bounds, reuse, concurrent reads, shutdown, browser seams, and production embedding |
 
@@ -93,6 +93,7 @@ node --test .github/scripts/docs-policy.test.mjs
 mdbook test docs
 mdbook build docs
 node .github/scripts/docs-policy.mjs docs target/docs-site/html
+bash scripts/validate-debian-package.test.sh
 git diff --check
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features --locked -- -D warnings
@@ -100,5 +101,6 @@ cargo test --all --locked
 cargo build --release --locked --bin eso-weave
 ```
 
-The release-note shell contract also runs in Linux CI. A missing local tool is a
-recorded limitation, not a substitute for its hosted check.
+The release-note and Debian package shell contracts also run in Linux CI. The
+Debian suite requires `dpkg-deb`. A missing local tool is a recorded limitation,
+not a substitute for its hosted check.
