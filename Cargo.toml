@@ -61,6 +61,7 @@ tempfile = "3"
 # `cargo deb --no-build`). Pinned packaging config: changes are recorded as dated
 # decisions in CHANGELOG.md.
 [package.metadata.deb]
+maintainer = "h8rt3rmin8r <46768484+h8rt3rmin8r@users.noreply.github.com>"
 section = "utils"
 priority = "optional"
 depends = "$auto"

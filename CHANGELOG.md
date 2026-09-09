@@ -12,6 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S065 records released-package verification for the bundled v0.15.0
   documentation across Windows and Linux without changing application runtime
   behavior (issues #84 and #83).
+- S066 clarifies that verification requiring downloadable release artifacts
+  follows publication in a separate lifecycle without weakening any
+  pre-publication gate (issue #104).
+- S066 adds explicit Debian maintainer metadata and validates required control
+  fields before a package can be uploaded or published (issue #105).
+
+### Decisions
+
+- 2026-09-08: Amend the constitution to 2.0.1 and align pinned release guidance
+  so mandatory automated and repository gates precede publication while
+  artifact-dependent installed verification follows it in a separate issue.
+  Add one reusable pinned Debian control validator, exercise it in Linux
+  pull-request CI, and gate the tagged release package before upload.
 
 ## [0.15.0] - 2026-09-09
 

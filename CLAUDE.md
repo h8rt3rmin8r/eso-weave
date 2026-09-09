@@ -50,6 +50,14 @@ pushes to `main` are reserved for explicitly authorized repository administratio
 or release work. Additional automated review rounds require explicit operator
 authorization.
 
+All mandatory candidate, CI, safety, release-note, packaging, repository, and
+authorization gates precede publication. Installed UI, package, field, or
+platform evidence that requires a downloadable release follows publication in a
+separate issue held in Release verification. Publication makes the artifact
+available for testing but does not prove its installed behavior. A discovered
+mismatch creates linked implementation work and requires a fixed released
+artifact before the verification issue closes.
+
 ## Non-negotiables
 
 - Safety-critical test surfaces are never weakened or skipped: injected-input

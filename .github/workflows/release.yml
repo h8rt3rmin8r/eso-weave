@@ -120,6 +120,9 @@ jobs:
           cargo install cargo-deb --locked
           cargo deb --no-build --locked
 
+      - name: Validate .deb metadata
+        run: scripts/validate-debian-package.sh target/debian/*.deb
+
       - name: Build AppImage
         run: |
           ver="${GITHUB_REF_NAME#v}"

@@ -1,8 +1,8 @@
 # Build-Phase Autopilot Protocol
 
-Version: 2.0.0
+Version: 2.0.1
 Adopted: 2026-07-10
-Last amended: 2026-09-07
+Last amended: 2026-09-08
 Status: operating procedure for the coding agent
 Project: eso-weave (`github.com/h8rt3rmin8r/eso-weave`)
 
@@ -94,6 +94,21 @@ The agent runs these steps in order, with no halt between them:
 15. After the operator confirms the merge, synchronize local `main`, verify the
     feature head is contained in it, delete the merged local and remote branch,
     prune stale refs, and update parent issue checklists.
+
+## Artifact-dependent release verification
+
+Every required candidate, CI, safety, release-note, packaging, repository, and
+authorization gate remains pre-publication work. Some installed UI, package,
+field, platform, or production evidence cannot exist until the authorized tag
+workflow publishes a downloadable artifact. That evidence follows publication
+and does not block creating the artifact after all pre-publication gates pass.
+
+Use a separate verification issue whenever implementation and artifact evidence
+can finish at different times. The issue may be filed before release, but it
+stays in Release verification until the named published artifact passes its
+matrix. Publication is only the entry gate and never counts as verification. A
+failure creates linked implementation work, and the verification issue remains
+open until a fixed release passes.
 
 ## Decision policy
 

@@ -34,6 +34,10 @@ jobs:
         if: runner.os == 'Linux'
         run: bash scripts/release-notes.test.sh
 
+      - name: Test Debian package validator
+        if: runner.os == 'Linux'
+        run: bash scripts/validate-debian-package.test.sh
+
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo scripts/linux-build-deps.sh

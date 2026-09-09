@@ -1506,13 +1506,23 @@
     },
     {
       "id": "035",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-035.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-035.md",
       "specs": [
         "specs/065-documentation-release-verification"
       ],
-      "evidence": "Issue #84 tracks the active S065 documentation release verification."
+      "evidence": "Issues #84 and #83 closed when S065 merged in PR #106."
+    },
+    {
+      "id": "036",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-036.md",
+      "specs": [
+        "specs/066-release-governance-debian-metadata"
+      ],
+      "evidence": "Issue #104 and issue #105 track the active S066 release governance and Debian metadata work."
     }
   ],
   "safetyCrosswalk": [
