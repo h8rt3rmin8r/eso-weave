@@ -6,7 +6,7 @@ use eso_weave::catalog::version::GameVersion;
 use eso_weave::catalog::{CatalogRelease, Channel};
 use eso_weave::catalog_pipeline::{build_candidate, inspect_candidate, PipelineRun};
 use eso_weave::catalog_update::{
-    resolve_availability, AvailabilityInput, CancellationToken, CatalogTarget,
+    resolve_availability, AvailabilityInput, CancellationToken, CatalogSelection, CatalogTarget,
     CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateError,
     UpdateStage, WorkerEvent,
 };
@@ -302,6 +302,39 @@ fn reviewed_install_survives_restart_and_rolls_back_to_bundled() {
             .catalog_version,
         "s070-live-1"
     );
+}
+
+#[test]
+fn install_records_the_resolved_fallback_as_rollback_target() {
+    let sandbox = Sandbox::new();
+    let candidate = sandbox.candidate(CHANGED_LIVE_BUNDLE, "s074-live-fallback");
+    let stale = CatalogSelection {
+        schema_version: 1,
+        generation: 7,
+        active: CatalogTarget::User {
+            candidate_sha256: "f".repeat(64),
+        },
+        previous: None,
+        last_receipt: None,
+    };
+    let mut bytes = serde_json::to_vec_pretty(&stale).unwrap();
+    bytes.push(b'\n');
+    fs::write(sandbox.service.roots().root().join("selection.json"), bytes).unwrap();
+    assert_eq!(
+        sandbox.service.resolve_catalog().target,
+        CatalogTarget::Bundled
+    );
+
+    let installed = sandbox
+        .service
+        .install(&candidate, true, &CancellationToken::new(), |_| {})
+        .unwrap();
+    assert_eq!(installed.selection.previous, Some(CatalogTarget::Bundled));
+    let rolled_back = sandbox
+        .service
+        .rollback(&CancellationToken::new(), |_| {})
+        .unwrap();
+    assert_eq!(rolled_back.selection.active, CatalogTarget::Bundled);
 }
 
 #[test]

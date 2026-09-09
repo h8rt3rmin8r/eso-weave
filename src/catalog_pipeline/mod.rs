@@ -101,6 +101,8 @@ pub enum PipelineError {
     Validation(String),
     #[error("catalog pipeline acquisition failed: {0}")]
     Acquisition(String),
+    #[error("catalog pipeline cancelled")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone)]
@@ -134,13 +136,34 @@ impl PipelineRun {
 }
 
 pub fn build_candidate(run: &PipelineRun) -> Result<CandidateReceipt, PipelineError> {
-    build_candidate_with_fetcher(run, &HttpsFetcher)
+    build_candidate_with_fetcher_and_cancel(run, &HttpsFetcher, || false)
 }
 
 pub fn build_candidate_with_fetcher(
     run: &PipelineRun,
     fetcher: &dyn SourceFetcher,
 ) -> Result<CandidateReceipt, PipelineError> {
+    build_candidate_with_fetcher_and_cancel(run, fetcher, || false)
+}
+
+pub fn build_candidate_with_cancel<F>(
+    run: &PipelineRun,
+    cancelled: F,
+) -> Result<CandidateReceipt, PipelineError>
+where
+    F: FnMut() -> bool,
+{
+    build_candidate_with_fetcher_and_cancel(run, &HttpsFetcher, cancelled)
+}
+
+fn build_candidate_with_fetcher_and_cancel<F>(
+    run: &PipelineRun,
+    fetcher: &dyn SourceFetcher,
+    mut cancelled: F,
+) -> Result<CandidateReceipt, PipelineError>
+where
+    F: FnMut() -> bool,
+{
     validate_output_roots(run)?;
     let workspace = canonical_real_directory(&run.workspace, "workspace")?;
     let request_path = if run.request.is_absolute() {
@@ -154,6 +177,7 @@ pub fn build_candidate_with_fetcher(
     validate_channel_output(&run.candidates, request.version.channel)?;
     validate_input_output_separation(&request, &request_path, run, &workspace)?;
     validate_policy(&request, &workspace)?;
+    check_cancelled(&mut cancelled)?;
 
     let staging_parent = run.candidates.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(staging_parent)?;
@@ -161,6 +185,7 @@ pub fn build_candidate_with_fetcher(
         .prefix(".catalog-pipeline-")
         .tempdir_in(staging_parent)?;
     let acquired = acquire_sources(&request, run, &workspace, staging.path(), fetcher)?;
+    check_cancelled(&mut cancelled)?;
     let input = acquired
         .get(&request.input_source)
         .ok_or_else(|| PipelineError::Validation("input source is missing".into()))?;
@@ -191,12 +216,14 @@ pub fn build_candidate_with_fetcher(
             return validation("input source cannot have the provenance role")
         }
     }
+    check_cancelled(&mut cancelled)?;
 
     let bundle_bytes = fs::read(&normalized)?;
     let bundle: CatalogBundle = serde_json::from_slice(&bundle_bytes)?;
     let bundle = bundle.normalize_and_validate()?;
     validate_version(&request, &bundle)?;
     validate_bundle_sources(&bundle, &acquired)?;
+    check_cancelled(&mut cancelled)?;
 
     let catalog = staging.path().join("catalog.sqlite");
     let build_report = build_catalog(&BuildRequest::new(
@@ -204,10 +231,13 @@ pub fn build_candidate_with_fetcher(
         &catalog,
         request.version.channel,
     ))?;
+    check_cancelled(&mut cancelled)?;
     let verify_report = verify_catalog(&catalog)?;
+    check_cancelled(&mut cancelled)?;
     let (diff, baseline_semantic_sha256) =
         baseline_diff(&request, &workspace, staging.path(), &catalog)?;
     enforce_thresholds(&request.thresholds, &diff)?;
+    check_cancelled(&mut cancelled)?;
 
     let icon_source = match &request.icon_source {
         Some(relative) => resolve_relative(&workspace, relative, true)?,
@@ -231,6 +261,7 @@ pub fn build_candidate_with_fetcher(
         &verify_report.semantic_sha256,
         references,
     ))?;
+    check_cancelled(&mut cancelled)?;
 
     let candidate_stage = staging.path().join("candidate");
     fs::create_dir(&candidate_stage)?;
@@ -315,6 +346,7 @@ pub fn build_candidate_with_fetcher(
     if staged_verification.candidate_sha256 != candidate_sha256 {
         return validation("staged candidate does not match its manifest identity");
     }
+    check_cancelled(&mut cancelled)?;
     fs::create_dir_all(run.candidates.join(manifest.version.channel.as_str()))?;
     let destination = run
         .candidates
@@ -346,6 +378,17 @@ pub fn build_candidate_with_fetcher(
         candidate_sha256,
         catalog_semantic_sha256: verify_report.semantic_sha256,
     })
+}
+
+fn check_cancelled<F>(cancelled: &mut F) -> Result<(), PipelineError>
+where
+    F: FnMut() -> bool,
+{
+    if cancelled() {
+        Err(PipelineError::Cancelled)
+    } else {
+        Ok(())
+    }
 }
 
 pub fn verify_candidate(path: impl AsRef<Path>) -> Result<CandidateVerification, PipelineError> {

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use eso_weave::catalog::compiler::{build_catalog, BuildRequest};
 use eso_weave::catalog::Channel;
 use eso_weave::catalog_pipeline::{
-    build_candidate, build_candidate_with_fetcher, verify_candidate, PipelineError, PipelineRun,
-    SourceFetcher,
+    build_candidate, build_candidate_with_cancel, build_candidate_with_fetcher, verify_candidate,
+    PipelineError, PipelineRun, SourceFetcher,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -114,6 +114,19 @@ fn offline_candidate_is_deterministic_review_safe_and_verifiable() {
         first_receipt.catalog_semantic_sha256,
         second_receipt.catalog_semantic_sha256
     );
+}
+
+#[test]
+fn pipeline_observes_cancellation_between_major_build_stages() {
+    let sandbox = offline_live_sandbox();
+    let mut checkpoints = 0;
+    let error = build_candidate_with_cancel(&sandbox.run(&sandbox.request_path(), false), || {
+        checkpoints += 1;
+        checkpoints == 5
+    })
+    .unwrap_err();
+    assert!(matches!(error, PipelineError::Cancelled));
+    assert!(!sandbox.candidates.join("live").exists());
 }
 
 #[test]

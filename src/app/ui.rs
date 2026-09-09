@@ -35,8 +35,9 @@ use crate::beacon::api_check::ApiCheckOutcome;
 use crate::catalog::Channel;
 use crate::catalog_pipeline::CandidateSummary;
 use crate::catalog_update::{
-    resolve_availability, AvailabilityInput, CaptureFingerprint, CatalogUpdateService,
-    CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateProgress, UpdateStage, WorkerEvent,
+    candidate_compatibility, resolve_availability, AvailabilityInput, CaptureFingerprint,
+    CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateProgress,
+    UpdateStage, WorkerEvent,
 };
 use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
@@ -1929,6 +1930,16 @@ impl EsoWeaveApp {
                     .find(|candidate| &candidate.candidate_sha256 == hash)
                     .cloned()
             });
+            let compatibility = selected_summary.as_ref().map(|candidate| {
+                self.model
+                    .catalog()
+                    .release()
+                    .map_err(|_| "The active catalog metadata could not be read.".to_string())
+                    .and_then(|active| {
+                        candidate_compatibility(candidate, active.as_ref())
+                            .map_err(|error| error.to_string())
+                    })
+            });
 
             if let Some(candidate) = &selected_summary {
                 ui.group(|ui| {
@@ -1963,6 +1974,12 @@ impl EsoWeaveApp {
                         }
                     ));
                 });
+            }
+            if let Some(Err(message)) = &compatibility {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    format!("Candidate cannot be installed: {message}"),
+                );
             }
 
             let trust_label =
@@ -2118,9 +2135,7 @@ impl EsoWeaveApp {
             ui.separator();
             ui.horizontal_wrapped(|ui| {
                 let can_install = !busy
-                    && selected_summary
-                        .as_ref()
-                        .is_some_and(|candidate| candidate.channel == Channel::Live)
+                    && compatibility.as_ref().is_some_and(Result::is_ok)
                     && self.catalog_acknowledged_candidate.as_deref()
                         == self.catalog_selected.as_deref();
                 if ui

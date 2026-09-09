@@ -89,6 +89,9 @@ Result: PASS, with Linux parity delegated to pull-request CI.
   candidate discovery, binds trust acknowledgement to one candidate identity,
   presents acquisition provenance before that acknowledgement, and serializes
   terminal receipt allocation under a dedicated cross-process lock.
+- Second-round review hardening records the catalog actually resolved as the
+  rollback target, shares candidate compatibility policy with UI eligibility,
+  and propagates collector cancellation checks between pipeline stages.
 - Format, strict all-target/all-feature Clippy, the complete locked test suite,
   both optimized binaries, mdBook test/build/link checking, generated-site
   policy, spelling, JSON parsing, diff whitespace, UTF-8/BOM, forbidden-dash,

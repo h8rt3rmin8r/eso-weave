@@ -28,7 +28,7 @@ use crate::bounded_file::{
 use crate::catalog::schema::SCHEMA_VERSION;
 use crate::catalog::version::parse_commit_message_version;
 use crate::catalog::{CatalogAccess, Channel};
-use crate::catalog_pipeline::{build_candidate, PipelineRun};
+use crate::catalog_pipeline::{build_candidate_with_cancel, PipelineRun};
 use crate::catalog_pipeline::{
     inspect_candidate, CandidateSummary, PipelineError, CANDIDATE_FILES,
 };
@@ -403,14 +403,21 @@ impl CatalogUpdateService {
             "Building a local review candidate through the S073 pipeline",
         ));
         cancel.check()?;
-        let receipt = build_candidate(&PipelineRun::new(
-            workspace.path().join("request.json"),
-            workspace.path(),
-            self.roots.source_cache(),
-            self.roots.icon_cache(),
-            self.roots.import_root(),
-            false,
-        ))?;
+        let receipt = build_candidate_with_cancel(
+            &PipelineRun::new(
+                workspace.path().join("request.json"),
+                workspace.path(),
+                self.roots.source_cache(),
+                self.roots.icon_cache(),
+                self.roots.import_root(),
+                false,
+            ),
+            || cancel.is_cancelled(),
+        )
+        .map_err(|error| match error {
+            PipelineError::Cancelled => UpdateError::Cancelled,
+            error => UpdateError::Pipeline(error),
+        })?;
         cancel.check()?;
         progress(UpdateProgress::new(
             UpdateStage::IntegrityChecking,
@@ -498,6 +505,12 @@ impl CatalogUpdateService {
         ));
         let _lock = OperationLock::acquire(&self.roots.operation_lock())?;
         cancel.check()?;
+        let previous_resolution = self.resolve_catalog();
+        let previous_target = previous_resolution.target;
+        let active_release = previous_resolution
+            .access
+            .release()
+            .map_err(|error| UpdateError::Validation(error.to_string()))?;
         let source = fs::canonicalize(candidate_path.as_ref())?;
         let import_root = fs::canonicalize(self.roots.import_root())?;
         if !is_same_or_nested(&source, &import_root) {
@@ -512,8 +525,7 @@ impl CatalogUpdateService {
             "Verifying reviewed catalog candidate",
         ));
         let candidate = inspect_candidate(&source)?;
-        validate_live_candidate(&candidate)?;
-        self.reject_downgrade(&candidate)?;
+        candidate_compatibility(&candidate, active_release.as_ref())?;
         cancel.check()?;
 
         let temporary = tempfile::Builder::new()
@@ -574,7 +586,7 @@ impl CatalogUpdateService {
             active: CatalogTarget::User {
                 candidate_sha256: candidate.candidate_sha256.clone(),
             },
-            previous: Some(previous.active),
+            previous: Some(previous_target),
             last_receipt: Some(sequence),
         };
         self.write_selection(&selection)?;
@@ -701,27 +713,6 @@ impl CatalogUpdateService {
         Ok(summary)
     }
 
-    fn reject_downgrade(&self, candidate: &CandidateSummary) -> Result<(), UpdateError> {
-        let resolution = self.resolve_catalog();
-        let Some(active) = resolution
-            .access
-            .release()
-            .map_err(|error| UpdateError::Validation(error.to_string()))?
-        else {
-            return Ok(());
-        };
-        let older = candidate.api_version < active.api_version
-            || (candidate.api_version == active.api_version
-                && parse_commit_message_version(&candidate.game_version)
-                    < parse_commit_message_version(&active.game_version));
-        if older {
-            return Err(UpdateError::Validation(
-                "candidate is older than the active Live catalog".into(),
-            ));
-        }
-        Ok(())
-    }
-
     fn import_candidate_path(&self, candidate_sha256: &str) -> Result<PathBuf, UpdateError> {
         CatalogTarget::User {
             candidate_sha256: candidate_sha256.to_string(),
@@ -841,6 +832,26 @@ fn validate_live_candidate(candidate: &CandidateSummary) -> Result<(), UpdateErr
             "candidate schema {} is unsupported",
             candidate.catalog_schema
         )));
+    }
+    Ok(())
+}
+
+pub(crate) fn candidate_compatibility(
+    candidate: &CandidateSummary,
+    active: Option<&crate::catalog::CatalogRelease>,
+) -> Result<(), UpdateError> {
+    validate_live_candidate(candidate)?;
+    let Some(active) = active else {
+        return Ok(());
+    };
+    let older = candidate.api_version < active.api_version
+        || (candidate.api_version == active.api_version
+            && parse_commit_message_version(&candidate.game_version)
+                < parse_commit_message_version(&active.game_version));
+    if older {
+        return Err(UpdateError::Validation(
+            "candidate is older than the active Live catalog".into(),
+        ));
     }
     Ok(())
 }
