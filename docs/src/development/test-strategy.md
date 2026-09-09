@@ -20,6 +20,7 @@ layer proves and what it does not prove.
 | Catalog compiler and runtime | `tests/catalog_compiler.rs`, `tests/catalog_runtime.rs` | Strict data-only input, provenance, constraints, deterministic hashes and bytes, atomic rollback, typed read-only queries, and graceful degradation |
 | Catalog packaging | `tests/catalog_packaging.rs` | MSI, Debian, AppImage, and tarball catalog paths plus baseline rights boundaries |
 | Discovery collector | `tests/collector_addon.rs`, `tests/collector_lifecycle.rs`, `tests/collector_import.rs` | Dedicated addon identity, explicit bounded collection, hostile non-executing parsing, truthful coverage, atomic staging, and marker-gated lifecycle isolation |
+| Local icon cache | `tests/icon_cache.rs` | Synthetic PNG/DDS decode, hostile paths and links, source preservation, deterministic objects, explicit fallback mappings, immutable publication, tamper rejection, and manifest privacy |
 
 ## Deterministic seams
 

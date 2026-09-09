@@ -53,6 +53,19 @@ The command-line discovery collector has separate lifecycle values:
 
 These values do not describe PixelBeacon and do not affect automation state.
 
+The local icon cache exposes library lookup states for future interface work:
+
+| Icon value | Meaning | Recovery or effect |
+| --- | --- | --- |
+| `Ready` | A verified user-local PNG or DDS source produced the mapped immutable PNG object | Render the local object |
+| `Placeholder` | A manifest explicitly selected the project placeholder without a more specific reason | Render the placeholder |
+| `Missing` | The requested mapping or local source file is absent | Render the placeholder; supply the exact local path if desired |
+| `Unsupported` | The selected source has an unsupported file type | Render the placeholder; use bounded PNG or DDS input |
+| `Failed` | A path, permission, decode, limit, I/O, link, or integrity check failed | Render the placeholder and correct the local source or cache |
+
+These states do not authorize input and do not imply that a cache is active in
+the application.
+
 ## Game Context and player state
 
 | Field and text | Meaning | Automation impact |

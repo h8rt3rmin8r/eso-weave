@@ -96,6 +96,20 @@ channel, checksum, chunk, status, size, or schema errors are fail-closed and do
 not overwrite the previous staged JSON. Do not edit the capture to bypass an
 error. Preserve it for diagnosis and begin a fresh explicit run.
 
+## A local ability icon uses the placeholder
+
+S072 provides a library cache boundary but does not activate icon selection in
+the application. For direct library use, confirm that the explicitly selected
+source root mirrors the complete catalog virtual path and contains a PNG or DDS
+file. `Missing` and `Unsupported` identify absence or file type. `Failed`
+includes unsafe paths, links or reparse points, permissions, corruption,
+dimension or byte limits, and cache integrity failures.
+
+Do not move game image bytes into the repository or a release to repair a local
+lookup. Keep them in the user-owned source and application-data cache. Remove or
+replace only the exact failed local cache generation after preserving it for
+diagnosis; another verified immutable generation remains usable.
+
 ## A skill passes through or a weave is dropped
 
 Check the Skills row first. It must be enabled, bound to the physical key, and

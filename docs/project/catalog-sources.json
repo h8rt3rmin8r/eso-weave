@@ -178,6 +178,23 @@
       "unsupported schema"
     ]
   },
+  "icon_cache_policy": {
+    "source_selection": "explicit-user-directory",
+    "network_access": false,
+    "archive_extraction": false,
+    "installed_client_discovery": false,
+    "source_mutation": false,
+    "manifest_required": true,
+    "immutable_generations": true,
+    "third_party_bytes_distributable": false,
+    "fallback": "project-created-placeholder",
+    "allowed_input": ["png", "dds"],
+    "max_source_bytes": 8388608,
+    "max_dimension": 1024,
+    "max_pixels": 1048576,
+    "max_references": 500000,
+    "max_manifest_bytes": 67108864
+  },
   "redistribution_decisions": {
     "stable_ids_and_normalized_numeric_facts": "allowed",
     "virtual_icon_paths": "allowed",

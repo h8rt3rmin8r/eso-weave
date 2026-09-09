@@ -88,6 +88,15 @@ User-local API discovery precedes that path when explicitly requested:
 
 `explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
 
+Optional icon transformation follows a separate user-local path:
+
+`catalog virtual paths -> explicit user-owned directory -> bounded PNG/DDS decode -> immutable local manifest and objects`
+
+The catalog never stores or associates user-local image bytes. The immutable
+manifest is the explicit virtual-path-to-object authority, and every unavailable
+source maps to the project placeholder. No icon path performs discovery,
+download, archive extraction, upload, or application activation.
+
 The collector is a separate addon and lifecycle boundary from PixelBeacon. It
 does limited work per update tick, pauses in combat, and emits only a fixed
 versioned table whose chunk payloads are deterministic JSON lines. The desktop
