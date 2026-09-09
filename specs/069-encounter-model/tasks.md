@@ -41,8 +41,8 @@
 ## Phase 6: Delivery
 
 - [x] T022 Commit with a `feat(069)` message and Co-Authored-By trailer.
-- [ ] T023 Push the authorized branch, open the official PR with `Closes #113`, and update Project stage.
-- [ ] T024 Resolve every CI and external review finding, with at most one authorized second `@Codex` round.
+- [x] T023 Push the authorized branch, open the official PR with `Closes #113`, and update Project stage.
+- [x] T024 Resolve every CI and external review finding, with at most one authorized second `@Codex` round.
 
 ## Dependencies and Execution Order
 
