@@ -120,9 +120,9 @@ phase begins with failing tests or fixtures before production changes.
   dash, mojibake, and package assertions.
 - [x] T039 Inspect the complete diff for secrets, personal data, third-party art,
   unrelated edits, and preservation of user-owned files.
-- [ ] T040 Commit as `feat(071): build bounded discovery exporter` with the
+- [x] T040 Commit as `feat(071): build bounded discovery exporter` with the
   required co-author trailer.
-- [ ] T041 Push the authorized branch, open the official PR with `Closes #115`,
+- [x] T041 Push the authorized branch, open the official PR with `Closes #115`,
   and move the project item to PR review.
 - [ ] T042 Resolve every CI and external review finding, request at most the one
   authorized second `@Codex` round, and stop when all checks and reviews pass.
