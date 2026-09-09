@@ -1220,6 +1220,18 @@ export function validateEncounterFixture(fixture) {
   const events = [...fixture.events].sort((left, right) => left.sequence - right.sequence);
   const seen = new Set();
   let previous;
+  const prohibitedPrivateFields = new Set([
+    "accountid", "accountname", "characterid", "charactername", "chat", "chattext",
+    "guild", "guildid", "guildname", "location", "locationname",
+  ]);
+  const scanPrivateFields = (value, sequence) => {
+    if (!value || typeof value !== "object") return;
+    for (const [key, nested] of Object.entries(value)) {
+      const normalized = key.toLowerCase().replace(/[^a-z0-9]/gu, "");
+      if (prohibitedPrivateFields.has(normalized)) errors.push(`event ${sequence} contains prohibited private field ${key}`);
+      scanPrivateFields(nested, sequence);
+    }
+  };
   for (const event of events) {
     if (!Number.isInteger(event.sequence) || seen.has(event.sequence)) errors.push(`duplicate sequence ${event.sequence}`);
     seen.add(event.sequence);
@@ -1227,11 +1239,16 @@ export function validateEncounterFixture(fixture) {
     if (!Number.isFinite(event.monotonic_ms)) errors.push(`event ${event.sequence} requires monotonic_ms`);
     if (previous) {
       if (event.monotonic_ms < previous.monotonic_ms) errors.push(`backward monotonic time at sequence ${event.sequence}`);
-      if (event.sequence > previous.sequence + 1) {
-        const declared = event.kind === "discontinuity" && event.payload?.missing_sequence_from === previous.sequence + 1 && event.payload?.missing_sequence_to === event.sequence - 1;
-        if (!declared) errors.push(`undeclared sequence gap after ${previous.sequence}`);
-      }
+      const hasGap = event.sequence > previous.sequence + 1;
+      const declaresGap = event.kind === "discontinuity" &&
+        Number.isInteger(event.payload?.missing_sequence_from) && Number.isInteger(event.payload?.missing_sequence_to) &&
+        event.payload.missing_sequence_from === previous.sequence + 1 &&
+        event.payload.missing_sequence_to === event.sequence - 1;
+      if (hasGap && !declaresGap) errors.push(`undeclared sequence gap after ${previous.sequence}`);
+      if (event.kind === "discontinuity" && !declaresGap) errors.push(`discontinuity ${event.sequence} must exactly describe the preceding missing range`);
     }
+    if (!previous && event.kind === "discontinuity") errors.push(`discontinuity ${event.sequence} cannot be the first event`);
+    scanPrivateFields(event, event.sequence);
     previous = event;
   }
   const kinds = new Set(events.map((event) => event.kind));
@@ -1255,16 +1272,40 @@ export function projectEncounterMetrics(fixture, knownCatalogIds = new Set()) {
   const damageByAbility = {};
   for (const event of damage) damageByAbility[event.payload.ability_id] = (damageByAbility[event.payload.ability_id] ?? 0) + event.payload.amount;
   const effectStarts = new Map();
-  const effectDurations = {};
+  const effectIntervals = new Map();
   for (const event of events.filter((candidate) => candidate.kind === "effect")) {
     const id = event.payload.ability_id;
-    if (event.payload.change === "gained") effectStarts.set(id, event.monotonic_ms);
-    else if (event.payload.change === "faded" && effectStarts.has(id)) {
-      effectDurations[id] = (effectDurations[id] ?? 0) + event.monotonic_ms - effectStarts.get(id);
-      effectStarts.delete(id);
+    const instance = event.payload.effect_instance_id ?? event.payload.effect_slot ?? "default";
+    const instanceKey = `${event.payload.target_actor_id ?? "unknown"}:${id}:${instance}`;
+    if (event.payload.change === "gained") effectStarts.set(instanceKey, { id, started: event.monotonic_ms });
+    else if (event.payload.change === "faded" && effectStarts.has(instanceKey)) {
+      const started = effectStarts.get(instanceKey).started;
+      if (!effectIntervals.has(id)) effectIntervals.set(id, []);
+      effectIntervals.get(id).push([started, event.monotonic_ms]);
+      effectStarts.delete(instanceKey);
     }
   }
-  for (const [id, started] of effectStarts) effectDurations[id] = (effectDurations[id] ?? 0) + fixture.envelope.ended_monotonic_ms - started;
+  for (const { id, started } of effectStarts.values()) {
+    if (!effectIntervals.has(id)) effectIntervals.set(id, []);
+    effectIntervals.get(id).push([started, fixture.envelope.ended_monotonic_ms]);
+  }
+  const effectDurations = {};
+  for (const [id, intervals] of effectIntervals) {
+    const sorted = intervals.map(([start, end]) => [
+      Math.max(start, fixture.envelope.started_monotonic_ms),
+      Math.min(end, fixture.envelope.ended_monotonic_ms),
+    ]).filter(([start, end]) => end > start).sort((left, right) => left[0] - right[0]);
+    let total = 0;
+    let current;
+    for (const interval of sorted) {
+      if (!current || interval[0] > current[1]) {
+        if (current) total += current[1] - current[0];
+        current = [...interval];
+      } else current[1] = Math.max(current[1], interval[1]);
+    }
+    if (current) total += current[1] - current[0];
+    effectDurations[id] = total;
+  }
   const abilityIds = [...new Set(events.map((event) => event.payload?.ability_id).filter(Number.isInteger))].sort((left, right) => left - right);
   const lossRanges = events.filter((event) => event.kind === "discontinuity").map((event) => ({ from: event.payload.missing_sequence_from, to: event.payload.missing_sequence_to, reason: event.payload.reason }));
   const quality = lossRanges.length > 0 ? "degraded" : "complete";
@@ -1299,10 +1340,11 @@ export function validateEncounterEvidence(fixture, expected, rawBytes) {
     const receipt = expected?.metrics?.[metricId];
     if (!receipt) errors.push(`encounter projection is missing metric ${metricId}`);
     else {
-      for (const field of ["value", "values", "unit", "quality"]) {
-        if (field in receipt && JSON.stringify(receipt[field]) !== JSON.stringify(actual[field])) errors.push(`encounter projection ${metricId} has stale ${field}`);
+      const resultField = "value" in actual ? "value" : "values";
+      for (const field of [resultField, "unit", "algorithm_version", "first_sequence", "last_sequence", "quality", "loss_ranges"]) {
+        if (!(field in receipt)) errors.push(`encounter projection ${metricId} requires ${field}`);
+        else if (JSON.stringify(receipt[field]) !== JSON.stringify(actual[field])) errors.push(`encounter projection ${metricId} has stale ${field}`);
       }
-      if (actual.algorithm_version !== expected.algorithm_version) errors.push(`encounter projection ${metricId} has stale algorithm version`);
     }
   }
   const receipts = Array.isArray(expected?.catalog_receipts) ? expected.catalog_receipts : [];

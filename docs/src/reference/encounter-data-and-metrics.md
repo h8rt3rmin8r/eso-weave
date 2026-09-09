@@ -74,7 +74,7 @@ and declared loss. The S069 baseline covers:
 - observed outgoing DPS over encounter duration;
 - observed outgoing effective HPS over encounter duration;
 - outgoing damage share by ability;
-- effect uptime from clipped active intervals;
+- effect uptime from clipped, instance-safe actor intervals;
 - cast ability IDs in authoritative sequence order.
 
 These are reproducible descriptive calculations. Observation and calculation do

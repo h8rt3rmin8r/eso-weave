@@ -67,7 +67,7 @@ Each projection records `metric_id`, `algorithm_version`, `value`, `unit`,
 - Observed DPS = outgoing damage divided by encounter duration in seconds.
 - Observed HPS = outgoing effective healing divided by encounter duration in seconds.
 - Ability damage share = outgoing damage for one ability divided by total outgoing damage.
-- Effect uptime = union of clipped active intervals divided by encounter duration.
+- Effect uptime = union of clipped active intervals across actor and effect-instance keys divided by encounter duration.
 - Ordered cast sequence = cast ability IDs sorted by authoritative sequence.
 
 ## ParityRoadmapEntry

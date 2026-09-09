@@ -10,6 +10,7 @@ import {
   validateBrandJavascript,
   validateCatalogSourceContract,
   projectEncounterMetrics,
+  validateEncounterEvidence,
   validateEncounterFixture,
   validateEncounterModelContract,
   validateContentCoverage,
@@ -1474,6 +1475,31 @@ test("requires a complete parity matrix and concrete ordered owners", () => {
   assert.match(errors, /follow-up calculation requires an issue number/i);
 });
 
+test("requires complete, traceable metric receipts", () => {
+  const fixture = validEncounterFixture();
+  const projected = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
+  const expected = {
+    algorithm_version: "s069-v1",
+    raw_content_sha256: projected.raw_content_sha256,
+    metrics: structuredClone(projected.metrics),
+    catalog_receipts: [
+      { ...projected.catalog_receipt, catalog_snapshot: "v1" },
+      { ...projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999])).catalog_receipt, catalog_snapshot: "v2" },
+    ],
+    storage: { production_retention_recommendation: "verification-required" },
+    parity_claim: "synthetic-determinism-only",
+  };
+  delete expected.metrics["observed-dps"].value;
+  delete expected.metrics["observed-dps"].first_sequence;
+  delete expected.metrics["observed-hps"].unit;
+  delete expected.metrics["effect-uptime"].quality;
+  const errors = validateEncounterEvidence(fixture, expected).join("\n");
+  assert.match(errors, /observed-dps.*value/i);
+  assert.match(errors, /observed-dps.*first_sequence/i);
+  assert.match(errors, /observed-hps.*unit/i);
+  assert.match(errors, /effect-uptime.*quality/i);
+});
+
 test("projects deterministic metrics and catalog receipts from the dummy encounter", () => {
   const fixture = validEncounterFixture();
   assert.deepEqual(validateEncounterFixture(fixture), []);
@@ -1507,4 +1533,32 @@ test("rejects duplicate sequences, undeclared gaps, and backward monotonic time"
   const backwards = validEncounterFixture();
   backwards.events.find((event) => event.sequence === 13).monotonic_ms = 5000;
   assert.match(validateEncounterFixture(backwards).join("\n"), /backward monotonic time/i);
+});
+
+test("rejects malformed discontinuities and private fixture fields", () => {
+  const malformed = validEncounterFixture();
+  for (const event of malformed.events.filter((event) => event.sequence >= 12)) event.sequence -= 2;
+  malformed.envelope.last_sequence -= 2;
+  const marker = malformed.events.find((event) => event.kind === "discontinuity");
+  marker.payload.missing_sequence_from = 50;
+  marker.payload.missing_sequence_to = 60;
+  assert.match(validateEncounterFixture(malformed).join("\n"), /discontinuity.*preceding missing range/i);
+
+  const privateFixture = validEncounterFixture();
+  privateFixture.events[2].payload.subject = { account_name: "private" };
+  assert.match(validateEncounterFixture(privateFixture).join("\n"), /prohibited private field account_name/i);
+});
+
+test("unions overlapping effect intervals across actor instances", () => {
+  const fixture = validEncounterFixture();
+  for (const event of fixture.events.filter((event) => event.sequence >= 12)) event.sequence += 3;
+  fixture.envelope.last_sequence += 3;
+  const marker = fixture.events.find((event) => event.kind === "discontinuity");
+  marker.payload.missing_sequence_from = 12;
+  marker.payload.missing_sequence_to = 14;
+  fixture.events.push(
+    { session_id: "s1", encounter_id: "e1", sequence: 10, monotonic_ms: 5000, kind: "effect", payload: { target_actor_id: "a2", ability_id: 200, effect_instance_id: "other", change: "gained" } },
+    { session_id: "s1", encounter_id: "e1", sequence: 11, monotonic_ms: 5500, kind: "effect", payload: { target_actor_id: "a2", ability_id: 200, effect_instance_id: "other", change: "faded" } },
+  );
+  assert.equal(projectEncounterMetrics(fixture).metrics["effect-uptime"].values["200"], 0.6);
 });

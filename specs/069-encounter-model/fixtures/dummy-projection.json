@@ -3,11 +3,11 @@
   "algorithm_version": "s069-v1",
   "raw_content_sha256": "4e510a251cbf65b71681fd36ad68c541ac7260c28d17f695e289ca730602e298",
   "metrics": {
-    "observed-dps": {"value": 300, "unit": "damage-per-second", "quality": "degraded"},
-    "observed-hps": {"value": 80, "unit": "effective-healing-per-second", "quality": "degraded"},
-    "ability-damage-share": {"values": {"100": 0.5, "999999": 0.5}, "unit": "ratio", "quality": "degraded"},
-    "effect-uptime": {"values": {"200": 0.6}, "unit": "ratio", "quality": "degraded"},
-    "ordered-cast-sequence": {"values": [100, 999999, 100], "unit": "ability-id-sequence", "quality": "degraded"}
+    "observed-dps": {"value": 300, "unit": "damage-per-second", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "observed-hps": {"value": 80, "unit": "effective-healing-per-second", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "ability-damage-share": {"values": {"100": 0.5, "999999": 0.5}, "unit": "ratio", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "effect-uptime": {"values": {"200": 0.6}, "unit": "ratio", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]},
+    "ordered-cast-sequence": {"values": [100, 999999, 100], "unit": "ability-id-sequence", "algorithm_version": "s069-v1", "first_sequence": 1, "last_sequence": 21, "quality": "degraded", "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}]}
   },
   "loss_ranges": [{"from": 10, "to": 11, "reason": "capture-overflow"}],
   "catalog_receipts": [
