@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-035.md](plan-035.md) | Active | S065 verifies bundled documentation in v0.15.0 packages for #84 and parent epic #83. |
+| [plan-036.md](plan-036.md) | Active | S066 clarifies release verification and fixes Debian control metadata for #104 and #105. |

@@ -51,6 +51,12 @@ Generated HTML remains ignored build output. A release-profile Cargo build fails
 if the exact documentation tools are absent, mismatched, or cannot produce the
 site, so package jobs cannot silently ship the development fixture.
 
+Before the Linux build copies, hashes, or uploads the `.deb`, the release
+workflow queries its actual control record and requires non-empty Package,
+Version, Architecture, Maintainer, and Description fields. The reusable
+`scripts/validate-debian-package.sh` contract performs this check against the
+built package rather than inferring metadata from source configuration.
+
 ## Workflow ownership and permissions
 
 The verification job and both platform build jobs use read-only repository
@@ -71,6 +77,7 @@ dated decision process. This published explanation does not replace that rule.
 | Changelog section is absent or empty | Verification fails before package builds |
 | Highlights are missing, duplicated, malformed, too numerous, or too long | Verification fails before package builds |
 | Documentation tools are absent, mismatched, or generation fails | The platform binary and packages are not produced |
+| Debian Package, Version, Architecture, Maintainer, or Description is empty | The Linux build fails before the `.deb` is copied or uploaded |
 | Either platform build fails | Final release job cannot run |
 | Required artifact or hash is absent | Assembly or publication fails |
 | Release creation lacks permission | Packages remain workflow artifacts; no GitHub Release is created |
@@ -78,7 +85,9 @@ dated decision process. This published explanation does not replace that rule.
 The shell contract in `scripts/release-notes.test.sh` exercises valid extraction,
 CRLF input, section boundaries, Unreleased preview, malformed lists, duplicate or
 empty Highlights, six-item and 120-word boundaries, and invalid version or
-repository arguments.
+repository arguments. `scripts/validate-debian-package.test.sh` exercises valid
+and incomplete control records, metadata query failures, argument validation,
+and real packages built with and without Maintainer metadata.
 
 ## Maintainer authority
 

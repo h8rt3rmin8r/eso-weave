@@ -40,6 +40,20 @@ That command (configured in `release.toml`):
 
 Pushing the tag triggers `.github/workflows/release.yml`.
 
+## Post-publication verification
+
+The candidate and tag workflow must pass every available CI, safety,
+release-note, packaging, repository, and authorization gate before publication.
+Installed UI, package, field, platform, or production checks that require a
+downloadable artifact occur after the GitHub Release exists. They do not block
+creating the artifact once the pre-publication gates pass.
+
+Track each independently closeable artifact check in a separate issue held in
+Release verification. Publication makes the exact package available for testing
+but does not prove that it installs or behaves correctly. Record the tag,
+checksum, environment, and observations. If the package fails, file linked
+implementation work and keep verification open until a fixed release passes.
+
 Note: the README version badge is a static shields.io badge (`version-X.Y.Z-2ea44f`). The
 `cargo release` rollover bumps it in lockstep with the version via a `[[pre-release-replacements]]`
 entry in `release.toml`, so it never drifts from the released version. Do not hand-edit the badge
@@ -55,7 +69,9 @@ The release workflow performs these as gated steps and fails the release if any 
 3. The version has a valid Highlights excerpt within the six-item and 120-word budget.
 4. A Windows x64 MSI installer is built with `cargo-wix` and checksummed.
 5. Linux x86_64 assets are built and checksummed: a `.deb` package (`cargo-deb`), an AppImage
-   (assembled from `packaging/appimage/`), and a plain tarball.
+   (assembled from `packaging/appimage/`), and a plain tarball. Before upload,
+   the `.deb` control record must contain non-empty Package, Version,
+   Architecture, Maintainer, and Description fields.
 6. A GitHub Release is created, with notes taken only from Highlights, a tag-specific link to the
    complete changelog, and every asset plus the combined `SHA256SUMS` attached.
 7. Both platform jobs install exact `mdbook 0.5.4` and `mdbook-linkcheck2 0.13.0`; each
@@ -84,6 +100,10 @@ Three pinned scripts back the pipeline and are shared with local development:
 - `scripts/linux-build-deps.sh`: installs the system libraries required to build the GUI and
   input backends on Linux (X11/XCB, xkbcommon, Wayland, GL, evdev/udev headers). The dependency
   list lives only in this script so CI and developer machines cannot drift apart.
+- `scripts/validate-debian-package.sh <package.deb>`: rejects a built Debian
+  package with a missing required control field before upload;
+  `scripts/validate-debian-package.test.sh` exercises its success and failure
+  contract in pull-request CI.
 
 ## Governance
 

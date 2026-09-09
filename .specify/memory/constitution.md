@@ -1,9 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: 1.1.0 -> 2.0.0
-- Ratification: structured documentation authority and lifecycle migration
-- Modified principles: I replaces the single master-specification file with the
-  canonical published corpus, issue-backed slices, and current build-plan index
+- Version change: 2.0.0 -> 2.0.1
+- Amendment: clarify the chronological boundary between mandatory
+  pre-publication gates and artifact-dependent post-publication verification
+- Modified principles: none; Development Workflow and Quality Gates now makes
+  the existing release-verification lifecycle explicit
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -14,9 +15,16 @@ Sync Impact Report
     references; no edit needed)
   .specify/templates/tasks-template.md ........ aligned (no constitution
     references; no edit needed)
-  CLAUDE.md, docs/project/build-autopilot.md .. updated to the structured
-    authority model and new project/archive paths
-- Follow-up TODOs: none
+  CLAUDE.md, docs/project/build-autopilot.md .. aligned with chronological
+    release verification
+  docs/project/governance.md .................. aligned with separate
+    implementation and artifact-evidence lifecycles
+  docs/project/releasing.md ................... aligned with post-publication
+    verification and the Debian metadata gate
+  .github/workflows/ci.yml, release.yml ....... aligned with the reusable
+    Debian package validator
+- Follow-up TODOs: issue #107 verifies the first released Debian package that
+  contains S066
 -->
 
 # ESO Weave Constitution
@@ -137,6 +145,14 @@ Crossing it changes what the software is.
   running `cargo release` always require explicit human authorization, as does
   every remote push unless that authorization was supplied at kickoff for the
   named work.
+- Required CI, safety, release-note, packaging, repository, and authorization
+  gates complete before publication. A criterion that can only be evaluated
+  against a downloadable release, installed package, field environment, or
+  production surface follows publication in a separate verification issue.
+  That issue may be opened earlier but remains in Release verification until its
+  evidence passes. Publication creates the evidence subject and is never proof
+  of installed behavior. A mismatch creates linked implementation work and the
+  verification issue stays open until a fixed release passes.
 
 ## Governance
 
@@ -154,4 +170,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 2.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-07
+**Version**: 2.0.1 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-08

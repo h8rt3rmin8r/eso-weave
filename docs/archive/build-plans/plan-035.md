@@ -1,6 +1,6 @@
 # Plan 035: v0.15.0 Documentation Release Verification
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -17,3 +17,5 @@ Sequence:
 
 This evidence slice changes no application runtime. Governance clarification
 issue #104 is separate and remains outside S065.
+
+Completion evidence: issues #84 and #83 closed when S065 merged in PR #106.

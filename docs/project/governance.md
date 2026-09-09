@@ -16,6 +16,15 @@ The `needs: verification` label belongs only on the issue currently waiting for
 field, platform, or release evidence. A merged implementation issue must not
 remain open solely to wait for a different verification lifecycle.
 
+All candidate, CI, safety, release-note, packaging, repository, and
+authorization gates that can run before publication remain mandatory. Evidence
+that requires a downloadable release, installed package, field environment, or
+production surface follows publication in its separate verification issue. The
+issue may exist before the release but remains in Release verification until the
+published artifact passes. Publication is the evidence entry gate, not proof of
+installed behavior. A mismatch creates linked implementation work and requires
+a fixed released artifact before verification closes.
+
 ## Pull request closure
 
 Every normal pull request targeting `main` includes at least one complete GitHub
