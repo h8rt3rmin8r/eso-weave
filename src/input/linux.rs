@@ -14,8 +14,8 @@
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use evdev::uinput::{VirtualDevice, VirtualDeviceBuilder};
-use evdev::{AttributeSet, AttributeSetRef, Device, EventType, InputEvent, Key as EvKey};
+use evdev::uinput::VirtualDevice;
+use evdev::{AttributeSet, AttributeSetRef, Device, EventType, InputEvent, KeyCode as EvKey};
 
 use crate::input::{
     Decision, InputBackend, InputEngine, InputError, Key, KeyEvent, MouseButton, Origin, Transition,
@@ -66,7 +66,7 @@ impl LinuxBackend {
             physical_capabilities_requested,
         ) {
             let keys = advertised_keys(physical_keys);
-            let device = VirtualDeviceBuilder::new()
+            let device = VirtualDevice::builder()
                 .map_err(|e| InputError::Start(format!("uinput unavailable: {e}")))?
                 .name("eso-weave")
                 .with_keys(&keys)
@@ -95,7 +95,7 @@ impl InputBackend for LinuxBackend {
             Transition::Down => 1,
             Transition::Up => 0,
         };
-        let event = InputEvent::new(EventType::KEY, to_ev_key(key).code(), value);
+        let event = InputEvent::new(EventType::KEY.0, to_ev_key(key).code(), value);
         let mut guard = self.virtual_device.lock().unwrap();
         let device = guard
             .device
@@ -120,7 +120,7 @@ impl InputBackend for LinuxBackend {
             Transition::Down => 1,
             Transition::Up => 0,
         };
-        let event = InputEvent::new(EventType::KEY, code.code(), value);
+        let event = InputEvent::new(EventType::KEY.0, code.code(), value);
         let mut guard = self.virtual_device.lock().unwrap();
         let device = guard
             .device
@@ -333,11 +333,11 @@ mod tests {
 
     #[test]
     fn forwarded_key_errors_are_explicit_and_metadata_is_ignored() {
-        let key = InputEvent::new(EventType::KEY, EvKey::KEY_A.code(), 1);
+        let key = InputEvent::new(EventType::KEY.0, EvKey::KEY_A.code(), 1);
         let error = emit_forwarded_key(key, |_| Err(io::Error::other("blocked"))).unwrap_err();
         assert!(error.to_string().contains("pass-through emit failed"));
 
-        let metadata = InputEvent::new(EventType::MISC, 4, 30);
+        let metadata = InputEvent::new(EventType::MISC.0, 4, 30);
         emit_forwarded_key(metadata, |_| panic!("metadata must not be emitted")).unwrap();
     }
 }
