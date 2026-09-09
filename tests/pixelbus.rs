@@ -2638,6 +2638,7 @@ fn recovered_alive_is_last_after_a_forced_actionable_baseline() {
     let (hi, mid, lo) = quickslot_id_blocks(0x12_3456);
     let samples = |life_red| BlockSamples {
         status: Some(MAGENTA),
+        weapon: Some(weapon(1, 2, 1)),
         menu: Some(menu(0)),
         health: Some(resource(HEALTH_MARKER, 10)),
         stamina: Some(resource(STAMINA_MARKER, 90)),
@@ -2670,6 +2671,7 @@ fn recovered_alive_is_last_after_a_forced_actionable_baseline() {
     for required in [
         "world",
         "menu",
+        "weapon",
         "travel",
         "roll_dodge",
         "movement",
@@ -2682,6 +2684,7 @@ fn recovered_alive_is_last_after_a_forced_actionable_baseline() {
             .position(|event| match required {
                 "world" => matches!(event, PixelBusEvent::World(_)),
                 "menu" => matches!(event, PixelBusEvent::MenuGate(_)),
+                "weapon" => matches!(event, PixelBusEvent::WeaponBar(_)),
                 "travel" => matches!(event, PixelBusEvent::Travel(_)),
                 "roll_dodge" => matches!(event, PixelBusEvent::RollDodge(_)),
                 "movement" => matches!(event, PixelBusEvent::Movement(_)),
@@ -2695,6 +2698,50 @@ fn recovered_alive_is_last_after_a_forced_actionable_baseline() {
     }
     assert_eq!(alive_index + 1, recovery.len(), "Alive must open last");
     assert_eq!(reader.sample_generation(), 2);
+}
+
+#[test]
+fn recovered_alive_clears_a_stale_weapon_before_reopening_input() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let observed = WeaponBarSignal {
+        bar: ActiveBar::Front,
+        front: WeaponClass::DualWield,
+        back: WeaponClass::TwoHanded,
+    };
+    let initial = reader.observe(
+        BlockSamples {
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        0,
+    );
+    assert!(initial.contains(&PixelBusEvent::WeaponBar(observed)));
+
+    reader.observe(
+        BlockSamples {
+            life: Some(life(0x80)),
+            weapon: Some(weapon(1, 2, 1)),
+            ..alive()
+        },
+        100,
+    );
+    let recovery = reader.observe(
+        BlockSamples {
+            life: Some(life(0x20)),
+            ..alive()
+        },
+        200,
+    );
+    let cleared = recovery
+        .iter()
+        .position(|event| *event == PixelBusEvent::WeaponBar(WeaponBarSignal::new_unknown()))
+        .expect("recovery clears a stale B3 observation");
+    let alive = recovery
+        .iter()
+        .position(|event| *event == PixelBusEvent::Life(LifeState::Alive))
+        .expect("recovery reopens life");
+
+    assert!(cleared < alive, "B3 must clear before Alive");
 }
 
 #[test]

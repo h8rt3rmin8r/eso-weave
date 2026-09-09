@@ -129,6 +129,18 @@ pub struct WeaponBarSignal {
     pub back: WeaponClass,
 }
 
+impl WeaponBarSignal {
+    /// Returns a signal in which neither the active bar nor either weapon class
+    /// is currently authoritative.
+    pub const fn new_unknown() -> Self {
+        Self {
+            bar: ActiveBar::Unknown,
+            front: WeaponClass::Unknown,
+            back: WeaponClass::Unknown,
+        }
+    }
+}
+
 /// The green marker that identifies a weapon-bar sample (distinct from the latency
 /// marker `0xA5` so tolerance can never confuse the two).
 const WEAPON_MARKER: u8 = 0x5A;
@@ -2679,12 +2691,14 @@ impl PixelBusReader {
             // a change in the decoded signal, so per-attack redraws never churn.
             //
             // Note the deliberate difference from the combat block below: a weapon
-            // sample that does not decode leaves the last good value in place, and
-            // only signal loss clears it. Combat state does not hold. See the
-            // clarification recorded in specs/031-combat-state-block/spec.md.
+            // sample that does not decode normally leaves the last good value in
+            // place, and signal loss clears it. Death recovery is the exception:
+            // B3 must be forced current or Unknown before Alive reopens input.
+            // Combat state does not hold. See the clarification recorded in
+            // specs/031-combat-state-block/spec.md.
             let weapon = b3.and_then(|c| decode_weapon_bar(c, tolerance));
-            if let Some(signal) = weapon {
-                if self.weapon != Some(signal) {
+            match weapon {
+                Some(signal) if self.weapon != Some(signal) || recovered => {
                     self.weapon = Some(signal);
                     tracing::debug!(
                         target: "eso_weave::pixelbus",
@@ -2693,6 +2707,15 @@ impl PixelBusReader {
                     );
                     events.push(PixelBusEvent::WeaponBar(signal));
                 }
+                None if recovered => {
+                    self.weapon = None;
+                    tracing::debug!(
+                        target: "eso_weave::pixelbus",
+                        "weapon bar cleared (life recovered without valid B3)"
+                    );
+                    events.push(PixelBusEvent::WeaponBar(WeaponBarSignal::new_unknown()));
+                }
+                _ => {}
             }
 
             // The combat block is optional in the same sense, but a sample that
