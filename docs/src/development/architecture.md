@@ -20,6 +20,7 @@ test seams. Platform modules contain operating-system calls.
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
 | Documentation Service | Immutable embedded-site lookup, bounded loopback GET and HEAD responses, browser handoff, and worker lifetime | Filesystem serving, application state, remote content, and mutation |
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
+| Discovery Collector | Explicit bounded public-API enumeration, deterministic local SavedVariables records, restricted staging, and an independent managed addon lifecycle | PixelBeacon, combat capture, input generation, network transfer, direct SQLite publication, or distributable game art |
 
 ## Thread model
 
@@ -82,6 +83,16 @@ Documentation follows a separate read-only path:
 Catalog data follows another read-only application path:
 
 `reviewed normalized JSON -> explicit catalog-compiler command -> verified catalog.sqlite -> package path -> typed read-only application queries`
+
+User-local API discovery precedes that path when explicitly requested:
+
+`explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
+
+The collector is a separate addon and lifecycle boundary from PixelBeacon. It
+does limited work per update tick, pauses in combat, and emits only a fixed
+versioned table whose chunk payloads are deterministic JSON lines. The desktop
+parser accepts that data grammar without a Lua runtime and stages through the
+same strict catalog model used by reviewed source bundles.
 
 The compiler is a second binary in the existing Cargo package, not a `build.rs`
 side effect or workspace. It builds a sibling candidate in one transaction,

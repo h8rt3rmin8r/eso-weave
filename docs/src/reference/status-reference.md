@@ -42,6 +42,17 @@ Observed numeric zero is different from all four states.
 | Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
+The command-line discovery collector has separate lifecycle values:
+
+| Collector value | Meaning | Recovery or effect |
+| --- | --- | --- |
+| `not-installed` | The dedicated collector target is absent | Install it explicitly when a local capture is needed |
+| `managed-up-to-date` | Marker, version, and embedded checksum match | Capture may be started in ESO after any required reload |
+| `managed-version-mismatch` | Ownership is proven but content differs | Run the explicit install command to update the managed copy |
+| `unmanaged` | Ownership, file type, or link safety could not be proven | No change is made; inspect only that exact target manually |
+
+These values do not describe PixelBeacon and do not affect automation state.
+
 ## Game Context and player state
 
 | Field and text | Meaning | Automation impact |

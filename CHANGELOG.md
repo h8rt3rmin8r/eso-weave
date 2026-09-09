@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S071 adds an explicit bounded in-game discovery addon, deterministic
+  checksummed SavedVariables export, a non-executing restricted importer,
+  atomic normalized staging, and an isolated marker-gated lifecycle for five
+  API-visible catalog categories (issue #115).
 - S070 adds a deterministic provenance-backed SQLite catalog compiler, stable
   semantic and artifact checksums, integrity and diff reports, atomic rollback,
   typed read-only application access, visible graceful degradation, and one
@@ -24,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Amend the constitution to 2.1.0 so the approved user-initiated,
+  read-only, local SavedVariables collector is a narrowly defined second addon
+  surface, separate from PixelBeacon and all input automation. Preserve the
+  prohibitions on memory, packet, upload, gameplay mutation, and multi-account
+  control. Use a fixed Lua table envelope with sorted JSON-line records, 64 KiB
+  chunks, per-chunk Adler-32, and desktop SHA-256; parse it without a Lua runtime
+  and stage through the catalog model before any explicit SQLite build.
 - 2026-09-09: Keep the catalog compiler as an explicit second binary in the
   existing Cargo package and use bundled SQLite for consistent Windows and Linux
   behavior. Model approved game concepts through constrained entities,

@@ -5,6 +5,19 @@ use std::path::PathBuf;
 
 use eso_weave::catalog::compiler::{build_catalog, diff_catalogs, verify_catalog, BuildRequest};
 use eso_weave::catalog::{CatalogError, Channel};
+use eso_weave::collector::lifecycle::{
+    install as install_collector, status as collector_status, uninstall as remove_collector,
+    RunningState as CollectorRunningState,
+};
+use eso_weave::collector::{import_capture, CollectorError, ImportRequest};
+
+#[derive(thiserror::Error, Debug)]
+enum CliError {
+    #[error("{0}")]
+    Catalog(#[from] CatalogError),
+    #[error("{0}")]
+    Collector(#[from] CollectorError),
+}
 
 fn main() {
     if let Err(error) = run(std::env::args().skip(1).collect()) {
@@ -13,9 +26,9 @@ fn main() {
     }
 }
 
-fn run(arguments: Vec<String>) -> Result<(), CatalogError> {
+fn run(arguments: Vec<String>) -> Result<(), CliError> {
     let Some(command) = arguments.first() else {
-        return Err(usage());
+        return Err(usage().into());
     };
     let flags = flags(&arguments[1..])?;
     match command.as_str() {
@@ -39,7 +52,44 @@ fn run(arguments: Vec<String>) -> Result<(), CatalogError> {
             }
             print_json(&report)?;
         }
-        _ => return Err(usage()),
+        "import-collector" => {
+            let input = required(&flags, "--input")?;
+            let output = required(&flags, "--output")?;
+            let channel = parse_channel(required(&flags, "--channel")?)?;
+            let catalog_version = required(&flags, "--catalog-version")?;
+            let report =
+                import_capture(&ImportRequest::new(input, output, channel, catalog_version))?;
+            print_json(&report)?;
+        }
+        "collector-status" => {
+            print_json(&collector_status(
+                PathBuf::from(required(&flags, "--addons")?).as_path(),
+            ))?;
+        }
+        "collector-install" => {
+            let addons = PathBuf::from(required(&flags, "--addons")?);
+            let api_version = required(&flags, "--api-version")?
+                .parse::<u32>()
+                .map_err(|_| {
+                    CatalogError::Validation("--api-version must be a positive integer".to_string())
+                })?;
+            if api_version == 0 {
+                return Err(CatalogError::Validation(
+                    "--api-version must be a positive integer".to_string(),
+                )
+                .into());
+            }
+            print_json(&install_collector(
+                &addons,
+                collector_running_state(),
+                api_version,
+            )?)?;
+        }
+        "collector-remove" => {
+            let addons = PathBuf::from(required(&flags, "--addons")?);
+            print_json(&remove_collector(&addons, collector_running_state())?)?;
+        }
+        _ => return Err(usage().into()),
     }
     Ok(())
 }
@@ -76,6 +126,14 @@ fn print_json(value: &impl serde::Serialize) -> Result<(), CatalogError> {
     Ok(())
 }
 
+fn collector_running_state() -> CollectorRunningState {
+    match eso_weave::beacon::probe_game_running() {
+        eso_weave::beacon::RunningState::Running => CollectorRunningState::Running,
+        eso_weave::beacon::RunningState::NotRunning => CollectorRunningState::NotRunning,
+        eso_weave::beacon::RunningState::Unknown => CollectorRunningState::Unknown,
+    }
+}
+
 fn write_json(path: PathBuf, value: &impl serde::Serialize) -> Result<(), CatalogError> {
     if let Some(parent) = path.parent().filter(|value| !value.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)?;
@@ -88,7 +146,7 @@ fn write_json(path: PathBuf, value: &impl serde::Serialize) -> Result<(), Catalo
 
 fn usage() -> CatalogError {
     CatalogError::Validation(
-        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]"
+        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
             .to_string(),
     )
 }

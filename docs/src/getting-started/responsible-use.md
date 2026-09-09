@@ -1,8 +1,8 @@
 # Responsible Use
 
-ESO Weave runs beside the game, never inside it. It does not read or write game
-process memory and does not inspect or alter network traffic. Input interception
-and synthesis are scoped to the focused ESO window.
+The ESO Weave desktop runs beside the game, never inside its process. It does not
+read or write game process memory and does not inspect or alter network traffic.
+Input interception and synthesis are scoped to the focused ESO window.
 
 This project is published for educational purposes only. It exists as a study
 in cross-platform input handling, screen-signal protocols, and game-adjacent
@@ -26,9 +26,13 @@ accordance with the Apache License, Version 2.0 under which it is distributed.
 
 ESO Weave supports Windows 10 and 11 x64 and Linux x64. macOS, multi-account or
 multi-client orchestration, game memory access, packet manipulation, and in-game
-features beyond the PixelBeacon signal contract are outside project scope.
+features beyond the two named local addon bridges are outside project scope.
 
 PixelBeacon ships only inside ESO Weave. It is not published to addon indexes.
+The separately managed ESO Weave Collector runs only after an explicit user
+command, reads documented public addon API values outside combat, and writes a
+bounded local SavedVariables capture. It does not drive gameplay or communicate
+over the network.
 
 ## Privacy and network behavior
 
@@ -37,6 +41,10 @@ events, and displayed pixels at the ESO client origin. PixelBeacon reads support
 ESO addon API values and renders them as local color blocks. The project does not
 read game process memory, inspect packet contents, send gameplay telemetry, or
 require an online account service.
+
+The optional collector records versioned, bounded catalog observations in the
+user's local SavedVariables. The desktop treats that file as hostile data, never
+executes it, never uploads it, and keeps user-collected localized text local.
 
 The desktop application performs one best-effort background startup check against
 the official `esoui/esoui` live client-version source. That request is used only

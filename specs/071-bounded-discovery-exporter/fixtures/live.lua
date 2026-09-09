@@ -1,0 +1,50 @@
+EsoWeaveCollectorSaved = {
+  ["schema_version"] = 1,
+  ["collector_version"] = 1,
+  ["collector_checksum"] = "7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae",
+  ["status"] = "complete",
+  ["channel"] = "live",
+  ["game_version"] = "12.0.8",
+  ["api_version"] = 101050,
+  ["locale"] = "en",
+  ["platform"] = "pc",
+  ["megaserver"] = "fixture-na",
+  ["scope_key"] = "anonymous-fixture-one",
+  ["started_at"] = "2026-09-09T12:00:00Z",
+  ["finished_at"] = "2026-09-09T12:00:01Z",
+  ["selected_categories"] = {
+    [1] = "player-skills",
+    [2] = "companions-races-classes",
+  },
+  ["coverage"] = {
+    [1] = {
+      ["category"] = "player-skills",
+      ["completeness"] = "bounded",
+      ["scope"] = "fixture class one, character, unlock, locale, and live channel",
+      ["record_count"] = 2,
+      ["limitations"] = "Does not claim visibility for other classes, characters, accounts, locales, or channels.",
+    },
+    [2] = {
+      ["category"] = "companions-races-classes",
+      ["completeness"] = "bounded",
+      ["scope"] = "fixture class one and live channel",
+      ["record_count"] = 1,
+      ["limitations"] = "Does not claim every account unlock or character identity.",
+    },
+  },
+  ["warnings"] = {},
+  ["cancellation_reason"] = nil,
+  ["checkpoint"] = {
+    ["adapter"] = 5,
+    ["cursor"] = 0,
+  },
+  ["chunks"] = {
+    [1] = {
+      ["sequence"] = 1,
+      ["record_count"] = 3,
+      ["byte_count"] = 687,
+      ["checksum"] = "c8fef243",
+      ["payload"] = "{\"category\":\"player-skills\",\"kind\":\"skill-line\",\"stable_id\":10,\"source_key\":\"player-skills/skill-line/10\",\"attributes\":{\"skill_type_source_index\":1,\"version_scoped_order\":1}}\n{\"category\":\"player-skills\",\"kind\":\"ability\",\"stable_id\":100,\"source_key\":\"player-skills/ability/100\",\"parent\":{\"kind\":\"skill-line\",\"relation\":\"skill-line-has-ability\",\"stable_id\":10},\"attributes\":{\"version_scoped_order\":1},\"name\":\"Fixture Ability\",\"description\":\"Fixture description\",\"icon_path\":\"/esoui/art/icons/fixture.dds\"}\n{\"category\":\"companions-races-classes\",\"kind\":\"class\",\"stable_id\":1,\"source_key\":\"companions-races-classes/class/1\",\"attributes\":{\"version_scoped_order\":1},\"name\":\"Fixture Class One\"}",
+    },
+  },
+}

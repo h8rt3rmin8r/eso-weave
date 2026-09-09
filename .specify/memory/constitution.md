@@ -1,10 +1,12 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.0 -> 2.0.1
-- Amendment: clarify the chronological boundary between mandatory
-  pre-publication gates and artifact-dependent post-publication verification
-- Modified principles: none; Development Workflow and Quality Gates now makes
-  the existing release-verification lifecycle explicit
+- Version change: 2.0.1 -> 2.1.0
+- Amendment: permit one separately managed, user-initiated, read-only catalog
+  collector addon with a bounded SavedVariables handoff
+- Modified principles: II adds collector lifecycle and confinement tests; V
+  replaces the obsolete PixelBeacon-only addon exception with an explicit
+  two-addon boundary while retaining all memory, packet, automation, upload,
+  and multi-account prohibitions
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -15,16 +17,13 @@ Sync Impact Report
     references; no edit needed)
   .specify/templates/tasks-template.md ........ aligned (no constitution
     references; no edit needed)
-  CLAUDE.md, docs/project/build-autopilot.md .. aligned with chronological
-    release verification
-  docs/project/governance.md .................. aligned with separate
-    implementation and artifact-evidence lifecycles
-  docs/project/releasing.md ................... aligned with post-publication
-    verification and the Debian metadata gate
-  .github/workflows/ci.yml, release.yml ....... aligned with the reusable
-    Debian package validator
-- Follow-up TODOs: issue #107 verifies the first released Debian package that
-  contains S066
+  CLAUDE.md ................................... aligned with the bounded
+  collector exception and required safety gates
+  docs/src/getting-started/responsible-use.md . aligned with the local-only
+  collector boundary
+  docs/project/build-autopilot.md ............. aligned (no procedural change)
+- Follow-up TODOs: issue #129 verifies real live and PTS visibility, size,
+  timing, and SavedVariables flush behavior
 -->
 
 # ESO Weave Constitution
@@ -62,6 +61,9 @@ skipped, or made conditional:
 - PixelBeacon uninstall deletes a folder only after verifying the managed-marker
   line in its manifest; an unmanaged folder is never deleted.
 - AddOns discovery never writes outside the resolved AddOns directory.
+- ESO Weave Collector install, update, and removal stay inside its separately
+  named subtree; removal and replacement require its own verified managed marker,
+  and no collector lifecycle action mutates PixelBeacon.
 - Fishing degrades to disabled on SignalLost rather than firing inputs blind.
 
 Rationale: each surface, if wrong, silently breaks input handling or destroys
@@ -95,16 +97,28 @@ no cargo gate to run, but still obey the text hygiene rules below.
 Rationale: local parity with CI keeps `main` continuously releasable and
 prevents the misdiagnosed hangs that backgrounded test runs have caused.
 
-### V. Bounded Scope: Outside The Game
+### V. Bounded Scope: Desktop With Two Narrow Addon Bridges
 
-ESO Weave runs entirely outside the game and its addon ecosystem. It MUST NOT
-read or write game process memory, intercept network or packet traffic, provide
-in-game functionality beyond the PixelBeacon screen-signal contract, or
-orchestrate multiple accounts. The weave engine has no in-game dependency of any
-kind; only the fishing module depends on PixelBeacon.
+The ESO Weave desktop application runs outside the game. It MUST NOT read or
+write game process memory, intercept network or packet traffic, orchestrate
+multiple accounts, or depend on an addon for the weave engine. Its only allowed
+addon surfaces are:
 
-Rationale: the scope boundary is the project's technical and ethical contract.
-Crossing it changes what the software is.
+- PixelBeacon, which publishes a minimal local screen-signal contract used only
+  by fishing.
+- ESO Weave Collector, which a user explicitly starts to read documented public
+  addon API values and write bounded, local SavedVariables for later hostile-data
+  parsing by the desktop.
+
+The collector MUST remain separately managed from PixelBeacon, read-only with
+respect to gameplay, prohibited during combat, independent of action automation,
+and free of uploads, synthesized input, equipment changes, item consumption, or
+automatic navigation. Partial or corrupt captures never become active data.
+
+Rationale: these two explicit bridges preserve the project's technical and
+ethical boundary while permitting local, consented, versioned data collection.
+Any additional in-game feature or transport changes what the software is and
+requires a future constitution amendment.
 
 ## Platform, Configuration, and Text Hygiene Constraints
 
@@ -170,4 +184,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 2.0.1 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-08
+**Version**: 2.1.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-09

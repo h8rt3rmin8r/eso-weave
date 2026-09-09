@@ -9,6 +9,7 @@
 pub mod app;
 pub mod beacon;
 pub mod catalog;
+pub mod collector;
 pub mod config;
 pub mod documentation;
 pub mod fishing;
