@@ -57,3 +57,14 @@ finding remains.
 S071 does not add encounter capture, installed archive extraction, icon byte
 distribution, automatic catalog builds, network transfer, or application UI.
 Those remain with issues #132, #116, #117, and #118 as applicable.
+
+## Delivery evidence
+
+- PR #139 passed Windows and Ubuntu CI, dependency review, documentation build
+  and policy, issue linkage, CodeQL analysis, and the CodeQL result gate.
+- The automatic Codex review failed in the external service without producing a
+  finding. The single authorized final round was then requested against commit
+  `6880f15` and also failed externally because that existing ref could not be
+  resolved. It produced no finding, and the failure was acknowledged on the PR.
+- No third Codex review was requested. There are no review threads or code
+  scanning alerts to resolve.

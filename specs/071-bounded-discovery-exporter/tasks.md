@@ -124,7 +124,7 @@ phase begins with failing tests or fixtures before production changes.
   required co-author trailer.
 - [x] T041 Push the authorized branch, open the official PR with `Closes #115`,
   and move the project item to PR review.
-- [ ] T042 Resolve every CI and external review finding, request at most the one
+- [x] T042 Resolve every CI and external review finding, request at most the one
   authorized second `@Codex` round, and stop when all checks and reviews pass.
 
 ## Dependencies and Execution Order
