@@ -66,5 +66,6 @@ Those remain with issues #132, #116, #117, and #118 as applicable.
   finding. The single authorized final round was then requested against commit
   `6880f15` and also failed externally because that existing ref could not be
   resolved. It produced no finding, and the failure was acknowledged on the PR.
-- No third Codex review was requested. There are no review threads or code
-  scanning alerts to resolve.
+- No third Codex review was requested. A later Copilot review identified a
+  schema parity issue and an avoidable per-record allocation. Both findings
+  were resolved, and no additional review was requested.

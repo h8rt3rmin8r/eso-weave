@@ -360,7 +360,41 @@ fn validate_record(
             ));
         }
     }
-    validate_json_strings(&serde_json::to_value(record)?)
+    validate_record_strings(record)
+}
+
+fn validate_record_strings(record: &CollectorRecord) -> Result<(), CollectorError> {
+    validate_capture_string(&record.category)?;
+    validate_capture_string(&record.source_key)?;
+    if let Some(parent) = &record.parent {
+        validate_capture_string(&parent.relation)?;
+    }
+    for (name, value) in &record.attributes {
+        validate_capture_string(name)?;
+        if let serde_json::Value::String(value) = value {
+            validate_capture_string(value)?;
+        }
+    }
+    for value in [
+        record.name.as_deref(),
+        record.description.as_deref(),
+        record.icon_path.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        validate_capture_string(value)?;
+    }
+    Ok(())
+}
+
+fn validate_capture_string(value: &str) -> Result<(), CollectorError> {
+    if value.len() > MAX_CAPTURE_STRING_BYTES {
+        return invalid(format!(
+            "string exceeds the {MAX_CAPTURE_STRING_BYTES} byte limit"
+        ));
+    }
+    Ok(())
 }
 
 fn kind_allowed(category: &str, kind: EntityKind) -> bool {
@@ -391,11 +425,7 @@ fn validate_json_strings(value: &serde_json::Value) -> Result<(), CollectorError
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         match value {
-            serde_json::Value::String(value) if value.len() > MAX_CAPTURE_STRING_BYTES => {
-                return invalid(format!(
-                    "string exceeds the {MAX_CAPTURE_STRING_BYTES} byte limit"
-                ));
-            }
+            serde_json::Value::String(value) => validate_capture_string(value)?,
             serde_json::Value::Array(values) => pending.extend(values),
             serde_json::Value::Object(values) => pending.extend(values.values()),
             _ => {}

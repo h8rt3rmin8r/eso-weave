@@ -37,10 +37,10 @@
     "megaserver": { "type": "string", "maxLength": 64 },
     "scope_key": { "type": "string", "minLength": 1, "maxLength": 128 },
     "started_at": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "finished_at": { "type": "string", "maxLength": 128 },
+    "finished_at": { "type": "string", "minLength": 1, "maxLength": 128 },
     "selected_categories": {
       "type": "array",
-      "minItems": 0,
+      "minItems": 1,
       "maxItems": 5,
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/category" }
@@ -60,6 +60,7 @@
     "checkpoint": { "$ref": "#/$defs/checkpoint" },
     "chunks": {
       "type": "array",
+      "minItems": 0,
       "maxItems": 1024,
       "items": { "$ref": "#/$defs/chunk" }
     }
