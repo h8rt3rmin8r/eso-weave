@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- S065 records released-package verification for the bundled v0.15.0
+  documentation across Windows and Linux without changing application runtime
+  behavior (issues #84 and #83).
+
 ## [0.15.0] - 2026-09-09
 
 ### Highlights

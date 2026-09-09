@@ -13,4 +13,4 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [plan-034.md](plan-034.md) | Active | S064 prepares the v0.15.0 documentation and reliability release candidate for #102. |
+| [plan-035.md](plan-035.md) | Active | S065 verifies bundled documentation in v0.15.0 packages for #84 and parent epic #83. |
