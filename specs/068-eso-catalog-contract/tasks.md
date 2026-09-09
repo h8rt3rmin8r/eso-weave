@@ -38,9 +38,9 @@
 
 ## Phase 6: Delivery
 
-- [ ] T020 Commit with a `feat(068)` message and Co-Authored-By trailer.
-- [ ] T021 Push the authorized branch, open the official PR with `Closes #112`, and update Project stage.
-- [ ] T022 Resolve every CI and external review finding, with at most one authorized second `@Codex` round.
+- [x] T020 Commit with a `feat(068)` message and Co-Authored-By trailer.
+- [x] T021 Push the authorized branch, open the official PR with `Closes #112`, and update Project stage.
+- [x] T022 Resolve every CI and external review finding, with at most one authorized second `@Codex` round.
 
 ## Dependencies and Execution Order
 

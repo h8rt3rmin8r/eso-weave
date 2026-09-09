@@ -13,7 +13,8 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [038](plan-038.md) | Active | [S068 ESO catalog source contract](../../../specs/068-eso-catalog-contract/spec.md), issue #112 |
+| [038](plan-038.md) | Active | S069 external encounter model and Combat Metrics parity roadmap, issue #113 |
 
-Installed v0.15.1 field verification remains independently tracked by issue
-#110 and does not block Plan 038.
+S068 merged in PR #130 and closed issue #112. Installed v0.15.1 verification
+in issue #110 and catalog field verification in issue #129 remain independent;
+neither blocks Plan 038.

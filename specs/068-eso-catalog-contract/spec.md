@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-09
 
-**Status**: Implemented, pending external review
+**Status**: Implemented and merged in PR #130
 
 **Input**: Issue #112. Define honest source, coverage, provenance, channel, and
 redistribution rules before the catalog compiler or collector chooses an
