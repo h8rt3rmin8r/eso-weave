@@ -42,7 +42,9 @@ impl SourceFetcher for HttpsFetcher {
 }
 
 pub(super) struct AcquiredSource {
+    pub(super) root: PathBuf,
     pub(super) path: PathBuf,
+    cache_destination: Option<PathBuf>,
     pub(super) inventory: SourceInventory,
 }
 
@@ -50,10 +52,14 @@ pub(super) fn acquire_sources(
     request: &PipelineRequest,
     run: &PipelineRun,
     workspace: &std::path::Path,
+    staging: &std::path::Path,
     fetcher: &dyn SourceFetcher,
 ) -> Result<BTreeMap<String, AcquiredSource>, PipelineError> {
     fs::create_dir_all(&run.source_cache)?;
     let cache = canonical_real_directory(&run.source_cache, "source cache")?;
+    let staging = staging.join("acquired-sources");
+    fs::create_dir(&staging)?;
+    let staging = canonical_real_directory(&staging, "acquisition staging")?;
     let mut result = BTreeMap::new();
     let mut sources = request.sources.iter().collect::<Vec<_>>();
     sources.sort_by(|left, right| left.id.cmp(&right.id));
@@ -84,7 +90,7 @@ pub(super) fn acquire_sources(
                     match fetcher.fetch(&source.uri, source.max_bytes) {
                         Ok(downloaded) => {
                             verify_source(source, &downloaded, "downloaded source")?;
-                            (downloaded, "downloaded".to_string())
+                            (downloaded, "network-refresh".to_string())
                         }
                         Err(_) if request.network.allow_stale_cache => {
                             (bytes, "stale-cache".to_string())
@@ -92,7 +98,7 @@ pub(super) fn acquire_sources(
                         Err(error) => return Err(error),
                     }
                 } else {
-                    (bytes, "cache".to_string())
+                    (bytes, "pinned-remote".to_string())
                 }
             } else {
                 if !(request.network.enabled && run.allow_network) {
@@ -100,24 +106,33 @@ pub(super) fn acquire_sources(
                 }
                 let bytes = fetcher.fetch(&source.uri, source.max_bytes)?;
                 verify_source(source, &bytes, "downloaded source")?;
-                (bytes, "downloaded".to_string())
+                let acquisition = if request.network.refresh {
+                    "network-refresh"
+                } else {
+                    "pinned-remote"
+                };
+                (bytes, acquisition.to_string())
             }
         };
-        if !destination.exists() {
-            let temp = tempfile::NamedTempFile::new_in(&cache)?;
-            fs::write(temp.path(), &bytes)?;
-            match temp.persist_noclobber(&destination) {
-                Ok(_) => {}
-                Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => return Err(error.error.into()),
+        let (root, path, cache_destination) = if destination.exists() {
+            let published = read_bounded(&cache, &destination, source.max_bytes)?;
+            verify_source(source, &published, "published cached source")?;
+            (cache.clone(), destination, None)
+        } else {
+            let staged = staging.join(format!("{}.bin", source.sha256));
+            if !staged.exists() {
+                fs::write(&staged, &bytes)?;
             }
-        }
-        let published = read_bounded(&cache, &destination, source.max_bytes)?;
-        verify_source(source, &published, "published cached source")?;
+            let staged_bytes = read_bounded(&staging, &staged, source.max_bytes)?;
+            verify_source(source, &staged_bytes, "staged source")?;
+            (staging.clone(), staged, Some(destination))
+        };
         result.insert(
             source.id.clone(),
             AcquiredSource {
-                path: destination,
+                root,
+                path,
+                cache_destination,
                 inventory: SourceInventory {
                     id: source.id.clone(),
                     role: source.role,
@@ -137,6 +152,48 @@ pub(super) fn acquire_sources(
         );
     }
     Ok(result)
+}
+
+pub(super) fn publish_source_cache(
+    acquired: &BTreeMap<String, AcquiredSource>,
+) -> Result<(), PipelineError> {
+    for source in acquired.values() {
+        let Some(destination) = &source.cache_destination else {
+            continue;
+        };
+        let bytes = read_bounded(&source.root, &source.path, source.inventory.byte_count)?;
+        verify_inventory(source, &bytes, "staged source")?;
+        let cache = destination
+            .parent()
+            .ok_or_else(|| PipelineError::Acquisition("cache entry has no parent".into()))?;
+        if destination.exists() {
+            let published = read_bounded(cache, destination, source.inventory.byte_count)?;
+            verify_inventory(source, &published, "published cached source")?;
+            continue;
+        }
+        let temp = tempfile::NamedTempFile::new_in(cache)?;
+        fs::write(temp.path(), &bytes)?;
+        match temp.persist_noclobber(destination) {
+            Ok(_) => {}
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.error.into()),
+        }
+        let published = read_bounded(cache, destination, source.inventory.byte_count)?;
+        verify_inventory(source, &published, "published cached source")?;
+    }
+    Ok(())
+}
+
+fn verify_inventory(
+    source: &AcquiredSource,
+    bytes: &[u8],
+    description: &str,
+) -> Result<(), PipelineError> {
+    if bytes.len() as u64 != source.inventory.byte_count || sha256(bytes) != source.inventory.sha256
+    {
+        return acquisition(format!("{description} failed size or SHA-256 verification"));
+    }
+    Ok(())
 }
 
 fn verify_source(source: &SourcePin, bytes: &[u8], description: &str) -> Result<(), PipelineError> {

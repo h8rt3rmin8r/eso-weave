@@ -21,7 +21,7 @@ mod acquire;
 mod manifest;
 
 pub use acquire::SourceFetcher;
-use acquire::{acquire_sources, AcquiredSource, HttpsFetcher};
+use acquire::{acquire_sources, publish_source_cache, AcquiredSource, HttpsFetcher};
 use manifest::{
     ArtifactRecord, CandidateManifest, IconSummary, PipelineMode, PipelineRequest, SourceRole,
     Thresholds, ValidationSummary,
@@ -113,16 +113,16 @@ pub fn build_candidate_with_fetcher(
     validate_input_output_separation(&request, &request_path, run, &workspace)?;
     validate_policy(&request, &workspace)?;
 
-    let acquired = acquire_sources(&request, run, &workspace, fetcher)?;
-    let input = acquired
-        .get(&request.input_source)
-        .ok_or_else(|| PipelineError::Validation("input source is missing".into()))?;
-
     let staging_parent = run.candidates.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(staging_parent)?;
     let staging = tempfile::Builder::new()
         .prefix(".catalog-pipeline-")
         .tempdir_in(staging_parent)?;
+    let acquired = acquire_sources(&request, run, &workspace, staging.path(), fetcher)?;
+    let input = acquired
+        .get(&request.input_source)
+        .ok_or_else(|| PipelineError::Validation("input source is missing".into()))?;
+
     let normalized = staging.path().join("normalized.json");
     let input_pin = request
         .sources
@@ -131,12 +131,12 @@ pub fn build_candidate_with_fetcher(
         .expect("validated input source");
     match input_pin.role {
         SourceRole::NormalizedBundle => {
-            let bytes = read_cache_file(&run.source_cache, &input.path, input_pin.max_bytes)?;
+            let bytes = read_acquired_file(input, input_pin.max_bytes)?;
             fs::write(&normalized, bytes)?;
         }
         SourceRole::CollectorCapture => {
             let capture = staging.path().join("capture.lua");
-            let bytes = read_cache_file(&run.source_cache, &input.path, input_pin.max_bytes)?;
+            let bytes = read_acquired_file(input, input_pin.max_bytes)?;
             fs::write(&capture, bytes)?;
             import_capture(&ImportRequest::new(
                 &capture,
@@ -259,6 +259,16 @@ pub fn build_candidate_with_fetcher(
     let candidate_sha256 = sha256(&manifest_bytes);
     fs::write(candidate_stage.join("manifest.json"), manifest_bytes)?;
 
+    let staged_channel = staging.path().join(manifest.version.channel.as_str());
+    fs::create_dir(&staged_channel)?;
+    let staged_candidate = staged_channel.join(&candidate_sha256);
+    fs::rename(&candidate_stage, &staged_candidate)?;
+    let staged_verification = verify_candidate(&staged_candidate)?;
+    if staged_verification.candidate_sha256 != candidate_sha256 {
+        return validation("staged candidate does not match its manifest identity");
+    }
+    publish_source_cache(&acquired)?;
+
     fs::create_dir_all(run.candidates.join(manifest.version.channel.as_str()))?;
     let destination = run
         .candidates
@@ -269,7 +279,7 @@ pub fn build_candidate_with_fetcher(
         if verified.candidate_sha256 != candidate_sha256 {
             return validation("existing candidate does not match the requested candidate");
         }
-    } else if let Err(error) = fs::rename(&candidate_stage, &destination) {
+    } else if let Err(error) = fs::rename(&staged_candidate, &destination) {
         if error.kind() != std::io::ErrorKind::AlreadyExists || !destination.is_dir() {
             return Err(error.into());
         }
@@ -522,6 +532,13 @@ fn validate_policy(request: &PipelineRequest, workspace: &Path) -> Result<(), Pi
         let fixture = source.uri.starts_with("project://")
             && source.local_path.is_some()
             && source.license_scope == "project-authored-synthetic";
+        let local_user_capture = request.mode == PipelineMode::UserCapture
+            && source.id == request.input_source
+            && source.role == SourceRole::CollectorCapture
+            && source.local_path.is_some()
+            && source.uri == "user-local-savedvariables"
+            && source.license_scope == "user-generated-local-only"
+            && source.redistribution == crate::catalog::model::Redistribution::UserGeneratedOnly;
         let listed = entries.iter().any(|entry| {
             entry.get("id").and_then(serde_json::Value::as_str) == Some(source.id.as_str())
                 && entry.get("channel").and_then(serde_json::Value::as_str)
@@ -547,7 +564,7 @@ fn validate_policy(request: &PipelineRequest, workspace: &Path) -> Result<(), Pi
                     .and_then(serde_json::Value::as_str)
                     .is_some_and(|uri| uri_matches_policy(uri, &source.uri))
         });
-        if !fixture && !listed {
+        if !fixture && !local_user_capture && !listed {
             return validation(format!("source {} is not admitted by policy", source.id));
         }
     }
@@ -575,16 +592,29 @@ fn validate_bundle_sources(
     bundle: &CatalogBundle,
     acquired: &BTreeMap<String, AcquiredSource>,
 ) -> Result<(), PipelineError> {
-    let hashes = acquired
-        .values()
-        .map(|source| source.inventory.sha256.as_str())
-        .collect::<BTreeSet<_>>();
-    if bundle
-        .source_snapshots
-        .iter()
-        .any(|snapshot| !hashes.contains(snapshot.raw_sha256.as_str()))
-    {
-        return validation("normalized catalog cites an unacquired source snapshot");
+    if bundle.source_snapshots.iter().any(|snapshot| {
+        !acquired.values().any(|source| {
+            let inventory = &source.inventory;
+            let common_identity = inventory.channel == snapshot.channel
+                && inventory.game_version == snapshot.game_version
+                && inventory.api_version == snapshot.api_version
+                && inventory.locale == snapshot.locale
+                && inventory.revision == snapshot.revision
+                && inventory.sha256 == snapshot.raw_sha256
+                && inventory.license_scope == snapshot.license_scope
+                && inventory.redistribution == snapshot.redistribution;
+            if inventory.role == SourceRole::CollectorCapture {
+                common_identity && inventory.uri == snapshot.uri
+            } else {
+                common_identity
+                    && inventory.id == snapshot.snapshot_id
+                    && uri_matches_policy(&snapshot.uri, &inventory.uri)
+            }
+        })
+    }) {
+        return validation(
+            "normalized catalog source snapshot does not match acquired identity or rights",
+        );
     }
     Ok(())
 }
@@ -631,7 +661,7 @@ fn enforce_thresholds(thresholds: &Thresholds, diff: &CatalogDiff) -> Result<(),
         ),
         (
             "coverage",
-            diff.coverage.removed.len(),
+            diff.coverage.removed.len() + diff.coverage_regressions.len(),
             thresholds.coverage_removed,
         ),
         (
@@ -780,9 +810,8 @@ fn read(root: &Path, path: &Path, max_bytes: u64) -> Result<Vec<u8>, PipelineErr
     read_bounded(root, path, max_bytes)
 }
 
-fn read_cache_file(root: &Path, path: &Path, max_bytes: u64) -> Result<Vec<u8>, PipelineError> {
-    let canonical = canonical_real_directory(root, "source cache")?;
-    read_bounded(&canonical, path, max_bytes)
+fn read_acquired_file(source: &AcquiredSource, max_bytes: u64) -> Result<Vec<u8>, PipelineError> {
+    read_bounded(&source.root, &source.path, max_bytes)
 }
 
 fn read_bounded(root: &Path, path: &Path, max_bytes: u64) -> Result<Vec<u8>, PipelineError> {

@@ -19,13 +19,13 @@
     "game_version": "12.0.8",
     "api_version": 101050,
     "locale": "en",
-    "revision": "s071-fixture-1",
+    "revision": "7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae",
     "sha256": "0c58f2af866e5e8d29471c360d59500f20b75885cd4a0fdff5b8d77b2662c016",
     "max_bytes": 67108864,
-    "uri": "project://specs/071/live-capture",
+    "uri": "user-local-savedvariables",
     "local_path": "specs/071-bounded-discovery-exporter/fixtures/live.lua",
-    "license_scope": "project-authored-synthetic",
-    "redistribution": "allowed"
+    "license_scope": "user-generated-local-only",
+    "redistribution": "user-generated-only"
   }],
   "network": {"enabled": false, "refresh": false, "allow_stale_cache": false},
   "baseline": null,

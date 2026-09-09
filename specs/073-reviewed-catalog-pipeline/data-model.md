@@ -24,8 +24,21 @@ bytes, URI, optional local relative path, license scope, and redistribution
 class. Exactly one byte location is active.
 
 After acquisition, the source inventory retains all non-path identity fields
-plus result (`local`, `downloaded`, `cache`, or `stale-cache`), actual byte
-count, and verified SHA-256. It does not retain a filesystem path.
+plus a stable result (`local`, `pinned-remote`, `network-refresh`, or
+`stale-cache`), actual byte count, and verified SHA-256. Cold and warm cache
+paths use the same `pinned-remote` value when the request does not refresh, so
+cache temperature cannot change candidate identity. It does not retain a
+filesystem path.
+
+Every normalized bundle source snapshot must match an acquired source's full
+channel, version, locale, revision, hash, license scope, and redistribution
+identity. Non-collector snapshots also match the source ID and canonical URI.
+Collector snapshots use the importer's fixed `user-local-savedvariables` URI
+and must retain `user-generated-local-only` / `user-generated-only` rights.
+
+New cache objects remain inside the run staging directory until the complete
+candidate has passed verification. Failed parsing, validation, diff,
+threshold, icon, or candidate checks therefore publish no source cache entry.
 
 ## Version tuple
 

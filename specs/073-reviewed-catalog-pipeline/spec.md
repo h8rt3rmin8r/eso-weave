@@ -101,10 +101,13 @@ mismatched, redirected, unapproved-host, unavailable, and stale-cache cases.
 1. **Given** a matching local source, **When** acquisition runs, **Then** the
    verified content-addressed cache entry is reused and recorded without its
    local path.
-2. **Given** opt-in HTTPS acquisition, **When** the response exceeds its limit,
+2. **Given** the same pinned remote bytes with a cold or warm cache, **When**
+   candidates are built without refresh, **Then** both runs retain the same
+   stable acquisition provenance and candidate identity.
+3. **Given** opt-in HTTPS acquisition, **When** the response exceeds its limit,
    redirects, comes from an unapproved host, or fails its hash, **Then** it is
    rejected and no cache entry or candidate is published.
-3. **Given** a network failure and an exact previously verified cache entry,
+4. **Given** a network failure and an exact previously verified cache entry,
    **When** stale-cache reuse was explicitly allowed, **Then** the candidate
    records that reuse visibly; otherwise the run fails.
 
@@ -198,7 +201,8 @@ release, or commit step exists.
   an allowlisted immutable host and revision path, bounded redirect-free reads,
   timeouts, and exact SHA-256 verification before caching.
 - **FR-008**: Source cache entries MUST be content-addressed, immutable,
-  verified on reuse, and published without replacing existing content.
+  verified on reuse, staged until all candidate checks pass, and published
+  without replacing existing content.
 - **FR-009**: Stale source reuse MUST require an explicit per-request decision
   and MUST appear in the source inventory and validation summary.
 - **FR-010**: User-capture mode MUST call the existing S071 restricted importer
@@ -212,7 +216,8 @@ release, or commit step exists.
   baseline MUST produce an explicit initial-candidate state.
 - **FR-014**: The structured diff MUST cover entities, localized text,
   relations, coverage, and icon references and MUST retain added, removed, and
-  changed stable keys.
+  changed stable keys. Coverage changes MUST identify completeness downgrades
+  as regressions that consume the configured coverage-removal threshold.
 - **FR-015**: Configured schema incompatibility, integrity failure, suspicious
   removals, coverage regression, source-rights change, or count threshold breach
   MUST block candidate publication with a stage-specific finding.

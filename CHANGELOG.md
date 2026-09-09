@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version tuples, bounded local or explicitly opted-in HTTPS acquisition,
   immutable source and icon caches, removal thresholds, canonical redacted
   reports, deterministic no-clobber candidates, and a pinned read-only
-  scheduled workflow (issue #117).
+  scheduled workflow. Candidate review additionally enforces exact source
+  rights, cache-independent provenance, coverage downgrade gates, and staged
+  source-cache publication (issue #117).
 - S072 adds a placeholder-first local icon cache with explicit virtual-path
   mappings, bounded PNG and DDS decoding, deterministic content-addressed PNG
   objects, immutable verified manifests, and no network or distributable game

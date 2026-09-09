@@ -76,3 +76,12 @@ first full-suite run; its exact rerun and the subsequent complete suite passed.
 No CRITICAL, HIGH, contract mismatch, unresolved clarification, template token,
 privacy leak, workflow authority escalation, or application update behavior
 remains. S073 is ready for pull-request review.
+
+## First-round review hardening
+
+The first automated review found four publication-boundary defects. The
+implementation now compares normalized snapshots with full acquired source
+identity and rights, uses stable provenance for cold and warm pinned-remote
+inputs, counts completeness downgrades as coverage removals, and delays source
+cache publication until the staged candidate verifies. Focused regression
+tests cover each defect, including failure without a new cache object.

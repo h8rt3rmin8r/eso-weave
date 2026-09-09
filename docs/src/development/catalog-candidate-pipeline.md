@@ -11,13 +11,20 @@ Every request fixes the mode, Live or PTS channel, game version, API version,
 catalog version and schema, locales, tool version, sources, baseline, and removal
 thresholds. Input paths are workspace-relative. Local files are opened through
 bounded no-follow handles and cached by exact SHA-256 without replacement.
+Normalized source snapshots must match the acquired channel, version, locale,
+revision, hash, license scope, and redistribution decision. Collector snapshots
+retain the fixed local-only rights assigned by the restricted importer.
 
 Remote acquisition is optional. The request and command must both enable it.
-Only HTTPS raw content from the approved repository host at an immutable 40-byte
-commit revision is admitted. Redirects are denied, reads have a timeout and byte
-limit, and content is cached only after its declared SHA-256 matches. Refresh
+Only HTTPS raw content from the approved repository host at an immutable
+40-character commit revision is admitted. Redirects are denied, reads have a
+timeout and byte limit, and content is cached only after its declared SHA-256
+matches. Refresh
 failure is fatal unless the request explicitly allows a verified stale cache;
-`sources.json` records that choice.
+`sources.json` records that choice. Cold and warm non-refresh retrieval both use
+the stable `pinned-remote` provenance value, so cache temperature cannot change
+candidate identity. New source objects remain staged until the complete
+candidate verifies.
 
 Live and PTS remain independent. The request, every applicable source, normalized
 bundle, optional baseline, compiled catalog, and manifest must agree on channel.
@@ -37,6 +44,9 @@ Reports contain stable source identities, hashes, counts, and results. They omit
 local paths, normalized source content, captures, localized catalog values, and
 icon bytes. The candidate ID is the SHA-256 of its canonical manifest. Existing
 candidates are verified and reused, never replaced.
+
+Coverage completeness downgrades are explicit regressions and consume the same
+configured threshold as removed coverage rows.
 
 `pipeline-verify` checks the exact file allowlist, canonical manifest, artifact
 sizes and hashes, directory identity, catalog integrity, channel, and semantic

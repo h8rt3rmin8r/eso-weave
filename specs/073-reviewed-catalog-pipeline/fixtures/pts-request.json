@@ -33,10 +33,10 @@
     "game_version": "12.1.4",
     "api_version": 101051,
     "locale": "en-US",
-    "revision": "s070-fixture-1",
+    "revision": "s070-fixture-pts-1",
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "max_bytes": 1,
-    "uri": "project://specs/070/minimal-pts-source",
+    "uri": "project://specs/070/minimal-pts",
     "local_path": "specs/073-reviewed-catalog-pipeline/fixtures/empty-source.bin",
     "license_scope": "project-authored-synthetic",
     "redistribution": "allowed"

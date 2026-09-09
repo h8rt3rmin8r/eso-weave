@@ -36,7 +36,7 @@
     "revision": "s070-fixture-1",
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "max_bytes": 1,
-    "uri": "project://specs/070/minimal-live-source",
+    "uri": "project://specs/070/minimal-live",
     "local_path": "specs/073-reviewed-catalog-pipeline/fixtures/empty-source.bin",
     "license_scope": "project-authored-synthetic",
     "redistribution": "allowed"

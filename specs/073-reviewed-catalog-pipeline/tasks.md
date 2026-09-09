@@ -89,7 +89,7 @@
 
 ## Phase 8: Delivery
 
-- [ ] T034 Commit S073 with the required attribution trailer, push the authorized
+- [x] T034 Commit S073 with the required attribution trailer, push the authorized
   branch, and open an official pull request closing #117.
 - [ ] T035 Wait for CI and automated reviews, respond to every finding, push
   verified corrections, and resolve all review threads.

@@ -178,7 +178,12 @@ fn remote_sources_require_both_network_gates_and_support_explicit_stale_cache() 
             .join("sources.json"),
     )
     .unwrap();
-    assert!(source_report.contains("downloaded"));
+    assert!(source_report.contains("pinned-remote"));
+
+    let warm = build_candidate_with_fetcher(&sandbox.run(&sandbox.request_path(), true), &fetcher)
+        .unwrap();
+    assert_eq!(fetcher.calls.get(), 1);
+    assert_eq!(warm.candidate_sha256, receipt.candidate_sha256);
 
     let mut request: Value =
         serde_json::from_slice(&fs::read(sandbox.request_path()).unwrap()).unwrap();
@@ -212,7 +217,7 @@ fn collector_capture_mode_builds_a_catalog_but_never_copies_the_capture() {
     let capture = fs::read(LIVE_CAPTURE).unwrap();
     fs::write(sandbox.workspace.join("capture.lua"), &capture).unwrap();
     write_policy(&sandbox.workspace);
-    let request = request_json(
+    let mut request = request_json(
         "user-capture",
         "live",
         "capture",
@@ -225,6 +230,12 @@ fn collector_capture_mode_builds_a_catalog_but_never_copies_the_capture() {
         "0.15.1",
         json!(["en"]),
     );
+    request["sources"][0]["revision"] =
+        json!("7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae");
+    request["sources"][0]["uri"] = json!("user-local-savedvariables");
+    request["sources"][0]["locale"] = json!("en");
+    request["sources"][0]["license_scope"] = json!("user-generated-local-only");
+    request["sources"][0]["redistribution"] = json!("user-generated-only");
     fs::write(
         sandbox.request_path(),
         serde_json::to_vec_pretty(&request).unwrap(),
@@ -237,6 +248,35 @@ fn collector_capture_mode_builds_a_catalog_but_never_copies_the_capture() {
     assert!(!fs::read_dir(candidate)
         .unwrap()
         .any(|entry| entry.unwrap().file_name() == "capture.lua"));
+}
+
+#[test]
+fn bundle_source_rights_must_match_the_acquired_inventory() {
+    let sandbox = offline_live_sandbox();
+    let path = sandbox.request_path();
+    let mut request: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    request["sources"][1]["redistribution"] = json!("user-generated-only");
+    fs::write(&path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+
+    let error = build_candidate(&sandbox.run(&path, false)).unwrap_err();
+    assert!(error.to_string().contains("identity or rights"));
+    assert!(!sandbox.candidates.exists());
+}
+
+#[test]
+fn rejected_bundles_do_not_publish_staged_source_cache_entries() {
+    let sandbox = offline_live_sandbox();
+    let path = sandbox.request_path();
+    let malformed = b"{\"not\":\"a catalog bundle\"}\n";
+    fs::write(sandbox.workspace.join("input.json"), malformed).unwrap();
+    let mut request: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    request["sources"][0]["sha256"] = json!(sha256(malformed));
+    fs::write(&path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+
+    assert!(build_candidate(&sandbox.run(&path, false)).is_err());
+    assert!(!sandbox.candidates.exists());
+    assert!(sandbox.sources.is_dir());
+    assert_eq!(fs::read_dir(&sandbox.sources).unwrap().count(), 0);
 }
 
 #[test]
@@ -283,6 +323,30 @@ fn cross_channel_baselines_and_removal_thresholds_block_new_candidates() {
 }
 
 #[test]
+fn coverage_completeness_regressions_consume_the_removal_threshold() {
+    let sandbox = offline_live_sandbox();
+    let baseline = sandbox.workspace.join("baseline-live.sqlite");
+    build_catalog(&BuildRequest::new(LIVE_BUNDLE, &baseline, Channel::Live)).unwrap();
+
+    let input = sandbox.workspace.join("input.json");
+    let mut bundle: Value = serde_json::from_slice(&fs::read(&input).unwrap()).unwrap();
+    bundle["coverage"][0]["completeness"] = json!("unknown");
+    bundle["coverage"][0]["limits"] = json!("coverage deliberately reduced for test");
+    let bundle = serde_json::to_vec_pretty(&bundle).unwrap();
+    fs::write(&input, &bundle).unwrap();
+
+    let path = sandbox.request_path();
+    let mut request: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    request["sources"][0]["sha256"] = json!(sha256(&bundle));
+    request["baseline"] = json!("baseline-live.sqlite");
+    fs::write(&path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+
+    let error = build_candidate(&sandbox.run(&path, false)).unwrap_err();
+    assert!(error.to_string().contains("coverage removal count 1"));
+    assert!(!sandbox.candidates.exists());
+}
+
+#[test]
 fn committed_mode_fixtures_build_and_output_root_aliases_fail_closed() {
     for request in [
         "offline-live-request.json",
@@ -299,7 +363,7 @@ fn committed_mode_fixtures_build_and_output_root_aliases_fail_closed() {
             outputs.path().join("candidates"),
             false,
         ))
-        .unwrap();
+        .unwrap_or_else(|error| panic!("{request}: {error}"));
         verify_candidate(
             outputs
                 .path()
@@ -364,7 +428,7 @@ fn offline_live_sandbox() -> Sandbox {
         "revision": "s070-fixture-1",
         "sha256": sha256(&[]),
         "max_bytes": 1,
-        "uri": "project://specs/070/minimal-live-source",
+        "uri": "project://specs/070/minimal-live",
         "local_path": "empty-source.bin",
         "license_scope": "project-authored-synthetic",
         "redistribution": "allowed"
@@ -415,7 +479,7 @@ fn remote_live_sandbox() -> Sandbox {
         "revision": "s070-fixture-1",
         "sha256": sha256(&[]),
         "max_bytes": 1,
-        "uri": "project://specs/070/minimal-live-source",
+        "uri": "project://specs/070/minimal-live",
         "local_path": "empty-source.bin",
         "license_scope": "project-authored-synthetic",
         "redistribution": "allowed"
