@@ -14,6 +14,7 @@ pub mod config;
 pub mod documentation;
 pub mod fishing;
 pub mod game;
+pub mod icon_cache;
 pub mod input;
 pub mod logging;
 pub mod pixelbus;

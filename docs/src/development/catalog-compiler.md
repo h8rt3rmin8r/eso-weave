@@ -120,3 +120,13 @@ The packaged relative path is `catalog/catalog.sqlite`:
 
 An open handle is never swapped in place. A controlled application restart or a
 future explicit reopen boundary observes a newly published version.
+
+## Local icon handoff
+
+Catalog icon rows remain virtual-path references. The optional
+[local icon cache](local-icon-cache.md) accepts selected references and the
+catalog semantic SHA-256, then records an explicit mapping to immutable local
+objects or the project placeholder. This handoff does not modify
+`catalog.sqlite`, infer associations by filename, or place user-local bytes in a
+package. Catalog compilation and typed metadata queries remain usable when no
+local icon source exists.

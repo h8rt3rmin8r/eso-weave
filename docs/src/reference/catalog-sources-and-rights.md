@@ -106,10 +106,16 @@ The current project decision is:
 - ZeniMax icon bytes, extracted icon packs, and community data without a clear
   data license do not enter source control, fixtures, binaries, documentation
   assets, caches shipped with the app, or releases.
-- A future resolver may read user-supplied files or another reviewed local
-  source. Acquired and transformed bytes remain in a user-local cache.
+- The S072 resolver reads only an explicitly supplied user-owned directory.
+  Acquired and transformed bytes remain in an immutable user-local cache whose
+  manifest binds each virtual path to one object or the placeholder.
 - Missing or unlicensed art falls back to a generic project-created placeholder
   and never blocks catalog, schema, or interface work.
+
+The resolver accepts bounded PNG and DDS input without network access, archive
+extraction, installed-client discovery, or source modification. See the
+[local icon cache](../development/local-icon-cache.md) for its limits and
+verification contract.
 
 This is a project source-selection decision, not legal advice. Revisit it if the
 project adds monetization, sponsorship, telemetry, a hosted asset service, or
@@ -149,8 +155,8 @@ explicit workflow and limits.
   may call only documented iterators and lookups, preserves unknown observed
   IDs, and cannot turn guessed ID ranges into an exhaustive claim.
 - The icon work in [#116](https://github.com/h8rt3rmin8r/eso-weave/issues/116)
-  consumes virtual paths and placeholders first. Any asset resolution remains
-  optional, reviewed, and local-only.
+  consumes virtual paths and placeholders first. Asset resolution is optional,
+  explicit, immutable, and local-only.
 
 Field experiments in #129 may narrow coverage or adjust provisional limits. They
 do not block these implementation contracts and cannot silently rewrite them.

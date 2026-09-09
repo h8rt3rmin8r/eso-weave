@@ -179,6 +179,23 @@ function validCatalogContract() {
       provisional_max_records: 500000,
       provisional_max_string_bytes: 65536,
     },
+    icon_cache_policy: {
+      source_selection: "explicit-user-directory",
+      network_access: false,
+      archive_extraction: false,
+      installed_client_discovery: false,
+      source_mutation: false,
+      manifest_required: true,
+      immutable_generations: true,
+      third_party_bytes_distributable: false,
+      fallback: "project-created-placeholder",
+      allowed_input: ["png", "dds"],
+      max_source_bytes: 8388608,
+      max_dimension: 1024,
+      max_pixels: 1048576,
+      max_references: 500000,
+      max_manifest_bytes: 67108864,
+    },
     redistribution_decisions: {
       zenimax_icon_bytes: "prohibited",
       prebuilt_extracted_icon_pack: "prohibited",
@@ -1412,6 +1429,30 @@ test("keeps authoritative icon redistribution decisions prohibited", () => {
       validateCatalogSourceContract(contract).some((error) => error.includes(`must prohibit ${decision}`)),
       `${decision} must remain prohibited`,
     );
+  }
+});
+
+test("rejects implicit, mutable, networked, or distributable icon caches", () => {
+  const contract = validCatalogContract();
+  contract.icon_cache_policy.source_selection = "installed-client-search";
+  contract.icon_cache_policy.network_access = true;
+  contract.icon_cache_policy.archive_extraction = true;
+  contract.icon_cache_policy.installed_client_discovery = true;
+  contract.icon_cache_policy.source_mutation = true;
+  contract.icon_cache_policy.manifest_required = false;
+  contract.icon_cache_policy.immutable_generations = false;
+  contract.icon_cache_policy.third_party_bytes_distributable = true;
+  contract.icon_cache_policy.fallback = "none";
+  contract.icon_cache_policy.allowed_input = ["png", "dds", "svg"];
+  contract.icon_cache_policy.max_source_bytes = 0;
+  const errors = validateCatalogSourceContract(contract);
+  for (const phrase of [
+    "explicit user directory", "network_access", "archive_extraction",
+    "installed_client_discovery", "source_mutation", "manifest_required",
+    "immutable_generations", "third_party_bytes_distributable",
+    "project-created placeholder", "only PNG and DDS", "positive integer max_source_bytes",
+  ]) {
+    assert.ok(errors.some((error) => error.includes(phrase)), phrase);
   }
 });
 

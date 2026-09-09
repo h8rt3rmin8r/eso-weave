@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S072 adds a placeholder-first local icon cache with explicit virtual-path
+  mappings, bounded PNG and DDS decoding, deterministic content-addressed PNG
+  objects, immutable verified manifests, and no network or distributable game
+  image bytes (issue #116).
 - S071 adds an explicit bounded in-game discovery addon, deterministic
   checksummed SavedVariables export, a non-executing restricted importer,
   atomic normalized staging, and an isolated marker-gated lifecycle for five
@@ -28,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Keep catalog icon references independent from user-local image
+  bytes and use an immutable manifest as their explicit association authority.
+  Resolve only selected paths beneath an explicit user-owned directory, reject
+  traversal and link-like filesystem objects through stable no-follow handles,
+  reject animated PNG, decode bounded static PNG and DDS input without encoder
+  or native ISPC features, and publish deterministic RGBA PNG objects without
+  replacement. Ship only the project placeholder; do not add
+  network acquisition, archive extraction, installed-client discovery, cache
+  activation, or third-party image bytes to S072.
 - 2026-09-09: Amend the constitution to 2.1.0 so the approved user-initiated,
   read-only, local SavedVariables collector is a narrowly defined second addon
   surface, separate from PixelBeacon and all input automation. Preserve the

@@ -1101,6 +1101,30 @@ export function validateCatalogSourceContract(contract) {
       errors.push(`catalog collector requires positive integer ${key}`);
     }
   }
+  const iconCache = contract.icon_cache_policy ?? {};
+  if (iconCache.source_selection !== "explicit-user-directory") {
+    errors.push("catalog icon cache requires an explicit user directory");
+  }
+  for (const key of ["network_access", "archive_extraction", "installed_client_discovery", "source_mutation", "third_party_bytes_distributable"]) {
+    if (iconCache[key] !== false) errors.push(`catalog icon cache must disable ${key}`);
+  }
+  for (const key of ["manifest_required", "immutable_generations"]) {
+    if (iconCache[key] !== true) errors.push(`catalog icon cache requires ${key}`);
+  }
+  if (iconCache.fallback !== "project-created-placeholder") {
+    errors.push("catalog icon cache requires the project-created placeholder");
+  }
+  if (!Array.isArray(iconCache.allowed_input) ||
+      iconCache.allowed_input.length !== 2 ||
+      !iconCache.allowed_input.includes("png") ||
+      !iconCache.allowed_input.includes("dds")) {
+    errors.push("catalog icon cache allows only PNG and DDS input");
+  }
+  for (const key of ["max_source_bytes", "max_dimension", "max_pixels", "max_references", "max_manifest_bytes"]) {
+    if (!Number.isInteger(iconCache[key]) || iconCache[key] <= 0) {
+      errors.push(`catalog icon cache requires positive integer ${key}`);
+    }
+  }
   return [...new Set(errors)];
 }
 
