@@ -117,10 +117,11 @@ bundled third-party art, or if written permission supplies a compatible grant.
 
 ## SavedVariables collector boundary
 
-Later collector work accepts only a restricted, versioned data envelope. It
-never executes SavedVariables as Lua. The envelope records game and API version,
-channel, locale, platform, megaserver when material, pseudonymous character
-scope, acquisition time, content hash, and bounded declarative records.
+The optional bounded collector accepts only a restricted, versioned data
+envelope. It never executes SavedVariables as Lua. The envelope records game and
+API version, channel, locale, platform, megaserver when material, pseudonymous
+character scope, acquisition time, content hash, and bounded declarative
+records.
 
 Imports must check a byte limit before parsing, enforce record and string limits,
 reject functions and computed expressions, validate the full content hash, and
@@ -132,6 +133,12 @@ The initial defensive limits are 64 MiB per snapshot, 500,000 records, and 64
 KiB per string. They are provisional until issue
 [#129](https://github.com/h8rt3rmin8r/eso-weave/issues/129) records real size,
 serialization, stall, corruption, and logout or `/reloadui` flush evidence.
+
+S071 implements this boundary through the separate `EsoWeaveCollector` addon,
+its marker-gated lifecycle commands, and an importer that stages normalized JSON
+without directly publishing SQLite. See the
+[bounded discovery collector](../development/discovery-collector.md) for the
+explicit workflow and limits.
 
 ## Implementation handoff
 

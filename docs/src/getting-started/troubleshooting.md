@@ -81,6 +81,21 @@ exact target manually; do not disable the ownership guard.
 Missing, invalid, stale, or corrupt telemetry becomes unavailable and does not
 authorize automated input.
 
+## Discovery collector capture or import fails
+
+The discovery collector is separate from PixelBeacon. Start with
+`collector-status` against the exact Live or PTS `AddOns` directory. An
+`unmanaged` result is intentionally not repaired or removed automatically. A
+successful install or removal can report `reload_required`; run `/reloadui` or
+relog before relying on ESO's addon state.
+
+In ESO, `/ewcollect status` reports the current capture state. Combat pauses a
+run and requires `/ewcollect resume`. After completion, run `/reloadui`, log
+out, or exit so ESO writes SavedVariables. Import the matching Live or PTS file;
+channel, checksum, chunk, status, size, or schema errors are fail-closed and do
+not overwrite the previous staged JSON. Do not edit the capture to bypass an
+error. Preserve it for diagnosis and begin a fresh explicit run.
+
 ## A skill passes through or a weave is dropped
 
 Check the Skills row first. It must be enabled, bound to the physical key, and

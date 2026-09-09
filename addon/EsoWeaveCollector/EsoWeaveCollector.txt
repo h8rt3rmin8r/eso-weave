@@ -1,0 +1,10 @@
+## Title: ESO Weave Collector
+## Description: User-initiated bounded public API catalog capture for local import.
+## Author: ESO Weave contributors
+## AddOnVersion: 1
+## Version: 1
+## APIVersion: 101051 101050
+## SavedVariables: EsoWeaveCollectorSaved
+## X-ESO-Weave-Collector-Managed: true
+
+EsoWeaveCollector.lua

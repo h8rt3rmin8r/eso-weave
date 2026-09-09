@@ -1,0 +1,50 @@
+EsoWeaveCollectorSaved = {
+  ["schema_version"] = 1,
+  ["collector_version"] = 1,
+  ["collector_checksum"] = "7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae",
+  ["status"] = "complete",
+  ["channel"] = "pts",
+  ["game_version"] = "12.1.4",
+  ["api_version"] = 101051,
+  ["locale"] = "en",
+  ["platform"] = "pc",
+  ["megaserver"] = "fixture-pts",
+  ["scope_key"] = "anonymous-fixture-two",
+  ["started_at"] = "2026-09-09T12:01:00Z",
+  ["finished_at"] = "2026-09-09T12:01:01Z",
+  ["selected_categories"] = {
+    [1] = "player-skills",
+    [2] = "companions-races-classes",
+  },
+  ["coverage"] = {
+    [1] = {
+      ["category"] = "player-skills",
+      ["completeness"] = "bounded",
+      ["scope"] = "fixture class two, character, unlock, locale, and PTS channel",
+      ["record_count"] = 2,
+      ["limitations"] = "Does not claim visibility for other classes, characters, accounts, locales, or channels.",
+    },
+    [2] = {
+      ["category"] = "companions-races-classes",
+      ["completeness"] = "bounded",
+      ["scope"] = "fixture class two and PTS channel",
+      ["record_count"] = 1,
+      ["limitations"] = "Does not claim every account unlock or character identity.",
+    },
+  },
+  ["warnings"] = {},
+  ["cancellation_reason"] = nil,
+  ["checkpoint"] = {
+    ["adapter"] = 5,
+    ["cursor"] = 0,
+  },
+  ["chunks"] = {
+    [1] = {
+      ["sequence"] = 1,
+      ["record_count"] = 3,
+      ["byte_count"] = 612,
+      ["checksum"] = "0e4ed6e1",
+      ["payload"] = "{\"category\":\"player-skills\",\"kind\":\"skill-line\",\"stable_id\":10,\"source_key\":\"player-skills/skill-line/10\",\"attributes\":{\"skill_type_source_index\":1,\"version_scoped_order\":1}}\n{\"category\":\"player-skills\",\"kind\":\"ability\",\"stable_id\":100,\"source_key\":\"player-skills/ability/100\",\"parent\":{\"kind\":\"skill-line\",\"relation\":\"skill-line-has-ability\",\"stable_id\":10},\"attributes\":{\"version_scoped_order\":1},\"name\":\"Fixture Ability PTS\"}\n{\"category\":\"companions-races-classes\",\"kind\":\"class\",\"stable_id\":2,\"source_key\":\"companions-races-classes/class/2\",\"attributes\":{\"version_scoped_order\":2},\"name\":\"Fixture Class Two\"}",
+    },
+  },
+}
