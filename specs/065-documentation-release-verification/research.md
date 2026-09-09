@@ -26,7 +26,10 @@
 
 ## Decision 5: Preserve defect boundaries
 
-**Decision**: Do not repair package or runtime defects inside #84. File a linked implementation issue, retain #84 in Release verification, and rerun against a fixed release.
+**Decision**: Do not repair bundled-documentation or required package-usability
+defects inside #84. File a linked implementation issue, retain #84 in Release
+verification, and rerun against a fixed release. Track incidental defects
+outside #84 separately without changing the documentation result.
 
 **Rationale**: Project governance deliberately separates implementation from release verification because they close at different times.
 

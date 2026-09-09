@@ -33,7 +33,7 @@
 
 - [x] T018 [US4] Write `docs/project/release-verification/v0.15.0-documentation.md` with exact evidence and limitations.
 - [x] T019 [US4] Map every #84 completion criterion and epic #83 gate to its evidence and operator acceptance decision.
-- [x] T020 [US4] File separate Debian metadata defect #105 without mislabeling it as a documentation failure.
+- [x] T020 [US4] File separate out-of-scope Debian metadata defect #105 without mislabeling it as a documentation failure or #84 package-usability failure.
 - [x] T021 Archive plan 034 with v0.15.0 evidence, establish plan 035, and update indexes and the migration ledger.
 - [x] T022 Add the S065 verification record to Unreleased without claiming a behavior change.
 

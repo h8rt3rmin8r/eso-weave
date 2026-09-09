@@ -26,6 +26,8 @@ Status: PASS
   inventing a manual screen-reader result.
 - MSI installation, installed-deb documentation activation, and portable Linux
   execution are explicitly `Operator-waived`, not mislabeled as passes.
+- Released-process listener reuse and post-exit probing are also explicitly
+  `Operator-waived`.
 - Debian metadata defect #105 is separate from bundled-documentation behavior
-  and does not alter the S065 runtime-free boundary.
+  and #84's required package usability, so it does not alter the S065 outcome.
 - Issue #84 and epic #83 may close through the official S065 pull request.

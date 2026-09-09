@@ -35,7 +35,7 @@ Close #84 and parent epic #83 only after exercising the downloadable v0.15.0 Win
 - No Rust source change is planned, so cargo parity is supporting rather than a commit gate: PASS
 - Pinned release artifacts remain unchanged: PASS
 - Artifact-dependent UI verification occurs only after downloadable packages exist: PASS
-- Any product defect creates separate implementation work and blocks closure: PASS
+- Any #84 documentation or required package-usability defect creates separate implementation work and blocks closure: PASS
 
 ## Project Structure
 

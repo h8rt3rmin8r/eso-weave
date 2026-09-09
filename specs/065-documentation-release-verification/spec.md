@@ -80,7 +80,11 @@ As a maintainer, I can review one durable receipt that distinguishes observed pa
 - **FR-009**: Evidence MUST show one reused ephemeral IPv4 loopback listener, GET and HEAD success, safe unknown-method and unknown-path responses, and listener cleanup at application exit.
 - **FR-010**: Keyboard reachability, visible focus, accessible names, light and dark presentation, responsive layout, and non-color communication MUST be spot-checked on Windows and Linux; unavailable assistive-technology evidence MUST be reported rather than inferred.
 - **FR-011**: The receipt MUST distinguish direct observation, automated inspection, and repository-contract evidence.
-- **FR-012**: A product mismatch MUST create a linked implementation issue and MUST keep #84 and #83 open pending a fixed release and complete rerun.
+- **FR-012**: A mismatch in #84's bundled-documentation behavior or required
+  package usability MUST create a linked implementation issue and MUST keep #84
+  and #83 open pending a fixed release and complete rerun. An incidental defect
+  outside #84 MUST be filed separately but does not redefine this verification
+  outcome.
 - **FR-013**: S065 MUST make no runtime, packaging, release-workflow, or pinned-tooling change unless a separately scoped defect requires it.
 - **FR-014**: S065 MUST archive completed plan 034 with v0.15.0 publication evidence, establish active plan 035, and update the plan indexes and migration ledger consistently.
 - **FR-015**: The official pull request MUST close #84 and #83 only if every

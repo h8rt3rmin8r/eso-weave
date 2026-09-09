@@ -8,7 +8,7 @@
 - [x] Linux AppImage and tarball inspection is complete and unperformed portable execution is labeled `Operator-waived`.
 - [x] Search, navigation, themes, responsive layout, assets, code, links, and 404 are covered by direct acceptance and release contracts.
 - [x] Accessibility names, keyboard, pointer, visible focus, and non-color communication are covered without claiming a manual screen-reader session.
-- [x] Loopback binding, methods, failures, reuse, origins, and cleanup are covered by direct inspection and release contracts.
+- [x] Loopback binding is directly inspected; methods and failures have release-contract support; unobserved released-process reuse and cleanup are labeled `Operator-waived`.
 - [x] Sidecar absence and offline runtime behavior are covered.
 - [x] Every #84 and #83 gate maps to explicit evidence or an explicit `Operator-waived` variance.
 - [x] No failure or blocker is mislabeled as an unqualified observation.
