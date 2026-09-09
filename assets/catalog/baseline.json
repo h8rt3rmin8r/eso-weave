@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "release": {
+    "catalog_version": "baseline-101050-s070",
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "created_at": "2026-09-09T00:00:00Z",
+    "locales": ["en-US"],
+    "tool_version": "s070-v1"
+  },
+  "source_snapshots": [
+    {
+      "snapshot_id": "project-baseline-s070",
+      "family": "project-fixture",
+      "channel": "live",
+      "game_version": "12.0.8",
+      "api_version": 101050,
+      "locale": "en-US",
+      "revision": "s070",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "uri": "project://assets/catalog/baseline.json",
+      "acquired_at": "2026-09-09T00:00:00Z",
+      "license_scope": "project-authored-synthetic",
+      "acquisition_method": "repository-baseline",
+      "redistribution": "allowed"
+    }
+  ],
+  "source_records": [],
+  "coverage": [],
+  "entities": [],
+  "attributes": [],
+  "relations": [],
+  "aliases": [],
+  "localized_text": [],
+  "icon_references": [],
+  "icon_assets": []
+}

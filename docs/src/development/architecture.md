@@ -19,6 +19,7 @@ test seams. Platform modules contain operating-system calls.
 | Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | UI presentation |
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
 | Documentation Service | Immutable embedded-site lookup, bounded loopback GET and HEAD responses, browser handoff, and worker lifetime | Filesystem serving, application state, remote content, and mutation |
+| Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
 
 ## Thread model
 
@@ -77,6 +78,16 @@ global captured level used by both the ring and optional file sink.
 Documentation follows a separate read-only path:
 
 `Help action -> one application-owned 127.0.0.1 listener -> exact embedded asset lookup -> default browser`
+
+Catalog data follows another read-only application path:
+
+`reviewed normalized JSON -> explicit catalog-compiler command -> verified catalog.sqlite -> package path -> typed read-only application queries`
+
+The compiler is a second binary in the existing Cargo package, not a `build.rs`
+side effect or workspace. It builds a sibling candidate in one transaction,
+validates and syncs it, preserves rollback evidence, then publishes atomically.
+The application holds the opened version until a controlled reopen and degrades
+to an empty typed catalog with a visible diagnostic on any verification failure.
 
 Release-profile `build.rs` runs the pinned mdBook and link-check renderer, then
 emits a sorted Rust manifest into Cargo's output directory. The executable

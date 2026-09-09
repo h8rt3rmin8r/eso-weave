@@ -31,10 +31,10 @@ manifest, so changing a count cannot hide an omission or substitution.
 - The post-baseline lifecycle preserves every completed plan with concrete
   delivery evidence. Plan 037 is archived after S067 merged and shipped. Plan
   038 is active for the ordered game-data foundation. S068 merged in PR #130,
-  and S069 is in progress under issue #113. Independent release verification does not reactivate a
-  completed plan or block the active plan. The policy requires the matching plan
-  file and index row for every state and rejects simultaneous current and archive
-  copies.
+  and S069 merged in PR #137 and closed issue #113. S070 is in progress under
+  issue #114. Independent release verification does not reactivate a completed
+  plan or block the active plan. The policy requires the matching plan file and
+  index row for every state and rejects simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six
   safety invariants have named canonical destinations.
 

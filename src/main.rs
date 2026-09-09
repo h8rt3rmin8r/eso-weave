@@ -64,6 +64,27 @@ fn main() {
         settings.schema_version
     );
 
+    // The catalog is immutable package data. Probe it once, read-only, and keep
+    // the resulting version-bound handle for this process. Any failure degrades
+    // to an empty typed service and remains visible in both the status region and
+    // the warning log without blocking unrelated features.
+    let executable = std::env::current_exe().unwrap_or_default();
+    let debug_root =
+        cfg!(debug_assertions).then_some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")));
+    let catalog_path = eso_weave::catalog::locate_catalog(&executable, debug_root);
+    let catalog = eso_weave::catalog::CatalogAccess::open_or_empty(&catalog_path);
+    if let Some(diagnostic) = catalog.diagnostic() {
+        tracing::warn!(target: "eso_weave::catalog", "{}", diagnostic.message);
+    } else if let Ok(Some(release)) = catalog.release() {
+        tracing::info!(
+            target: "eso_weave::catalog",
+            catalog_version = %release.catalog_version,
+            channel = %release.channel,
+            api_version = release.api_version,
+            "catalog opened read-only"
+        );
+    }
+
     // Input engine and its shared backend.
     let (bindings, binding_notices) = BindingTable::from_settings_map(&settings.bindings);
     for notice in &binding_notices {
@@ -467,6 +488,7 @@ fn main() {
         config_dir,
         clock_origin,
     );
+    model.set_catalog(catalog);
     if let Some((state, notices)) = session {
         for notice in &notices {
             tracing::warn!(target: "eso_weave::config", "{}", notice.message);

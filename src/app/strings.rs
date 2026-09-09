@@ -15,6 +15,7 @@ pub const STATUS_TITLE: &str = "ESO Weave";
 pub const FISHING_TITLE: &str = "Fishing";
 pub const BEACON_TITLE: &str = "PixelBeacon Status";
 pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon Signal";
+pub const CATALOG_TITLE: &str = "Catalog";
 pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game Installation";
 pub const GAME_RUNTIME_TITLE: &str = "Game State";
@@ -34,6 +35,8 @@ pub const BEACON_UNMANAGED_TOOLTIP: &str =
     "ESO Weave did not modify this unmanaged PixelBeacon target. Move or remove it manually before using Install.";
 pub const BEACON_SIGNAL_TOOLTIP: &str =
     "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
+pub const CATALOG_TOOLTIP: &str =
+    "The immutable local game-data catalog version. An unavailable catalog leaves unrelated ESO Weave features working.";
 pub const GAME_INSTALLATION_TOOLTIP: &str =
     "Whether ESO is installed and which distribution platform supplied the authoritative evidence.";
 pub const GAME_RUNTIME_TOOLTIP: &str =

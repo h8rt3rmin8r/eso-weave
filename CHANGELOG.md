@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S070 adds a deterministic provenance-backed SQLite catalog compiler, stable
+  semantic and artifact checksums, integrity and diff reports, atomic rollback,
+  typed read-only application access, visible graceful degradation, and one
+  rights-compatible baseline across supported packages (issue #114).
 - S069 adds a validated user-owned encounter model, deterministic synthetic
   metric projection, explicit order and loss semantics, privacy-minimized raw
   retention, unknown-ID reconciliation, and a Combat Metrics parity roadmap
@@ -20,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Keep the catalog compiler as an explicit second binary in the
+  existing Cargo package and use bundled SQLite for consistent Windows and Linux
+  behavior. Model approved game concepts through constrained entities,
+  attributes, relations, and aliases rather than speculative empty tables; add
+  specialized tables only through forward migrations backed by source shapes.
+  Treat the canonical semantic SHA-256 as cross-platform content authority and
+  the SQLite file SHA-256 as exact artifact evidence. Package the minimal
+  rights-compatible baseline in MSI, Debian, AppImage, and tarball layouts, with
+  no third-party image bytes or user-collected prose.
 - 2026-09-09: Keep raw encounter observations outside `catalog.sqlite`, order
   them by session sequence and monotonic duration, expose declared capture loss,
   and rebuild versioned metrics without rewriting raw data. Preserve unknown IDs

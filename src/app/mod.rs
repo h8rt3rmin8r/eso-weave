@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
+use crate::catalog::{CatalogAccess, CatalogDiagnosticKind};
 use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
@@ -253,6 +254,21 @@ pub fn status_line_beacon(condition: BeaconCondition) -> StatusLine {
         } else {
             strings::BEACON_TOOLTIP
         },
+    }
+}
+
+/// Derives the immutable catalog status without exposing SQL to the interface.
+pub fn status_line_catalog(catalog: &CatalogAccess) -> StatusLine {
+    let (state_text, available) = catalog.status();
+    StatusLine {
+        title: strings::CATALOG_TITLE,
+        state_text,
+        role: if available {
+            StatusRole::Healthy
+        } else {
+            StatusRole::Warning
+        },
+        tooltip: strings::CATALOG_TOOLTIP,
     }
 }
 
@@ -1441,6 +1457,8 @@ pub struct AppView {
     pub fishing_line: StatusLine,
     /// The normalized Pixel Beacon line.
     pub beacon_line: StatusLine,
+    /// The immutable catalog version or graceful-degradation diagnostic.
+    pub catalog_line: StatusLine,
     /// Live PixelBeacon freshness, independent from addon installation.
     pub beacon_signal_line: StatusLine,
     /// Distribution-platform installation evidence.
@@ -1626,6 +1644,7 @@ pub struct AppModel {
     log_filter: LevelName,
     scheduler: SaveScheduler,
     api_version: ApiVersionCache,
+    catalog: CatalogAccess,
     window: Option<WindowGeometry>,
 }
 
@@ -1697,6 +1716,10 @@ impl AppModel {
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
             api_version: ApiVersionCache::default(),
+            catalog: CatalogAccess::empty(
+                CatalogDiagnosticKind::Unavailable,
+                "Catalog has not been checked",
+            ),
             window: None,
         }
     }
@@ -1854,6 +1877,7 @@ impl AppModel {
             status_line: status_line_app(suspended),
             fishing_line: status_line_fishing(fishing_state, fishing_reason),
             beacon_line: status_line_beacon(condition),
+            catalog_line: status_line_catalog(&self.catalog),
             beacon_signal_line: beacon_signal_line(game.runtime, game.freshness),
             installation_line: installation_line(&game.installation),
             runtime_line: runtime_line(game.runtime),
@@ -1879,6 +1903,16 @@ impl AppModel {
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         }
+    }
+
+    /// Installs the version-bound read-only catalog service selected at startup.
+    pub fn set_catalog(&mut self, catalog: CatalogAccess) {
+        self.catalog = catalog;
+    }
+
+    /// Returns the typed catalog seam for future consumers.
+    pub fn catalog(&self) -> &CatalogAccess {
+        &self.catalog
     }
 
     /// Derives the beacon condition from discovery plus the on-disk status.

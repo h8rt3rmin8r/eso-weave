@@ -13,8 +13,9 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [038](plan-038.md) | Active | S069 external encounter model and Combat Metrics parity roadmap, issue #113 |
+| [038](plan-038.md) | Active | S070 deterministic SQLite catalog compiler, issue #114 |
 
-S068 merged in PR #130 and closed issue #112. S069 is now in progress. Installed
-v0.15.1 verification in issue #110 and catalog field verification in issue #129
-remain independent; neither blocks Plan 038.
+S068 merged in PR #130 and closed issue #112. S069 then merged in PR #137 and
+closed issue #113. S070 is now in progress under issue #114. Installed v0.15.1 verification in
+issue #110, catalog field verification in issue #129, and live Combat Metrics
+verification in issue #131 remain independent; none blocks Plan 038.

@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/h8rt3rmin8r/eso-weave/specs/070/catalog-bundle.schema.json",
+  "title": "ESO Weave normalized catalog bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release",
+    "source_snapshots",
+    "source_records",
+    "coverage",
+    "entities",
+    "attributes",
+    "relations",
+    "aliases",
+    "localized_text",
+    "icon_references",
+    "icon_assets"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "release": { "$ref": "#/$defs/release" },
+    "source_snapshots": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sourceSnapshot" } },
+    "source_records": { "type": "array", "items": { "$ref": "#/$defs/sourceRecord" } },
+    "coverage": { "type": "array", "items": { "$ref": "#/$defs/coverage" } },
+    "entities": { "type": "array", "items": { "$ref": "#/$defs/entity" } },
+    "attributes": { "type": "array", "items": { "$ref": "#/$defs/attribute" } },
+    "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
+    "aliases": { "type": "array", "items": { "$ref": "#/$defs/alias" } },
+    "localized_text": { "type": "array", "items": { "$ref": "#/$defs/localizedText" } },
+    "icon_references": { "type": "array", "items": { "$ref": "#/$defs/iconReference" } },
+    "icon_assets": { "type": "array", "items": { "$ref": "#/$defs/iconAsset" } }
+  },
+  "$defs": {
+    "channel": { "enum": ["live", "pts"] },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "entityKind": {
+      "enum": [
+        "skill-type", "skill-line", "ability", "ability-progression",
+        "ability-rank", "ability-morph", "crafted-ability", "script",
+        "effect", "item", "item-variant", "equipment-type", "armor-type",
+        "weapon-type", "quality", "trait", "enchantment", "item-set",
+        "item-set-piece", "item-set-bonus", "combat-stat", "champion-skill",
+        "mundus", "food-drink", "potion", "poison", "class", "race",
+        "companion", "collection-category", "constant"
+      ]
+    },
+    "entityRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "stable_id"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/entityKind" },
+        "stable_id": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_version", "channel", "game_version", "api_version", "created_at", "locales", "tool_version"],
+      "properties": {
+        "catalog_version": { "type": "string", "minLength": 1 },
+        "channel": { "$ref": "#/$defs/channel" },
+        "game_version": { "type": "string", "minLength": 1 },
+        "api_version": { "type": "integer", "minimum": 1 },
+        "created_at": { "type": "string", "minLength": 1 },
+        "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 2 } },
+        "tool_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_id", "family", "channel", "game_version", "api_version", "locale", "revision", "raw_sha256", "uri", "acquired_at", "license_scope", "acquisition_method", "redistribution"],
+      "properties": {
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "family": { "type": "string", "minLength": 1 },
+        "channel": { "enum": ["live", "pts", "not-applicable"] },
+        "game_version": { "type": "string", "minLength": 1 },
+        "api_version": { "type": "integer", "minimum": 0 },
+        "locale": { "type": "string", "minLength": 1 },
+        "revision": { "type": "string", "minLength": 1 },
+        "raw_sha256": { "$ref": "#/$defs/sha256" },
+        "uri": { "type": "string", "minLength": 1 },
+        "acquired_at": { "type": "string", "minLength": 1 },
+        "license_scope": { "type": "string", "minLength": 1 },
+        "acquisition_method": { "type": "string", "minLength": 1 },
+        "redistribution": { "enum": ["allowed", "attribution-required", "user-generated-only", "prohibited", "unresolved"] }
+      }
+    },
+    "sourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "snapshot_id", "category", "source_key", "content_sha256", "acquisition_method", "import_result"],
+      "properties": {
+        "record_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "source_key": { "type": "string", "minLength": 1 },
+        "content_sha256": { "$ref": "#/$defs/sha256" },
+        "acquisition_method": { "type": "string", "minLength": 1 },
+        "import_result": { "enum": ["accepted", "observed-only"] }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "snapshot_id", "locale", "scope", "completeness", "limits"],
+      "properties": {
+        "category": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "locale": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 },
+        "completeness": { "enum": ["exhaustive", "bounded", "opportunistic", "unknown"] },
+        "limits": { "type": "string" }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "observed_only", "source_records"],
+      "properties": {
+        "entity": { "$ref": "#/$defs/entityRef" },
+        "observed_only": { "type": "boolean" },
+        "source_records": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "name", "value", "source_record"],
+      "properties": {
+        "entity": { "$ref": "#/$defs/entityRef" },
+        "name": { "type": "string", "minLength": 1 },
+        "value": {},
+        "source_record": { "type": "string", "minLength": 1 }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "source_record"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "from": { "$ref": "#/$defs/entityRef" },
+        "to": { "$ref": "#/$defs/entityRef" },
+        "source_record": { "type": "string", "minLength": 1 }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "source_record"],
+      "properties": {
+        "kind": { "enum": ["renamed", "morph", "perfected", "retired", "superseded"] },
+        "from": { "$ref": "#/$defs/entityRef" },
+        "to": { "$ref": "#/$defs/entityRef" },
+        "source_record": { "type": "string", "minLength": 1 }
+      }
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "locale", "text_kind", "value", "source_version", "redistribution", "source_record"],
+      "properties": {
+        "entity": { "$ref": "#/$defs/entityRef" },
+        "locale": { "type": "string", "minLength": 2 },
+        "text_kind": { "type": "string", "minLength": 1 },
+        "value": { "type": "string" },
+        "normalized_search": { "type": ["string", "null"] },
+        "source_version": { "type": "string", "minLength": 1 },
+        "redistribution": { "enum": ["allowed", "attribution-required", "user-generated-only"] },
+        "source_record": { "type": "string", "minLength": 1 }
+      }
+    },
+    "iconReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "virtual_path", "availability", "source_record"],
+      "properties": {
+        "entity": { "$ref": "#/$defs/entityRef" },
+        "virtual_path": { "type": "string", "minLength": 1 },
+        "availability": { "enum": ["reference-only", "local", "missing", "placeholder"] },
+        "source_record": { "type": "string", "minLength": 1 }
+      }
+    },
+    "iconAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_sha256", "transformation_id", "media_type", "width", "height", "origin", "attribution", "availability", "redistribution"],
+      "properties": {
+        "content_sha256": { "$ref": "#/$defs/sha256" },
+        "transformation_id": { "type": "string", "minLength": 1 },
+        "media_type": { "type": "string", "minLength": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "origin": { "type": "string", "minLength": 1 },
+        "attribution": { "type": "string" },
+        "availability": { "enum": ["local", "missing", "placeholder"] },
+        "redistribution": { "enum": ["allowed", "attribution-required", "user-generated-only", "prohibited", "unresolved"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "release": {
+    "catalog_version": "s070-live-2",
+    "channel": "live",
+    "game_version": "12.0.8",
+    "api_version": 101050,
+    "created_at": "2026-09-09T01:00:00Z",
+    "locales": ["en-US", "fr"],
+    "tool_version": "s070-v1"
+  },
+  "source_snapshots": [
+    {
+      "snapshot_id": "synthetic-live-2",
+      "family": "project-fixture",
+      "channel": "live",
+      "game_version": "12.0.8",
+      "api_version": 101050,
+      "locale": "multiple",
+      "revision": "s070-fixture-2",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "uri": "project://specs/070/minimal-live-changed",
+      "acquired_at": "2026-09-09T01:00:00Z",
+      "license_scope": "project-authored-synthetic",
+      "acquisition_method": "project-fixture",
+      "redistribution": "allowed"
+    }
+  ],
+  "source_records": [
+    {
+      "record_id": "live2-skill-line-10",
+      "snapshot_id": "synthetic-live-2",
+      "category": "player-skills",
+      "source_key": "skill-line:10",
+      "content_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "acquisition_method": "project-fixture",
+      "import_result": "accepted"
+    },
+    {
+      "record_id": "live2-ability-100",
+      "snapshot_id": "synthetic-live-2",
+      "category": "player-skills",
+      "source_key": "ability:100",
+      "content_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "acquisition_method": "project-fixture",
+      "import_result": "accepted"
+    },
+    {
+      "record_id": "live2-ability-101",
+      "snapshot_id": "synthetic-live-2",
+      "category": "player-skills",
+      "source_key": "ability:101",
+      "content_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "acquisition_method": "project-fixture",
+      "import_result": "accepted"
+    }
+  ],
+  "coverage": [
+    {
+      "category": "player-skills",
+      "snapshot_id": "synthetic-live-2",
+      "locale": "multiple",
+      "scope": "synthetic-fixture",
+      "completeness": "bounded",
+      "limits": "three project-authored fixture records only"
+    }
+  ],
+  "entities": [
+    {
+      "entity": { "kind": "skill-line", "stable_id": 10 },
+      "observed_only": false,
+      "source_records": ["live2-skill-line-10"]
+    },
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "observed_only": false,
+      "source_records": ["live2-ability-100"]
+    },
+    {
+      "entity": { "kind": "ability", "stable_id": 101 },
+      "observed_only": false,
+      "source_records": ["live2-ability-101"]
+    }
+  ],
+  "attributes": [
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "name": "cost",
+      "value": 43,
+      "source_record": "live2-ability-100"
+    },
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "name": "version-scoped-order",
+      "value": 9,
+      "source_record": "live2-ability-100"
+    }
+  ],
+  "relations": [
+    {
+      "kind": "skill-line-membership",
+      "from": { "kind": "ability", "stable_id": 100 },
+      "to": { "kind": "skill-line", "stable_id": 10 },
+      "source_record": "live2-ability-100"
+    },
+    {
+      "kind": "skill-line-membership",
+      "from": { "kind": "ability", "stable_id": 101 },
+      "to": { "kind": "skill-line", "stable_id": 10 },
+      "source_record": "live2-ability-101"
+    }
+  ],
+  "aliases": [
+    {
+      "kind": "superseded",
+      "from": { "kind": "ability", "stable_id": 100 },
+      "to": { "kind": "ability", "stable_id": 101 },
+      "source_record": "live2-ability-101"
+    }
+  ],
+  "localized_text": [
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "locale": "en-US",
+      "text_kind": "name",
+      "value": "Training Pulse Revised",
+      "normalized_search": "training pulse revised",
+      "source_version": "s070-fixture-2",
+      "redistribution": "allowed",
+      "source_record": "live2-ability-100"
+    },
+    {
+      "entity": { "kind": "ability", "stable_id": 100 },
+      "locale": "fr",
+      "text_kind": "name",
+      "value": "Impulsion d'entraînement",
+      "normalized_search": "impulsion d'entrainement",
+      "source_version": "s070-fixture-2",
+      "redistribution": "allowed",
+      "source_record": "live2-ability-100"
+    }
+  ],
+  "icon_references": [],
+  "icon_assets": []
+}
