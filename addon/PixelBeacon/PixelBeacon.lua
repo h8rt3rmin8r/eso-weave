@@ -125,6 +125,7 @@ local lifeSawReincarnated = false
 local lifeSawDeactivated = false
 local lifeSawActivated = false
 local ghostClearBaselines = 0
+local restoreRecoveredLifecycle
 
 -- The world lifecycle. Unknown is published from addon construction until the
 -- first complete player-activation baseline. Deactivation enters Transitioning,
@@ -710,6 +711,7 @@ local function completeLifeRecovery()
     if lifeBaselineGeneration < recoveryReadyGeneration then
         return false
     end
+    restoreRecoveredLifecycle()
     local changed = setLifeState(LIFE_ALIVE_RED)
     resetDeathEpisode()
     return changed
@@ -1697,6 +1699,21 @@ local function onFastTick()
         renderUltimate()
     end
     onFishingTick()
+end
+
+-- Recovery reaches this boundary only after current queries and world state are
+-- coherent. Publish fresh Inactive lifecycle observations before Alive so the
+-- companion receives one actionable baseline rather than permanent Unknowns.
+restoreRecoveredLifecycle = function()
+    rollDodgeLifecycleValid = true
+    rollDodgeDeadline = nil
+    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    travelLifecycleValid = true
+    lastRecallRemaining = GetRecallCooldown()
+    travelSource = nil
+    travelStartedAt = nil
+    travelDeadline = nil
+    setTravelState(TRAVEL_INACTIVE_RED)
 end
 
 -- Recompute and render every player-derived payload before the world block can

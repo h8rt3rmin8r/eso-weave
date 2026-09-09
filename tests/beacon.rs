@@ -1085,6 +1085,48 @@ fn alive_event_cannot_publish_alive_without_a_later_coherent_baseline() {
 }
 
 #[test]
+fn coherent_life_recovery_restores_roll_and_travel_before_alive() {
+    let lua = beacon::LUA;
+    let completion = lua
+        .split("local function completeLifeRecovery()")
+        .nth(1)
+        .and_then(|suffix| suffix.split("local function observeLifeState").next())
+        .expect("bounded completion function");
+    let restore = completion
+        .find("restoreRecoveredLifecycle()")
+        .expect("completion restores dependent lifecycle observations");
+    let alive = completion
+        .find("setLifeState(LIFE_ALIVE_RED)")
+        .expect("completion publishes Alive");
+    assert!(
+        restore < alive,
+        "dependent lifecycle state must precede Alive"
+    );
+
+    let lifecycle = lua
+        .split("restoreRecoveredLifecycle = function()")
+        .nth(1)
+        .and_then(|suffix| {
+            suffix
+                .split("local function rebaselinePlayerState()")
+                .next()
+        })
+        .expect("bounded recovery lifecycle helper");
+    for required in [
+        "rollDodgeLifecycleValid = true",
+        "setRollDodgeState(ROLL_DODGE_INACTIVE_RED)",
+        "travelLifecycleValid = true",
+        "lastRecallRemaining = GetRecallCooldown()",
+        "setTravelState(TRAVEL_INACTIVE_RED)",
+    ] {
+        assert!(
+            lifecycle.contains(required),
+            "recovery is missing {required}"
+        );
+    }
+}
+
+#[test]
 fn addon_world_state_uses_authoritative_events_and_a_complete_activation_baseline() {
     let lua = beacon::LUA;
     for required in [
