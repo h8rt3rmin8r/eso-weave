@@ -754,13 +754,30 @@ test("requires the table of contents unit to map to SUMMARY", async () => {
 
 test("derives post-baseline lifecycle and permits an evidenced archive followed by a new active plan", async () => {
   const ledger = await migrationLedger();
-  const active = virtualCorpus(ledger);
-  assert.deepEqual(validateMigrationLedger(ledger, active), []);
-  assert.deepEqual(validateCorpusSnapshot(ledger, active), []);
+  const baseline = virtualCorpus(ledger);
+  assert.deepEqual(validateMigrationLedger(ledger, baseline), []);
+  assert.deepEqual(validateCorpusSnapshot(ledger, baseline), []);
 
-  const transitioned = structuredClone(ledger);
-  const activeIndex = transitioned.postBaselinePlans.findIndex((plan) => plan.lifecycle === "Active");
-  assert.notEqual(activeIndex, -1);
+  const withActive = structuredClone(ledger);
+  let activeIndex = withActive.postBaselinePlans.findIndex((plan) => plan.lifecycle === "Active");
+  if (activeIndex === -1) {
+    const latestId = withActive.postBaselinePlans.at(-1).id;
+    const activeId = String(Number(latestId) + 1).padStart(3, "0");
+    withActive.postBaselinePlans.push({
+      id: activeId,
+      completion: "In Progress",
+      lifecycle: "Active",
+      destination: `docs/project/build-plans/plan-${activeId}.md`,
+      specs: [`specs/${activeId}-active-slice`],
+      evidence: "Issue #100 tracks the active delivery.",
+    });
+    activeIndex = withActive.postBaselinePlans.length - 1;
+  }
+  const active = virtualCorpus(withActive);
+  assert.deepEqual(validateMigrationLedger(withActive, active), []);
+  assert.deepEqual(validateCorpusSnapshot(withActive, active), []);
+
+  const transitioned = structuredClone(withActive);
   const activeId = transitioned.postBaselinePlans[activeIndex].id;
   transitioned.postBaselinePlans[activeIndex] = {
     ...transitioned.postBaselinePlans[activeIndex],
@@ -820,12 +837,27 @@ test("derives post-baseline lifecycle and permits an evidenced archive followed 
 
 test("does not accept plan index rows hidden in code or comments", async () => {
   const ledger = await migrationLedger();
-  const active = virtualCorpus(ledger);
+  const activeLedger = structuredClone(ledger);
+  let activePlan = activeLedger.postBaselinePlans.find((plan) => plan.lifecycle === "Active");
+  if (activePlan === undefined) {
+    const latestId = activeLedger.postBaselinePlans.at(-1).id;
+    const activeId = String(Number(latestId) + 1).padStart(3, "0");
+    activePlan = {
+      id: activeId,
+      completion: "In Progress",
+      lifecycle: "Active",
+      destination: `docs/project/build-plans/plan-${activeId}.md`,
+      specs: [`specs/${activeId}-active-slice`],
+      evidence: "Issue #100 tracks the active delivery.",
+    };
+    activeLedger.postBaselinePlans.push(activePlan);
+  }
+  const active = virtualCorpus(activeLedger);
   active.textFiles.set(
     "docs/project/build-plans/README.md",
-    "# Current Build Plans\n\n```markdown\n| [plan-028.md](plan-028.md) | Active | Hidden |\n```\n",
+    `# Current Build Plans\n\n\`\`\`markdown\n| [plan-${activePlan.id}.md](plan-${activePlan.id}.md) | Active | Hidden |\n\`\`\`\n`,
   );
-  assert.match(validateCorpusSnapshot(ledger, active).join("\n"), /missing its Active index row/);
+  assert.match(validateCorpusSnapshot(activeLedger, active).join("\n"), /missing its Active index row/);
 
   const archivedLedger = structuredClone(ledger);
   archivedLedger.postBaselinePlans[0] = {

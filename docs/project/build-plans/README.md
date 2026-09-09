@@ -11,6 +11,6 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plan
 
-| Plan | Status | Scope |
-| --- | --- | --- |
-| [plan-037.md](plan-037.md) | Active | S067 keeps all automation blocked through death recovery and resets stale controller work for #109. |
+No build plan is active. S067 merged in PR #128 and shipped in v0.15.1. Installed
+field verification remains independently tracked by issue #110 and does not
+block selection of the next development slice.
