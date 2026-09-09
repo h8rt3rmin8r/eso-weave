@@ -67,6 +67,10 @@ Approval consists of reviewing the immutable sources, coverage truth, compiler
 report, semantic diff, rights classification, and exact artifact hash before the
 database enters a package.
 
+The [reviewed candidate pipeline](catalog-candidate-pipeline.md) composes these
+commands with the collector and local icon cache. It produces an immutable
+review directory and cannot replace this application or package catalog.
+
 ## Publication and rollback
 
 A candidate is built in the destination directory and never modifies the open or

@@ -32,6 +32,7 @@
 - [Development](development/README.md)
   - [Architecture and Ownership](development/architecture.md)
   - [Catalog Compiler and Runtime](development/catalog-compiler.md)
+  - [Reviewed Catalog Candidate Pipeline](development/catalog-candidate-pipeline.md)
   - [Bounded Discovery Collector](development/discovery-collector.md)
   - [Local Icon Cache](development/local-icon-cache.md)
   - [State Machines](development/state-machines.md)

@@ -8,7 +8,9 @@
 
 pub mod app;
 pub mod beacon;
+mod bounded_file;
 pub mod catalog;
+pub mod catalog_pipeline;
 pub mod collector;
 pub mod config;
 pub mod documentation;

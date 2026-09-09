@@ -110,6 +110,15 @@ lookup. Keep them in the user-owned source and application-data cache. Remove or
 replace only the exact failed local cache generation after preserving it for
 diagnosis; another verified immutable generation remains usable.
 
+## A catalog review candidate fails
+
+Candidate generation is a maintainer operation and does not affect the catalog
+used by the application. Read `validation.json`, `sources.json`, and the command
+error before retrying. Fix the pinned request or source rather than changing a
+hash to bypass verification. A failed source refresh uses cached bytes only when
+the request explicitly permits stale fallback, and the resulting source report
+labels that choice. Existing immutable candidates remain unchanged.
+
 ## A skill passes through or a weave is dropped
 
 Check the Skills row first. It must be enabled, bound to the physical key, and

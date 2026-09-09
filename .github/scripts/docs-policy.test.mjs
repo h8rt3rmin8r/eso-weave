@@ -8,6 +8,7 @@ import {
   contrastRatio,
   validateBrandCss,
   validateBrandJavascript,
+  validateCatalogCandidateWorkflow,
   validateCatalogSourceContract,
   projectEncounterMetrics,
   validateEncounterEvidence,
@@ -23,6 +24,18 @@ import {
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+test("S073 keeps catalog candidate automation pinned and read-only", async () => {
+  const workflow = await readFile(".github/workflows/catalog-candidate.yml", "utf8");
+  assert.deepEqual(validateCatalogCandidateWorkflow(workflow), []);
+
+  const escalated = workflow.replace("contents: read", "contents: write");
+  assert.match(validateCatalogCandidateWorkflow(escalated).join("\n"), /contents: read/i);
+  const mutable = workflow.replace(/actions\/checkout@[0-9a-f]{40}/u, "actions/checkout@v7");
+  assert.match(validateCatalogCandidateWorkflow(mutable).join("\n"), /exact commit SHA/i);
+  const unbounded = workflow.replace(/^    timeout-minutes: 30\r?\n/mu, "");
+  assert.match(validateCatalogCandidateWorkflow(unbounded).join("\n"), /timeout/i);
+});
 
 const requiredEncounterKinds = [
   "encounter-start", "encounter-end", "damage", "healing", "effect", "resource", "cast",

@@ -319,6 +319,72 @@ pub fn open_generation(
     })
 }
 
+pub fn publish_staged_generation(
+    staged_root: impl AsRef<Path>,
+    cache_root: impl AsRef<Path>,
+    generation_sha256: &str,
+) -> Result<(), IconCacheError> {
+    let staged_root = staged_root.as_ref();
+    let cache_root = cache_root.as_ref();
+    let canonical_staged = validate_distinct_roots(staged_root, cache_root)?;
+    let staged = open_generation(staged_root, generation_sha256)?;
+    let manifest = staged.manifest.clone();
+    let manifest_path = staged_root
+        .join("generations")
+        .join(generation_sha256)
+        .join("manifest.json");
+    let manifest_bytes = read_cache_file(&canonical_staged, &manifest_path, MAX_MANIFEST_BYTES)?;
+
+    let objects_directory = cache_root.join("objects");
+    let generations_directory = cache_root.join("generations");
+    fs::create_dir_all(&objects_directory)?;
+    fs::create_dir_all(&generations_directory)?;
+    ensure_real_directory(cache_root)?;
+    ensure_real_directory(&objects_directory)?;
+    ensure_real_directory(&generations_directory)?;
+    let canonical_cache = fs::canonicalize(cache_root)?;
+
+    let mut object_hashes = BTreeSet::from([manifest.placeholder_sha256.clone()]);
+    object_hashes.extend(
+        manifest
+            .entries
+            .iter()
+            .map(|entry| entry.object_sha256.clone()),
+    );
+    for hash in object_hashes {
+        let bytes = read_cache_file(
+            &canonical_staged,
+            &object_path(staged_root, &hash),
+            MAX_SOURCE_BYTES,
+        )?;
+        publish_object(&canonical_cache, &objects_directory, &hash, &bytes)?;
+    }
+
+    let generation_directory = generations_directory.join(generation_sha256);
+    if generation_directory.exists() {
+        let published = open_generation(cache_root, generation_sha256)?;
+        if published.manifest != manifest {
+            return invalid("existing generation does not match staged generation");
+        }
+        return Ok(());
+    }
+    let candidate = tempfile::Builder::new()
+        .prefix(".icon-generation-")
+        .tempdir_in(&generations_directory)?;
+    let candidate_manifest = candidate.path().join("manifest.json");
+    let mut file = fs::File::create(&candidate_manifest)?;
+    file.write_all(&manifest_bytes)?;
+    file.sync_all()?;
+    drop(file);
+    verify_manifest_objects(cache_root, &canonical_cache, &manifest)?;
+    fs::rename(candidate.path(), &generation_directory)?;
+    let published = open_generation(cache_root, generation_sha256)?;
+    if published.manifest != manifest {
+        return invalid("published generation changed during staged publication");
+    }
+    Ok(())
+}
+
 fn verify_manifest_objects(
     cache_root: &Path,
     canonical_cache: &Path,

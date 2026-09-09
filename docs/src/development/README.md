@@ -4,6 +4,7 @@ Published developer references include:
 
 - [Architecture and Ownership](architecture.md)
 - [Catalog Compiler and Runtime](catalog-compiler.md)
+- [Reviewed Catalog Candidate Pipeline](catalog-candidate-pipeline.md)
 - [Bounded Discovery Collector](discovery-collector.md)
 - [Local Icon Cache](local-icon-cache.md)
 - [State Machines](state-machines.md)

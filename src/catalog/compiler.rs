@@ -74,8 +74,12 @@ pub struct SurfaceDiff {
 pub struct CatalogDiff {
     pub entities: SurfaceDiff,
     pub localized_text: SurfaceDiff,
+    #[serde(default)]
+    pub localized_text_redistribution_changes: Vec<String>,
     pub relations: SurfaceDiff,
     pub coverage: SurfaceDiff,
+    #[serde(default)]
+    pub coverage_regressions: Vec<String>,
     pub icon_references: SurfaceDiff,
 }
 
@@ -762,6 +766,9 @@ pub fn diff_catalogs(
     let new = open_read_only(new_path.as_ref())?;
     verify_connection(&old)?;
     verify_connection(&new)?;
+    let localized_text_redistribution_changes =
+        value_changes(text_redistribution(&old)?, text_redistribution(&new)?);
+    let coverage_regressions = coverage_regressions(&old, &new)?;
     Ok(CatalogDiff {
         entities: compare_surfaces(entity_surface(&old)?, entity_surface(&new)?),
         localized_text: compare_surfaces(
@@ -782,6 +789,7 @@ pub fn diff_catalogs(
                 6,
             )?,
         ),
+        localized_text_redistribution_changes,
         relations: compare_surfaces(
             surface(
                 &old,
@@ -816,6 +824,7 @@ pub fn diff_catalogs(
                 4,
             )?,
         ),
+        coverage_regressions,
         icon_references: compare_surfaces(
             surface(
                 &old,
@@ -835,6 +844,89 @@ pub fn diff_catalogs(
             )?,
         ),
     })
+}
+
+fn text_redistribution(connection: &Connection) -> Result<BTreeMap<String, String>, CatalogError> {
+    let mut statement = connection.prepare(
+        "SELECT kind, stable_id, channel, api_version, locale, text_kind, redistribution
+         FROM localized_text ORDER BY kind, stable_id, channel, api_version, locale, text_kind",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            format!(
+                "{}|{}|{}|{}|{}|{}",
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?
+            ),
+            row.get::<_, String>(6)?,
+        ))
+    })?;
+    rows.collect::<Result<BTreeMap<_, _>, _>>()
+        .map_err(CatalogError::from)
+}
+
+fn value_changes(old: BTreeMap<String, String>, new: BTreeMap<String, String>) -> Vec<String> {
+    old.into_iter()
+        .filter_map(|(key, old_value)| {
+            new.get(&key)
+                .is_some_and(|new_value| new_value != &old_value)
+                .then_some(key)
+        })
+        .collect()
+}
+
+fn coverage_regressions(old: &Connection, new: &Connection) -> Result<Vec<String>, CatalogError> {
+    let old = coverage_completeness(old)?;
+    let new = coverage_completeness(new)?;
+    let mut regressions = Vec::new();
+    for (key, old_value) in old {
+        let Some(new_value) = new.get(&key) else {
+            continue;
+        };
+        if completeness_rank(new_value)? < completeness_rank(&old_value)? {
+            regressions.push(key);
+        }
+    }
+    Ok(regressions)
+}
+
+fn coverage_completeness(
+    connection: &Connection,
+) -> Result<BTreeMap<String, String>, CatalogError> {
+    let mut statement = connection.prepare(
+        "SELECT category, snapshot_id, locale, scope, completeness
+         FROM coverage ORDER BY category, snapshot_id, locale, scope",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            format!(
+                "{}|{}|{}|{}",
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?
+            ),
+            row.get::<_, String>(4)?,
+        ))
+    })?;
+    rows.collect::<Result<BTreeMap<_, _>, _>>()
+        .map_err(CatalogError::from)
+}
+
+fn completeness_rank(value: &str) -> Result<u8, CatalogError> {
+    match value {
+        "unknown" => Ok(0),
+        "opportunistic" => Ok(1),
+        "bounded" => Ok(2),
+        "exhaustive" => Ok(3),
+        _ => Err(CatalogError::Validation(format!(
+            "catalog contains invalid coverage completeness {value}"
+        ))),
+    }
 }
 
 fn entity_surface(connection: &Connection) -> Result<BTreeMap<String, String>, CatalogError> {

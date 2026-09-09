@@ -117,6 +117,13 @@ extraction, installed-client discovery, or source modification. See the
 [local icon cache](../development/local-icon-cache.md) for its limits and
 verification contract.
 
+The S073 candidate pipeline preserves this boundary. Candidate directories may
+contain the normalized SQLite catalog and redacted evidence, but never source
+bundles, SavedVariables captures, or local icon objects. Its scheduled workflow
+can upload those review candidates as short-lived CI artifacts with read-only
+repository permission. It cannot install a catalog, promote PTS data, publish a
+release, or write to the repository.
+
 This is a project source-selection decision, not legal advice. Revisit it if the
 project adds monetization, sponsorship, telemetry, a hosted asset service, or
 bundled third-party art, or if written permission supplies a compatible grant.
@@ -157,6 +164,10 @@ explicit workflow and limits.
 - The icon work in [#116](https://github.com/h8rt3rmin8r/eso-weave/issues/116)
   consumes virtual paths and placeholders first. Asset resolution is optional,
   explicit, immutable, and local-only.
+- The candidate pipeline in
+  [#117](https://github.com/h8rt3rmin8r/eso-weave/issues/117) composes those
+  boundaries into immutable redacted review evidence without activating a
+  catalog. Selection and rollback remain issue #118 work.
 
 Field experiments in #129 may narrow coverage or adjust provisional limits. They
 do not block these implementation contracts and cannot silently rewrite them.
