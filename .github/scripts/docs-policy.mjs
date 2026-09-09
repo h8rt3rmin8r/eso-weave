@@ -977,6 +977,8 @@ export function validateCatalogSourceContract(contract) {
     "api-iterator", "known-id", "observed-event", "item-link", "constant-file", "local-file", "none",
   ]);
   const enumerableMethods = new Set(["api-iterator", "constant-file", "local-file"]);
+  const sourceFamilies = new Set(["zos-api", "stock-ui", "collector", "community-code", "archive", "remote"]);
+  const sourceChannels = new Set(["live", "pts", "not-applicable"]);
   if (!contract || typeof contract !== "object") return ["catalog contract must be an object"];
   if (contract.schema_version !== 1) errors.push("catalog contract schema_version must be 1");
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(contract.as_of ?? "")) errors.push("catalog contract as_of must be an ISO date");
@@ -998,6 +1000,17 @@ export function validateCatalogSourceContract(contract) {
   for (const snapshot of snapshots) {
     if (!snapshot?.id || snapshotIds.has(snapshot.id)) errors.push(`catalog contract has invalid or duplicate source id ${snapshot?.id ?? "<missing>"}`);
     else snapshotIds.add(snapshot.id);
+    const sourceLabel = snapshot?.id ?? "<missing>";
+    for (const key of ["family", "locale", "revision", "uri", "license_scope"]) {
+      if (typeof snapshot?.[key] !== "string" || snapshot[key].trim() === "") {
+        errors.push(`source ${sourceLabel} requires ${key}`);
+      }
+    }
+    if (!sourceFamilies.has(snapshot?.family)) errors.push(`source ${sourceLabel} requires a supported family`);
+    if (!sourceChannels.has(snapshot?.channel)) errors.push(`source ${sourceLabel} requires a supported channel`);
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(snapshot?.acquired_at ?? "")) {
+      errors.push(`source ${sourceLabel} requires acquired_at as an ISO date`);
+    }
     if (snapshot?.recommended) {
       if (!/^[0-9a-f]{40}$/u.test(snapshot.revision ?? "")) {
         errors.push(`recommended source ${snapshot.id} requires an immutable 40-character revision`);
@@ -1069,6 +1082,9 @@ export function validateCatalogSourceContract(contract) {
   }
 
   if (contract.promotion_policy?.automatic !== false) errors.push("catalog contract must forbid automatic PTS promotion");
+  if (contract.promotion_policy?.preserve_original_channel !== true) {
+    errors.push("catalog promotion policy must preserve original channel provenance");
+  }
   for (const key of ["requires_live_api_version", "requires_live_revision", "requires_content_hash", "requires_reviewer"]) {
     if (contract.promotion_policy?.[key] !== true) errors.push(`catalog promotion policy requires ${key}`);
   }
@@ -1079,6 +1095,11 @@ export function validateCatalogSourceContract(contract) {
   if (collector.atomic_import !== true) errors.push("catalog collector import must be atomic");
   if (collector.upload_default !== false) errors.push("catalog collector data must not be uploaded by default");
   if (collector.user_data_separate !== true) errors.push("catalog collector must keep user data separate");
+  for (const key of ["provisional_max_snapshot_bytes", "provisional_max_records", "provisional_max_string_bytes"]) {
+    if (!Number.isInteger(collector[key]) || collector[key] <= 0) {
+      errors.push(`catalog collector requires positive integer ${key}`);
+    }
+  }
   return [...new Set(errors)];
 }
 

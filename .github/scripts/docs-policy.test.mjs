@@ -99,6 +99,7 @@ function validCatalogContract() {
       requires_live_revision: true,
       requires_content_hash: true,
       requires_reviewer: true,
+      preserve_original_channel: true,
     },
     collector_policy: {
       format: "restricted-data-envelope",
@@ -108,6 +109,9 @@ function validCatalogContract() {
       atomic_import: true,
       upload_default: false,
       user_data_separate: true,
+      provisional_max_snapshot_bytes: 67108864,
+      provisional_max_records: 500000,
+      provisional_max_string_bytes: 65536,
     },
     redistribution_decisions: {
       zenimax_icon_bytes: "prohibited",
@@ -1283,6 +1287,16 @@ test("rejects unsupported exhaustive claims and unresolved source references", (
   assert.ok(errors.some((error) => error.includes("unknown source missing-source")));
 });
 
+test("requires reproducible provenance for every declared source snapshot", () => {
+  const contract = validCatalogContract();
+  contract.source_snapshots.push({ id: "community-reference", channel: "not-applicable", recommended: false });
+  contract.categories[0].source_ids = ["community-reference"];
+  const errors = validateCatalogSourceContract(contract);
+  for (const field of ["family", "locale", "revision", "uri", "acquired_at", "license_scope"]) {
+    assert.ok(errors.some((error) => error.includes(`requires ${field}`)), field);
+  }
+});
+
 test("requires exhaustive categories to use enumerable evidence with relationship or count checks", () => {
   const contract = validCatalogContract();
   const category = contract.categories[0];
@@ -1314,10 +1328,12 @@ test("rejects position-based durable keys regardless of separator", () => {
 test("rejects implicit PTS promotion and distributable game icon bytes", () => {
   const contract = validCatalogContract();
   contract.promotion_policy.automatic = true;
+  contract.promotion_policy.preserve_original_channel = false;
   contract.categories.find((row) => row.id === "icon-bytes").redistribution = "allowed";
   contract.project_facts.placeholders_allowed = false;
   const errors = validateCatalogSourceContract(contract);
   assert.ok(errors.includes("catalog contract must forbid automatic PTS promotion"));
+  assert.ok(errors.includes("catalog promotion policy must preserve original channel provenance"));
   assert.ok(errors.includes("catalog contract must prohibit redistribution of game icon bytes"));
   assert.ok(errors.includes("catalog contract must retain project-created placeholders"));
 });
@@ -1341,8 +1357,15 @@ test("rejects executable, unbounded, non-atomic, or uploaded collector input", (
   contract.collector_policy.atomic_import = false;
   contract.collector_policy.upload_default = true;
   contract.collector_policy.user_data_separate = false;
+  contract.collector_policy.provisional_max_snapshot_bytes = 0;
+  contract.collector_policy.provisional_max_records = -1;
+  contract.collector_policy.provisional_max_string_bytes = 1.5;
   const errors = validateCatalogSourceContract(contract);
-  for (const phrase of ["execute Lua", "byte limit", "record limit", "atomic", "uploaded by default", "user data separate"]) {
+  for (const phrase of [
+    "execute Lua", "byte limit", "record limit", "atomic", "uploaded by default", "user data separate",
+    "positive integer provisional_max_snapshot_bytes", "positive integer provisional_max_records",
+    "positive integer provisional_max_string_bytes",
+  ]) {
     assert.ok(errors.some((error) => error.includes(phrase)), phrase);
   }
 });
