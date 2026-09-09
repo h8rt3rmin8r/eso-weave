@@ -319,7 +319,7 @@ fn report_paths_cannot_alias_inputs_or_catalog_artifacts() {
     let mut request = BuildRequest::new(CHANGED_LIVE_FIXTURE, &destination, Channel::Live);
     request.report_path = Some(rollback.clone());
     let error = build_catalog(&request).expect_err("rollback alias must fail");
-    assert!(error.to_string().contains("rollback artifact"));
+    assert!(error.to_string().contains("rollback"));
     assert_eq!(bytes(rollback), rollback_before);
 
     let manifest = destination.with_extension("sqlite.rollback.json");
@@ -331,6 +331,28 @@ fn report_paths_cannot_alias_inputs_or_catalog_artifacts() {
         .to_string()
         .contains("alias the catalog rollback manifest"));
     assert_eq!(bytes(manifest), manifest_before);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_report_aliases_use_unicode_case_folding() {
+    let sandbox = CatalogSandbox::new();
+    let destination = sandbox.path("CÄTALOG.sqlite");
+    build_catalog(&BuildRequest::new(
+        LIVE_FIXTURE,
+        &destination,
+        Channel::Live,
+    ))
+    .unwrap();
+    let before = bytes(&destination);
+    let mut request = BuildRequest::new(CHANGED_LIVE_FIXTURE, &destination, Channel::Live);
+    request.report_path = Some(sandbox.path("cätalog.sqlite.rollback.json"));
+
+    let error = build_catalog(&request).expect_err("Unicode case alias must fail on Windows");
+    assert!(error
+        .to_string()
+        .contains("alias the catalog rollback manifest"));
+    assert_eq!(bytes(destination), before);
 }
 
 #[test]

@@ -120,7 +120,7 @@ pub fn build_catalog(request: &BuildRequest) -> Result<BuildReport, CatalogError
     match build_catalog_inner(request) {
         Ok(report) => Ok(report),
         Err(error) => {
-            if validate_artifact_paths(request, None).is_ok() {
+            if failure_report_path_is_safe(request) {
                 if let Some(path) = &request.report_path {
                     let report = FailureReport {
                         status: "failed",
@@ -582,13 +582,11 @@ fn validate_artifact_paths(
         return Ok(());
     };
     let report = comparable_path(report_path)?;
+    let manifest_path = rollback_manifest_path(&request.output_path);
     let mut reserved = vec![
         ("input", input),
         ("output", output.clone()),
-        (
-            "rollback manifest",
-            comparable_path(&rollback_manifest_path(&request.output_path))?,
-        ),
+        ("rollback manifest", comparable_path(&manifest_path)?),
     ];
     if let Some(artifact_sha256) = rollback_sha256 {
         reserved.push((
@@ -599,6 +597,16 @@ fn validate_artifact_paths(
             ))?,
         ));
     }
+    if manifest_path.is_file() {
+        if let Ok(bytes) = fs::read(&manifest_path) {
+            if let Ok(manifest) = serde_json::from_slice::<RollbackManifest>(&bytes) {
+                reserved.push((
+                    "active rollback generation",
+                    comparable_path(Path::new(&manifest.rollback))?,
+                ));
+            }
+        }
+    }
     for (label, path) in reserved {
         if same_path(&report, &path) {
             return Err(CatalogError::Validation(format!(
@@ -606,12 +614,20 @@ fn validate_artifact_paths(
             )));
         }
     }
+    let artifact_parent = comparable_path(
+        request
+            .output_path
+            .parent()
+            .filter(|value| !value.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new(".")),
+    )?;
     if same_path(
         report.parent().unwrap_or_else(|| Path::new(".")),
-        output.parent().unwrap_or_else(|| Path::new(".")),
+        &artifact_parent,
     ) {
         let output_name = comparable_name(
-            output
+            request
+                .output_path
                 .file_name()
                 .unwrap_or_else(|| std::ffi::OsStr::new("catalog.sqlite")),
         );
@@ -627,6 +643,21 @@ fn validate_artifact_paths(
         }
     }
     Ok(())
+}
+
+fn failure_report_path_is_safe(request: &BuildRequest) -> bool {
+    let existing = request
+        .output_path
+        .is_file()
+        .then(|| verify_catalog(&request.output_path).ok())
+        .flatten();
+    validate_artifact_paths(
+        request,
+        existing
+            .as_ref()
+            .map(|report| report.artifact_sha256.as_str()),
+    )
+    .is_ok()
 }
 
 fn comparable_path(path: &Path) -> Result<PathBuf, CatalogError> {
@@ -675,8 +706,7 @@ fn normalize_lexically(path: PathBuf) -> PathBuf {
 fn same_path(left: &Path, right: &Path) -> bool {
     #[cfg(windows)]
     {
-        left.to_string_lossy()
-            .eq_ignore_ascii_case(&right.to_string_lossy())
+        left.to_string_lossy().to_lowercase() == right.to_string_lossy().to_lowercase()
     }
     #[cfg(not(windows))]
     {
@@ -688,7 +718,7 @@ fn comparable_name(value: &std::ffi::OsStr) -> String {
     let value = value.to_string_lossy();
     #[cfg(windows)]
     {
-        value.to_ascii_lowercase()
+        value.to_lowercase()
     }
     #[cfg(not(windows))]
     {
