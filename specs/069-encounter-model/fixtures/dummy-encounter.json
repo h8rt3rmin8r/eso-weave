@@ -1,0 +1,35 @@
+{
+  "envelope": {
+    "schema_version": 1,
+    "session_id": "session-s069-dummy",
+    "encounter_id": "encounter-s069-dummy",
+    "source": {"addon_version": "synthetic-s069", "api_version": 101050, "channel": "live"},
+    "started_monotonic_ms": 0,
+    "ended_monotonic_ms": 10000,
+    "first_sequence": 1,
+    "last_sequence": 21,
+    "content_sha256": "4e510a251cbf65b71681fd36ad68c541ac7260c28d17f695e289ca730602e298",
+    "privacy_profile": "minimal-local"
+  },
+  "events": [
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":1,"monotonic_ms":0,"kind":"encounter-start","payload":{}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":2,"monotonic_ms":900,"kind":"cast","payload":{"actor_id":"actor-player","ability_id":100}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":3,"monotonic_ms":1000,"kind":"damage","payload":{"source_actor_id":"actor-player","target_actor_id":"actor-target","ability_id":100,"amount":1000,"direction":"outgoing"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":4,"monotonic_ms":2000,"kind":"effect","payload":{"target_actor_id":"actor-player","ability_id":200,"change":"gained"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":5,"monotonic_ms":2500,"kind":"resource","payload":{"actor_id":"actor-player","resource":"magicka","value":8000}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":6,"monotonic_ms":2800,"kind":"cast","payload":{"actor_id":"actor-player","ability_id":999999}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":7,"monotonic_ms":3000,"kind":"damage","payload":{"source_actor_id":"actor-player","target_actor_id":"actor-target","ability_id":999999,"amount":1500,"direction":"outgoing"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":8,"monotonic_ms":4000,"kind":"healing","payload":{"source_actor_id":"actor-player","target_actor_id":"actor-player","ability_id":300,"effective_amount":800,"direction":"outgoing"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":9,"monotonic_ms":4500,"kind":"bar-change","payload":{"actor_id":"actor-player","bar":2}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":12,"monotonic_ms":6000,"kind":"discontinuity","payload":{"missing_sequence_from":10,"missing_sequence_to":11,"reason":"capture-overflow"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":13,"monotonic_ms":6900,"kind":"cast","payload":{"actor_id":"actor-player","ability_id":100}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":14,"monotonic_ms":7000,"kind":"damage","payload":{"source_actor_id":"actor-player","target_actor_id":"actor-target","ability_id":100,"amount":500,"direction":"outgoing"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":15,"monotonic_ms":7200,"kind":"boss-health","payload":{"actor_id":"actor-target","percent":42}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":16,"monotonic_ms":7500,"kind":"death","payload":{"actor_id":"actor-player"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":17,"monotonic_ms":8000,"kind":"effect","payload":{"target_actor_id":"actor-player","ability_id":200,"change":"faded"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":18,"monotonic_ms":8500,"kind":"performance","payload":{"fps":60,"latency_ms":70}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":19,"monotonic_ms":8800,"kind":"quickslot","payload":{"actor_id":"actor-player","slot":1}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":20,"monotonic_ms":9000,"kind":"resurrection","payload":{"actor_id":"actor-player"}},
+    {"session_id":"session-s069-dummy","encounter_id":"encounter-s069-dummy","sequence":21,"monotonic_ms":10000,"kind":"encounter-end","payload":{}}
+  ]
+}

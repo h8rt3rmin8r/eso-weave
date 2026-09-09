@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { gzipSync } from "node:zlib";
 
 const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/gmu;
 const HTML_LINK = /<a\b[^>]*?\bhref=["']([^"']+)["']/giu;
@@ -1103,6 +1104,220 @@ export function validateCatalogSourceContract(contract) {
   return [...new Set(errors)];
 }
 
+const REQUIRED_ENCOUNTER_KINDS = new Set([
+  "encounter-start", "encounter-end", "damage", "healing", "effect", "resource", "cast",
+  "bar-change", "death", "resurrection", "boss-health", "performance", "quickslot", "discontinuity",
+]);
+const REQUIRED_ENCOUNTER_METRICS = new Set([
+  "observed-dps", "observed-hps", "ability-damage-share", "effect-uptime", "ordered-cast-sequence",
+]);
+
+function canonicalEncounterEvents(events) {
+  return JSON.stringify([...events].sort((left, right) => left.sequence - right.sequence));
+}
+
+export function validateEncounterModelContract(contract) {
+  const errors = [];
+  if (!contract || typeof contract !== "object") return ["encounter model contract must be an object"];
+  for (const field of [
+    "source_snapshots", "storage_planes", "capture_envelope", "ordering_policy", "loss_policy",
+    "privacy_policy", "integrity_policy", "catalog_join_policy", "actor_policy", "build_snapshot_policy",
+    "retention_policy", "recommendation_policy", "catalog_schema_requirements", "transport_policy",
+    "event_kinds", "metrics", "parity_roadmap", "follow_up_order", "follow_up_issues", "synthetic_fixture",
+  ]) if (!(field in contract)) errors.push(`encounter model requires ${field}`);
+  if (contract.schema_version !== 1) errors.push("encounter model schema_version must be 1");
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(contract.as_of ?? "")) errors.push("encounter model as_of must be an ISO date");
+
+  const snapshots = Array.isArray(contract.source_snapshots) ? contract.source_snapshots : [];
+  const snapshotIds = new Set();
+  for (const snapshot of snapshots) {
+    if (!snapshot?.id || snapshotIds.has(snapshot.id)) errors.push("encounter source IDs must be present and unique");
+    else snapshotIds.add(snapshot.id);
+    if (!/^[0-9a-f]{40}$/u.test(snapshot?.revision ?? "")) errors.push(`encounter source ${snapshot?.id ?? "<missing>"} requires an immutable revision`);
+    for (const field of ["channel", "license", "uri"]) {
+      if (typeof snapshot?.[field] !== "string" || snapshot[field].trim() === "") errors.push(`encounter source ${snapshot?.id ?? "<missing>"} requires ${field}`);
+    }
+  }
+  for (const required of ["eso-api-live", "libcombat", "combat-metrics"]) {
+    if (!snapshotIds.has(required)) errors.push(`encounter model is missing required source ${required}`);
+  }
+
+  const planes = contract.storage_planes ?? {};
+  if (!planes.catalog || !planes.raw || !planes.derived || planes.raw === planes.catalog || planes.derived === planes.catalog) {
+    errors.push("raw observations and derived analysis must remain separate from catalog storage");
+  }
+  if (planes.catalog !== "catalog.sqlite") errors.push("catalog storage must remain catalog.sqlite");
+
+  const envelope = contract.capture_envelope ?? {};
+  if (JSON.stringify(envelope.identity) !== JSON.stringify(["session_id", "sequence"])) errors.push("encounter event identity must be session_id plus sequence");
+  if (envelope.duration_clock !== "monotonic_ms") errors.push("encounter durations require monotonic_ms");
+  if (envelope.actor_identity !== "encounter-local-opaque") errors.push("encounter actors must use encounter-local opaque identity");
+
+  const ordering = contract.ordering_policy ?? {};
+  if (ordering.authority !== "sequence" || ordering.reject_duplicates !== true || ordering.reject_undeclared_gaps !== true || ordering.reject_backward_monotonic_time !== true) {
+    errors.push("encounter ordering must reject duplicate, undeclared-gap, and backward-time input");
+  }
+  if (contract.loss_policy?.marker !== "discontinuity" || contract.loss_policy?.degrade_spanning_metrics !== true || contract.loss_policy?.expose_ranges !== true) {
+    errors.push("encounter loss must use exposed discontinuities and degrade spanning metrics");
+  }
+
+  const privacy = contract.privacy_policy ?? {};
+  if (privacy.local_only_default !== true || privacy.upload_default !== false) errors.push("encounter data must be local-only and never uploaded by default");
+  for (const omitted of ["account-name", "character-name", "chat", "guild", "location"]) {
+    if (!privacy.omitted_by_default?.includes(omitted)) errors.push(`encounter privacy must omit ${omitted} by default`);
+  }
+
+  const integrity = contract.integrity_policy ?? {};
+  if (integrity.raw_immutable !== true) errors.push("raw observations must be immutable");
+  if (integrity.derived_rebuildable !== true) errors.push("derived analysis must be rebuildable");
+  if (integrity.execute_input !== false || integrity.bounded_import !== true || integrity.atomic_import !== true) errors.push("encounter imports must be bounded, atomic, and non-executing");
+  const join = contract.catalog_join_policy ?? {};
+  if (join.retain_unknown_ids !== true || join.rejoin_without_raw_mutation !== true || join.preserve_channel !== true) errors.push("catalog joins must preserve unknown IDs, raw content, and channel provenance");
+  const transport = contract.transport_policy ?? {};
+  if (transport.pixel_bus_bulk_transport !== false) errors.push("Pixel Bus cannot be the bulk encounter transport");
+  if (transport.automation_independent !== true) errors.push("encounter observation and calculation must remain independent of automation");
+  if (transport.future_transport !== "bounded-saved-variables-import") errors.push("future encounter transport must use a bounded SavedVariables import");
+  if (contract.actor_policy?.identity !== "encounter-local-opaque" || !contract.actor_policy?.roles?.includes("pet") || !contract.actor_policy?.pet_owner_relationship || !contract.actor_policy?.ability_aliases) errors.push("encounter actor policy must model opaque actors, pets, owners, and aliases");
+  if (contract.build_snapshot_policy?.retention !== "derived-versioned" || contract.build_snapshot_policy?.catalog_version_required !== true || contract.build_snapshot_policy?.consent_required_for_personal_identity !== true) errors.push("build snapshots must be versioned, catalog-bound, and consent personal identity");
+  const retention = contract.retention_policy ?? {};
+  for (const field of ["export", "delete", "backup", "corruption_recovery", "compression"]) if (!retention[field]) errors.push(`encounter retention policy requires ${field}`);
+  if (retention.production_budget !== "verification-required") errors.push("encounter production storage budget must remain verification-required");
+  const recommendations = contract.recommendation_policy ?? {};
+  if (recommendations.requires_encounter_version !== true || recommendations.requires_catalog_version !== true || recommendations.requires_metric_quality !== true || recommendations.correlation_is_not_causation !== true || recommendations.action_automation_coupling !== false) errors.push("recommendations must be versioned, quality-scoped, non-causal, and automation-independent");
+  const catalogRequirements = contract.catalog_schema_requirements ?? {};
+  if (!Array.isArray(catalogRequirements.entities) || catalogRequirements.entities.length === 0 || !Array.isArray(catalogRequirements.relationships) || catalogRequirements.relationships.length === 0 || catalogRequirements.unknown_id_supported !== true) errors.push("encounter model requires concrete catalog entities, relationships, and unknown-ID support");
+
+  const eventIds = new Set((Array.isArray(contract.event_kinds) ? contract.event_kinds : []).map((row) => row?.id));
+  for (const id of REQUIRED_ENCOUNTER_KINDS) if (!eventIds.has(id)) errors.push(`encounter model is missing required event kind ${id}`);
+  const metrics = Array.isArray(contract.metrics) ? contract.metrics : [];
+  const metricIds = new Set(metrics.map((row) => row?.id));
+  for (const id of REQUIRED_ENCOUNTER_METRICS) if (!metricIds.has(id)) errors.push(`encounter model is missing required metric ${id}`);
+  for (const metric of metrics) {
+    if (!metric?.algorithm_version) errors.push(`metric ${metric?.id ?? "<missing>"} requires an algorithm version`);
+    if (metric?.source_range_required !== true) errors.push(`metric ${metric?.id ?? "<missing>"} requires a source range`);
+    if (metric?.quality_required !== true) errors.push(`metric ${metric?.id ?? "<missing>"} requires quality disclosure`);
+  }
+  for (const row of Array.isArray(contract.parity_roadmap) ? contract.parity_roadmap : []) {
+    for (const field of ["capability", "source_event", "calculation", "confidence", "privacy_impact", "state", "target_phase", "acceptance", "owner", "risk"]) {
+      if (typeof row?.[field] !== "string" || row[field].trim() === "") errors.push(`parity row ${row?.capability ?? "<missing>"} requires ${field}`);
+    }
+    if (row?.state !== "fixture-proved" && !/^issue #\d+$/u.test(row?.owner ?? "")) errors.push(`parity row ${row?.capability ?? "<missing>"} requires a concrete owner issue`);
+  }
+  if (JSON.stringify(contract.follow_up_order) !== JSON.stringify(["capture", "import", "calculation", "ui", "recommendations"])) {
+    errors.push("encounter follow-up order must be capture, import, calculation, UI, recommendations");
+  }
+  for (const phase of ["capture", "import", "calculation", "ui", "recommendations", "live_parity_verification"]) {
+    if (!Number.isInteger(contract.follow_up_issues?.[phase]) || contract.follow_up_issues[phase] <= 0) errors.push(`encounter follow-up ${phase} requires an issue number`);
+  }
+  if (contract.synthetic_fixture?.proves_live_parity !== false) errors.push("synthetic evidence cannot prove live parity");
+  for (const field of ["encounter", "projection"]) if (!contract.synthetic_fixture?.[field]) errors.push(`synthetic fixture requires ${field}`);
+  return [...new Set(errors)];
+}
+
+export function validateEncounterFixture(fixture) {
+  const errors = [];
+  if (!fixture?.envelope || !Array.isArray(fixture?.events)) return ["encounter fixture requires an envelope and events"];
+  const events = [...fixture.events].sort((left, right) => left.sequence - right.sequence);
+  const seen = new Set();
+  let previous;
+  for (const event of events) {
+    if (!Number.isInteger(event.sequence) || seen.has(event.sequence)) errors.push(`duplicate sequence ${event.sequence}`);
+    seen.add(event.sequence);
+    if (event.session_id !== fixture.envelope.session_id || event.encounter_id !== fixture.envelope.encounter_id) errors.push(`event ${event.sequence} does not match its envelope identity`);
+    if (!Number.isFinite(event.monotonic_ms)) errors.push(`event ${event.sequence} requires monotonic_ms`);
+    if (previous) {
+      if (event.monotonic_ms < previous.monotonic_ms) errors.push(`backward monotonic time at sequence ${event.sequence}`);
+      if (event.sequence > previous.sequence + 1) {
+        const declared = event.kind === "discontinuity" && event.payload?.missing_sequence_from === previous.sequence + 1 && event.payload?.missing_sequence_to === event.sequence - 1;
+        if (!declared) errors.push(`undeclared sequence gap after ${previous.sequence}`);
+      }
+    }
+    previous = event;
+  }
+  const kinds = new Set(events.map((event) => event.kind));
+  for (const id of REQUIRED_ENCOUNTER_KINDS) if (!kinds.has(id)) errors.push(`encounter fixture is missing required event kind ${id}`);
+  if (events[0]?.sequence !== fixture.envelope.first_sequence || events.at(-1)?.sequence !== fixture.envelope.last_sequence) errors.push("encounter fixture sequence range does not match its envelope");
+  if (events[0]?.monotonic_ms !== fixture.envelope.started_monotonic_ms || events.at(-1)?.monotonic_ms !== fixture.envelope.ended_monotonic_ms) errors.push("encounter fixture duration range does not match its envelope");
+  const contentSha256 = createHash("sha256").update(canonicalEncounterEvents(events), "utf8").digest("hex");
+  if (fixture.envelope.content_sha256 && fixture.envelope.content_sha256 !== contentSha256) errors.push("encounter fixture content_sha256 does not match canonical events");
+  return [...new Set(errors)];
+}
+
+export function projectEncounterMetrics(fixture, knownCatalogIds = new Set()) {
+  const errors = validateEncounterFixture(fixture);
+  if (errors.length > 0) throw new Error(errors.join("\n"));
+  const events = [...fixture.events].sort((left, right) => left.sequence - right.sequence);
+  const durationMs = fixture.envelope.ended_monotonic_ms - fixture.envelope.started_monotonic_ms;
+  const damage = events.filter((event) => event.kind === "damage" && event.payload.direction === "outgoing");
+  const healing = events.filter((event) => event.kind === "healing" && event.payload.direction === "outgoing");
+  const totalDamage = damage.reduce((sum, event) => sum + event.payload.amount, 0);
+  const totalHealing = healing.reduce((sum, event) => sum + event.payload.effective_amount, 0);
+  const damageByAbility = {};
+  for (const event of damage) damageByAbility[event.payload.ability_id] = (damageByAbility[event.payload.ability_id] ?? 0) + event.payload.amount;
+  const effectStarts = new Map();
+  const effectDurations = {};
+  for (const event of events.filter((candidate) => candidate.kind === "effect")) {
+    const id = event.payload.ability_id;
+    if (event.payload.change === "gained") effectStarts.set(id, event.monotonic_ms);
+    else if (event.payload.change === "faded" && effectStarts.has(id)) {
+      effectDurations[id] = (effectDurations[id] ?? 0) + event.monotonic_ms - effectStarts.get(id);
+      effectStarts.delete(id);
+    }
+  }
+  for (const [id, started] of effectStarts) effectDurations[id] = (effectDurations[id] ?? 0) + fixture.envelope.ended_monotonic_ms - started;
+  const abilityIds = [...new Set(events.map((event) => event.payload?.ability_id).filter(Number.isInteger))].sort((left, right) => left - right);
+  const lossRanges = events.filter((event) => event.kind === "discontinuity").map((event) => ({ from: event.payload.missing_sequence_from, to: event.payload.missing_sequence_to, reason: event.payload.reason }));
+  const quality = lossRanges.length > 0 ? "degraded" : "complete";
+  const decorate = (value) => ({ ...value, algorithm_version: "s069-v1", first_sequence: fixture.envelope.first_sequence, last_sequence: fixture.envelope.last_sequence, quality, loss_ranges: lossRanges });
+  const rawContentSha256 = createHash("sha256").update(canonicalEncounterEvents(events), "utf8").digest("hex");
+  return {
+    raw_content_sha256: rawContentSha256,
+    metrics: {
+      "observed-dps": decorate({ value: totalDamage / (durationMs / 1000), unit: "damage-per-second" }),
+      "observed-hps": decorate({ value: totalHealing / (durationMs / 1000), unit: "effective-healing-per-second" }),
+      "ability-damage-share": decorate({ values: Object.fromEntries(Object.entries(damageByAbility).map(([id, amount]) => [id, amount / totalDamage])), unit: "ratio" }),
+      "effect-uptime": decorate({ values: Object.fromEntries(Object.entries(effectDurations).map(([id, amount]) => [id, amount / durationMs])), unit: "ratio" }),
+      "ordered-cast-sequence": decorate({ values: events.filter((event) => event.kind === "cast").map((event) => event.payload.ability_id), unit: "ability-id-sequence" }),
+    },
+    catalog_receipt: {
+      known_ids: abilityIds.filter((id) => knownCatalogIds.has(id)),
+      unknown_ids: abilityIds.filter((id) => !knownCatalogIds.has(id)),
+      raw_content_sha256: rawContentSha256,
+    },
+  };
+}
+
+export function validateEncounterEvidence(fixture, expected, rawBytes) {
+  const errors = validateEncounterFixture(fixture);
+  if (errors.length > 0) return errors;
+  const initial = projectEncounterMetrics(fixture, new Set([100, 200, 300]));
+  const resolved = projectEncounterMetrics(fixture, new Set([100, 200, 300, 999999]));
+  if (expected?.raw_content_sha256 !== initial.raw_content_sha256) errors.push("encounter projection raw_content_sha256 is stale");
+  if (fixture.envelope.content_sha256 !== initial.raw_content_sha256) errors.push("encounter envelope content_sha256 is stale");
+  for (const metricId of REQUIRED_ENCOUNTER_METRICS) {
+    const actual = initial.metrics[metricId];
+    const receipt = expected?.metrics?.[metricId];
+    if (!receipt) errors.push(`encounter projection is missing metric ${metricId}`);
+    else {
+      for (const field of ["value", "values", "unit", "quality"]) {
+        if (field in receipt && JSON.stringify(receipt[field]) !== JSON.stringify(actual[field])) errors.push(`encounter projection ${metricId} has stale ${field}`);
+      }
+      if (actual.algorithm_version !== expected.algorithm_version) errors.push(`encounter projection ${metricId} has stale algorithm version`);
+    }
+  }
+  const receipts = Array.isArray(expected?.catalog_receipts) ? expected.catalog_receipts : [];
+  if (JSON.stringify(receipts[0]?.unknown_ids) !== JSON.stringify(initial.catalog_receipt.unknown_ids)) errors.push("initial catalog receipt does not preserve unknown IDs");
+  if (JSON.stringify(receipts[1]?.unknown_ids) !== JSON.stringify(resolved.catalog_receipt.unknown_ids)) errors.push("resolved catalog receipt is stale");
+  if (receipts.some((receipt) => receipt.raw_content_sha256 !== initial.raw_content_sha256)) errors.push("catalog rejoin must preserve the raw-content hash");
+  if (rawBytes) {
+    if (expected?.storage?.exact?.raw_bytes !== rawBytes.byteLength) errors.push("encounter fixture exact raw byte receipt is stale");
+    if (expected?.storage?.exact?.gzip_bytes !== gzipSync(rawBytes, { mtime: 0 }).byteLength) errors.push("encounter fixture exact gzip byte receipt is stale");
+  }
+  if (expected?.storage?.production_retention_recommendation !== "verification-required") errors.push("production retention guidance must remain verification-required");
+  if (expected?.parity_claim !== "synthetic-determinism-only") errors.push("synthetic evidence must remain a determinism-only parity claim");
+  return [...new Set(errors)];
+}
+
 export function validateMigrationLedger(ledger, snapshot) {
   const errors = [];
   if (ledger.baselineCommit !== MIGRATION_BASELINE) {
@@ -1756,9 +1971,16 @@ async function run() {
   const ledgerPath = path.join(docsRoot, "project", "migration-ledger.json");
   const coveragePath = path.join(docsRoot, "project", "content-coverage.json");
   const catalogPath = path.join(docsRoot, "project", "catalog-sources.json");
+  const encounterModelPath = path.join(docsRoot, "project", "encounter-model.json");
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   const coverage = JSON.parse(await readFile(coveragePath, "utf8"));
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+  const encounterModel = JSON.parse(await readFile(encounterModelPath, "utf8"));
+  const encounterFixturePath = path.join(repositoryRoot, encounterModel.synthetic_fixture.encounter);
+  const encounterProjectionPath = path.join(repositoryRoot, encounterModel.synthetic_fixture.projection);
+  const encounterFixtureBytes = await readFile(encounterFixturePath);
+  const encounterFixture = JSON.parse(encounterFixtureBytes);
+  const encounterProjection = JSON.parse(await readFile(encounterProjectionPath, "utf8"));
   const errors = [
     ...(await validateSourceTree(docsRoot)),
     ...(await validateGeneratedSite(outputRoot)),
@@ -1767,6 +1989,8 @@ async function run() {
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
     ...validateCatalogSourceContract(catalog),
+    ...validateEncounterModelContract(encounterModel),
+    ...validateEncounterEvidence(encounterFixture, encounterProjection, encounterFixtureBytes),
   ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`docs policy: ${error}`);

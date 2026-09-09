@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S069 adds a validated user-owned encounter model, deterministic synthetic
+  metric projection, explicit order and loss semantics, privacy-minimized raw
+  retention, unknown-ID reconciliation, and a Combat Metrics parity roadmap
+  (issue #113).
 - S068 adds a validated ESO catalog source contract with category-specific
   stable identities, honest completeness classes, immutable live and PTS
   evidence, explicit redistribution decisions, and compiler, collector, and
@@ -16,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Keep raw encounter observations outside `catalog.sqlite`, order
+  them by session sequence and monotonic duration, expose declared capture loss,
+  and rebuild versioned metrics without rewriting raw data. Preserve unknown IDs
+  for later catalog reconciliation, exclude bulk encounters from Pixel Bus, and
+  keep observation independent of action automation. Treat the synthetic spike
+  as determinism evidence only and require a separately tracked same-parse
+  Combat Metrics comparison before making live parity or retention claims.
 - 2026-09-09: Keep API 101050 live and API 101051 PTS as independent immutable
   source snapshots, forbid automatic promotion, and extend documentation policy
   so transient keys, unsupported exhaustive claims, unsafe collector input, and

@@ -7,8 +7,8 @@ Sequence:
 1. S068 defined the source, coverage, provenance, live/PTS promotion,
    redistribution, and collector-input contract. It merged in PR #130 and
    closed issue #112.
-2. S069 is next and defines the external encounter model and Combat Metrics
-   parity boundary under issue #113.
+2. S069 is in progress and defines the external encounter model, deterministic
+   synthetic projection, and Combat Metrics parity boundary under issue #113.
 3. Later slices implement the deterministic SQLite compiler, bounded collector,
    local-only icon path, reviewed discovery pipeline, and explicit user updater
    in the order established by epic #111.

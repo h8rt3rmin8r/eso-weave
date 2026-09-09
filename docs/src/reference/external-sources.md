@@ -8,6 +8,10 @@ These external sources define the ESO integration context:
 - [ESOUI](https://www.esoui.com/) is the ESO addon community and index.
 - [ESOUI Wiki](https://wiki.esoui.com/) provides human-readable ESO Lua API
   documentation.
+- [LibCombat](https://github.com/Solinur/LibCombat) provides published addon
+  callback and combat-observation source used to study encounter event families.
+- [Combat Metrics](https://github.com/Solinur/CombatMetrics) provides published
+  fight-data and calculation source used to define the parity roadmap.
 - [The Elder Scrolls Online](https://www.elderscrollsonline.com/) is the official
   game site.
 
@@ -20,3 +24,7 @@ The [ESO Catalog Sources and Rights](catalog-sources-and-rights.md) reference
 pins the live and PTS evidence used for catalog planning, distinguishes API
 iteration from known-ID and observed-event coverage, and records the
 placeholder-first graphics boundary.
+
+The [Encounter Data and Metrics](encounter-data-and-metrics.md) reference pins
+the specific API, LibCombat, and Combat Metrics revisions used for the S069
+model, and distinguishes deterministic synthetic evidence from live parity.

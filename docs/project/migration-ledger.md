@@ -31,7 +31,7 @@ manifest, so changing a count cannot hide an omission or substitution.
 - The post-baseline lifecycle preserves every completed plan with concrete
   delivery evidence. Plan 037 is archived after S067 merged and shipped. Plan
   038 is active for the ordered game-data foundation. S068 merged in PR #130,
-  and issue #113 is next. Independent release verification does not reactivate a
+  and S069 is in progress under issue #113. Independent release verification does not reactivate a
   completed plan or block the active plan. The policy requires the matching plan
   file and index row for every state and rejects simultaneous current and archive
   copies.
