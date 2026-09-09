@@ -169,7 +169,7 @@ pub fn build_generation(request: &IconCacheRequest) -> Result<IconCacheReceipt, 
     let mut placeholder_count = 0;
     for reference in references {
         let transformed = match resolve_local(&canonical_source, &reference)? {
-            LocalResolution::Found(path) => transform_source(&path),
+            LocalResolution::Found(path) => transform_source(&canonical_source, &path),
             LocalResolution::Fallback(reason) => Err(reason),
         };
         match transformed {

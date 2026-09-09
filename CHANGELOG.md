@@ -35,9 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-09-09: Keep catalog icon references independent from user-local image
   bytes and use an immutable manifest as their explicit association authority.
   Resolve only selected paths beneath an explicit user-owned directory, reject
-  traversal and link-like filesystem objects, decode bounded PNG and DDS input
-  without encoder or native ISPC features, and publish deterministic RGBA PNG
-  objects without replacement. Ship only the project placeholder; do not add
+  traversal and link-like filesystem objects through stable no-follow handles,
+  reject animated PNG, decode bounded static PNG and DDS input without encoder
+  or native ISPC features, and publish deterministic RGBA PNG objects without
+  replacement. Ship only the project placeholder; do not add
   network acquisition, archive extraction, installed-client discovery, cache
   activation, or third-party image bytes to S072.
 - 2026-09-09: Amend the constitution to 2.1.0 so the approved user-initiated,

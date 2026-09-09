@@ -56,8 +56,11 @@ Result: PASS.
 The implementation matches every functional requirement and keeps the local
 manifest, rather than the distributable catalog, as the association authority.
 Review added explicit rejection for link-like cache directories and objects in
-addition to the planned source-tree checks. This proportional hardening closes
-the only material gap found during implementation analysis.
+addition to the planned source-tree checks. First-round automated review then
+identified two further gaps: a check/read race and APNG default-frame
+acceptance. S072 now verifies one stable no-follow source handle before a hard-
+capped read and rejects APNG before decoding. These proportional changes close
+all material findings from implementation and external analysis.
 
 Focused cache, catalog, packaging, and documentation-policy tests pass. Full
 format, strict all-feature Clippy, locked tests, optimized binary builds, mdBook

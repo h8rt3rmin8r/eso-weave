@@ -16,8 +16,9 @@ Routine choices were resolved under the build-phase autopilot policy:
 - S072 enables only project-created placeholders and a user-supplied local
   directory. Network, community mirror, prebuilt third-party pack, and installed
   archive extraction adapters remain disabled until separately approved.
-- Inputs may be PNG or DDS. Both are decoded under byte, dimension, pixel, and
-  frame limits and are deterministically re-encoded as PNG.
+- Inputs may be static PNG or DDS. Animated PNG is rejected. Both formats are
+  decoded under byte, dimension, pixel, and frame limits and are
+  deterministically re-encoded as PNG.
 - Virtual paths are normalized case-insensitively for lookup while canonical
   spelling remains catalog provenance.
 - An immutable cache manifest provides the explicit virtual-path-to-asset
@@ -132,12 +133,14 @@ redistribution classification without personal paths.
   supplied local directory and MUST request only selected catalog references.
 - **FR-004**: Network access, remote mirrors, prebuilt third-party packs, full
   archive crawling, and installed-client extraction MUST remain absent.
-- **FR-005**: Source paths MUST remain confined to the approved root after
-  filesystem resolution, and symlink or reparse-point inputs MUST be rejected.
+- **FR-005**: Source paths MUST remain confined to the approved root after a
+  stable no-follow file handle is opened. The handle's resolved path, type, link
+  attributes, and bounded read MUST be verified so component swaps, symlink or
+  reparse-point races, and concurrent growth cannot escape the root or limit.
 - **FR-006**: Source files MUST be bounded to 8 MiB before reading.
-- **FR-007**: Decoding MUST accept only PNG and DDS inputs with one two-
-  dimensional image, dimensions from 1 through 1024 on each axis, and at most
-  1,048,576 decoded pixels.
+- **FR-007**: Decoding MUST accept only static PNG and DDS inputs with one
+  two-dimensional image, dimensions from 1 through 1024 on each axis, and at
+  most 1,048,576 decoded pixels.
 - **FR-008**: The DDS path MUST use a memory-safe decoder with encoding features
   disabled and MUST decode only the base image after header limits pass.
 - **FR-009**: Every accepted source MUST be converted to RGBA8 and encoded as a

@@ -15,11 +15,16 @@ ASCII case-insensitive by component and fails closed on ambiguous matches,
 traversal, links or reparse points, non-files, unsafe root aliases, and excessive
 directory fanout.
 
-Only PNG and DDS are accepted. Each source is limited to 8 MiB, each dimension
-to 1024 pixels, and decoded area to 1,048,576 pixels. DDS input must contain one
-two-dimensional array layer and at most 16 declared mip levels. Only mip level
-zero is decoded. The locked decoder excludes its encoding and native ISPC
-features.
+Only static PNG and DDS are accepted; animated PNG is rejected. Each source is
+limited to 8 MiB, each dimension to 1024 pixels, and decoded area to 1,048,576
+pixels. DDS input must contain one two-dimensional array layer and at most 16
+declared mip levels. Only mip level zero is decoded. The locked decoder excludes
+its encoding and native ISPC features.
+
+The selected file is opened once with platform no-follow behavior. Its resolved
+handle path, type, link attributes, and initial length must pass before the same
+handle is read through an 8 MiB hard cap. A component swap, link race, or
+concurrent file growth therefore cannot redirect or unbound the read.
 
 Decoded pixels become deterministic RGBA PNG objects. Source files are read
 only and remain unchanged. Unsupported, missing, inaccessible, corrupt, or

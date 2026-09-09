@@ -181,7 +181,7 @@ fn normalize_lexically(path: PathBuf) -> PathBuf {
     normalized
 }
 
-fn is_same_or_nested(candidate: &Path, root: &Path) -> bool {
+pub(super) fn is_same_or_nested(candidate: &Path, root: &Path) -> bool {
     #[cfg(windows)]
     {
         let candidate = candidate

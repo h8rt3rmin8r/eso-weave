@@ -46,7 +46,7 @@ node .github/scripts/docs-policy.mjs docs target/docs-site/html
 
 ## Completed evidence
 
-All commands above passed on 2026-09-09. The focused suite contains 10
+All commands above passed on 2026-09-09. The focused suite contains 11
 synthetic tests, the catalog and packaging regression set contains 23 tests,
 and documentation policy contains 74 tests. Both optimized binaries built from
 the locked dependency graph, whose `image_dds` feature set contains only

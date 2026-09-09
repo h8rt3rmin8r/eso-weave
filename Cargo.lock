@@ -762,6 +762,7 @@ dependencies = [
  "evdev",
  "image",
  "image_dds",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",

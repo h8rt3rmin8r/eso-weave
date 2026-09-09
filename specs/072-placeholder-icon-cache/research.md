@@ -64,6 +64,14 @@ native ISPC toolchain that is not available on every target.
 - An external converter executes another binary and complicates containment.
 - Enabling encode support adds unnecessary platform-specific build risk.
 
+PNG input uses the locked `image` decoder's explicit APNG inspection and
+rejects animation before the default frame can be treated as a static icon.
+Source acquisition opens one stable no-follow file handle, verifies the
+handle's final path and metadata, and reads through a hard byte cap. Linux
+resolves the open descriptor through `/proc/self/fd`; Windows uses
+`GetFinalPathNameByHandleW`. This closes the path-check/read race without an
+archive or recursive discovery dependency.
+
 ## Decision 4: Canonical deterministic PNG transformation
 
 **Decision**: Convert each accepted source to one RGBA8 surface and encode with

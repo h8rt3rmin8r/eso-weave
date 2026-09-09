@@ -246,6 +246,32 @@ fn unsupported_corrupt_oversized_and_overdimensioned_inputs_fall_back() {
 }
 
 #[test]
+fn animated_png_input_falls_back_instead_of_publishing_its_default_frame() {
+    let sandbox = Sandbox::new();
+    let path = sandbox.source_path("esoui/art/icons/animated.png");
+    write_png(&path, 1, 1, [1, 2, 3, 255]);
+    let mut bytes = fs::read(&path).unwrap();
+    insert_png_chunk(&mut bytes, 33, *b"acTL", &[0, 0, 0, 1, 0, 0, 0, 0]);
+    let frame_control = [
+        0, 0, 0, 0, // sequence
+        0, 0, 0, 1, // width
+        0, 0, 0, 1, // height
+        0, 0, 0, 0, // x offset
+        0, 0, 0, 0, // y offset
+        0, 1, 0, 10, // delay numerator and denominator
+        0, 0, // dispose and blend
+    ];
+    insert_png_chunk(&mut bytes, 53, *b"fcTL", &frame_control);
+    fs::write(&path, bytes).unwrap();
+
+    let receipt = build_generation(&request(&sandbox, &["/esoui/art/icons/animated.png"])).unwrap();
+    let generation = open_generation(&sandbox.cache(), &receipt.generation_sha256).unwrap();
+    let resolution = generation.resolve("/esoui/art/icons/animated.png").unwrap();
+    assert_eq!(resolution.state, IconLookupState::Failed);
+    assert!(resolution.uses_placeholder);
+}
+
+#[test]
 fn unsupported_dds_volume_cubemap_and_mipmap_shapes_fall_back_before_decode() {
     let sandbox = Sandbox::new();
     for name in ["volume.dds", "cubemap.dds", "mipmaps.dds"] {
@@ -461,6 +487,27 @@ fn mutate_u32(path: &Path, offset: usize, update: impl FnOnce(u32) -> u32) {
     let current = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
     bytes[offset..offset + 4].copy_from_slice(&update(current).to_le_bytes());
     fs::write(path, bytes).unwrap();
+}
+
+fn insert_png_chunk(bytes: &mut Vec<u8>, offset: usize, kind: [u8; 4], data: &[u8]) {
+    let mut chunk = Vec::with_capacity(data.len() + 12);
+    chunk.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(&kind);
+    chunk.extend_from_slice(data);
+    chunk.extend_from_slice(&png_crc32(&kind, data).to_be_bytes());
+    bytes.splice(offset..offset, chunk);
+}
+
+fn png_crc32(kind: &[u8; 4], data: &[u8]) -> u32 {
+    kind.iter().chain(data).fold(u32::MAX, |crc, byte| {
+        (0..8).fold(crc ^ u32::from(*byte), |value, _| {
+            if value & 1 == 0 {
+                value >> 1
+            } else {
+                (value >> 1) ^ 0xedb8_8320
+            }
+        })
+    }) ^ u32::MAX
 }
 
 #[cfg(unix)]
