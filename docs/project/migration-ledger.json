@@ -1543,7 +1543,7 @@
         "specs/068-eso-catalog-contract",
         "specs/069-encounter-model"
       ],
-      "evidence": "S068 merged in PR #130 and closed issue #112; S069 is in progress under issue #113, while issues #110 and #129 remain independent verification."
+      "evidence": "S068 merged in PR #130 and closed issue #112; S069 merged in PR #137 and closed issue #113; issue #114 is the next Ready outcome, while issues #110, #129, and #131 remain independent verification."
     }
   ],
   "safetyCrosswalk": [
