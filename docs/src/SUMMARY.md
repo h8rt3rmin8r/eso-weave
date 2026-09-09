@@ -26,6 +26,7 @@
   - [Logging](reference/logging.md)
   - [Pixel Bus Protocol](reference/pixel-bus-protocol.md)
   - [Weave Delay Defaults](reference/weave-delay-defaults.md)
+  - [ESO Catalog Sources and Rights](reference/catalog-sources-and-rights.md)
   - [External and Project Sources](reference/external-sources.md)
 - [Development](development/README.md)
   - [Architecture and Ownership](development/architecture.md)

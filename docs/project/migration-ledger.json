@@ -1533,6 +1533,16 @@
         "specs/067-death-recovery-safety"
       ],
       "evidence": "Issue #109 closed when S067 merged in PR #128 and shipped in v0.15.1; issue #110 keeps installed field verification separate."
+    },
+    {
+      "id": "038",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-038.md",
+      "specs": [
+        "specs/068-eso-catalog-contract"
+      ],
+      "evidence": "Issue #112 and epic #111 define the ordered source-contract slice; issue #110 remains independent release verification."
     }
   ],
   "safetyCrosswalk": [

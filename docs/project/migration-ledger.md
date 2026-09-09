@@ -29,11 +29,11 @@ manifest, so changing a count cannot hide an omission or substitution.
 - Current maintainer records live under `docs/project/`.
 - Plans 001 through 027 and the website announcement live under `docs/archive/`.
 - The post-baseline lifecycle preserves every completed plan with concrete
-  delivery evidence. Plan 037 is archived after S067 merged and shipped, with no
-  active plan until the next slice is accepted. Independent release verification
-  does not reactivate a completed plan. The policy requires the matching plan
-  file and index row for every state and rejects simultaneous current and archive
-  copies.
+  delivery evidence. Plan 037 is archived after S067 merged and shipped. Plan
+  038 is active for the ordered game-data foundation beginning with S068.
+  Independent release verification does not reactivate a completed plan or block
+  the active plan. The policy requires the matching plan file and index row for
+  every state and rejects simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six
   safety invariants have named canonical destinations.
 

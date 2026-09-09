@@ -8,6 +8,7 @@ import {
   contrastRatio,
   validateBrandCss,
   validateBrandJavascript,
+  validateCatalogSourceContract,
   validateContentCoverage,
   validateContentCoverageRepository,
   validateCorpusSnapshot,
@@ -18,6 +19,99 @@ import {
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const requiredCatalogCategories = [
+  "player-skills",
+  "crafted-abilities",
+  "ability-metadata",
+  "effects-and-status",
+  "items-and-gear",
+  "item-sets",
+  "champion-skills",
+  "consumables",
+  "mundus-effects",
+  "companions-races-classes",
+  "combat-statistics",
+  "constants",
+  "localized-text",
+  "icon-references",
+  "icon-bytes",
+];
+
+function validCatalogContract() {
+  const category = (id) => ({
+    id,
+    category: id,
+    stable_key: `${id}-id`,
+    enumeration_method: "api-iterator",
+    visibility: ["channel"],
+    completeness: "bounded",
+    source_ids: ["live-api"],
+    redistribution: id === "icon-bytes" ? "prohibited" : "allowed",
+    failure_modes: ["partial"],
+    validation: ["stable IDs are unique"],
+    field_verification: "issue #129",
+  });
+  return {
+    schema_version: 1,
+    as_of: "2026-09-09",
+    project_facts: {
+      noncommercial: true,
+      educational: true,
+      telemetry: false,
+      placeholders_allowed: true,
+    },
+    completeness_values: ["exhaustive", "bounded", "opportunistic", "unknown"],
+    redistribution_values: ["allowed", "attribution-required", "user-generated-only", "prohibited", "unresolved"],
+    source_snapshots: [
+      {
+        id: "live-api",
+        family: "stock-ui",
+        channel: "live",
+        game_version: "12.0.8",
+        api_version: 101050,
+        locale: "all",
+        revision: "f76cf16c4e5be7b234d15dc7f676febffa64c5bb",
+        sha256: "f9faa484d8f2d875d00ab78b32e9e236e06922101b25e356f2101591db2e3d83",
+        uri: "https://github.com/esoui/esoui/blob/f76cf16c4e5be7b234d15dc7f676febffa64c5bb/ESOUIDocumentation.txt",
+        acquired_at: "2026-09-09",
+        license_scope: "technical-reference-only",
+        recommended: true,
+      },
+      {
+        id: "pts-api",
+        family: "stock-ui",
+        channel: "pts",
+        game_version: "12.1.4",
+        api_version: 101051,
+        locale: "all",
+        revision: "1baf1131560c2bcd38ffd2bd070728273b25f934",
+        sha256: "baf4e5173ce9ac478e76a5b81820b55bfe6525dfa45830b4dbc706916ba48055",
+        uri: "https://github.com/esoui/esoui/blob/1baf1131560c2bcd38ffd2bd070728273b25f934/ESOUIDocumentation.txt",
+        acquired_at: "2026-09-09",
+        license_scope: "technical-reference-only",
+        recommended: true,
+      },
+    ],
+    promotion_policy: {
+      automatic: false,
+      requires_live_api_version: true,
+      requires_live_revision: true,
+      requires_content_hash: true,
+      requires_reviewer: true,
+    },
+    collector_policy: {
+      format: "restricted-data-envelope",
+      execute_lua: false,
+      byte_limit_required: true,
+      record_limit_required: true,
+      atomic_import: true,
+      upload_default: false,
+      user_data_separate: true,
+    },
+    categories: requiredCatalogCategories.map(category),
+  };
+}
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
 
@@ -1160,4 +1254,52 @@ test("S059 requires every frozen alias or a directly linked glossary explanation
     `# Glossary\n\n\`\`\`text\n${entry.aliases[0]} [${entry.canonical}](../README.md)\n\`\`\`\n`,
   );
   assert.match(validateContentCoverage(manifest, snapshot).join("\n"), /required search alias/);
+});
+
+test("accepts the complete ESO catalog source contract", () => {
+  assert.deepEqual(validateCatalogSourceContract(validCatalogContract()), []);
+});
+
+test("rejects missing catalog categories and transient durable keys", () => {
+  const contract = validCatalogContract();
+  contract.categories = contract.categories.filter((row) => row.id !== "items-and-gear");
+  contract.categories[0].stable_key = "luaindex";
+  const errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("missing required category items-and-gear")));
+  assert.ok(errors.some((error) => error.includes("transient stable_key")));
+});
+
+test("rejects unsupported exhaustive claims and unresolved source references", () => {
+  const contract = validCatalogContract();
+  contract.categories[0].completeness = "exhaustive";
+  contract.categories[0].field_verification = "issue #129";
+  contract.categories[1].source_ids = ["missing-source"];
+  const errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.some((error) => error.includes("cannot be exhaustive while field verification is pending")));
+  assert.ok(errors.some((error) => error.includes("unknown source missing-source")));
+});
+
+test("rejects implicit PTS promotion and distributable game icon bytes", () => {
+  const contract = validCatalogContract();
+  contract.promotion_policy.automatic = true;
+  contract.categories.find((row) => row.id === "icon-bytes").redistribution = "allowed";
+  contract.project_facts.placeholders_allowed = false;
+  const errors = validateCatalogSourceContract(contract);
+  assert.ok(errors.includes("catalog contract must forbid automatic PTS promotion"));
+  assert.ok(errors.includes("catalog contract must prohibit redistribution of game icon bytes"));
+  assert.ok(errors.includes("catalog contract must retain project-created placeholders"));
+});
+
+test("rejects executable, unbounded, non-atomic, or uploaded collector input", () => {
+  const contract = validCatalogContract();
+  contract.collector_policy.execute_lua = true;
+  contract.collector_policy.byte_limit_required = false;
+  contract.collector_policy.record_limit_required = false;
+  contract.collector_policy.atomic_import = false;
+  contract.collector_policy.upload_default = true;
+  contract.collector_policy.user_data_separate = false;
+  const errors = validateCatalogSourceContract(contract);
+  for (const phrase of ["execute Lua", "byte limit", "record limit", "atomic", "uploaded by default", "user data separate"]) {
+    assert.ok(errors.some((error) => error.includes(phrase)), phrase);
+  }
 });

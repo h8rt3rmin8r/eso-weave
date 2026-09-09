@@ -11,6 +11,9 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plan
 
-No build plan is active. S067 merged in PR #128 and shipped in v0.15.1. Installed
-field verification remains independently tracked by issue #110 and does not
-block selection of the next development slice.
+| Plan | Status | Current slice |
+| --- | --- | --- |
+| [038](plan-038.md) | Active | [S068 ESO catalog source contract](../../../specs/068-eso-catalog-contract/spec.md), issue #112 |
+
+Installed v0.15.1 field verification remains independently tracked by issue
+#110 and does not block Plan 038.

@@ -15,3 +15,8 @@ Project history and licensing remain available in the repository:
 
 - [Changelog](https://github.com/h8rt3rmin8r/eso-weave/blob/main/CHANGELOG.md)
 - [Apache-2.0 License](https://github.com/h8rt3rmin8r/eso-weave/blob/main/LICENSE)
+
+The [ESO Catalog Sources and Rights](catalog-sources-and-rights.md) reference
+pins the live and PTS evidence used for catalog planning, distinguishes API
+iteration from known-ID and observed-event coverage, and records the
+placeholder-first graphics boundary.
