@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S067 keeps every generated-input path closed through ghost, world-activation,
+  and no-load death recovery, refreshes action-driving observations before
+  reopening Life, cancels stale Fishing and weave work, and starts a complete
+  new Auto Potion retry interval after coherent recovery (issue #109).
 - S065 records released-package verification for the bundled v0.15.0
   documentation across Windows and Linux without changing application runtime
   behavior (issues #84 and #83).
@@ -20,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Model resurrection as a death episode with typed recovery paths.
+  Treat player-alive events as recovery evidence rather than authorization,
+  require a later coherent baseline, republish current controller inputs before
+  Alive, and preserve protocol compatibility by retaining B21 while assigning
+  distinct fail-closed recovery values. Reset Auto Potion retry eligibility only
+  for an observed death episode, not an ordinary signal or tolerance recovery.
 - 2026-09-08: Amend the constitution to 2.0.1 and align pinned release guidance
   so mandatory automated and repository gates precede publication while
   artifact-dependent installed verification follows it in a separate issue.

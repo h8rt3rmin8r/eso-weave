@@ -73,7 +73,7 @@ pub enum StopReason {
     Unfocused,
     /// ESO Weave was suspended while fishing was requested.
     Suspended,
-    /// The player is dead, reincarnating, or not authoritatively known alive.
+    /// The player is dead, recovering, or not authoritatively known alive.
     PlayerUnavailable,
     /// The world is loading or has no authoritative active baseline.
     WorldUnavailable,

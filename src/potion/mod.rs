@@ -38,7 +38,8 @@ use crate::config::{Notice, NoticeKind};
 use crate::input::{InputBackend, Key, Transition};
 use crate::pixelbus::{
     LifeState, MovementSignal, QuickslotClassification, QuickslotPotionAvailability,
-    QuickslotState, ResourceLevel, ResourceSet, SlotCooldown, TravelState, WorldState,
+    QuickslotState, RecoveryPath, ResourceLevel, ResourceSet, SlotCooldown, TravelState,
+    WorldState,
 };
 
 /// The largest accepted retry interval, in milliseconds.
@@ -192,9 +193,15 @@ impl AutoPotionState {
                 "blocked_player_unknown"
             }
             Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Dead)) => "blocked_player_dead",
-            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Reincarnating)) => {
-                "blocked_player_reincarnating"
-            }
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Recovering(
+                RecoveryPath::Ghost,
+            ))) => "blocked_player_recovering_ghost",
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Recovering(
+                RecoveryPath::WorldActivation,
+            ))) => "blocked_player_recovering_world_activation",
+            Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Recovering(
+                RecoveryPath::NoLoad,
+            ))) => "blocked_player_recovering_no_load",
             Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Alive)) => {
                 "blocked_player_alive_invalid"
             }
@@ -459,6 +466,8 @@ pub struct AutoPotionController {
     travel: TravelState,
     movement: MovementSignal,
     last_attempt_ms: Option<u64>,
+    recovery_retry_pending: bool,
+    retry_episode_started_ms: Option<u64>,
     state: AutoPotionState,
 }
 
@@ -487,6 +496,8 @@ impl AutoPotionController {
             travel: TravelState::Unknown,
             movement: MovementSignal::Unknown,
             last_attempt_ms: None,
+            recovery_retry_pending: false,
+            retry_episode_started_ms: None,
             state: AutoPotionState::Off,
         }
     }
@@ -512,6 +523,11 @@ impl AutoPotionController {
     /// When the key was last pressed, if ever.
     pub fn last_attempt_ms(&self) -> Option<u64> {
         self.last_attempt_ms
+    }
+
+    /// The coherent recovery time that currently bounds a new retry episode.
+    pub fn retry_episode_started_ms(&self) -> Option<u64> {
+        self.retry_episode_started_ms
     }
 
     /// The effective result of the most recent evaluation or lifecycle change.
@@ -622,6 +638,10 @@ impl AutoPotionController {
 
     /// Sets the authoritative player life state without changing requested enablement.
     pub fn set_life_state(&mut self, life: LifeState) {
+        if matches!(life, LifeState::Dead | LifeState::Recovering(_)) {
+            self.recovery_retry_pending = true;
+            self.retry_episode_started_ms = None;
+        }
         self.life = life;
         self.apply_immediate_state();
     }
@@ -686,6 +706,19 @@ impl AutoPotionController {
         now_ms: u64,
         sink: &mut dyn AutoPotionSink,
     ) -> AutoPotionState {
+        if self.life == LifeState::Alive && self.recovery_retry_pending {
+            self.retry_episode_started_ms = Some(now_ms);
+            self.recovery_retry_pending = false;
+            tracing::debug!(
+                target: "eso_weave::potion",
+                retry_episode_started_ms = now_ms,
+                "auto-potion recovery retry episode started"
+            );
+        }
+        let retry_baseline_ms = match (self.last_attempt_ms, self.retry_episode_started_ms) {
+            (Some(attempt), Some(recovery)) => Some(attempt.max(recovery)),
+            (attempt, recovery) => attempt.or(recovery),
+        };
         // The gates come from the controller, never from the caller. That is the
         // single source of truth the split between the two input types exists to
         // enforce.
@@ -705,7 +738,7 @@ impl AutoPotionController {
             inputs,
             &self.config,
             self.enabled,
-            self.last_attempt_ms,
+            retry_baseline_ms,
             now_ms,
         );
         if matches!(outcome, AutoPotionState::Triggered(_)) {
@@ -717,6 +750,7 @@ impl AutoPotionController {
             sink.key(self.config.quickslot_key, Transition::Down);
             sink.key(self.config.quickslot_key, Transition::Up);
             self.last_attempt_ms = Some(now_ms);
+            self.retry_episode_started_ms = None;
         }
         self.set_state(outcome);
         outcome

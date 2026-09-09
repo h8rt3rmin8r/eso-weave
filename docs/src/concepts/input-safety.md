@@ -61,6 +61,13 @@ waits. If one closes during a sequence, remaining synthesis stops. Releases for
 any key or mouse button already held by the sink still run. A cancelled sequence
 that emitted nothing does not consume the Global Cooldown.
 
+Death closes the shared Life gate immediately and advances a monotonic death
+epoch once for that open-to-closed transition. Dead, Unknown, and every
+Recovering path remain closed. When the add-on finishes a death episode, the
+reader republishes current safety and action observations before routing Alive,
+so no pre-death cache value can become authorization merely because the gate
+reopened.
+
 Roll-dodge evidence fails open for physical input and closed for generated input.
 Active or unavailable roll state passes the player's original skill key through.
 The worker rechecks the gate before accounting cooldown, and the real input sink

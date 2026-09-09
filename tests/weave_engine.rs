@@ -432,7 +432,9 @@ fn queued_weave_requires_alive_and_is_not_replayed_after_recovery() {
     for state in [
         LifeState::Unknown,
         LifeState::Dead,
-        LifeState::Reincarnating,
+        LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::Ghost),
+        LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::WorldActivation),
+        LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::NoLoad),
     ] {
         engine.set_life(state);
         engine.handle(Action::Skill1, &mut sink);

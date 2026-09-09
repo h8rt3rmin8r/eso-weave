@@ -13,7 +13,8 @@ use eso_weave::fishing::{
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{BindingTable, InputEngine, Key, Transition};
 use eso_weave::pixelbus::{
-    LifeState, MockSampler, PixelBusReader, ReaderConfig, Rgb, TravelState, WorldState,
+    LifeState, MockSampler, PixelBusReader, ReaderConfig, RecoveryPath, Rgb, TravelState,
+    WorldState,
 };
 
 fn controller() -> FishingController {
@@ -101,6 +102,55 @@ fn non_alive_cancels_pending_fishing_without_replay_and_keeps_request() {
         sink.ops.is_empty(),
         "a manual fresh cast is observed, not synthesized"
     );
+}
+
+#[test]
+fn s067_every_non_alive_state_cancels_every_fishing_phase_without_replay() {
+    for unsafe_life in [
+        LifeState::Unknown,
+        LifeState::Dead,
+        LifeState::Recovering(RecoveryPath::Ghost),
+        LifeState::Recovering(RecoveryPath::WorldActivation),
+        LifeState::Recovering(RecoveryPath::NoLoad),
+    ] {
+        for phase in [
+            FishingState::Armed,
+            FishingState::Waiting,
+            FishingState::Reeling,
+            FishingState::Recast,
+        ] {
+            let cfg = FishingConfig::default();
+            let mut controller = controller();
+            let mut sink = MockFishingSink::new();
+            controller.set_enabled(true, 0, &mut sink);
+            if phase != FishingState::Armed {
+                controller.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+            }
+            if matches!(phase, FishingState::Reeling | FishingState::Recast) {
+                controller.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+            }
+            if phase == FishingState::Recast {
+                controller.tick(20 + u64::from(cfg.reel_delay_ms), &mut sink);
+            }
+            assert_eq!(controller.state(), phase);
+            sink.clear();
+
+            controller.set_life_state(unsafe_life);
+            controller.tick(100_000, &mut sink);
+            controller.set_life_state(LifeState::Alive);
+
+            assert!(controller.enabled(), "request cleared for {unsafe_life:?}");
+            assert_eq!(controller.state(), FishingState::Disabled);
+            assert_eq!(
+                controller.stop_reason(),
+                Some(StopReason::PlayerUnavailable)
+            );
+            assert!(
+                sink.ops.is_empty(),
+                "{unsafe_life:?} replayed {phase:?} work"
+            );
+        }
+    }
 }
 
 #[test]

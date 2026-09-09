@@ -14,8 +14,8 @@
 use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{
     LifeState, MovementSignal, QuickslotClassification, QuickslotNonPotionKind,
-    QuickslotPotionAvailability, QuickslotState, ResourceLevel, ResourceSet, SlotCooldown,
-    TravelState, WorldState,
+    QuickslotPotionAvailability, QuickslotState, RecoveryPath, ResourceLevel, ResourceSet,
+    SlotCooldown, TravelState, WorldState,
 };
 use eso_weave::potion::{
     evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState,
@@ -104,7 +104,9 @@ fn every_non_alive_state_blocks_auto_potion_without_replay() {
     for life in [
         LifeState::Unknown,
         LifeState::Dead,
-        LifeState::Reincarnating,
+        LifeState::Recovering(RecoveryPath::Ghost),
+        LifeState::Recovering(RecoveryPath::WorldActivation),
+        LifeState::Recovering(RecoveryPath::NoLoad),
     ] {
         let mut inputs = eligible_inputs();
         inputs.life = life;
@@ -113,6 +115,51 @@ fn every_non_alive_state_blocks_auto_potion_without_replay() {
             AutoPotionState::Blocked(BlockReason::PlayerUnavailable(life))
         );
     }
+}
+
+#[test]
+fn s067_recovery_starts_a_complete_new_retry_episode() {
+    let mut controller = armed_controller();
+    let retry = u64::from(controller.config().retry_interval_ms);
+    let mut sink = MockAutoPotionSink::new();
+
+    assert!(matches!(
+        controller.tick(eligible_readings(), 1_000, &mut sink),
+        AutoPotionState::Triggered(_)
+    ));
+    sink.clear();
+
+    controller.set_life_state(LifeState::Dead);
+    assert_eq!(
+        controller.tick(eligible_readings(), 1_000 + retry * 2, &mut sink),
+        AutoPotionState::Blocked(BlockReason::PlayerUnavailable(LifeState::Dead))
+    );
+    controller.set_life_state(LifeState::Recovering(RecoveryPath::NoLoad));
+    controller.set_life_state(LifeState::Alive);
+
+    let recovered_at = 1_000 + retry * 3;
+    assert_eq!(
+        controller.tick(eligible_readings(), recovered_at, &mut sink),
+        AutoPotionState::Blocked(BlockReason::RetryInterval)
+    );
+    assert!(
+        sink.ops.is_empty(),
+        "the first recovered tick must not press Q"
+    );
+    assert_eq!(controller.retry_episode_started_ms(), Some(recovered_at));
+
+    assert_eq!(
+        controller.tick(eligible_readings(), recovered_at + retry - 1, &mut sink),
+        AutoPotionState::Blocked(BlockReason::RetryInterval)
+    );
+    assert!(matches!(
+        controller.tick(eligible_readings(), recovered_at + retry, &mut sink),
+        AutoPotionState::Triggered(_)
+    ));
+    assert_eq!(
+        sink.ops,
+        vec![(Key::Q, Transition::Down), (Key::Q, Transition::Up)]
+    );
 }
 
 #[test]

@@ -168,8 +168,18 @@ fn life_state_view_names_every_protocol_state() {
         (LifeState::Alive, "Alive", StatusRole::Healthy),
         (LifeState::Dead, "Dead", StatusRole::Warning),
         (
-            LifeState::Reincarnating,
-            "Reincarnating",
+            LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::Ghost),
+            "Recovering (ghost)",
+            StatusRole::Warning,
+        ),
+        (
+            LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::WorldActivation),
+            "Recovering (world activation)",
+            StatusRole::Warning,
+        ),
+        (
+            LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::NoLoad),
+            "Recovering (no load)",
             StatusRole::Warning,
         ),
     ] {

@@ -354,8 +354,8 @@ pub enum LifeState {
     Alive,
     /// The player is dead.
     Dead,
-    /// The player is transitioning back to life.
-    Reincarnating,
+    /// A death episode is still resolving through the identified recovery path.
+    Recovering(RecoveryPath),
 }
 
 impl LifeState {
@@ -363,6 +363,17 @@ impl LifeState {
     pub fn gates(self) -> bool {
         self != Self::Alive
     }
+}
+
+/// The evidence path that must complete before a death episode can publish Alive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryPath {
+    /// The player is leaving ghost or soul form.
+    Ghost,
+    /// Recovery crossed a world deactivation and requires a fresh activation.
+    WorldActivation,
+    /// Recovery stayed in the same loaded world and needs a later coherent baseline.
+    NoLoad,
 }
 
 /// Whether ESO has a fully re-baselined active world or is transitioning.
@@ -436,8 +447,10 @@ impl RollDodgeState {
 /// more than four times the default tolerance.
 const LIFE_MARKER: u8 = 0x89;
 const LIFE_ALIVE_RED: u8 = 0x20;
+const LIFE_RECOVERING_NO_LOAD_RED: u8 = 0x50;
 const LIFE_DEAD_RED: u8 = 0x80;
-const LIFE_REINCARNATING_RED: u8 = 0xE0;
+const LIFE_RECOVERING_WORLD_RED: u8 = 0xB0;
+const LIFE_RECOVERING_GHOST_RED: u8 = 0xE0;
 
 /// The green marker identifying the B22 world-state sample.
 ///
@@ -987,7 +1000,7 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In the version-20 addon, the 29 blocks follow three negotiated header cells
+/// In the version-21 addon, the 29 blocks follow three negotiated header cells
 /// and remain on one row at every supported client width and block size. In the
 /// explicit legacy layout they retain the two-row 16-column shape introduced by
 /// slices 038 and 042.
@@ -1810,15 +1823,31 @@ pub fn decode_life_state(sample: Rgb, tolerance: u8) -> LifeState {
     if !within(sample.g, LIFE_MARKER, tolerance) || checksum.abs_diff(255) > u16::from(tolerance) {
         return LifeState::Unknown;
     }
-    if within(sample.r, LIFE_ALIVE_RED, tolerance) {
-        LifeState::Alive
-    } else if within(sample.r, LIFE_DEAD_RED, tolerance) {
-        LifeState::Dead
-    } else if within(sample.r, LIFE_REINCARNATING_RED, tolerance) {
-        LifeState::Reincarnating
-    } else {
-        LifeState::Unknown
+    let mut matches = [
+        (LIFE_ALIVE_RED, LifeState::Alive),
+        (
+            LIFE_RECOVERING_NO_LOAD_RED,
+            LifeState::Recovering(RecoveryPath::NoLoad),
+        ),
+        (LIFE_DEAD_RED, LifeState::Dead),
+        (
+            LIFE_RECOVERING_WORLD_RED,
+            LifeState::Recovering(RecoveryPath::WorldActivation),
+        ),
+        (
+            LIFE_RECOVERING_GHOST_RED,
+            LifeState::Recovering(RecoveryPath::Ghost),
+        ),
+    ]
+    .into_iter()
+    .filter(|(code, _)| within(sample.r, *code, tolerance));
+    let Some((_, state)) = matches.next() else {
+        return LifeState::Unknown;
+    };
+    if matches.next().is_some() {
+        return LifeState::Unknown;
     }
+    state
 }
 
 /// Decodes B22 into the authoritative world lifecycle state.
@@ -2269,6 +2298,8 @@ pub struct PixelBusReader {
     world: WorldState,
     roll_dodge: RollDodgeState,
     travel: TravelState,
+    sample_generation: u64,
+    death_episode_observed: bool,
     fishing_config_generation: u64,
     had_heartbeat: bool,
 }
@@ -2305,6 +2336,8 @@ impl PixelBusReader {
             world: WorldState::Unknown,
             roll_dodge: RollDodgeState::Unknown,
             travel: TravelState::Unknown,
+            sample_generation: 0,
+            death_episode_observed: false,
             fishing_config_generation: 0,
             had_heartbeat: false,
         }
@@ -2348,6 +2381,11 @@ impl PixelBusReader {
     /// The most recently validated layout or bounded unavailable reason.
     pub fn layout(&self) -> LayoutState {
         self.layout
+    }
+
+    /// Monotonic count of coherent heartbeat-bearing payload captures.
+    pub fn sample_generation(&self) -> u64 {
+        self.sample_generation
     }
 
     /// Clears all history so a restarted game republishes even unchanged values.
@@ -2546,15 +2584,38 @@ impl PixelBusReader {
         self.had_heartbeat = heartbeat;
 
         if heartbeat {
+            self.sample_generation = self.sample_generation.wrapping_add(1);
             self.last_heartbeat_ms = Some(now_ms);
             self.signal_lost = false;
             events.push(PixelBusEvent::Heartbeat);
 
+            // Unsafe life transitions close authorization before any observation
+            // from this capture can drive work. A recovered Alive transition is
+            // held until the current actionable baseline has been republished.
+            let life = b21.map_or(LifeState::Unknown, |c| decode_life_state(c, tolerance));
+            let life_changed = life != self.life;
+            if matches!(life, LifeState::Dead | LifeState::Recovering(_)) {
+                self.death_episode_observed = true;
+            }
+            let recovered = life_changed && life == LifeState::Alive && self.death_episode_observed;
+            if life_changed {
+                self.life = life;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    signal = ?life,
+                    sample_generation = self.sample_generation,
+                    "player life state detected"
+                );
+                if !recovered {
+                    events.push(PixelBusEvent::Life(life));
+                }
+            }
+
             // B22 describes whether the rest of this captured payload belongs
-            // to a complete active-world baseline. Publish it before every
-            // dependent observation from the same batch.
+            // to a complete active-world baseline. Recovery republishes it even
+            // when unchanged so controllers cannot reuse pre-death state.
             let world = b22.map_or(WorldState::Unknown, |c| decode_world_state(c, tolerance));
-            if world != self.world {
+            if world != self.world || recovered {
                 self.world = world;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
@@ -2564,26 +2625,11 @@ impl PixelBusReader {
                 events.push(PixelBusEvent::World(world));
             }
 
-            // B21 is safety-authoritative and therefore precedes every event
-            // that can drive synthesized work from the same captured frame.
-            // This ordering closes the gate before a death-associated fishing
-            // stop and opens it before a genuine recovery cast edge.
-            let life = b21.map_or(LifeState::Unknown, |c| decode_life_state(c, tolerance));
-            if life != self.life {
-                self.life = life;
-                tracing::debug!(
-                    target: "eso_weave::pixelbus",
-                    signal = ?life,
-                    "player life state detected"
-                );
-                events.push(PixelBusEvent::Life(life));
-            }
-
             // B23 is safety-authoritative for generated weaves and therefore
             // precedes any event that could hand work to a synthesis controller.
             let roll_dodge =
                 b23.map_or(RollDodgeState::Unknown, |c| decode_roll_dodge(c, tolerance));
-            if roll_dodge != self.roll_dodge {
+            if roll_dodge != self.roll_dodge || recovered {
                 self.roll_dodge = roll_dodge;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
@@ -2595,7 +2641,7 @@ impl PixelBusReader {
 
             // B24 is authoritative for every synthesis path and precedes work.
             let travel = b24.map_or(TravelState::Unknown, |c| decode_travel_state(c, tolerance));
-            if travel != self.travel {
+            if travel != self.travel || recovered {
                 self.travel = travel;
                 tracing::debug!(target: "eso_weave::pixelbus", signal = ?travel, "player travel state detected");
                 events.push(PixelBusEvent::Travel(travel));
@@ -2604,7 +2650,7 @@ impl PixelBusReader {
             // The menu block authorizes generated input and must recover before
             // any Fishing edge from the same captured frame is routed.
             let menu = b5.and_then(|c| decode_menu(c, tolerance));
-            if menu != self.menu {
+            if menu != self.menu || recovered {
                 self.menu = menu;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
@@ -2669,7 +2715,7 @@ impl PixelBusReader {
             // the clear-on-non-decode behaviour: a stale "mounted" surviving an
             // addon downgrade is the same false reading in a different signal.
             let movement = b9.map_or(MovementSignal::Unknown, |c| decode_movement(c, tolerance));
-            if movement != self.movement {
+            if movement != self.movement || recovered {
                 self.movement = movement;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
@@ -2684,7 +2730,7 @@ impl PixelBusReader {
             // six events plus six log lines for one action would bury the signal
             // this block exists to make visible.
             let cooldowns = decode_cooldowns(b10, b11, b12, b13, b14, b15, tolerance);
-            if cooldowns != self.cooldowns {
+            if cooldowns != self.cooldowns || recovered {
                 let previous = self.cooldowns;
                 self.cooldowns = cooldowns;
                 tracing::debug!(
@@ -2702,7 +2748,7 @@ impl PixelBusReader {
             // for synthesizes a keypress, so a stale "there is a ready potion"
             // surviving an addon downgrade would become a stale action.
             let quickslot = decode_quickslot(b16, b17, b18, b19, b20, tolerance);
-            if quickslot != self.quickslot {
+            if quickslot != self.quickslot || recovered {
                 self.quickslot = quickslot;
                 tracing::debug!(
                     target: "eso_weave::pixelbus",
@@ -2720,7 +2766,7 @@ impl PixelBusReader {
             // combat, and at DEBUG they would push every other line out of the
             // live log, which is the tool used to diagnose everything else.
             let resources = decode_resources(b6, b7, b8, tolerance);
-            if resources != self.resources {
+            if resources != self.resources || recovered {
                 self.resources = resources;
                 tracing::trace!(
                     target: "eso_weave::pixelbus",
@@ -2735,6 +2781,15 @@ impl PixelBusReader {
                 self.ultimate = ultimate;
                 tracing::trace!(target: "eso_weave::pixelbus", ?ultimate, "ultimate changed");
                 events.push(PixelBusEvent::Ultimate(ultimate));
+            }
+
+            if recovered {
+                events.push(PixelBusEvent::Life(LifeState::Alive));
+                self.death_episode_observed = false;
+                // A cast edge observed while Life was still closed is deliberately
+                // not replayed. Force the next heartbeat to publish current cast
+                // evidence as a genuinely post-recovery observation.
+                self.fishing = FishingSignal::None;
             }
         } else if let Some(last) = self.last_heartbeat_ms {
             if !self.signal_lost && now_ms.saturating_sub(last) > self.config.heartbeat_timeout_ms {

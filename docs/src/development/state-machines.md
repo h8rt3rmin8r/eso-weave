@@ -35,7 +35,7 @@ Evidence: `src/game/mod.rs` symbols `ProcessObservation::runtime`,
 
 | State machine | Safe value | Unsafe or unavailable values | Entry and recovery |
 | --- | --- | --- | --- |
-| Life State | Alive | Dead, Reincarnating, Unknown | ESO unit queries and life events establish state; invalid data, deactivation, death transitions, and signal loss clear authorization |
+| Life State | Alive | Dead, Recovering (ghost, world activation, or no load), Unknown | Death starts an episode; player-alive and path events establish recovery, and only a later coherent baseline can publish Alive |
 | World State | Active | Transitioning, Unknown | Player deactivation enters Transitioning; player activation refreshes every player payload before publishing Active |
 | Travel | Inactive | Pending, Unknown | Recall-cooldown growth or jump preparation enters Pending; movement, jump failure, loading, or a 15 second watchdog clears the attempt |
 | Roll Dodge | Inactive | Active, Unknown | Player ability 28549 gain enters Active and fade leaves it; a 1500 ms watchdog bounds rejected or missing fades |
@@ -78,6 +78,11 @@ machine:
 11. Record the Global Cooldown origin only if the sequence emitted a Down event.
 
 Requests blocked before or during a sequence are never replayed.
+
+An open-to-closed Life transition advances a diagnostic death epoch. The reader
+records a sample generation and, at death recovery, republishes every current
+action-driving observation before it routes Life Alive. This makes reopening a
+fresh authorization boundary rather than reuse of pre-death controller state.
 
 Evidence: `WeaveEngine::handle`, `RealSink::emit`, `RealSink::wait`, and
 `sequence_for_adapted` in `src/weave`; tests

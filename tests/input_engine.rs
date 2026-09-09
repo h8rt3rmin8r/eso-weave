@@ -635,6 +635,26 @@ fn s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes() {
 }
 
 #[test]
+fn s067_death_epoch_advances_once_per_open_to_closed_life_transition() {
+    let (input, _rx) = engine();
+    input.set_life_gated(false);
+    assert_eq!(input.death_epoch(), 0);
+
+    input.set_life_gated(true);
+    assert_eq!(input.death_epoch(), 1);
+    input.set_life_gated(true);
+    assert_eq!(
+        input.death_epoch(),
+        1,
+        "duplicate unsafe evidence is idempotent"
+    );
+
+    input.set_life_gated(false);
+    input.set_life_gated(true);
+    assert_eq!(input.death_epoch(), 2);
+}
+
+#[test]
 fn s060_toggle_handoff_remains_identifiable_across_authorization_epochs() {
     let (input, rx) = engine();
     input.set_focused(true);

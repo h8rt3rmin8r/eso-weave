@@ -35,8 +35,9 @@ use crate::logging::LogHandle;
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, LiveReaderConfig, MenuSurface, MovementSignal,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
-    QuickslotUnavailableReason, ReaderConfig, ResourceLevel, ResourceSet, RollDodgeState,
-    SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponClass, WorldState,
+    QuickslotUnavailableReason, ReaderConfig, RecoveryPath, ResourceLevel, ResourceSet,
+    RollDodgeState, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponClass,
+    WorldState,
 };
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
@@ -307,8 +308,14 @@ pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
                 BlockReason::PlayerUnavailable(LifeState::Dead) => {
                     strings::AUTO_POTION_BLOCKED_PLAYER_DEAD
                 }
-                BlockReason::PlayerUnavailable(LifeState::Reincarnating) => {
-                    strings::AUTO_POTION_BLOCKED_PLAYER_REINCARNATING
+                BlockReason::PlayerUnavailable(LifeState::Recovering(RecoveryPath::Ghost)) => {
+                    strings::AUTO_POTION_BLOCKED_PLAYER_RECOVERING_GHOST
+                }
+                BlockReason::PlayerUnavailable(LifeState::Recovering(
+                    RecoveryPath::WorldActivation,
+                )) => strings::AUTO_POTION_BLOCKED_PLAYER_RECOVERING_WORLD,
+                BlockReason::PlayerUnavailable(LifeState::Recovering(RecoveryPath::NoLoad)) => {
+                    strings::AUTO_POTION_BLOCKED_PLAYER_RECOVERING_NO_LOAD
                 }
                 BlockReason::WorldUnavailable => "Blocked (world unavailable)",
                 BlockReason::TravelPending => "Blocked (travel pending)",
@@ -479,11 +486,13 @@ pub fn life_state_view(state: LifeState) -> LifeStateView {
             LifeState::Unknown => "Not detected",
             LifeState::Alive => "Alive",
             LifeState::Dead => "Dead",
-            LifeState::Reincarnating => "Reincarnating",
+            LifeState::Recovering(RecoveryPath::Ghost) => "Recovering (ghost)",
+            LifeState::Recovering(RecoveryPath::WorldActivation) => "Recovering (world activation)",
+            LifeState::Recovering(RecoveryPath::NoLoad) => "Recovering (no load)",
         },
         role: match state {
             LifeState::Alive => StatusRole::Healthy,
-            LifeState::Dead | LifeState::Reincarnating => StatusRole::Warning,
+            LifeState::Dead | LifeState::Recovering(_) => StatusRole::Warning,
             LifeState::Unknown => StatusRole::Muted,
         },
     }

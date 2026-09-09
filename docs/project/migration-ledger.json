@@ -1516,13 +1516,23 @@
     },
     {
       "id": "036",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-036.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-036.md",
       "specs": [
         "specs/066-release-governance-debian-metadata"
       ],
-      "evidence": "Issue #104 and issue #105 track the active S066 release governance and Debian metadata work."
+      "evidence": "Issues #104 and #105 closed when S066 merged in PR #108."
+    },
+    {
+      "id": "037",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-037.md",
+      "specs": [
+        "specs/067-death-recovery-safety"
+      ],
+      "evidence": "Issue #109 tracks the active S067 death recovery safety work."
     }
   ],
   "safetyCrosswalk": [

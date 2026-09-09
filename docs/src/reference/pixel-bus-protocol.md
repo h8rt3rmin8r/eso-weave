@@ -78,7 +78,7 @@ Positions below use the default block size and current one-row layout.
 | B16 Quickslot Cooldown | (312, 8) | `G = 0x38`; R uses the cooldown encoding; this attached fact never classifies the selected entry |
 | B17 through B19 Quickslot Item | (328, 8) through (360, 8) | Markers `0xB0`, `0xDD`, `0xF3`; R carries an optional 24-bit item ID most significant byte first; retained only with explicit B20 potion classification and used for diagnosis only |
 | B20 Quickslot Classification | (376, 8) | `G = 0x76`; spaced R codes distinguish unsupported API, invalid or inconsistent facts, empty, item, collectible, quest item, emote, quick chat, other, depleted potion, blocked potion, and usable potion |
-| B21 Life State | (392, 8) | `G = 0x89`; R is `0x20` Alive, `0x80` Dead, or `0xE0` Reincarnating; reincarnation takes precedence over death and missing evidence is Unknown |
+| B21 Life State | (392, 8) | `G = 0x89`; R is `0x20` Alive, `0x50` Recovering (no load), `0x80` Dead, `0xB0` Recovering (world activation), or `0xE0` Recovering (ghost); all recovery values are fail closed and missing evidence is Unknown |
 | B22 World State | (408, 8) | Version 2; `G = 0xCC`; R is `0x20` Unknown, `0x80` Transitioning, or `0xE0` Active; deactivation transitions immediately and activation refreshes all player payloads before Active |
 | B23 Roll Dodge | (424, 8) | Version 3; `G = 0xF9`; R is `0x20` Unknown, `0x80` Inactive, or `0xE0` Active; player ability 28549 gain/fade drives it and a 1500 ms watchdog clears rejected gains |
 | B24 Travel | (440, 8) | Version 4; `G = 0x13`; R is `0x20` Unknown, `0x80` Inactive, or `0xE0` Pending; recall-cooldown growth or jump preparation enters Pending and movement, jump failure, or a 15 second watchdog clears it |
