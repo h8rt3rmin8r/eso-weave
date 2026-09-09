@@ -85,6 +85,10 @@ Result: PASS, with Linux parity delegated to pull-request CI.
 - Atomic temporary-file replacement was extracted into one crate-private helper
   shared by the compiler, collector importer, and S074 selection/receipt writer,
   resolving pre-implementation finding 5 instead of adding a third copy.
+- First-round review hardening separates saved-catalog startup resolution from
+  candidate discovery, binds trust acknowledgement to one candidate identity,
+  presents acquisition provenance before that acknowledgement, and serializes
+  terminal receipt allocation under a dedicated cross-process lock.
 - Format, strict all-target/all-feature Clippy, the complete locked test suite,
   both optimized binaries, mdBook test/build/link checking, generated-site
   policy, spelling, JSON parsing, diff whitespace, UTF-8/BOM, forbidden-dash,

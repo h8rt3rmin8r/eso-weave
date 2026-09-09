@@ -131,6 +131,10 @@ impl UpdateRoots {
         self.root.join("operation.lock")
     }
 
+    fn receipt_lock(&self) -> PathBuf {
+        self.root.join("receipt.lock")
+    }
+
     fn prepare(&self) -> Result<(), UpdateError> {
         for path in [
             self.root(),
@@ -796,6 +800,7 @@ impl CatalogUpdateService {
         finding_code: &str,
     ) -> Result<(), UpdateError> {
         self.prepare()?;
+        let _lock = OperationLock::acquire_blocking(&self.roots.receipt_lock())?;
         let sequence = next_event_sequence(&self.roots.receipts())?;
         let old_target = self
             .load_selection()
@@ -989,17 +994,27 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), UpdateError> {
 struct OperationLock(File);
 
 impl OperationLock {
-    fn acquire(path: &Path) -> Result<Self, UpdateError> {
-        let file = OpenOptions::new()
+    fn open(path: &Path) -> Result<File, UpdateError> {
+        Ok(OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .open(path)?;
+            .open(path)?)
+    }
+
+    fn acquire(path: &Path) -> Result<Self, UpdateError> {
+        let file = Self::open(path)?;
         file.try_lock().map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => UpdateError::ConcurrentOperation,
             std::fs::TryLockError::Error(error) => UpdateError::Io(error),
         })?;
+        Ok(Self(file))
+    }
+
+    fn acquire_blocking(path: &Path) -> Result<Self, UpdateError> {
+        let file = Self::open(path)?;
+        file.lock()?;
         Ok(Self(file))
     }
 }
@@ -1007,5 +1022,47 @@ impl OperationLock {
 impl Drop for OperationLock {
     fn drop(&mut self) {
         let _ = self.0.unlock();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn concurrent_terminal_receipts_keep_distinct_sequences() {
+        let root = tempfile::tempdir().unwrap();
+        let service = CatalogUpdateService::new(root.path(), root.path().join("bundled.sqlite"));
+        service.prepare().unwrap();
+        let participants = 8;
+        let barrier = Arc::new(Barrier::new(participants));
+        let handles = (0..participants)
+            .map(|_| {
+                let service = service.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    service
+                        .write_terminal_receipt(
+                            UpdateOperation::Install,
+                            UpdateResult::Failed,
+                            UpdateStage::Failed,
+                            None,
+                            "concurrent-test",
+                        )
+                        .unwrap();
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        let receipts = fs::read_dir(service.roots.receipts())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with("event-"))
+            .count();
+        assert_eq!(receipts, participants);
     }
 }

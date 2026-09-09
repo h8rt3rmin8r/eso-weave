@@ -263,7 +263,7 @@ pub struct EsoWeaveApp {
     catalog_update_open: bool,
     catalog_candidates: Vec<CandidateSummary>,
     catalog_selected: Option<String>,
-    catalog_origin_acknowledged: bool,
+    catalog_acknowledged_candidate: Option<String>,
     catalog_progress: Option<UpdateProgress>,
     catalog_update_message: Option<String>,
     catalog_notice_dismissed: bool,
@@ -328,7 +328,7 @@ impl EsoWeaveApp {
             catalog_update_open: false,
             catalog_candidates: Vec::new(),
             catalog_selected: None,
-            catalog_origin_acknowledged: false,
+            catalog_acknowledged_candidate: None,
             catalog_progress: None,
             catalog_update_message: None,
             catalog_notice_dismissed: false,
@@ -621,18 +621,26 @@ impl EsoWeaveApp {
                     candidates,
                     resolution,
                     recovered_staging,
+                    discovery_failure,
                 } => {
                     self.catalog_status_ready = true;
                     self.catalog_candidates = candidates;
                     self.choose_default_catalog_candidate();
                     self.model.set_catalog(resolution.access);
+                    let mut messages = Vec::new();
                     if let Some(warning) = resolution.warning {
-                        self.catalog_update_message = Some(warning);
-                    } else if recovered_staging > 0 {
-                        self.catalog_update_message = Some(format!(
+                        messages.push(warning);
+                    }
+                    if recovered_staging > 0 {
+                        messages.push(format!(
                             "Recovered {recovered_staging} interrupted catalog staging operation(s)."
                         ));
                     }
+                    if let Some(failure) = discovery_failure {
+                        messages.push(format!("Candidate discovery failed: {}", failure.message));
+                    }
+                    self.catalog_update_message =
+                        (!messages.is_empty()).then(|| messages.join(" "));
                 }
                 WorkerEvent::DiscoveryComplete(candidates) => {
                     self.catalog_status_ready = true;
@@ -668,7 +676,6 @@ impl EsoWeaveApp {
                         self.catalog_candidates.push(candidate.clone());
                     }
                     self.catalog_selected = Some(candidate.candidate_sha256);
-                    self.catalog_origin_acknowledged = true;
                     self.catalog_progress = Some(UpdateProgress {
                         stage: UpdateStage::Complete,
                         completed_bytes: candidate.total_bytes,
@@ -1864,13 +1871,6 @@ impl EsoWeaveApp {
             .catalog_worker
             .as_ref()
             .is_some_and(CatalogUpdateWorker::is_busy);
-        let selected = self.catalog_selected.clone();
-        let selected_summary = selected.as_ref().and_then(|hash| {
-            self.catalog_candidates
-                .iter()
-                .find(|candidate| &candidate.candidate_sha256 == hash)
-                .cloned()
-        });
         let modal = egui::Modal::new(egui::Id::new("eso_weave_catalog_update")).show(ctx, |ui| {
             let modal_width = 620.0_f32.min(ctx.content_rect().width() * 0.90).max(280.0);
             let modal_height = (ctx.content_rect().height() * 0.88).max(260.0);
@@ -1923,6 +1923,13 @@ impl EsoWeaveApp {
                 }
             }
 
+            let selected_summary = self.catalog_selected.as_ref().and_then(|hash| {
+                self.catalog_candidates
+                    .iter()
+                    .find(|candidate| &candidate.candidate_sha256 == hash)
+                    .cloned()
+            });
+
             if let Some(candidate) = &selected_summary {
                 ui.group(|ui| {
                     ui.label(format!(
@@ -1941,13 +1948,36 @@ impl EsoWeaveApp {
                         "Integrity identity: {}...",
                         &candidate.candidate_sha256[..12]
                     ));
+                    let provenance = candidate
+                        .acquisition_counts
+                        .iter()
+                        .map(|(kind, count)| format!("{kind}: {count}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    ui.label(format!(
+                        "Source acquisition: {}",
+                        if provenance.is_empty() {
+                            "none recorded"
+                        } else {
+                            &provenance
+                        }
+                    ));
                 });
             }
 
-            ui.checkbox(
-                &mut self.catalog_origin_acknowledged,
-                "I obtained this candidate from a review or release source I trust.",
-            );
+            let trust_label =
+                "I obtained this candidate from a review or release source I trust.";
+            if let Some(candidate) = &selected_summary {
+                let hash = candidate.candidate_sha256.clone();
+                let mut acknowledged =
+                    self.catalog_acknowledged_candidate.as_deref() == Some(hash.as_str());
+                if ui.checkbox(&mut acknowledged, trust_label).changed() {
+                    self.catalog_acknowledged_candidate = acknowledged.then_some(hash);
+                }
+            } else {
+                let mut acknowledged = false;
+                ui.add_enabled(false, egui::Checkbox::new(&mut acknowledged, trust_label));
+            }
             ui.label(
                 "Collector-assisted builds are local-only. ESO saves addon data only after /reloadui, logout, or exit. Captures are parsed as restricted data, never executed or uploaded.",
             );
@@ -2091,7 +2121,8 @@ impl EsoWeaveApp {
                     && selected_summary
                         .as_ref()
                         .is_some_and(|candidate| candidate.channel == Channel::Live)
-                    && self.catalog_origin_acknowledged;
+                    && self.catalog_acknowledged_candidate.as_deref()
+                        == self.catalog_selected.as_deref();
                 if ui
                     .add_enabled(can_install, egui::Button::new("Install selected Live catalog"))
                     .clickable()

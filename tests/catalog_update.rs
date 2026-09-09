@@ -647,6 +647,53 @@ fn worker_failures_are_redacted_and_write_terminal_receipts() {
     assert!(!receipt.contains(sandbox.root.path().to_string_lossy().as_ref()));
 }
 
+#[test]
+fn startup_applies_saved_selection_even_when_candidate_discovery_fails() {
+    let sandbox = Sandbox::new();
+    let candidate = sandbox.candidate(CHANGED_LIVE_BUNDLE, "s074-live-2");
+    let installed = sandbox
+        .service
+        .install(&candidate, true, &CancellationToken::new(), |_| {})
+        .unwrap();
+    let live_import = sandbox.service.roots().import_root().join("live");
+    fs::remove_dir_all(&live_import).unwrap();
+    fs::write(&live_import, b"not a directory").unwrap();
+
+    let worker = CatalogUpdateWorker::spawn(sandbox.service.clone());
+    assert!(worker.startup());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let (target, release, discovery_failed) = loop {
+        match worker.try_recv() {
+            Ok(WorkerEvent::StartupComplete {
+                resolution,
+                discovery_failure,
+                ..
+            }) => {
+                let release = resolution.access.release().unwrap().unwrap();
+                break (resolution.target, release, discovery_failure.is_some());
+            }
+            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "worker event timed out"
+                );
+                std::thread::yield_now();
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                panic!("worker disconnected before startup resolution")
+            }
+        }
+    };
+    assert_eq!(
+        target,
+        CatalogTarget::User {
+            candidate_sha256: installed.candidate.candidate_sha256
+        }
+    );
+    assert_eq!(release.catalog_version, "s074-live-2");
+    assert!(discovery_failed);
+}
+
 fn request(bundle: &[u8], catalog_version: &str) -> Value {
     json!({
         "schema_version": 1,

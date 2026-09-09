@@ -55,6 +55,7 @@ pub enum WorkerEvent {
         candidates: Vec<CandidateSummary>,
         resolution: CatalogResolution,
         recovered_staging: usize,
+        discovery_failure: Option<WorkerFailure>,
     },
     DiscoveryComplete(Vec<CandidateSummary>),
     CaptureBoundaryRecorded(CaptureFingerprint),
@@ -159,20 +160,19 @@ impl CatalogUpdateWorker {
                             );
                         }
                         let resolution = service.resolve_catalog();
-                        match service.discover_candidates() {
-                            Ok(candidates) => {
-                                let _ = event_tx.send(WorkerEvent::StartupComplete {
-                                    candidates,
-                                    resolution,
-                                    recovered_staging,
-                                });
-                            }
-                            Err(error) => {
-                                let _ = event_tx.send(WorkerEvent::Failed(
-                                    WorkerFailure::from_error(&error, UpdateStage::Checking),
-                                ));
-                            }
-                        }
+                        let (candidates, discovery_failure) = match service.discover_candidates() {
+                            Ok(candidates) => (candidates, None),
+                            Err(error) => (
+                                Vec::new(),
+                                Some(WorkerFailure::from_error(&error, UpdateStage::Checking)),
+                            ),
+                        };
+                        let _ = event_tx.send(WorkerEvent::StartupComplete {
+                            candidates,
+                            resolution,
+                            recovered_staging,
+                            discovery_failure,
+                        });
                         worker_busy.store(false, Ordering::Release);
                     }
                     WorkerCommand::Discover => {
