@@ -758,6 +758,114 @@ function glossaryExplainsAlias(markdown, alias, target) {
   });
 }
 
+function sameBytes(left, right) {
+  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array) || left.byteLength !== right.byteLength) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+export function validateLandingIdentity({ landingMarkdown, cargoToml, changelog, approvedBanner, publishedBanner }) {
+  const errors = [];
+  const packageName = tomlStringValue(cargoToml, "package", "name");
+  const packageVersion = tomlStringValue(cargoToml, "package", "version");
+  const repository = tomlStringValue(cargoToml, "package", "repository");
+
+  if (!packageName) errors.push("S080 cannot resolve the package handle authority");
+  if (!packageVersion) errors.push("S080 cannot resolve the package version authority");
+  if (!repository) errors.push("S080 cannot resolve the package repository authority");
+
+  const releaseMatch = packageVersion
+    ? changelog.match(new RegExp(`^## \\[${escapeRegExp(packageVersion)}\\] - (\\d{4}-\\d{2}-\\d{2})\\s*$`, "mu"))
+    : null;
+  const releaseDate = releaseMatch?.[1];
+  if (!releaseDate) errors.push("S080 cannot resolve the matching changelog release date authority");
+
+  const bannerPattern = /<p\s+class=["']landing-wordmark["']>\s*<img\s+src=["']assets\/brand\/eso-weave-banner\.png["']\s+alt=["']["']\s*\/?>\s*<\/p>/iu;
+  if (!bannerPattern.test(landingMarkdown)) errors.push("S080 landing identity requires the local decorative full-color banner");
+  const headings = [...landingMarkdown.matchAll(/^#\s+(.+?)\s*$/gmu)];
+  if (headings.length !== 1 || !/^<span class=["']visually-hidden["']>ESO Weave<\/span>\s+Documentation$/u.test(headings[0]?.[1] ?? "")) {
+    errors.push("S080 landing heading requires visually hidden ESO Weave and visible Documentation text");
+  }
+
+  const metadataPattern = /<dl\s+class=["']project-metadata["']\s+aria-label=["']Documentation snapshot["']>[\s\S]*?<\/dl>/iu;
+  const metadata = landingMarkdown.match(metadataPattern)?.[0] ?? "";
+  if (!metadata) errors.push("S080 landing page requires semantic Documentation snapshot metadata");
+  const fieldPresent = (term, valuePattern) => new RegExp(`<dt>${term}<\\/dt>\\s*<dd>${valuePattern}<\\/dd>`, "u").test(metadata);
+  if (packageName && !fieldPresent("Handle", `<code>${escapeRegExp(packageName)}<\\/code>`)) {
+    errors.push("S080 landing metadata handle does not match Cargo.toml");
+  }
+  if (packageVersion && !fieldPresent("Applies to", `v${escapeRegExp(packageVersion)}`)) {
+    errors.push("S080 landing metadata Applies to version does not match Cargo.toml");
+  }
+  if (releaseDate && !fieldPresent("Released", `<time datetime=["']${releaseDate}["']>${releaseDate}<\\/time>`)) {
+    errors.push("S080 landing metadata release date does not match CHANGELOG.md");
+  }
+  if (repository) {
+    const repositoryLabel = repository.replace(/^https?:\/\//u, "");
+    const repositoryValue = `<a href=["']${escapeRegExp(repository)}["']>${escapeRegExp(repositoryLabel)}<\\/a>`;
+    if (!fieldPresent("Repository", repositoryValue)) {
+      errors.push("S080 landing metadata repository link does not match Cargo.toml");
+    }
+  }
+
+  if (!hasVisiblePhrase(landingMarkdown, "build-time documentation snapshot") ||
+      !landingMarkdown.includes("`Cargo.toml`") || !landingMarkdown.includes("`CHANGELOG.md`")) {
+    errors.push("S080 landing page must disclose the build-time snapshot and its update authorities");
+  }
+  const bannerIndex = landingMarkdown.search(bannerPattern);
+  const headingIndex = landingMarkdown.search(/^#\s+/mu);
+  const metadataIndex = landingMarkdown.search(metadataPattern);
+  const introIndex = landingMarkdown.indexOf("ESO Weave is an offline-first desktop companion");
+  if (!(bannerIndex >= 0 && headingIndex > bannerIndex && metadataIndex > headingIndex && introIndex > metadataIndex)) {
+    errors.push("S080 landing identity and metadata must precede the introductory prose in order");
+  }
+  if (!sameBytes(approvedBanner, publishedBanner)) {
+    errors.push("S080 published banner bytes must match the approved source asset");
+  }
+  return errors;
+}
+
+export function validateLandingGenerated(indexHtml, outputPaths) {
+  const errors = [];
+  if (!/<p\s+class=["']landing-wordmark["']>[\s\S]*?<img\s+src=["']assets\/brand\/eso-weave-banner\.png["']\s+alt=["']["']/iu.test(indexHtml)) {
+    errors.push("S080 generated landing identity is missing the local decorative banner");
+  }
+  if (!/<h1[^>]*>[\s\S]*?<span\s+class=["']visually-hidden["']>ESO Weave<\/span>\s+Documentation[\s\S]*?<\/h1>/iu.test(indexHtml)) {
+    errors.push("S080 generated landing heading lost its accessible identity");
+  }
+  if (!/<dl\s+class=["']project-metadata["']\s+aria-label=["']Documentation snapshot["']>/iu.test(indexHtml)) {
+    errors.push("S080 generated landing metadata lost its semantic definition list");
+  }
+  if (!hasVisiblePhrase(indexHtml, "build-time documentation snapshot")) {
+    errors.push("S080 generated landing page lost its snapshot disclosure");
+  }
+  if (!(outputPaths instanceof Set) || !outputPaths.has("assets/brand/eso-weave-banner.png")) {
+    errors.push("S080 generated banner output is missing");
+  }
+  return errors;
+}
+
+export function validateLandingCss(css) {
+  const errors = [];
+  const wordmark = css.match(/\.landing-wordmark\s+img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/display:\s*block/iu.test(wordmark) || !/height:\s*auto/iu.test(wordmark) ||
+      !/max-width:\s*min\(100%,\s*38rem\)/iu.test(wordmark) || !/width:\s*100%/iu.test(wordmark)) {
+    errors.push("S080 wordmark CSS must bound the responsive banner");
+  }
+  const hidden = css.match(/\.visually-hidden\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/clip-path:\s*inset\(50%\)/iu.test(hidden) || !/height:\s*1px/iu.test(hidden) ||
+      !/overflow:\s*hidden/iu.test(hidden) || !/position:\s*absolute/iu.test(hidden) ||
+      !/white-space:\s*nowrap/iu.test(hidden) || !/width:\s*1px/iu.test(hidden)) {
+    errors.push("S080 visually hidden CSS must preserve accessible text");
+  }
+  if (!/\.project-metadata\s*\{[\s\S]*?display:\s*grid/iu.test(css)) {
+    errors.push("S080 metadata CSS requires a grid layout");
+  }
+  if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.project-metadata\s*\{[\s\S]*?grid-template-columns:\s*1fr/iu.test(css)) {
+    errors.push("S080 metadata CSS requires a one-column narrow layout");
+  }
+  return errors;
+}
+
 const GLOSSARY_LEGACY_ENTRIES = [
   {
     canonical: "Managed Marker",
@@ -2251,6 +2359,14 @@ async function run() {
   const encounterFixture = JSON.parse(encounterFixtureBytes);
   const encounterProjection = JSON.parse(await readFile(encounterProjectionPath, "utf8"));
   const glossary = await readFile(path.join(docsRoot, "src", "reference", "glossary.md"), "utf8");
+  const landingMarkdown = await readFile(path.join(docsRoot, "src", "README.md"), "utf8");
+  const cargoToml = await readFile(path.join(repositoryRoot, "Cargo.toml"), "utf8");
+  const changelog = await readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8");
+  const approvedBanner = await readFile(path.join(repositoryRoot, "assets", "eso-weave-banner.png"));
+  const publishedBanner = await readFile(path.join(docsRoot, "src", "assets", "brand", "eso-weave-banner.png"));
+  const landingHtml = await readFile(path.join(outputRoot, "index.html"), "utf8");
+  const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
+  const css = await readFile(cssPath, "utf8");
   const searchIndexFiles = (await readdir(outputRoot)).filter((name) => /^searchindex-[0-9a-f]+\.js$/u.test(name));
   const searchIndex = searchIndexFiles.length === 1
     ? await readFile(path.join(outputRoot, searchIndexFiles[0]), "utf8")
@@ -2258,12 +2374,15 @@ async function run() {
   const errors = [
     ...(await validateSourceTree(docsRoot)),
     ...(await validateGeneratedSite(outputRoot)),
-    ...validateBrandCss(await readFile(cssPath, "utf8")),
+    ...validateBrandCss(css),
+    ...validateLandingCss(css),
     ...validateWorkflowText(await readFile(workflowPath, "utf8")),
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
     ...validateFormalGlossary(glossary, coverage.search_map),
+    ...validateLandingIdentity({ landingMarkdown, cargoToml, changelog, approvedBanner, publishedBanner }),
+    ...validateLandingGenerated(landingHtml, outputPaths),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
     ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),

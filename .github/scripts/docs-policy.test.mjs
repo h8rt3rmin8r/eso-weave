@@ -20,12 +20,72 @@ import {
   validateGeneratedSite,
   validateFormalGlossary,
   validateGlossarySearchIndex,
+  validateLandingCss,
+  validateLandingGenerated,
+  validateLandingIdentity,
   validateMigrationLedger,
   validateSourceTree,
   validateSettingsRuntimeClaims,
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const landingCargo = `[package]\nname = "eso-weave"\nversion = "0.15.1"\nrepository = "https://github.com/h8rt3rmin8r/eso-weave"\n`;
+const landingChangelog = "# Changelog\n\n## [Unreleased]\n\n## [0.15.1] - 2026-09-09\n";
+const landingMarkdown = `<p class="landing-wordmark"><img src="assets/brand/eso-weave-banner.png" alt=""></p>\n\n# <span class="visually-hidden">ESO Weave</span> Documentation\n\n<dl class="project-metadata" aria-label="Documentation snapshot">\n<div><dt>Handle</dt><dd><code>eso-weave</code></dd></div>\n<div><dt>Applies to</dt><dd>v0.15.1</dd></div>\n<div><dt>Released</dt><dd><time datetime="2026-09-09">2026-09-09</time></dd></div>\n<div><dt>Repository</dt><dd><a href="https://github.com/h8rt3rmin8r/eso-weave">github.com/h8rt3rmin8r/eso-weave</a></dd></div>\n</dl>\n\nThis build-time documentation snapshot follows package metadata in \`Cargo.toml\` and release dates in \`CHANGELOG.md\`; update this block whenever those authorities change.\n\nESO Weave is an offline-first desktop companion.\n`;
+const bannerBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47]);
+
+test("S080 accepts the authoritative landing identity and metadata snapshot", () => {
+  assert.deepEqual(validateLandingIdentity({
+    landingMarkdown,
+    cargoToml: landingCargo,
+    changelog: landingChangelog,
+    approvedBanner: bannerBytes,
+    publishedBanner: bannerBytes,
+  }), []);
+});
+
+test("S080 rejects wrong identity structure, duplicate naming, and banner bytes", () => {
+  const wrongImage = landingMarkdown.replace("eso-weave-banner.png\" alt=\"\"", "eso-weave-mark.svg\" alt=\"ESO Weave\"");
+  assert.match(validateLandingIdentity({ landingMarkdown: wrongImage, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /banner|identity/i);
+
+  const visibleDuplicate = landingMarkdown.replace('<span class="visually-hidden">ESO Weave</span>', "ESO Weave");
+  assert.match(validateLandingIdentity({ landingMarkdown: visibleDuplicate, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /heading|visually hidden/i);
+
+  assert.match(validateLandingIdentity({ landingMarkdown, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: Uint8Array.from([1, 2, 3]) }).join("\n"), /bytes/i);
+});
+
+test("S080 rejects metadata drift, missing release authority, and missing disclosure", () => {
+  const drifted = landingMarkdown.replace("<code>eso-weave</code>", "<code>other-name</code>");
+  assert.match(validateLandingIdentity({ landingMarkdown: drifted, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /handle/i);
+
+  const wrongVersion = landingMarkdown.replace("v0.15.1", "v9.9.9");
+  assert.match(validateLandingIdentity({ landingMarkdown: wrongVersion, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /version|applies/i);
+
+  const wrongRepository = landingMarkdown.replaceAll("https://github.com/h8rt3rmin8r/eso-weave", "https://example.com/other");
+  assert.match(validateLandingIdentity({ landingMarkdown: wrongRepository, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /repository/i);
+
+  const missingRelease = landingChangelog.replace("## [0.15.1] - 2026-09-09", "## [0.15.0] - 2026-09-09");
+  assert.match(validateLandingIdentity({ landingMarkdown, cargoToml: landingCargo, changelog: missingRelease, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /release date/i);
+
+  const noDisclosure = landingMarkdown.replace("build-time documentation snapshot", "documentation details");
+  assert.match(validateLandingIdentity({ landingMarkdown: noDisclosure, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /build-time snapshot/i);
+});
+
+test("S080 requires generated semantics and the local banner output", () => {
+  const html = `<main><p class="landing-wordmark"><img src="assets/brand/eso-weave-banner.png" alt=""></p><h1><span class="visually-hidden">ESO Weave</span> Documentation</h1><dl class="project-metadata" aria-label="Documentation snapshot"><dt>Handle</dt><dd><code>eso-weave</code></dd></dl><p>build-time documentation snapshot</p></main>`;
+  assert.deepEqual(validateLandingGenerated(html, new Set(["assets/brand/eso-weave-banner.png"])), []);
+  assert.match(validateLandingGenerated(html.replace("project-metadata", "other-metadata"), new Set(["assets/brand/eso-weave-banner.png"])).join("\n"), /metadata/i);
+  assert.match(validateLandingGenerated(html, new Set()).join("\n"), /banner output/i);
+});
+
+test("S080 requires bounded wordmark, accessible hidden text, and narrow metadata layout", () => {
+  const css = `.landing-wordmark img { display: block; height: auto; max-width: min(100%, 38rem); width: 100%; }\n.visually-hidden { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }\n.project-metadata { display: grid; }\n@media (max-width: 40rem) { .project-metadata { grid-template-columns: 1fr; } }`;
+  assert.deepEqual(validateLandingCss(css), []);
+  assert.match(validateLandingCss(css.replace("max-width: min(100%, 38rem);", "max-width: none;")).join("\n"), /wordmark/i);
+  assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "display: none;")).join("\n"), /visually hidden/i);
+  assert.match(validateLandingCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(4, 1fr);")).join("\n"), /narrow/i);
+});
 
 const glossarySearchMap = [
   { canonical: "Auto Potion", aliases: ["auto pot", "potion trigger"], target: "docs/src/features/auto-potion.md" },

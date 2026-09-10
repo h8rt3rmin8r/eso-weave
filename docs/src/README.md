@@ -1,6 +1,31 @@
-# ESO Weave Documentation
+<p class="landing-wordmark">
+  <img src="assets/brand/eso-weave-banner.png" alt="">
+</p>
 
-![ESO Weave mark](assets/brand/eso-weave-mark.svg)
+# <span class="visually-hidden">ESO Weave</span> Documentation
+
+<dl class="project-metadata" aria-label="Documentation snapshot">
+  <div>
+    <dt>Handle</dt>
+    <dd><code>eso-weave</code></dd>
+  </div>
+  <div>
+    <dt>Applies to</dt>
+    <dd>v0.15.1</dd>
+  </div>
+  <div>
+    <dt>Released</dt>
+    <dd><time datetime="2026-09-09">2026-09-09</time></dd>
+  </div>
+  <div>
+    <dt>Repository</dt>
+    <dd><a href="https://github.com/h8rt3rmin8r/eso-weave">github.com/h8rt3rmin8r/eso-weave</a></dd>
+  </div>
+</dl>
+
+This build-time documentation snapshot follows package metadata in `Cargo.toml`
+and release dates in `CHANGELOG.md`; update this block whenever those authorities
+change.
 
 ESO Weave is an offline-first desktop companion for The Elder Scrolls Online.
 It provides focus-scoped combat weaving, optional fishing, and cautious Auto
