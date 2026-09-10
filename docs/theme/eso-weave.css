@@ -97,6 +97,27 @@ a {
   text-underline-offset: 0.16em;
 }
 
+.glossary-index {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 1.25rem 0 2rem;
+}
+
+.glossary-index a {
+  align-items: center;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--table-border-color);
+  border-radius: 0.25rem;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0.2rem;
+  text-decoration: none;
+}
+
 :focus-visible {
   outline: 3px solid var(--eso-focus);
   outline-offset: 3px;
@@ -114,6 +135,7 @@ a {
 }
 
 @media (max-width: 40rem) {
+  .glossary-index a,
   .icon-button,
   .mobile-nav-chapters,
   button {

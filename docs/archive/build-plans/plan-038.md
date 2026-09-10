@@ -1,6 +1,6 @@
 # Plan 038: ESO Game-Data Foundation
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -33,16 +33,13 @@ Sequence:
     share, effect uptime, cast order, explicit loss quality, compatible catalog
     receipts, and atomic rebuildable projections. It merged in PR #145 and closed
     issue #134.
-11. S078 is in progress under issue #135. It implements explicit local encounter
-    import, deterministic history summaries, on-demand observed projections,
-    visible loss and catalog knowledge, typed failure states, and confirmed local
-    deletion outside the GUI render thread.
-12. A later slice continues the encounter pipeline through issue #136 according
-    to its native dependencies. Issue #131 retains live Combat Metrics parity
-    verification after the repository calculation path exists.
+11. S078 implemented explicit local encounter import, deterministic history
+    summaries, on-demand observed projections, visible loss and catalog knowledge,
+    typed failure states, and confirmed local deletion outside the GUI render
+    thread. It merged in PR #146 and closed issue #135.
 
-Issue #135 is the active dependency-ordered implementation and unlocks the UI
-portion required by recommendations issue #136. Installed v0.15.1 verification
-in issue #110, catalog field verification in issue #129, and live Combat Metrics
-verification in issue #131 remain independent verification work and do not block
-the active implementation sequence.
+The foundation and local encounter presentation sequence is complete. Issue #136
+is a separately Ready recommendation feature, not unfinished foundation work.
+Installed v0.15.1 verification in issue #110, catalog field verification in issue
+#129, and live Combat Metrics verification in issue #131 remain independent
+evidence work and never block later implementation.

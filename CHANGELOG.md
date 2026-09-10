@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S079 replaces the split bullet glossary and Search vocabulary list with one
+  formal alphabetical reference covering the complete established terminology
+  map, explicit aliases, definitions, canonical related pages, accessible
+  populated-letter navigation, responsive focus targets, and policy-enforced
+  source and generated-search integrity (issue #120).
 - S078 adds a private local Encounter History window with explicit import from
   the selected Live or PTS environment, deterministic raw summaries, on-demand
   versioned observed metrics, visible capture loss and catalog coverage,
@@ -71,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-10: Use native H2 letter groups and H3 canonical terms for the formal
+  glossary, with visible Aliases and Related fields plus one labeled wrapping
+  alphabet navigation region. Preserve the complete S059 terminology map as well
+  as the smaller legacy glossary inventory, rather than publishing a formally
+  structured but incomplete reference. Keep Markdown as the single authored
+  authority and add no generator, JavaScript search replacement, external asset,
+  or runtime application behavior.
 - 2026-09-10: Keep S078 encounter projections disposable and calculate only the
   selected raw encounter against the current catalog path. Store UI-imported raw
   history under the per-user application root, derive the fixed terminal capture

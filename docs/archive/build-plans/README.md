@@ -49,6 +49,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [035](plan-035.md) | Complete, Archived | [S065 documentation release verification](../../../specs/065-documentation-release-verification/spec.md), merged in [PR #106](https://github.com/h8rt3rmin8r/eso-weave/pull/106) and closed issues #84 and #83 |
 | [036](plan-036.md) | Complete, Archived | [S066 release governance and Debian metadata](../../../specs/066-release-governance-debian-metadata/spec.md), merged in [PR #108](https://github.com/h8rt3rmin8r/eso-weave/pull/108) and closed issues #104 and #105 |
 | [037](plan-037.md) | Complete, Archived | [S067 death recovery safety](../../../specs/067-death-recovery-safety/spec.md), merged in [PR #128](https://github.com/h8rt3rmin8r/eso-weave/pull/128), closed issue #109, and shipped in [v0.15.1](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.15.1); field verification remains separate in issue #110 |
+| [038](plan-038.md) | Complete, Archived | [S068](../../../specs/068-eso-catalog-contract/spec.md) through [S078](../../../specs/078-encounter-history-ui/spec.md), completed when [PR #146](https://github.com/h8rt3rmin8r/eso-weave/pull/146) merged and closed issue #135; verification remains separate in issues #129 and #131 |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

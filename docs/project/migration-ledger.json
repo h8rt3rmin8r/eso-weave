@@ -1536,9 +1536,9 @@
     },
     {
       "id": "038",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-038.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-038.md",
       "specs": [
         "specs/068-eso-catalog-contract",
         "specs/069-encounter-model",
@@ -1548,9 +1548,21 @@
         "specs/073-reviewed-catalog-pipeline",
         "specs/074-user-catalog-updates",
         "specs/075-encounter-capture",
-        "specs/076-encounter-import"
+        "specs/076-encounter-import",
+        "specs/077-encounter-metrics",
+        "specs/078-encounter-history-ui"
       ],
-      "evidence": "S068 merged in PR #130 and closed issue #112; S069 merged in PR #137 and closed issue #113; S070 merged in PR #138 and closed issue #114; S071 merged in PR #139 and closed issue #115; S072 merged in PR #140 and closed issue #116; S073 merged in PR #141 and closed issue #117; S074 merged in PR #142 and closed issue #118; S075 merged in PR #143 and closed issue #132; S076 is in progress under issue #133, while issues #110, #129, and #131 remain independent verification."
+      "evidence": "S068 merged in PR #130 and closed issue #112; S069 merged in PR #137 and closed issue #113; S070 merged in PR #138 and closed issue #114; S071 merged in PR #139 and closed issue #115; S072 merged in PR #140 and closed issue #116; S073 merged in PR #141 and closed issue #117; S074 merged in PR #142 and closed issue #118; S075 merged in PR #143 and closed issue #132; S076 merged in PR #144 and closed issue #133; S077 merged in PR #145 and closed issue #134; S078 merged in PR #146 and closed issue #135; issues #110, #129, and #131 remain independent non-blocking verification."
+    },
+    {
+      "id": "039",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-039.md",
+      "specs": [
+        "specs/079-formal-glossary"
+      ],
+      "evidence": "S079 is in progress under issue #120."
     }
   ],
   "safetyCrosswalk": [
