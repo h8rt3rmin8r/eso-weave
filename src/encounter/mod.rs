@@ -1,5 +1,6 @@
 //! Hostile encounter SavedVariables import and user-owned raw storage.
 
+mod history;
 mod metrics;
 mod model;
 mod store;
@@ -13,6 +14,9 @@ use crate::bounded_file::{read_bounded_stable, StableReadError};
 use crate::catalog::Channel;
 use crate::saved_variables::{self, EmptyTable, ParseLimits};
 
+pub use history::{
+    EncounterHistoryService, EncounterIdentity, HistoryDiagnostic, HistoryDiagnosticKind,
+};
 pub use metrics::{
     calculate_projection, canonical_projection_bytes, project_encounter, AbilityDamageShare,
     CatalogJoinReceipt, EffectUptime, EncounterProjection, LossRange, MetricQuality, MetricResult,

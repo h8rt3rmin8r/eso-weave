@@ -76,6 +76,9 @@ fn main() {
     let catalog_updates = config_dir
         .as_ref()
         .map(|dir| eso_weave::catalog_update::CatalogUpdateService::new(dir, &catalog_path));
+    let encounter_history = config_dir
+        .as_ref()
+        .map(|dir| eso_weave::encounter::EncounterHistoryService::new(dir, &catalog_path));
     if let Some(diagnostic) = catalog.diagnostic() {
         tracing::warn!(target: "eso_weave::catalog", "{}", diagnostic.message);
     } else if let Ok(Some(release)) = catalog.release() {
@@ -569,11 +572,14 @@ fn main() {
         native_options,
         Box::new(|cc| {
             eso_weave::app::theme::install_fonts(&cc.egui_ctx);
-            let app = EsoWeaveApp::new(model, toggle_rx, api_rx, restored_geometry);
-            Ok(Box::new(match catalog_updates {
-                Some(service) => app.with_catalog_updates(service),
-                None => app,
-            }))
+            let mut app = EsoWeaveApp::new(model, toggle_rx, api_rx, restored_geometry);
+            if let Some(service) = catalog_updates {
+                app = app.with_catalog_updates(service);
+            }
+            if let Some(service) = encounter_history {
+                app = app.with_encounter_history(service);
+            }
+            Ok(Box::new(app))
         }),
     ) {
         tracing::error!(target: "eso_weave", "GUI exited with error: {err}");

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S078 adds a private local Encounter History window with explicit import from
+  the selected Live or PTS environment, deterministic raw summaries, on-demand
+  versioned observed metrics, visible capture loss and catalog coverage,
+  distinct store/catalog compatibility states, and confirmed one/all deletion
+  through a serialized background worker (issue #135).
 - S077 adds deterministic algorithm-versioned encounter projections for observed
   DPS, effective HPS, ability damage share, effect uptime, and cast order, with
   explicit loss quality, exact catalog compatibility, known/unknown ID receipts,
@@ -66,6 +71,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-10: Keep S078 encounter projections disposable and calculate only the
+  selected raw encounter against the current catalog path. Store UI-imported raw
+  history under the per-user application root, derive the fixed terminal capture
+  path from the explicitly selected ESO environment, and serialize all history
+  I/O outside the render thread. Do not add a derived database, arbitrary scan,
+  file-picker dependency, automatic retention, upload, telemetry, or action
+  coupling. Preserve raw summaries whenever catalog detail is unavailable.
 - 2026-09-10: Implement encounter calculation as an explicit schema-v1 canonical
   JSON projection over the immutable S076 raw store and a verified exact-channel,
   exact-API catalog. Retain algorithm ID `s069-v1`, omit creation time for byte
