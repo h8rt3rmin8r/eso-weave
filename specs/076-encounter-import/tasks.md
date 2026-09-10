@@ -77,8 +77,8 @@
 ## Phase 8: Publication and Review
 
 - [x] T050 Commit S076 with required attribution
-- [ ] T051 Push `codex/s076-encounter-import` and open the official PR closing #133
-- [ ] T052 Move issue #133 to PR review and record the PR link
+- [x] T051 Push `codex/s076-encounter-import` and open the official PR closing #133
+- [x] T052 Move issue #133 to PR review and record the PR link
 - [ ] T053 Wait for all CI checks and first-round external reviews
 - [ ] T054 Resolve every actionable review thread with verified corrections
 - [ ] T055 Trigger at most one authorized second Codex review round if appropriate
