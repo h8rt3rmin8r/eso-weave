@@ -6,8 +6,10 @@ engine intercepts and synthesizes keys while the game window is focused, a weave
 engine executes combat action sequences, and an optional fishing module reads a
 pixel-bus signal rendered by the embedded PixelBeacon companion addon. A
 separately managed, user-initiated collector may export bounded public addon API
-values through local SavedVariables without coupling to automation. Canonical
-shipped behavior and architecture live under `docs/src`; every feature traces
+values through local SavedVariables without coupling to automation. A distinct
+encounter addon may record one explicitly armed, bounded, privacy-minimized local
+combat capture without names, upload, Pixel Bus transport, or action authority.
+Canonical shipped behavior and architecture live under `docs/src`; every feature traces
 to an actionable issue and that corpus. Current build plans under
 `docs/project/build-plans/` define ordered work slices, while completed plans
 move to `docs/archive/build-plans/`. They are distinct from the per-feature
@@ -67,7 +69,9 @@ artifact before the verification issue closes.
   no blocking work on the hook thread, and PixelBeacon uninstall deleting a
   folder only after verifying the managed-marker line in its manifest. Collector
   lifecycle mutation is separately confined and marker-gated and never changes
-  PixelBeacon.
+  PixelBeacon. Encounter capture is separately identified, dormant until one
+  explicit arm, name-free, bounded, loss-aware, and unable to drive automation;
+  any future lifecycle mutation requires its own containment and marker gates.
 - CI parity before any commit: `cargo fmt --all -- --check`,
   `cargo clippy --all-targets --all-features -- -D warnings`,
   `cargo test --all --locked`, all run in the foreground and watched to

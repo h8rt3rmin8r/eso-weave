@@ -1,9 +1,10 @@
 # Encounter Data and Metrics
 
-S069 defines a future local encounter-analysis boundary. It establishes the data
-ESO Weave would need to collect, how that data remains private and reproducible,
-and which claims still require live comparison. It does not add game capture,
-import, database, interface, or recommendation behavior.
+S069 defines the local encounter-analysis boundary: what ESO Weave collects, how
+that data remains private and reproducible, and which claims still require live
+comparison. S075 now implements the explicitly armed, bounded addon capture.
+Desktop import, database persistence, metric calculation, interface, and
+recommendations remain later work.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -21,9 +22,9 @@ storage planes distinct:
 
 Raw and derived rows do not belong in the bundled `catalog.sqlite`. The current
 Pixel Bus remains a small safety and action-observation channel and is not a bulk
-encounter transport. The intended future boundary is a dedicated addon writing
-bounded SavedVariables data for an atomic, schema-validated, non-executing
-desktop import.
+encounter transport. [ESO Weave Encounter](../features/encounter-capture.md) is a
+separate addon that writes one explicitly armed, bounded SavedVariables capture.
+Issue #133 will add the atomic, schema-validated, non-executing desktop import.
 
 There is no automatic upload. Account names, character names, chat, guild, and
 location are omitted by default. Actors use opaque encounter-local IDs because
@@ -45,9 +46,11 @@ missing range and its reason. Metrics spanning that range remain available as
 observed values, but their quality is `degraded` and the loss range stays visible.
 This prevents an incomplete capture from looking complete.
 
-The baseline event families are encounter boundaries, damage, healing, effects,
-resources, casts, bar changes, deaths, resurrections, boss health, performance,
-quickslot use, and discontinuities.
+The implemented capture families are encounter boundaries, damage, healing,
+effects, resources, casts, bar changes, deaths, resurrections, boss health,
+performance, quickslot use, and discontinuities. Executed Lua 5.1 tests prove
+the repository state machine and privacy contract. Live event completeness and
+same-parse parity remain issues #129 and #131.
 
 ## Raw events and catalog knowledge
 

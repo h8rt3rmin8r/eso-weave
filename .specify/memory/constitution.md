@@ -1,12 +1,12 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.1 -> 2.1.0
-- Amendment: permit one separately managed, user-initiated, read-only catalog
-  collector addon with a bounded SavedVariables handoff
-- Modified principles: II adds collector lifecycle and confinement tests; V
-  replaces the obsolete PixelBeacon-only addon exception with an explicit
-  two-addon boundary while retaining all memory, packet, automation, upload,
-  and multi-account prohibitions
+- Version change: 2.1.0 -> 2.2.0
+- Amendment: permit one separately identified, explicitly armed, read-only
+  encounter capture addon with a bounded local SavedVariables handoff
+- Modified principles: II adds encounter capture confinement and future
+  lifecycle gates; V expands the explicit addon boundary from two to three
+  narrow bridges while retaining all memory, packet, automation, upload,
+  personal-identity, and multi-account prohibitions
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -17,13 +17,13 @@ Sync Impact Report
     references; no edit needed)
   .specify/templates/tasks-template.md ........ aligned (no constitution
     references; no edit needed)
-  CLAUDE.md ................................... aligned with the bounded
-  collector exception and required safety gates
-  docs/src/getting-started/responsible-use.md . aligned with the local-only
-  collector boundary
+  CLAUDE.md ................................... aligned with the third narrow
+  addon bridge and required safety gates
+  docs/src/getting-started/responsible-use.md . aligned with the three local-only
+  addon bridges
   docs/project/build-autopilot.md ............. aligned (no procedural change)
-- Follow-up TODOs: issue #129 verifies real live and PTS visibility, size,
-  timing, and SavedVariables flush behavior
+- Follow-up TODOs: issue #131 verifies live Combat Metrics parity and exact
+  representative encounter storage; issue #133 owns hostile-data import
 -->
 
 # ESO Weave Constitution
@@ -64,6 +64,11 @@ skipped, or made conditional:
 - ESO Weave Collector install, update, and removal stay inside its separately
   named subtree; removal and replacement require its own verified managed marker,
   and no collector lifecycle action mutates PixelBeacon.
+- ESO Weave Encounter is separately named and dormant until the user explicitly
+  arms one capture. It persists no personal names, uses no Pixel Bus transport,
+  and cannot drive automation. Any future install, update, or removal stays in
+  its own subtree behind its own verified managed marker and cannot mutate the
+  other addons.
 - Fishing degrades to disabled on SignalLost rather than firing inputs blind.
 
 Rationale: each surface, if wrong, silently breaks input handling or destroys
@@ -97,7 +102,7 @@ no cargo gate to run, but still obey the text hygiene rules below.
 Rationale: local parity with CI keeps `main` continuously releasable and
 prevents the misdiagnosed hangs that backgrounded test runs have caused.
 
-### V. Bounded Scope: Desktop With Two Narrow Addon Bridges
+### V. Bounded Scope: Desktop With Three Narrow Addon Bridges
 
 The ESO Weave desktop application runs outside the game. It MUST NOT read or
 write game process memory, intercept network or packet traffic, orchestrate
@@ -109,13 +114,23 @@ addon surfaces are:
 - ESO Weave Collector, which a user explicitly starts to read documented public
   addon API values and write bounded, local SavedVariables for later hostile-data
   parsing by the desktop.
+- ESO Weave Encounter, which a user explicitly arms for one encounter to record
+  bounded, privacy-minimized public combat API observations in local
+  SavedVariables for later hostile-data parsing by the desktop.
 
 The collector MUST remain separately managed from PixelBeacon, read-only with
 respect to gameplay, prohibited during combat, independent of action automation,
 and free of uploads, synthesized input, equipment changes, item consumption, or
 automatic navigation. Partial or corrupt captures never become active data.
 
-Rationale: these two explicit bridges preserve the project's technical and
+The encounter addon MUST remain separately identified from both existing addons,
+read-only with respect to gameplay, dormant without explicit one-shot user
+authority, bounded in events and estimated bytes, independent of action
+automation, and free of uploads, names, chat, guild, location, synthesized input,
+equipment changes, item consumption, or automatic navigation. It MUST declare
+capture loss and MUST NOT present partial observations as complete.
+
+Rationale: these three explicit bridges preserve the project's technical and
 ethical boundary while permitting local, consented, versioned data collection.
 Any additional in-game feature or transport changes what the software is and
 requires a future constitution amendment.
@@ -184,4 +199,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 2.1.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-09
+**Version**: 2.2.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-09

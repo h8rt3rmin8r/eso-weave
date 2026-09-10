@@ -13,6 +13,7 @@
   - [Live Interface](features/interface.md)
   - [Ultimate Resource](features/ultimate-resource.md)
   - [PixelBeacon](features/pixelbeacon.md)
+  - [Encounter Capture](features/encounter-capture.md)
 - [Concepts](concepts/README.md)
   - [Scope and Platform Model](concepts/scope-and-platform.md)
   - [Game Observation and Safety State](concepts/game-observation.md)

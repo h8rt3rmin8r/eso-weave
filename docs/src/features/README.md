@@ -8,6 +8,7 @@ Choose the feature you want to configure or understand:
 - [Live Interface](interface.md)
 - [Ultimate Resource](ultimate-resource.md)
 - [PixelBeacon](pixelbeacon.md)
+- [Encounter Capture](encounter-capture.md)
 
 For a field such as **Signal lost**, **Blocked**, **Unknown**, or **Ready**, use
 the [Status Reference](../reference/status-reference.md). For control defaults and

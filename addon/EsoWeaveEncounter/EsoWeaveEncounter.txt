@@ -1,0 +1,10 @@
+## Title: ESO Weave Encounter
+## Description: Explicit one-encounter privacy-minimized local combat capture.
+## Author: ESO Weave contributors
+## AddOnVersion: 1
+## Version: 1
+## APIVersion: 101051 101050
+## SavedVariables: EsoWeaveEncounterSaved
+## X-ESO-Weave-Encounter-Managed: true
+
+EsoWeaveEncounter.lua

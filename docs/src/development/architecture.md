@@ -23,6 +23,7 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active selection, authenticated origin, releases, or source redistribution |
 | Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic local SavedVariables records, restricted staging, and an independent managed addon lifecycle | PixelBeacon, combat capture, input generation, network transfer, direct SQLite publication, or distributable game art |
+| Encounter Capture Addon | One explicitly armed Live or PTS encounter, numeric public-API observations, encounter-local actors, ordered elapsed time, bounded SavedVariables, and declared loss | Pixel Bus transport, personal names, desktop import, metric calculation, upload, input generation, or gameplay mutation |
 
 ## Thread model
 
@@ -99,6 +100,13 @@ User-local API discovery precedes that path when explicitly requested:
 
 `explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
 
+Encounter observation follows a third addon path:
+
+`explicit one-shot arm -> clean combat boundary -> bounded anonymous events -> declared loss and terminal boundary -> SavedVariables flush`
+
+The desktop does not consume this path in S075. Issue #133 adds a restricted,
+non-executing importer and a user-owned raw store separate from `catalog.sqlite`.
+
 Optional icon transformation follows a separate user-local path:
 
 `catalog virtual paths -> explicit user-owned directory -> bounded PNG/DDS decode -> immutable local manifest and objects`
@@ -113,6 +121,13 @@ does limited work per update tick, pauses in combat, and emits only a fixed
 versioned table whose chunk payloads are deterministic JSON lines. The desktop
 parser accepts that data grammar without a Lua runtime and stages through the
 same strict catalog model used by reviewed source bundles.
+
+ESO Weave Encounter is separate from both existing addons. It is dormant until
+one explicit Live or PTS arm, captures only the next clean encounter, stores no
+personal names, and disarms on every terminal path. Event and estimated-byte
+budgets reserve room for loss and terminal records, so overflow cannot appear
+complete. It never sends observations through Pixel Bus and cannot authorize or
+generate gameplay actions.
 
 The compiler is a second binary in the existing Cargo package, not a `build.rs`
 side effect or workspace. It builds a sibling candidate in one transaction,

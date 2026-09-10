@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/h8rt3rmin8r/eso-weave/specs/075-encounter-capture/contracts/encounter-capture.schema.json",
+  "title": "ESO Weave Encounter Capture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "addon_version",
+    "status",
+    "channel",
+    "privacy_profile",
+    "source",
+    "session_id",
+    "encounter_id",
+    "started_at",
+    "finished_at",
+    "started_monotonic_ms",
+    "ended_monotonic_ms",
+    "first_sequence",
+    "last_sequence",
+    "stored_event_count",
+    "omitted_event_count",
+    "estimated_bytes",
+    "events"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "addon_version": { "const": 1 },
+    "status": { "enum": ["complete", "partial"] },
+    "channel": { "enum": ["live", "pts"] },
+    "privacy_profile": { "const": "anonymous-local-v1" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_version", "game_version", "locale", "platform"],
+      "properties": {
+        "api_version": { "type": "integer", "minimum": 1 },
+        "game_version": { "type": "string", "maxLength": 128 },
+        "locale": { "type": "string", "maxLength": 16 },
+        "platform": { "type": "string", "maxLength": 32 }
+      }
+    },
+    "session_id": { "type": "string", "pattern": "^session-[0-9]+-[0-9]+$" },
+    "encounter_id": { "type": "string", "pattern": "^encounter-[0-9]+-[0-9]+$" },
+    "started_at": { "type": "string", "pattern": "^[0-9]+$" },
+    "finished_at": { "type": "string", "pattern": "^[0-9]+$" },
+    "started_monotonic_ms": { "type": "integer", "minimum": 0 },
+    "ended_monotonic_ms": { "type": "integer", "minimum": 0 },
+    "first_sequence": { "type": "integer", "minimum": 1 },
+    "last_sequence": { "type": "integer", "minimum": 1 },
+    "stored_event_count": { "type": "integer", "minimum": 2, "maximum": 100000 },
+    "omitted_event_count": { "type": "integer", "minimum": 0 },
+    "estimated_bytes": { "type": "integer", "minimum": 0, "maximum": 33554432 },
+    "partial_reason": {
+      "type": ["string", "null"],
+      "enum": [null, "capture-overflow", "clock-reset", "user-stopped", "player-deactivated", "callback-failed"]
+    },
+    "warnings": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "events": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "encounter_id", "sequence", "monotonic_ms", "kind", "payload"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "encounter_id": { "type": "string" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "monotonic_ms": { "type": "integer", "minimum": 0 },
+        "kind": {
+          "enum": [
+            "encounter-start",
+            "encounter-end",
+            "damage",
+            "healing",
+            "effect",
+            "resource",
+            "cast",
+            "bar-change",
+            "death",
+            "resurrection",
+            "boss-health",
+            "performance",
+            "quickslot",
+            "discontinuity"
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["integer", "boolean", "string"]
+          }
+        }
+      }
+    }
+  }
+}

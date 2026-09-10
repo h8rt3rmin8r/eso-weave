@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "addon_version": 1,
+  "status": "partial",
+  "channel": "live",
+  "privacy_profile": "anonymous-local-v1",
+  "source": {
+    "api_version": 101050,
+    "game_version": "12.0.7",
+    "locale": "en",
+    "platform": "pc"
+  },
+  "session_id": "session-1788912000-1000",
+  "encounter_id": "encounter-1788912000-1",
+  "started_at": "1788912000",
+  "finished_at": "1788912010",
+  "started_monotonic_ms": 1000,
+  "ended_monotonic_ms": 10000,
+  "first_sequence": 1,
+  "last_sequence": 15,
+  "stored_event_count": 14,
+  "omitted_event_count": 1,
+  "estimated_bytes": 4096,
+  "partial_reason": "clock-reset",
+  "warnings": {},
+  "events": [
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":1,"monotonic_ms":0,"kind":"encounter-start","payload":{"reason":"combat-started"}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":2,"monotonic_ms":500,"kind":"damage","payload":{"ability_id":100,"amount":1000,"result":1,"source_actor":1,"target_actor":2}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":3,"monotonic_ms":600,"kind":"healing","payload":{"ability_id":101,"amount":200,"result":2,"source_actor":1,"target_actor":1}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":4,"monotonic_ms":700,"kind":"effect","payload":{"ability_id":200,"change_type":1,"stack_count":1,"target_actor":1}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":5,"monotonic_ms":800,"kind":"resource","payload":{"actor":1,"power_type":1,"value":900,"maximum":1000,"effective_maximum":1000}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":6,"monotonic_ms":900,"kind":"cast","payload":{"slot":3,"ability_id":100}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":7,"monotonic_ms":1000,"kind":"bar-change","payload":{"active_pair":2,"locked":false}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":8,"monotonic_ms":1100,"kind":"death","payload":{"actor":2,"source":1}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":9,"monotonic_ms":1200,"kind":"resurrection","payload":{"actor":2,"source":1}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":10,"monotonic_ms":1300,"kind":"boss-health","payload":{"boss_index":1,"actor":2,"value":5000,"maximum":10000,"effective_maximum":10000}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":11,"monotonic_ms":1400,"kind":"performance","payload":{"frames_per_second":60,"latency_ms":45}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":12,"monotonic_ms":1500,"kind":"quickslot","payload":{"action":"selected","slot":4,"ability_id":300}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":14,"monotonic_ms":1600,"kind":"discontinuity","payload":{"missing_sequence_from":13,"missing_sequence_to":13,"reason":"clock-reset"}},
+    {"session_id":"session-1788912000-1000","encounter_id":"encounter-1788912000-1","sequence":15,"monotonic_ms":10000,"kind":"encounter-end","payload":{"reason":"clock-reset","complete":false}}
+  ]
+}
