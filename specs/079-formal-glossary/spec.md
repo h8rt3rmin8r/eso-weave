@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s079-formal-glossary`
 **Created**: 2026-09-10
-**Status**: Implemented, pull request pending
+**Status**: Implemented in PR #147
 **Input**: Issue #120 and the documentation presentation epic #119
 
 ## User Scenarios and Testing

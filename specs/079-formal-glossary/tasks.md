@@ -35,6 +35,6 @@
 - [x] T019 Run mdBook examples, build, links, generated-site policy, and spelling
 - [x] T020 Run repository whitespace, encoding, forbidden-dash, and relevant CI parity
 - [x] T021 Record post-implementation analysis and mark implementation tasks complete
-- [ ] T022 Commit, push, publish PR, and move project state to PR review
+- [x] T022 Commit, push, publish PR, and move project state to PR review
 - [ ] T023 Process all CI and bot feedback with at most one second `@Codex` round
 - [ ] T024 Stop with green CI and satisfied reviews for the merge ritual
