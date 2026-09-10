@@ -210,6 +210,8 @@ local function updateClock()
     local now = GetGameTimeMilliseconds()
     if now < runtime.last_raw_ms then
         runtime.last_raw_ms = now
+        runtime.last_boss_sample_raw = now
+        runtime.last_performance_sample_raw = now
         declareClockReset()
         return
     end
@@ -385,7 +387,13 @@ local function handleActionSlotUsed(_, slot)
     local abilityId = GetSlotBoundId(slot) or 0
     record("cast", { slot = slot or 0, ability_id = abilityId })
     if slot == GetCurrentQuickslot() then
-        record("quickslot", { action = "used", slot = slot or 0, ability_id = abilityId })
+        local quickslotAbilityId =
+            GetSlotBoundId(slot, HOTBAR_CATEGORY_QUICKSLOT_WHEEL) or 0
+        record("quickslot", {
+            action = "used",
+            slot = slot or 0,
+            ability_id = quickslotAbilityId,
+        })
     end
 end
 

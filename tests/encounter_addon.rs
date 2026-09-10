@@ -45,6 +45,7 @@ __now = 1000
 __timestamp = 1788912000
 __messages = {}
 __slot_ids = { [3] = 7003, [4] = 7004 }
+__quickslot_ids = { [4] = 9004 }
 __boss_exists = true
 __boss_value = 5000
 __boss_max = 10000
@@ -76,7 +77,12 @@ function GetESOVersionString() return "12.0.7" end
 function GetCVar(name) if name == "language.2" then return "en" end return "" end
 function GetPlatformServiceType() return 1 end
 function IsUnitInCombat(tag) return __in_combat end
-function GetSlotBoundId(slot) return __slot_ids[slot] or 0 end
+function GetSlotBoundId(slot, hotbar)
+    if hotbar == HOTBAR_CATEGORY_QUICKSLOT_WHEEL then
+        return __quickslot_ids[slot] or 0
+    end
+    return __slot_ids[slot] or 0
+end
 function GetCurrentQuickslot() return 4 end
 function DoesUnitExist(tag) return tag == "boss1" and __boss_exists end
 function GetUnitPower(tag, powerType) return __boss_value, __boss_max, __boss_max end
@@ -205,7 +211,9 @@ fn representative_capture_has_every_family_and_no_private_callback_text() {
 
         __now = 500
         __fire(EVENT_ACTION_SLOT_ABILITY_USED, 4)
-        __advance(10)
+        __boss_value = 4000
+        __advance(1000)
+        __run_updates()
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
 
         assert(EsoWeaveEncounterSaved.status == "partial")
@@ -219,6 +227,9 @@ fn representative_capture_has_every_family_and_no_private_callback_text() {
         }
         local previousSequence = 0
         local previousTime = 0
+        local bossSamples = 0
+        local performanceSamples = 0
+        local usedQuickslotAbility = 0
         for _, event in ipairs(EsoWeaveEncounterSaved.events) do
             assert(required[event.kind] ~= nil, event.kind)
             required[event.kind] = true
@@ -226,10 +237,22 @@ fn representative_capture_has_every_family_and_no_private_callback_text() {
             assert(event.monotonic_ms >= previousTime)
             assert(event.session_id == EsoWeaveEncounterSaved.session_id)
             assert(event.encounter_id == EsoWeaveEncounterSaved.encounter_id)
+            if event.kind == "boss-health" then bossSamples = bossSamples + 1 end
+            if event.kind == "performance" then
+                performanceSamples = performanceSamples + 1
+            end
+            if event.kind == "quickslot" and event.payload.action == "used" then
+                usedQuickslotAbility = event.payload.ability_id
+            end
             previousSequence = event.sequence
             previousTime = event.monotonic_ms
         end
         for kind, present in pairs(required) do assert(present, kind) end
+        assert(bossSamples == 2, "boss samples: " .. tostring(bossSamples))
+        assert(performanceSamples == 2,
+            "performance samples: " .. tostring(performanceSamples))
+        assert(usedQuickslotAbility == 9004,
+            "used quickslot ability: " .. tostring(usedQuickslotAbility))
         assert(EsoWeaveEncounterSaved.stored_event_count == #EsoWeaveEncounterSaved.events)
         assert(not __contains_saved_string("AccountSecret"))
         assert(not __contains_saved_string("CharacterSecret"))
