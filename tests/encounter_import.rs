@@ -47,6 +47,12 @@ fn partial_lua() -> String {
     format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value))
 }
 
+fn recovered_partial_lua() -> String {
+    let mut value: serde_json::Value = serde_json::from_str(PARTIAL_JSON).unwrap();
+    value["warnings"]["recovered_interruption"] = serde_json::json!(1);
+    format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value))
+}
+
 #[test]
 fn complete_and_truthful_partial_captures_canonicalize() {
     let complete = parse_capture(COMPLETE.as_bytes(), Channel::Live).unwrap();
@@ -62,6 +68,9 @@ fn complete_and_truthful_partial_captures_canonicalize() {
         partial.events[12].payload["missing_sequence_from"],
         PayloadValue::Integer(13)
     );
+
+    let recovered = parse_capture(recovered_partial_lua().as_bytes(), Channel::Live).unwrap();
+    assert_eq!(recovered.warnings["recovered_interruption"], 1);
 }
 
 #[test]
@@ -164,6 +173,14 @@ fn backup_and_explicit_deletion_preserve_user_ownership() {
         .unwrap();
     drop(connection);
     assert!(backup_store(&tampered, sandbox.path().join("rejected.sqlite")).is_err());
+    assert!(delete_all(&tampered).is_err());
+    assert!(import_encounter(&ImportRequest::new(&input, &tampered, Channel::Live)).is_err());
+    let connection = rusqlite::Connection::open(&tampered).unwrap();
+    let remaining: i64 = connection
+        .query_row("SELECT count(*) FROM raw_encounters", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(remaining, 1);
+    drop(connection);
 
     let deleted = delete_encounter(&store, &imported.session_id, &imported.encounter_id).unwrap();
     assert_eq!(deleted.deleted_records, 1);
@@ -202,6 +219,40 @@ fn corrupt_unrecognized_and_future_stores_are_not_replaced() {
     connection.pragma_update(None, "user_version", 2).unwrap();
     drop(connection);
     assert!(import_encounter(&ImportRequest::new(&input, &future, Channel::Live)).is_err());
+}
+
+#[test]
+fn altered_schema_objects_are_rejected() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("capture.lua");
+    fs::write(&input, COMPLETE).unwrap();
+
+    let altered_trigger = sandbox.path().join("altered-trigger.sqlite");
+    import_encounter(&ImportRequest::new(&input, &altered_trigger, Channel::Live)).unwrap();
+    let connection = rusqlite::Connection::open(&altered_trigger).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER raw_encounters_no_update;
+             CREATE TRIGGER raw_encounters_no_update
+             AFTER INSERT ON raw_encounters
+             BEGIN
+                 SELECT 1;
+             END;",
+        )
+        .unwrap();
+    drop(connection);
+    assert!(list_encounters(&altered_trigger).is_err());
+    assert!(delete_all(&altered_trigger).is_err());
+
+    let altered_table = sandbox.path().join("altered-table.sqlite");
+    import_encounter(&ImportRequest::new(&input, &altered_table, Channel::Live)).unwrap();
+    let connection = rusqlite::Connection::open(&altered_table).unwrap();
+    connection
+        .execute_batch("ALTER TABLE raw_encounters RENAME COLUMN source_sha256 TO source_digest;")
+        .unwrap();
+    drop(connection);
+    assert!(list_encounters(&altered_table).is_err());
+    assert!(delete_all(&altered_table).is_err());
 }
 
 #[test]

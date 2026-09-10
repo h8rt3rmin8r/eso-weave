@@ -16,15 +16,14 @@ use super::{
     STORE_SCHEMA_VERSION,
 };
 
-const SCHEMA: &str = r#"
-CREATE TABLE encounter_store_meta (
+const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version = 1),
     canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 1)
-);
-INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
-VALUES (1, 1, 1);
-CREATE TABLE raw_encounters (
+)"#;
+const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
+VALUES (1, 1, 1)"#;
+const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
     source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
     session_id TEXT NOT NULL,
@@ -41,14 +40,12 @@ CREATE TABLE raw_encounters (
     omitted_event_count INTEGER NOT NULL,
     canonical_json BLOB NOT NULL,
     UNIQUE (session_id, encounter_id)
-);
-CREATE TRIGGER raw_encounters_no_update
+)"#;
+const IMMUTABILITY_TRIGGER_SQL: &str = r#"CREATE TRIGGER raw_encounters_no_update
 BEFORE UPDATE ON raw_encounters
 BEGIN
     SELECT RAISE(ABORT, 'raw encounter records are immutable');
-END;
-PRAGMA user_version = 1;
-"#;
+END"#;
 
 pub(crate) fn append(
     store_path: &Path,
@@ -302,9 +299,12 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
         if !allow_create || !schema_is_empty(&connection)? {
             return invalid("encounter store has an unrecognized schema");
         }
+        let schema = format!(
+            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 1;"
+        );
         connection.execute_batch("BEGIN IMMEDIATE;")?;
         if let Err(error) = connection
-            .execute_batch(SCHEMA)
+            .execute_batch(&schema)
             .and_then(|_| connection.execute_batch("COMMIT;"))
         {
             let _ = connection.execute_batch("ROLLBACK;");
@@ -314,6 +314,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
         return invalid(format!("unsupported encounter store schema {version}"));
     }
     validate_schema(&connection)?;
+    validate_record_hashes(&connection)?;
     Ok(connection)
 }
 
@@ -335,6 +336,48 @@ fn schema_is_empty(connection: &Connection) -> Result<bool, EncounterError> {
 }
 
 fn validate_schema(connection: &Connection) -> Result<(), EncounterError> {
+    let mut statement = connection.prepare(
+        "SELECT type, name, tbl_name, sql
+         FROM sqlite_schema
+         WHERE name NOT LIKE 'sqlite_%'
+         ORDER BY type, name",
+    )?;
+    let actual = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let expected = [
+        (
+            "table",
+            "encounter_store_meta",
+            "encounter_store_meta",
+            META_TABLE_SQL,
+        ),
+        ("table", "raw_encounters", "raw_encounters", RAW_TABLE_SQL),
+        (
+            "trigger",
+            "raw_encounters_no_update",
+            "raw_encounters",
+            IMMUTABILITY_TRIGGER_SQL,
+        ),
+    ];
+    let schema_matches = actual.len() == expected.len()
+        && actual.iter().zip(expected).all(|(actual, expected)| {
+            actual.0 == expected.0
+                && actual.1 == expected.1
+                && actual.2 == expected.2
+                && normalize_sql(&actual.3) == normalize_sql(expected.3)
+        });
+    if !schema_matches {
+        return invalid("encounter store schema objects do not match schema version 1");
+    }
+
     let meta: Option<(u32, u32)> = connection
         .query_row(
             "SELECT schema_version, canonical_format_version FROM encounter_store_meta WHERE singleton = 1",
@@ -345,17 +388,11 @@ fn validate_schema(connection: &Connection) -> Result<(), EncounterError> {
     if meta != Some((STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION)) {
         return invalid("encounter store metadata does not match its schema");
     }
-    let trigger: Option<String> = connection
-        .query_row(
-            "SELECT name FROM sqlite_schema WHERE type = 'trigger' AND name = 'raw_encounters_no_update'",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if trigger.is_none() {
-        return invalid("encounter store immutability trigger is missing");
-    }
     Ok(())
+}
+
+fn normalize_sql(sql: &str) -> String {
+    sql.split_ascii_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn validate_record_hashes(connection: &Connection) -> Result<(), EncounterError> {

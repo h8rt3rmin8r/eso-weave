@@ -65,7 +65,11 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
         return invalid("encounter sequence span does not reconcile with counts");
     }
     for (name, count) in &capture.warnings {
-        if !matches!(name.as_str(), "actor_limit" | "terminal_reserve_exhausted") || *count == 0 {
+        if !matches!(
+            name.as_str(),
+            "actor_limit" | "terminal_reserve_exhausted" | "recovered_interruption"
+        ) || *count == 0
+        {
             return invalid("encounter warning is not a supported counted token");
         }
     }
