@@ -82,8 +82,8 @@
 - [x] T053 Wait for all CI checks and first-round external reviews
 - [x] T054 Resolve every actionable review thread with verified corrections
 - [x] T055 Trigger at most one authorized second Codex review round if appropriate
-- [ ] T056 Resolve second-round feedback and confirm all checks green
-- [ ] T057 Ask the operator for the final review and merge ritual
+- [x] T056 Resolve second-round feedback and confirm all checks green
+- [x] T057 Ask the operator for the final review and merge ritual
 
 ## Dependencies
 
