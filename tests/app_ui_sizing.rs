@@ -124,6 +124,37 @@ fn help_menu_exposes_the_offline_documentation_action() {
     );
 }
 
+#[test]
+fn file_menu_opens_the_accessible_catalog_update_modal() {
+    let mut harness = harness_at(egui::vec2(760.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+        .click_accesskit();
+    harness.step();
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            eso_weave::app::strings::MENU_CATALOG_UPDATE,
+        )
+        .click_accesskit();
+    harness.step();
+    harness.get_by_label("Catalog Update");
+    harness.get_by_label(
+        "Updates are always user initiated. Imported hashes prove integrity, not who supplied the files.",
+    );
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates");
+    harness.get_by_role_and_label(
+        egui::accesskit::Role::CheckBox,
+        "I obtained this candidate from a review or release source I trust.",
+    );
+    harness.key_press(egui::Key::Escape);
+    harness.step();
+    assert!(!harness.state().catalog_update_open());
+}
+
 struct FailingDocumentationOpener;
 
 impl BrowserOpener for FailingDocumentationOpener {

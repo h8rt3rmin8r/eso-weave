@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::bounded_file::{is_link_like, is_same_or_nested, read_bounded_stable, StableReadError};
@@ -34,7 +34,7 @@ const REQUEST_LIMIT: u64 = 1024 * 1024;
 const REPORT_LIMIT: u64 = 64 * 1024 * 1024;
 const CATALOG_LIMIT: u64 = 256 * 1024 * 1024;
 const MAX_SOURCES: usize = 128;
-const CANDIDATE_FILES: [&str; 9] = [
+pub const CANDIDATE_FILES: [&str; 9] = [
     "build-report.json",
     "catalog.sqlite",
     "checksums.json",
@@ -45,6 +45,45 @@ const CANDIDATE_FILES: [&str; 9] = [
     "validation.json",
     "verify-report.json",
 ];
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CandidateDiffSummary {
+    pub entities_added: usize,
+    pub entities_removed: usize,
+    pub entities_changed: usize,
+    pub localized_text_added: usize,
+    pub localized_text_removed: usize,
+    pub localized_text_changed: usize,
+    pub relations_added: usize,
+    pub relations_removed: usize,
+    pub relations_changed: usize,
+    pub coverage_added: usize,
+    pub coverage_removed: usize,
+    pub coverage_changed: usize,
+    pub icon_references_added: usize,
+    pub icon_references_removed: usize,
+    pub icon_references_changed: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CandidateSummary {
+    pub candidate_sha256: String,
+    pub catalog_semantic_sha256: String,
+    pub channel: Channel,
+    pub game_version: String,
+    pub api_version: u32,
+    pub catalog_version: String,
+    pub catalog_schema: u32,
+    pub locales: Vec<String>,
+    pub tool_version: String,
+    pub total_bytes: u64,
+    pub source_count: usize,
+    pub acquisition_counts: BTreeMap<String, usize>,
+    pub diff: CandidateDiffSummary,
+    pub ready_icons: usize,
+    pub placeholder_icons: usize,
+    pub findings: Vec<String>,
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineError {
@@ -62,6 +101,8 @@ pub enum PipelineError {
     Validation(String),
     #[error("catalog pipeline acquisition failed: {0}")]
     Acquisition(String),
+    #[error("catalog pipeline cancelled")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone)]
@@ -95,13 +136,34 @@ impl PipelineRun {
 }
 
 pub fn build_candidate(run: &PipelineRun) -> Result<CandidateReceipt, PipelineError> {
-    build_candidate_with_fetcher(run, &HttpsFetcher)
+    build_candidate_with_fetcher_and_cancel(run, &HttpsFetcher, || false)
 }
 
 pub fn build_candidate_with_fetcher(
     run: &PipelineRun,
     fetcher: &dyn SourceFetcher,
 ) -> Result<CandidateReceipt, PipelineError> {
+    build_candidate_with_fetcher_and_cancel(run, fetcher, || false)
+}
+
+pub fn build_candidate_with_cancel<F>(
+    run: &PipelineRun,
+    cancelled: F,
+) -> Result<CandidateReceipt, PipelineError>
+where
+    F: FnMut() -> bool,
+{
+    build_candidate_with_fetcher_and_cancel(run, &HttpsFetcher, cancelled)
+}
+
+fn build_candidate_with_fetcher_and_cancel<F>(
+    run: &PipelineRun,
+    fetcher: &dyn SourceFetcher,
+    mut cancelled: F,
+) -> Result<CandidateReceipt, PipelineError>
+where
+    F: FnMut() -> bool,
+{
     validate_output_roots(run)?;
     let workspace = canonical_real_directory(&run.workspace, "workspace")?;
     let request_path = if run.request.is_absolute() {
@@ -115,6 +177,7 @@ pub fn build_candidate_with_fetcher(
     validate_channel_output(&run.candidates, request.version.channel)?;
     validate_input_output_separation(&request, &request_path, run, &workspace)?;
     validate_policy(&request, &workspace)?;
+    check_cancelled(&mut cancelled)?;
 
     let staging_parent = run.candidates.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(staging_parent)?;
@@ -122,6 +185,7 @@ pub fn build_candidate_with_fetcher(
         .prefix(".catalog-pipeline-")
         .tempdir_in(staging_parent)?;
     let acquired = acquire_sources(&request, run, &workspace, staging.path(), fetcher)?;
+    check_cancelled(&mut cancelled)?;
     let input = acquired
         .get(&request.input_source)
         .ok_or_else(|| PipelineError::Validation("input source is missing".into()))?;
@@ -152,12 +216,14 @@ pub fn build_candidate_with_fetcher(
             return validation("input source cannot have the provenance role")
         }
     }
+    check_cancelled(&mut cancelled)?;
 
     let bundle_bytes = fs::read(&normalized)?;
     let bundle: CatalogBundle = serde_json::from_slice(&bundle_bytes)?;
     let bundle = bundle.normalize_and_validate()?;
     validate_version(&request, &bundle)?;
     validate_bundle_sources(&bundle, &acquired)?;
+    check_cancelled(&mut cancelled)?;
 
     let catalog = staging.path().join("catalog.sqlite");
     let build_report = build_catalog(&BuildRequest::new(
@@ -165,10 +231,13 @@ pub fn build_candidate_with_fetcher(
         &catalog,
         request.version.channel,
     ))?;
+    check_cancelled(&mut cancelled)?;
     let verify_report = verify_catalog(&catalog)?;
+    check_cancelled(&mut cancelled)?;
     let (diff, baseline_semantic_sha256) =
         baseline_diff(&request, &workspace, staging.path(), &catalog)?;
     enforce_thresholds(&request.thresholds, &diff)?;
+    check_cancelled(&mut cancelled)?;
 
     let icon_source = match &request.icon_source {
         Some(relative) => resolve_relative(&workspace, relative, true)?,
@@ -192,6 +261,7 @@ pub fn build_candidate_with_fetcher(
         &verify_report.semantic_sha256,
         references,
     ))?;
+    check_cancelled(&mut cancelled)?;
 
     let candidate_stage = staging.path().join("candidate");
     fs::create_dir(&candidate_stage)?;
@@ -276,6 +346,7 @@ pub fn build_candidate_with_fetcher(
     if staged_verification.candidate_sha256 != candidate_sha256 {
         return validation("staged candidate does not match its manifest identity");
     }
+    check_cancelled(&mut cancelled)?;
     fs::create_dir_all(run.candidates.join(manifest.version.channel.as_str()))?;
     let destination = run
         .candidates
@@ -307,6 +378,17 @@ pub fn build_candidate_with_fetcher(
         candidate_sha256,
         catalog_semantic_sha256: verify_report.semantic_sha256,
     })
+}
+
+fn check_cancelled<F>(cancelled: &mut F) -> Result<(), PipelineError>
+where
+    F: FnMut() -> bool,
+{
+    if cancelled() {
+        Err(PipelineError::Cancelled)
+    } else {
+        Ok(())
+    }
 }
 
 pub fn verify_candidate(path: impl AsRef<Path>) -> Result<CandidateVerification, PipelineError> {
@@ -407,6 +489,95 @@ pub fn verify_candidate(path: impl AsRef<Path>) -> Result<CandidateVerification,
     Ok(CandidateVerification {
         candidate_sha256,
         channel: manifest.version.channel,
+    })
+}
+
+pub fn inspect_candidate(path: impl AsRef<Path>) -> Result<CandidateSummary, PipelineError> {
+    let path = path.as_ref();
+    let verification = verify_candidate(path)?;
+    let canonical = fs::canonicalize(path)?;
+    let manifest: CandidateManifest = serde_json::from_slice(&read_bounded(
+        &canonical,
+        &canonical.join("manifest.json"),
+        REPORT_LIMIT,
+    )?)?;
+    let sources: Vec<manifest::SourceInventory> = serde_json::from_slice(&read_bounded(
+        &canonical,
+        &canonical.join("sources.json"),
+        REPORT_LIMIT,
+    )?)?;
+    let diff: CatalogDiff = serde_json::from_slice(&read_bounded(
+        &canonical,
+        &canonical.join("diff.json"),
+        REPORT_LIMIT,
+    )?)?;
+    let icons: IconSummary = serde_json::from_slice(&read_bounded(
+        &canonical,
+        &canonical.join("icons.json"),
+        REPORT_LIMIT,
+    )?)?;
+    let validation: serde_json::Value = serde_json::from_slice(&read_bounded(
+        &canonical,
+        &canonical.join("validation.json"),
+        REPORT_LIMIT,
+    )?)?;
+    let findings = validation
+        .get("findings")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| PipelineError::Validation("validation findings are missing".into()))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| PipelineError::Validation("validation finding is not text".into()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut acquisition_counts = BTreeMap::new();
+    for source in &sources {
+        *acquisition_counts
+            .entry(source.acquisition.clone())
+            .or_insert(0) += 1;
+    }
+    let total_bytes = CANDIDATE_FILES.iter().try_fold(0_u64, |total, name| {
+        let length = fs::metadata(canonical.join(name))?.len();
+        total
+            .checked_add(length)
+            .ok_or_else(|| PipelineError::Validation("candidate byte total overflowed".into()))
+    })?;
+    Ok(CandidateSummary {
+        candidate_sha256: verification.candidate_sha256,
+        catalog_semantic_sha256: manifest.catalog_semantic_sha256,
+        channel: manifest.version.channel,
+        game_version: manifest.version.game_version,
+        api_version: manifest.version.api_version,
+        catalog_version: manifest.version.catalog_version,
+        catalog_schema: manifest.version.catalog_schema,
+        locales: manifest.version.locales,
+        tool_version: manifest.version.tool_version,
+        total_bytes,
+        source_count: sources.len(),
+        acquisition_counts,
+        diff: CandidateDiffSummary {
+            entities_added: diff.entities.added.len(),
+            entities_removed: diff.entities.removed.len(),
+            entities_changed: diff.entities.changed.len(),
+            localized_text_added: diff.localized_text.added.len(),
+            localized_text_removed: diff.localized_text.removed.len(),
+            localized_text_changed: diff.localized_text.changed.len(),
+            relations_added: diff.relations.added.len(),
+            relations_removed: diff.relations.removed.len(),
+            relations_changed: diff.relations.changed.len(),
+            coverage_added: diff.coverage.added.len(),
+            coverage_removed: diff.coverage.removed.len(),
+            coverage_changed: diff.coverage.changed.len(),
+            icon_references_added: diff.icon_references.added.len(),
+            icon_references_removed: diff.icon_references.removed.len(),
+            icon_references_changed: diff.icon_references.changed.len(),
+        },
+        ready_icons: icons.entry_count.saturating_sub(icons.placeholder_count),
+        placeholder_icons: icons.placeholder_count,
+        findings,
     })
 }
 

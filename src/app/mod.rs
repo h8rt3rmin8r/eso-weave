@@ -2210,6 +2210,27 @@ impl AppModel {
             .max(beacon::DEFAULT_API_VERSION)
     }
 
+    /// Resolves collector paths for the background worker. The UI never displays
+    /// or logs these values.
+    pub fn catalog_collector_addons_root(&self) -> Option<PathBuf> {
+        beacon::resolve_addons_dir(&self.beacon_prefs).ok()
+    }
+
+    pub fn catalog_collector_capture_path(&self) -> Option<PathBuf> {
+        let root = self.catalog_collector_addons_root()?;
+        crate::collector::lifecycle::saved_variables_path(&root)
+    }
+
+    pub fn catalog_collector_running_state(&self) -> crate::collector::lifecycle::RunningState {
+        match beacon::probe_game_running() {
+            beacon::RunningState::Running => crate::collector::lifecycle::RunningState::Running,
+            beacon::RunningState::NotRunning => {
+                crate::collector::lifecycle::RunningState::NotRunning
+            }
+            beacon::RunningState::Unknown => crate::collector::lifecycle::RunningState::Unknown,
+        }
+    }
+
     /// Applies a startup version-check outcome: updates the cache and, when it
     /// changed, marks the session store dirty so the value is persisted through the
     /// existing coalesced save path. The bump notice is emitted by the check thread

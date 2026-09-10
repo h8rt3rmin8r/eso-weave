@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/h8rt3rmin8r/eso-weave/specs/074/selection.schema.json",
+  "title": "ESO Weave active catalog selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generation", "active", "previous", "last_receipt"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "generation": { "type": "integer", "minimum": 0 },
+    "active": { "$ref": "#/$defs/target" },
+    "previous": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/target" }
+      ]
+    },
+    "last_receipt": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 1 }
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "bundled" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "candidate_sha256"],
+          "properties": {
+            "kind": { "const": "user" },
+            "candidate_sha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      ]
+    }
+  }
+}

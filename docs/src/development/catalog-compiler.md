@@ -86,7 +86,8 @@ that alias an input, catalog, rollback generation, or manifest are rejected.
 
 Stop the application before a manual rollback. Confirm the manifest hash, copy
 the rollback file over the destination, and run `verify` before restarting. User
-update orchestration remains future issue #118 work.
+the [user-initiated update workflow](catalog-updates.md) resolves a verified
+user-data selection before this bundled fallback.
 
 ## Schema and provenance
 

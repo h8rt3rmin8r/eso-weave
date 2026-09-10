@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S074 adds an accessible, user-initiated catalog update workflow with
+  background Live and PTS status, verified local candidate discovery, explicit
+  origin acknowledgement, immutable user-data installation, atomic selection,
+  cooperative cancellation, rollback, startup recovery, redacted receipts, and
+  a save-boundary-gated local collector path that remains separate from
+  PixelBeacon (issue #118).
 - S073 adds a reviewed catalog candidate pipeline with exact Live and PTS
   version tuples, bounded local or explicitly opted-in HTTPS acquisition,
   immutable source and icon caches, removal thresholds, canonical redacted
@@ -40,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Keep catalog updates local, explicit, and review-format based.
+  Candidate SHA-256 proves integrity but not authenticated origin, so require a
+  trusted-source acknowledgement and add no remote feed, silent download, or
+  automatic install. Resolve verified immutable Live selections from user data
+  before the bundled fallback, keep PTS preview-only, serialize operations with
+  a cross-process lock, and change the canonical selection only after staged
+  verification and read-only first open. Treat receipt persistence as best
+  effort after selection because a full disk cannot guarantee both writes;
+  surface that failure without invalidating the safe selection.
 - 2026-09-09: Keep catalog candidate generation maintainer-only and separate
   from active catalog selection. Require request and command network gates,
   immutable raw GitHub revisions, bounded streamed reads, exact SHA-256, and

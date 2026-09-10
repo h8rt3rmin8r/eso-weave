@@ -13,12 +13,13 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [038](plan-038.md) | Active | S073 reviewed catalog candidate pipeline, issue #117 |
+| [038](plan-038.md) | Active | S074 user-initiated catalog updates, issue #118 |
 
 S068 merged in PR #130 and closed issue #112. S069 then merged in PR #137 and
 closed issue #113. S070 merged in PR #138 and closed issue #114. S071 merged in
 PR #139 and closed issue #115. S072 merged in PR #140 and closed issue #116.
-S073 is now in progress under issue #117.
+S073 merged in PR #141 and closed issue #117. S074 is now in progress under
+issue #118.
 Installed v0.15.1 verification in issue #110, catalog field verification in
 issue #129, and live Combat Metrics verification in issue #131 remain
 independent; none blocks Plan 038.

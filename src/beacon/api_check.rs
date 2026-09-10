@@ -93,6 +93,8 @@ pub struct ApiCheckOutcome {
     pub last_known_api_version: u32,
     /// The newest game version observed, if the fetch succeeded.
     pub last_seen_game_version: Option<GameVersion>,
+    /// Whether this run reached and parsed the bounded Live-version source.
+    pub fresh: bool,
 }
 
 /// Runs the startup version check: resolves the effective numeric API version,
@@ -114,7 +116,7 @@ pub fn run_check(
     }
 
     let mut last_seen = stored_last_seen_game;
-    match source.fetch() {
+    let fresh = match source.fetch() {
         Ok(fetched) => {
             let baseline = stored_last_seen_game
                 .unwrap_or(DEFAULT_GAME_VERSION)
@@ -129,15 +131,18 @@ pub fn run_check(
             if last_seen.is_none_or(|seen| fetched > seen) {
                 last_seen = Some(fetched);
             }
+            true
         }
         Err(err) => {
             tracing::debug!(target: "beacon", "API version check fetch failed: {err}");
+            false
         }
-    }
+    };
 
     ApiCheckOutcome {
         last_known_api_version: effective,
         last_seen_game_version: last_seen,
+        fresh,
     }
 }
 
@@ -294,6 +299,7 @@ mod tests {
         let outcome = run_check(&err_source(), None, None, None);
         assert_eq!(outcome.last_known_api_version, DEFAULT_API_VERSION);
         assert_eq!(outcome.last_seen_game_version, None);
+        assert!(!outcome.fresh);
     }
 
     #[test]
@@ -303,5 +309,6 @@ mod tests {
             outcome.last_seen_game_version,
             Some(GameVersion::new([12, 1, 0, 0]))
         );
+        assert!(outcome.fresh);
     }
 }

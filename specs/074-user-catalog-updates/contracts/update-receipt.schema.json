@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/h8rt3rmin8r/eso-weave/specs/074/update-receipt.schema.json",
+  "title": "ESO Weave catalog update receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "operation",
+    "sequence",
+    "result",
+    "stage",
+    "old_target",
+    "new_target",
+    "candidate_sha256",
+    "catalog_semantic_sha256",
+    "channel",
+    "catalog_version",
+    "game_version",
+    "api_version",
+    "source_count",
+    "finding_codes"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "operation": { "enum": ["install", "collector-build", "rollback", "recovery"] },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "result": { "enum": ["complete", "cancelled", "failed", "interrupted"] },
+    "stage": {
+      "enum": [
+        "checking",
+        "locating-sources",
+        "waiting-for-capture",
+        "validating",
+        "normalizing",
+        "building",
+        "resolving-icons",
+        "integrity-checking",
+        "installing",
+        "opening",
+        "complete",
+        "cancelled",
+        "failed"
+      ]
+    },
+    "old_target": { "$ref": "selection.schema.json#/$defs/target" },
+    "new_target": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "selection.schema.json#/$defs/target" }
+      ]
+    },
+    "candidate_sha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      ]
+    },
+    "catalog_semantic_sha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      ]
+    },
+    "channel": { "oneOf": [{ "type": "null" }, { "enum": ["live", "pts"] }] },
+    "catalog_version": { "type": ["string", "null"], "maxLength": 128 },
+    "game_version": { "type": ["string", "null"], "maxLength": 64 },
+    "api_version": { "type": ["integer", "null"], "minimum": 1 },
+    "source_count": { "type": "integer", "minimum": 0, "maximum": 128 },
+    "finding_codes": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" }
+    }
+  }
+}
