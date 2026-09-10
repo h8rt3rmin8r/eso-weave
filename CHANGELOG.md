@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S076 adds bounded non-executing import for terminal encounter SavedVariables,
+  strict schema, payload, privacy, ordering, and loss validation, deterministic
+  canonical SHA-256 identity, immutable user-owned SQLite storage, idempotent
+  reimport, collision preservation, deterministic listing, explicit deletion,
+  and atomically published snapshot backups (issue #133).
 - S075 adds a separately identified, explicitly armed encounter addon that
   records one bounded Live or PTS combat observation with encounter-local actors,
   authoritative sequence and elapsed time, fourteen event families, declared
@@ -49,8 +54,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence, explicit redistribution decisions, and compiler, collector, and
   icon handoffs (issue #112).
 
+### Changed
+
+- S076 centralizes the collector and encounter data-only SavedVariables grammar
+  in one bounded non-executing parser while preserving separate roots, limits,
+  schemas, and destinations.
+
 ### Decisions
 
+- 2026-09-10: Normalize validated terminal encounter facts into deterministic
+  compact JSON and use their SHA-256 as immutable raw identity while retaining a
+  separate source-byte hash for each import attempt. Keep those records in a
+  dedicated caller-selected SQLite store with no update path, no automatic
+  pruning, and explicit consistent backup and deletion. Accept truthful partial
+  captures, retain unknown numeric IDs and Live or PTS provenance, and reject
+  corrupt or future-version stores in place. Share only the restricted table
+  grammar with collector import so the two typed schemas and destinations remain
+  independent.
 - 2026-09-09: Amend the constitution to 2.2.0 for a third narrow addon bridge,
   keeping encounter capture separately identified from PixelBeacon and the
   discovery collector. Require explicit one-encounter Live or PTS authority,

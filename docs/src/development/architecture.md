@@ -24,6 +24,7 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic local SavedVariables records, restricted staging, and an independent managed addon lifecycle | PixelBeacon, combat capture, input generation, network transfer, direct SQLite publication, or distributable game art |
 | Encounter Capture Addon | One explicitly armed Live or PTS encounter, numeric public-API observations, encounter-local actors, ordered elapsed time, bounded SavedVariables, and declared loss | Pixel Bus transport, personal names, desktop import, metric calculation, upload, input generation, or gameplay mutation |
+| Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing restricted parsing, terminal validation, canonical content identity, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
 
 ## Thread model
 
@@ -100,12 +101,17 @@ User-local API discovery precedes that path when explicitly requested:
 
 `explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
 
-Encounter observation follows a third addon path:
+Encounter observation and import follow a third addon path:
 
-`explicit one-shot arm -> clean combat boundary -> bounded anonymous events -> declared loss and terminal boundary -> SavedVariables flush`
+`explicit one-shot arm -> clean combat boundary -> bounded anonymous events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> canonical hash -> immutable encounters.sqlite record`
 
-The desktop does not consume this path in S075. Issue #133 adds a restricted,
-non-executing importer and a user-owned raw store separate from `catalog.sqlite`.
+The desktop importer consumes only terminal schema-v1 handoffs and requires the
+caller to name both the file and its expected Live or PTS channel. It retains
+unknown numeric IDs, accepts truthful partial captures, and rejects syntax,
+schema, privacy, ordering, count, loss, channel, and identity conflicts before
+publication. SQLite transactions make append and explicit deletion atomic; an
+update-blocking trigger keeps raw records immutable. Consistent snapshot backup
+is separate from derived metric projection.
 
 Optional icon transformation follows a separate user-local path:
 
@@ -128,6 +134,11 @@ personal names, and disarms on every terminal path. Event and estimated-byte
 budgets reserve room for loss and terminal records, so overflow cannot appear
 complete. It never sends observations through Pixel Bus and cannot authorize or
 generate gameplay actions.
+
+The collector and encounter paths share one crate-private restricted table
+parser with caller-specific roots, work limits, and empty-table interpretation.
+This centralizes the no-execution grammar while each importer retains its own
+typed schema and validation authority.
 
 The compiler is a second binary in the existing Cargo package, not a `build.rs`
 side effect or workspace. It builds a sibling candidate in one transaction,

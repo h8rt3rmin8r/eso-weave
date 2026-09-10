@@ -1,4 +1,4 @@
-//! Explicit maintainer command for catalog build, verification, and diffing.
+//! Explicit maintainer command for catalog and local data maintenance.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -10,7 +10,13 @@ use eso_weave::collector::lifecycle::{
     install as install_collector, status as collector_status, uninstall as remove_collector,
     RunningState as CollectorRunningState,
 };
-use eso_weave::collector::{import_capture, CollectorError, ImportRequest};
+use eso_weave::collector::{
+    import_capture, CollectorError, ImportRequest as CollectorImportRequest,
+};
+use eso_weave::encounter::{
+    backup_store, delete_all, delete_encounter, import_encounter, list_encounters, EncounterError,
+    ImportRequest as EncounterImportRequest,
+};
 
 #[derive(thiserror::Error, Debug)]
 enum CliError {
@@ -20,6 +26,8 @@ enum CliError {
     Collector(#[from] CollectorError),
     #[error("{0}")]
     Pipeline(#[from] PipelineError),
+    #[error("{0}")]
+    Encounter(#[from] EncounterError),
 }
 
 fn main() {
@@ -60,8 +68,50 @@ fn run(arguments: Vec<String>) -> Result<(), CliError> {
             let output = required(&flags, "--output")?;
             let channel = parse_channel(required(&flags, "--channel")?)?;
             let catalog_version = required(&flags, "--catalog-version")?;
-            let report =
-                import_capture(&ImportRequest::new(input, output, channel, catalog_version))?;
+            let report = import_capture(&CollectorImportRequest::new(
+                input,
+                output,
+                channel,
+                catalog_version,
+            ))?;
+            print_json(&report)?;
+        }
+        "encounter-import" => {
+            let report = import_encounter(&EncounterImportRequest::new(
+                required(&flags, "--input")?,
+                required(&flags, "--store")?,
+                parse_channel(required(&flags, "--channel")?)?,
+            ))?;
+            print_json(&report)?;
+        }
+        "encounter-list" => {
+            print_json(&list_encounters(required(&flags, "--store")?)?)?;
+        }
+        "encounter-backup" => {
+            print_json(&backup_store(
+                required(&flags, "--store")?,
+                required(&flags, "--output")?,
+            )?)?;
+        }
+        "encounter-delete" => {
+            let store = required(&flags, "--store")?;
+            let delete_everything = flags.get("--all").is_some_and(|value| value == "true");
+            let has_identity = flags.contains_key("--session") || flags.contains_key("--encounter");
+            let report = if delete_everything {
+                if has_identity {
+                    return Err(CatalogError::Validation(
+                        "encounter-delete accepts either --all or one complete identity".into(),
+                    )
+                    .into());
+                }
+                delete_all(store)?
+            } else {
+                delete_encounter(
+                    store,
+                    required(&flags, "--session")?,
+                    required(&flags, "--encounter")?,
+                )?
+            };
             print_json(&report)?;
         }
         "pipeline-build" => {
@@ -123,14 +173,27 @@ fn run(arguments: Vec<String>) -> Result<(), CliError> {
 }
 
 fn flags(arguments: &[String]) -> Result<BTreeMap<String, String>, CatalogError> {
-    if !arguments.len().is_multiple_of(2) {
-        return Err(usage());
-    }
     let mut result = BTreeMap::new();
-    for pair in arguments.chunks_exact(2) {
-        if !pair[0].starts_with("--") || result.insert(pair[0].clone(), pair[1].clone()).is_some() {
+    let mut index = 0;
+    while index < arguments.len() {
+        let name = &arguments[index];
+        if name == "--all" {
+            if result.insert(name.clone(), "true".into()).is_some() {
+                return Err(usage());
+            }
+            index += 1;
+            continue;
+        }
+        let Some(value) = arguments.get(index + 1) else {
+            return Err(usage());
+        };
+        if !name.starts_with("--")
+            || value.starts_with("--")
+            || result.insert(name.clone(), value.clone()).is_some()
+        {
             return Err(usage());
         }
+        index += 2;
     }
     Ok(result)
 }
@@ -177,7 +240,7 @@ fn write_json(path: PathBuf, value: &impl serde::Serialize) -> Result<(), Catalo
 
 fn usage() -> CatalogError {
     CatalogError::Validation(
-        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler pipeline-build --request PATH --workspace PATH --source-cache PATH --icon-cache PATH --candidates PATH [--network enabled|disabled]; catalog-compiler pipeline-verify --candidate PATH; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
+        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler encounter-import --input PATH --store PATH --channel live|pts; catalog-compiler encounter-list --store PATH; catalog-compiler encounter-backup --store PATH --output PATH; catalog-compiler encounter-delete --store PATH (--session ID --encounter ID | --all); catalog-compiler pipeline-build --request PATH --workspace PATH --source-cache PATH --icon-cache PATH --candidates PATH [--network enabled|disabled]; catalog-compiler pipeline-verify --candidate PATH; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
             .to_string(),
     )
 }

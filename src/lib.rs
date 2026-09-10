@@ -16,6 +16,7 @@ pub mod catalog_update;
 pub mod collector;
 pub mod config;
 pub mod documentation;
+pub mod encounter;
 pub mod fishing;
 pub mod game;
 pub mod icon_cache;
@@ -24,6 +25,7 @@ pub mod logging;
 pub mod pixelbus;
 pub mod platform;
 pub mod potion;
+mod saved_variables;
 pub mod weave;
 
 /// Returns the crate version, single-sourced from `Cargo.toml`.

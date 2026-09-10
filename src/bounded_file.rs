@@ -18,6 +18,8 @@ pub(crate) fn read_bounded_stable(
 ) -> Result<Vec<u8>, StableReadError> {
     let mut file = open_bounded_stable(canonical_root, path, max_bytes)?;
     let metadata = file.metadata().map_err(StableReadError::Io)?;
+    let original_length = metadata.len();
+    let original_modified = metadata.modified().ok();
     let read_limit = max_bytes
         .checked_add(1)
         .ok_or(StableReadError::Invalid("file byte limit is invalid"))?;
@@ -28,6 +30,14 @@ pub(crate) fn read_bounded_stable(
         .map_err(StableReadError::Io)?;
     if bytes.len() as u64 > max_bytes {
         return Err(StableReadError::Invalid("file exceeds its byte limit"));
+    }
+    let final_metadata = file.metadata().map_err(StableReadError::Io)?;
+    if final_metadata.len() != original_length
+        || (original_modified.is_some() && final_metadata.modified().ok() != original_modified)
+    {
+        return Err(StableReadError::Invalid(
+            "file changed during its stable read",
+        ));
     }
     Ok(bytes)
 }
