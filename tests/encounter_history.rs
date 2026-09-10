@@ -63,6 +63,36 @@ fn absent_store_is_empty_and_read_only_until_explicit_import() {
 }
 
 #[test]
+fn invalid_store_ancestor_is_not_reported_as_empty_history() {
+    let root = tempfile::tempdir().unwrap();
+    let invalid_parent = root.path().join("not-a-directory");
+    fs::write(&invalid_parent, b"ordinary file").unwrap();
+    let service = EncounterHistoryService::from_paths(
+        invalid_parent.join("encounters.sqlite"),
+        root.path().join("catalog.sqlite"),
+    );
+
+    assert_eq!(
+        service.snapshot().unwrap_err().kind,
+        HistoryDiagnosticKind::StoreInvalid
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_store_symlink_is_not_reported_as_empty_history() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("encounters.sqlite");
+    std::os::unix::fs::symlink(root.path().join("missing.sqlite"), &store).unwrap();
+    let service = EncounterHistoryService::from_paths(store, root.path().join("catalog.sqlite"));
+
+    assert_eq!(
+        service.snapshot().unwrap_err().kind,
+        HistoryDiagnosticKind::StoreInvalid
+    );
+}
+
+#[test]
 fn explicit_import_lists_and_projects_truthful_quality_and_catalog_coverage() {
     let root = tempfile::tempdir().unwrap();
     let input = root.path().join("EsoWeaveEncounter.lua");

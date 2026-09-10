@@ -1,3 +1,5 @@
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -99,8 +101,10 @@ impl EncounterHistoryService {
     }
 
     pub fn snapshot(&self) -> Result<Vec<EncounterSummary>, HistoryDiagnostic> {
-        if !self.store_path.exists() {
-            return Ok(Vec::new());
+        match store_is_absent(&self.store_path) {
+            Ok(true) => return Ok(Vec::new()),
+            Ok(false) => {}
+            Err(()) => return Err(invalid_store_diagnostic()),
         }
         list_encounters(&self.store_path).map_err(store_diagnostic)
     }
@@ -215,8 +219,32 @@ impl EncounterHistoryService {
 }
 
 fn store_diagnostic(_error: EncounterError) -> HistoryDiagnostic {
+    invalid_store_diagnostic()
+}
+
+fn invalid_store_diagnostic() -> HistoryDiagnostic {
     HistoryDiagnostic::new(
         HistoryDiagnosticKind::StoreInvalid,
         "The local encounter store is unavailable, corrupt, or unsupported. It was left unchanged.",
     )
+}
+
+fn store_is_absent(path: &Path) -> Result<bool, ()> {
+    match fs::metadata(path) {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            let mut candidate = Some(path);
+            while let Some(current) = candidate {
+                match fs::symlink_metadata(current) {
+                    Ok(metadata) => return Ok(metadata.is_dir()),
+                    Err(error) if error.kind() == ErrorKind::NotFound => {
+                        candidate = current.parent();
+                    }
+                    Err(_) => return Err(()),
+                }
+            }
+            Err(())
+        }
+        Err(_) => Err(()),
+    }
 }

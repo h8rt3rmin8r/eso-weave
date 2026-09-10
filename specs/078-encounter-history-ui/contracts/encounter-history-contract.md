@@ -3,7 +3,8 @@
 ## Storage and import
 
 1. The desktop store is `<application-root>/encounters/encounters.sqlite`.
-2. A missing store lists as empty and is not created by listing.
+2. A genuinely missing store lists as empty and is not created by listing; an
+   inaccessible path, dangling link, or invalid ancestor reports a safe store diagnostic.
 3. Import begins only from the Import Current Capture control.
 4. The source is `<selected-environment>/SavedVariables/EsoWeaveEncounter.lua` and
    the expected channel is the same selected environment.
