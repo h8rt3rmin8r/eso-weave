@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "addon_version": 1,
+  "status": "partial",
+  "channel": "live",
+  "privacy_profile": "anonymous-local-v1",
+  "source": {
+    "api_version": 101050,
+    "game_version": "12.0.7",
+    "locale": "en",
+    "platform": "pc"
+  },
+  "session_id": "session-1788998400-500000",
+  "encounter_id": "encounter-1788998400-1",
+  "started_at": "1788998400",
+  "finished_at": "1788998410",
+  "started_monotonic_ms": 500000,
+  "ended_monotonic_ms": 10000,
+  "first_sequence": 1,
+  "last_sequence": 15,
+  "stored_event_count": 13,
+  "omitted_event_count": 2,
+  "estimated_bytes": 4096,
+  "partial_reason": "capture-overflow",
+  "warnings": {},
+  "events": [
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":1,"monotonic_ms":0,"kind":"encounter-start","payload":{"reason":"combat-started"}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":2,"monotonic_ms":500,"kind":"damage","payload":{"ability_id":100,"amount":1500,"overflow":0,"result":1,"source_actor":2,"source_type":1,"target_actor":1,"target_type":0}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":3,"monotonic_ms":800,"kind":"damage","payload":{"ability_id":999999,"amount":1500,"overflow":0,"result":1,"source_actor":2,"source_type":1,"target_actor":1,"target_type":0}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":4,"monotonic_ms":900,"kind":"healing","payload":{"ability_id":101,"amount":1000,"overflow":200,"result":2,"source_actor":2,"source_type":1,"target_actor":2,"target_type":1}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":5,"monotonic_ms":1000,"kind":"effect","payload":{"ability_id":200,"begin_ms":501000,"change_type":1,"end_ms":507000,"source_type":1,"stack_count":1,"target_actor":1}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":6,"monotonic_ms":2000,"kind":"effect","payload":{"ability_id":200,"begin_ms":502000,"change_type":1,"end_ms":504000,"source_type":1,"stack_count":1,"target_actor":3}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":7,"monotonic_ms":3000,"kind":"cast","payload":{"ability_id":100,"slot":3}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":8,"monotonic_ms":4000,"kind":"cast","payload":{"ability_id":999999,"slot":4}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":9,"monotonic_ms":5000,"kind":"cast","payload":{"ability_id":100,"slot":3}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":12,"monotonic_ms":8000,"kind":"discontinuity","payload":{"missing_sequence_from":10,"missing_sequence_to":11,"reason":"capture-overflow"}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":13,"monotonic_ms":8500,"kind":"resource","payload":{"actor":2,"effective_maximum":1000,"maximum":1000,"power_type":1,"value":900}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":14,"monotonic_ms":9000,"kind":"boss-health","payload":{"actor":1,"boss_index":1,"effective_maximum":10000,"maximum":10000,"value":5000}},
+    {"session_id":"session-1788998400-500000","encounter_id":"encounter-1788998400-1","sequence":15,"monotonic_ms":10000,"kind":"encounter-end","payload":{"complete":false,"reason":"capture-overflow"}}
+  ]
+}

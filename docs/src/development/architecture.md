@@ -25,6 +25,7 @@ test seams. Platform modules contain operating-system calls.
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic local SavedVariables records, restricted staging, and an independent managed addon lifecycle | PixelBeacon, combat capture, input generation, network transfer, direct SQLite publication, or distributable game art |
 | Encounter Capture Addon | One explicitly armed Live or PTS encounter, numeric public-API observations, encounter-local actors, ordered elapsed time, bounded SavedVariables, and declared loss | Pixel Bus transport, personal names, desktop import, metric calculation, upload, input generation, or gameplay mutation |
 | Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing restricted parsing, terminal validation, canonical content identity, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
+| Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
 
 ## Thread model
 
@@ -112,6 +113,17 @@ schema, privacy, ordering, count, loss, channel, and identity conflicts before
 publication. SQLite transactions make append and explicit deletion atomic; an
 update-blocking trigger keeps raw records immutable. Consistent snapshot backup
 is separate from derived metric projection.
+
+Derived encounter calculation continues through an explicit local path:
+
+`immutable raw record + verified compatible catalog -> s069-v1 metrics and loss quality -> canonical projection JSON`
+
+The projection command identifies local-player contributions by recorded combat
+source type rather than opaque actor allocation order. It requires an exact
+channel and API match, keeps unknown positive IDs visible, and can rebuild a new
+catalog receipt without rewriting raw data. The output is outside both SQLite
+authorities and contains no wall-clock creation time, so equal inputs reproduce
+equal bytes.
 
 Optional icon transformation follows a separate user-local path:
 

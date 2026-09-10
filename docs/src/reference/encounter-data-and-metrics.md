@@ -3,8 +3,9 @@
 S069 defines the local encounter-analysis boundary: what ESO Weave collects, how
 that data remains private and reproducible, and which claims still require live
 comparison. S075 implements the explicitly armed, bounded addon capture. S076
-implements its hostile-data import and dedicated raw store. Metric calculation,
-the desktop history interface, and recommendations remain later work.
+implements its hostile-data import and dedicated raw store. S077 implements
+versioned metric projection and catalog reconciliation. The desktop history
+interface and recommendations remain later work.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -34,6 +35,13 @@ caller-selected schema-v1 `encounters.sqlite`, not `catalog.sqlite` or the
 settings file. Raw records cannot be updated, exact canonical reimports are
 idempotent, and changed content under an existing session and encounter identity
 is rejected.
+
+S077 reads one validated raw record and one schema-verified catalog, then writes
+an explicit canonical schema-v1 JSON projection outside both SQLite authorities.
+The file is disposable, atomically replaceable, and rebuildable. Its provenance
+contains raw and catalog hashes and versions rather than a creation timestamp, so
+equal inputs produce byte-identical output. A future derived database remains a
+history-UI decision rather than an extension of the raw store.
 
 There is no automatic upload. Account names, character names, chat, guild, and
 location are omitted by default. Actors use opaque encounter-local IDs because
@@ -96,9 +104,39 @@ These are reproducible descriptive calculations. Observation and calculation do
 not authorize input and do not depend on action automation. Later advice must
 consume a named, versioned projection rather than an unversioned summary.
 
+Algorithm `s069-v1` is implemented over S076 capture schema v1. Duration is the
+validated elapsed `ended_monotonic_ms`; `started_monotonic_ms` is a raw clock
+origin and is not subtracted from it. Outgoing damage and healing require combat
+source type 1, the local player, rather than assuming actor 1. Actor allocation is
+observation-order dependent. Pets remain excluded until raw evidence can model
+ownership without guessing. Effective healing saturates `amount - overflow`.
+
+Effect records retain duration but not the absolute clock origin or effect-slot
+identity. The v1 algorithm anchors each nonnegative `end_ms - begin_ms` duration
+at the event's elapsed monotonic time, clips to encounter bounds, and unions
+overlap by numeric ID. Invalid intervals contribute zero. This is deterministic
+repository behavior, not a live-semantic parity claim. Zero-duration encounters
+report rate and uptime values as unavailable, and encounters with no outgoing
+damage report an empty share collection.
+
+The explicit maintainer operation is:
+
+```text
+catalog-compiler encounter-project \
+  --store PATH --catalog PATH --output PATH \
+  --session ID --encounter ID
+```
+
+The selected catalog must exactly match capture channel and API version. Ability
+references join as abilities, while effect callback IDs may resolve as catalog
+effects or abilities. The receipt exposes sorted known and unknown positive IDs,
+catalog semantic identity, and immutable raw-content identity. Rebuilding with a
+later compatible catalog can resolve an unknown ID without changing raw bytes or
+metric values.
+
 ## Deterministic synthetic spike
 
-The checked-in ten-second dummy encounter exercises every baseline event family,
+The checked-in ten-second S069 dummy encounter exercises every baseline event family,
 a declared two-record loss, and ability ID `999999`, which the first dummy
 catalog does not know. It deterministically produces:
 
@@ -120,6 +158,15 @@ At that artificial event rate, linear estimates are 1,541,160 raw bytes or
 279,000 gzip bytes per hour. One hundred identical fixtures would occupy
 428,100 raw bytes or 77,500 gzip bytes. These are reproducibility receipts, not
 production retention recommendations.
+
+S077 adds an actual capture-schema fixture that reproduces the same five headline
+values through the production raw-store, catalog-reader, projection, and atomic
+publication boundaries. It also proves degraded loss evidence, actor-order-safe
+player attribution, exact catalog compatibility, unavailable zero-duration rates,
+output no-clobber, and later resolution of ID `999999`. S076 requires raw event
+arrays to already be in authoritative sequence order, so S077 consumes that
+stricter validated form rather than accepting the S069 spike's provisional
+presentation-order variant.
 
 ## Combat Metrics parity roadmap
 
