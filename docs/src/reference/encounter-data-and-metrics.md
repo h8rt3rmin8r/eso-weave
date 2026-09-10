@@ -2,17 +2,17 @@
 
 S069 defines the local encounter-analysis boundary: what ESO Weave collects, how
 that data remains private and reproducible, and which claims still require live
-comparison. S075 now implements the explicitly armed, bounded addon capture.
-Desktop import, database persistence, metric calculation, interface, and
-recommendations remain later work.
+comparison. S075 implements the explicitly armed, bounded addon capture. S076
+implements its hostile-data import and dedicated raw store. Metric calculation,
+the desktop history interface, and recommendations remain later work.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
 
 ## Ownership and storage
 
-Encounter history belongs to the user. A future implementation must keep three
-storage planes distinct:
+Encounter history belongs to the user. The implementation keeps three storage
+planes distinct:
 
 | Plane | Content | Lifecycle |
 | --- | --- | --- |
@@ -24,16 +24,28 @@ Raw and derived rows do not belong in the bundled `catalog.sqlite`. The current
 Pixel Bus remains a small safety and action-observation channel and is not a bulk
 encounter transport. [ESO Weave Encounter](../features/encounter-capture.md) is a
 separate addon that writes one explicitly armed, bounded SavedVariables capture.
-Issue #133 will add the atomic, schema-validated, non-executing desktop import.
+The S076 importer reads one explicitly selected file through a stable no-follow
+handle, accepts only the fixed data-only table grammar, validates the complete
+terminal contract, and never executes Lua.
+
+Accepted observations become deterministic compact JSON and receive separate
+source-byte and canonical-content SHA-256 hashes. The canonical bytes enter a
+caller-selected schema-v1 `encounters.sqlite`, not `catalog.sqlite` or the
+settings file. Raw records cannot be updated, exact canonical reimports are
+idempotent, and changed content under an existing session and encounter identity
+is rejected.
 
 There is no automatic upload. Account names, character names, chat, guild, and
 location are omitted by default. Actors use opaque encounter-local IDs because
 stable personal identity is unnecessary for encounter metrics.
 
-Export is always an explicit user action. Users control deletion by encounter or
-for the complete local store. Backups retain their schema and content hash;
-corrupt imports are rejected while the last valid store remains intact. Gzip is
-an optional local storage form, not a transport or upload mechanism.
+Export and import are always explicit user actions. Users control deletion by
+encounter or for the complete local store. The reusable encounter API and
+maintainer command expose deterministic listing, delete-one, delete-all, and a
+consistent atomically published SQLite backup with a final SHA-256 receipt.
+There is no automatic pruning. Corrupt, unrelated, and unsupported future stores
+remain in place for user-directed recovery. Gzip remains an optional future local
+storage form, not a transport or upload mechanism.
 
 ## Ordering and incomplete captures
 

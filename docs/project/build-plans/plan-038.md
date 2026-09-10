@@ -23,15 +23,18 @@ Sequence:
 7. S074 implemented the user-initiated catalog update, collector handshake,
    immutable user-data selection, rollback, recovery, and redacted receipt
    workflow. It merged in PR #142 and closed issue #118.
-8. S075 is in progress under issue #132. It implements the separate, explicitly
-   armed, privacy-minimized encounter addon, bounded SavedVariables envelope,
-   encounter-local actors, event order, elapsed time, and declared loss.
-9. Later slices continue the encounter pipeline through issues #133 through
+8. S075 implemented the separate, explicitly armed, privacy-minimized encounter
+   addon, bounded SavedVariables envelope, encounter-local actors, event order,
+   elapsed time, and declared loss. It merged in PR #143 and closed issue #132.
+9. S076 is in progress under issue #133. It implements bounded non-executing
+   terminal import, deterministic canonical identity, immutable user-owned raw
+   storage, and explicit listing, backup, and deletion.
+10. Later slices continue the encounter pipeline through issues #134 through
    #136 according to their native dependency order. Issue #131 verifies live
    Combat Metrics parity only after its encounter prerequisites are delivered.
 
-Issue #132 is the next dependency-ordered implementation after the catalog
-foundation and unlocks import issue #133. Installed v0.15.1 verification in
+Issue #133 is the active dependency-ordered implementation and unlocks metric
+calculation issue #134. Installed v0.15.1 verification in
 issue #110, catalog field verification in issue #129, and live Combat Metrics
 verification in issue #131 remain independent verification work and do not
 block the active implementation sequence.
