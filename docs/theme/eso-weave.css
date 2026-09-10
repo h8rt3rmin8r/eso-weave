@@ -44,6 +44,7 @@
 .rust {
   --bg: #f7f5f0;
   --fg: #14110b;
+  --eso-muted: #6b6455;
   --sidebar-bg: #ffffff;
   --sidebar-fg: #14110b;
   --sidebar-non-existant: #6b6455;

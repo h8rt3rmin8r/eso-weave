@@ -80,10 +80,13 @@ test("S080 requires generated semantics and the local banner output", () => {
 });
 
 test("S080 requires bounded wordmark, accessible hidden text, and narrow metadata layout", () => {
-  const css = `.landing-wordmark img { display: block; height: auto; max-width: min(100%, 38rem); width: 100%; }\n.visually-hidden { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }\n.project-metadata { display: grid; }\n@media (max-width: 40rem) { .project-metadata { grid-template-columns: 1fr; } }`;
+  const css = `:root { --eso-panel: #151b23; --eso-muted: #8b97a7; }\n.light, .rust { --sidebar-bg: #ffffff; --eso-muted: #6b6455; }\n.landing-wordmark img { display: block; height: auto; max-width: min(100%, 38rem); width: 100%; }\n.visually-hidden { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }\n.project-metadata { display: grid; }\n.project-metadata dt { color: var(--eso-muted); }\n@media (max-width: 40rem) { .project-metadata { grid-template-columns: 1fr; } }`;
   assert.deepEqual(validateLandingCss(css), []);
   assert.match(validateLandingCss(css.replace("max-width: min(100%, 38rem);", "max-width: none;")).join("\n"), /wordmark/i);
   assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "display: none;")).join("\n"), /visually hidden/i);
+  assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "clip-path: inset(50%); display: none;")).join("\n"), /assistive technology/i);
+  assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "clip-path: inset(50%); visibility: hidden;")).join("\n"), /assistive technology/i);
+  assert.match(validateLandingCss(css.replace("--eso-muted: #6b6455", "--eso-muted: #c0c0c0")).join("\n"), /label contrast/i);
   assert.match(validateLandingCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(4, 1fr);")).join("\n"), /narrow/i);
 });
 

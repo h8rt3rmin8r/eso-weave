@@ -857,8 +857,29 @@ export function validateLandingCss(css) {
       !/white-space:\s*nowrap/iu.test(hidden) || !/width:\s*1px/iu.test(hidden)) {
     errors.push("S080 visually hidden CSS must preserve accessible text");
   }
+  if (/\b(?:display:\s*none|visibility:\s*hidden)\b/iu.test(hidden)) {
+    errors.push("S080 visually hidden CSS must not remove text from assistive technology");
+  }
   if (!/\.project-metadata\s*\{[\s\S]*?display:\s*grid/iu.test(css)) {
     errors.push("S080 metadata CSS requires a grid layout");
+  }
+  const labels = css.match(/\.project-metadata\s+dt\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/color:\s*var\(--eso-muted\)/iu.test(labels)) {
+    errors.push("S080 metadata labels must use the theme-aware muted color");
+  }
+  const root = css.match(/:root\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const light = css.match(/\.light,[\s\S]*?\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const property = (block, name) =>
+    block.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "iu"))?.[1];
+  for (const [label, foreground, background] of [
+    ["dark", property(root, "eso-muted"), property(root, "eso-panel")],
+    ["light", property(light, "eso-muted"), property(light, "sidebar-bg")],
+  ]) {
+    if (!foreground || !background) {
+      errors.push(`S080 cannot resolve ${label} metadata label contrast colors`);
+    } else if (contrastRatio(foreground, background) < 4.5) {
+      errors.push(`S080 ${label} metadata label contrast is below 4.5:1`);
+    }
   }
   if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.project-metadata\s*\{[\s\S]*?grid-template-columns:\s*1fr/iu.test(css)) {
     errors.push("S080 metadata CSS requires a one-column narrow layout");
