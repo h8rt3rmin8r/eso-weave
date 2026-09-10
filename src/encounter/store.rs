@@ -47,6 +47,24 @@ BEGIN
     SELECT RAISE(ABORT, 'raw encounter records are immutable');
 END"#;
 
+struct StoredRecord {
+    content_sha256: String,
+    source_sha256: String,
+    session_id: String,
+    encounter_id: String,
+    channel: String,
+    capture_schema_version: i64,
+    addon_version: i64,
+    status: String,
+    started_at: String,
+    finished_at: String,
+    first_sequence: i64,
+    last_sequence: i64,
+    stored_event_count: i64,
+    omitted_event_count: i64,
+    canonical_json: Vec<u8>,
+}
+
 pub(crate) fn append(
     store_path: &Path,
     capture: &EncounterCapture,
@@ -244,7 +262,7 @@ pub fn backup_store(
     ensure_distinct_paths(store_path, destination)?;
     reject_link_like_file(destination)?;
     let connection = open_store(store_path, false, false)?;
-    validate_record_hashes(&connection)?;
+    validate_records(&connection)?;
     let parent = destination
         .parent()
         .filter(|value| !value.as_os_str().is_empty())
@@ -256,7 +274,7 @@ pub fn backup_store(
         .into_temp_path();
     connection.backup("main", &temporary, None)?;
     let candidate = open_store(&temporary, false, false)?;
-    validate_record_hashes(&candidate)?;
+    validate_records(&candidate)?;
     drop(candidate);
     File::options().write(true).open(&temporary)?.sync_all()?;
     let (byte_length, digest) = hash_file(&temporary)?;
@@ -314,7 +332,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
         return invalid(format!("unsupported encounter store schema {version}"));
     }
     validate_schema(&connection)?;
-    validate_record_hashes(&connection)?;
+    validate_records(&connection)?;
     Ok(connection)
 }
 
@@ -395,19 +413,73 @@ fn normalize_sql(sql: &str) -> String {
     sql.split_ascii_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn validate_record_hashes(connection: &Connection) -> Result<(), EncounterError> {
-    let mut statement =
-        connection.prepare("SELECT content_sha256, canonical_json FROM raw_encounters")?;
+fn validate_records(connection: &Connection) -> Result<(), EncounterError> {
+    let mut statement = connection.prepare(
+        "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
+                capture_schema_version, addon_version, status, started_at, finished_at,
+                first_sequence, last_sequence, stored_event_count, omitted_event_count,
+                canonical_json
+         FROM raw_encounters",
+    )?;
     let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+        Ok(StoredRecord {
+            content_sha256: row.get(0)?,
+            source_sha256: row.get(1)?,
+            session_id: row.get(2)?,
+            encounter_id: row.get(3)?,
+            channel: row.get(4)?,
+            capture_schema_version: row.get(5)?,
+            addon_version: row.get(6)?,
+            status: row.get(7)?,
+            started_at: row.get(8)?,
+            finished_at: row.get(9)?,
+            first_sequence: row.get(10)?,
+            last_sequence: row.get(11)?,
+            stored_event_count: row.get(12)?,
+            omitted_event_count: row.get(13)?,
+            canonical_json: row.get(14)?,
+        })
     })?;
     for row in rows {
-        let (expected, canonical) = row?;
-        if sha256(&canonical) != expected {
+        let stored = row?;
+        if sha256(&stored.canonical_json) != stored.content_sha256 {
             return invalid("encounter store contains a raw content hash mismatch");
+        }
+        if !is_sha256(&stored.source_sha256) {
+            return invalid("encounter store contains an invalid source hash");
+        }
+        let capture: EncounterCapture =
+            serde_json::from_slice(&stored.canonical_json).map_err(|_| {
+                EncounterError::Validation("stored canonical encounter is invalid".into())
+            })?;
+        super::validate::validate(&capture)?;
+        if super::canonical_bytes(&capture)? != stored.canonical_json {
+            return invalid("encounter store contains noncanonical encounter bytes");
+        }
+        let indexed_fields_match = stored.session_id == capture.session_id
+            && stored.encounter_id == capture.encounter_id
+            && stored.channel == capture.channel.as_str()
+            && stored.capture_schema_version == i64::from(capture.schema_version)
+            && stored.addon_version == i64::from(capture.addon_version)
+            && stored.status == capture.status.as_str()
+            && stored.started_at == capture.started_at
+            && stored.finished_at == capture.finished_at
+            && u64::try_from(stored.first_sequence) == Ok(capture.first_sequence)
+            && u64::try_from(stored.last_sequence) == Ok(capture.last_sequence)
+            && usize::try_from(stored.stored_event_count) == Ok(capture.stored_event_count)
+            && u64::try_from(stored.omitted_event_count) == Ok(capture.omitted_event_count);
+        if !indexed_fields_match {
+            return invalid("encounter store index fields do not match canonical content");
         }
     }
     Ok(())
+}
+
+fn is_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn parse_channel(value: &str) -> Result<Channel, EncounterError> {

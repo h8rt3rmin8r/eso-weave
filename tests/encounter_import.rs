@@ -182,6 +182,24 @@ fn backup_and_explicit_deletion_preserve_user_ownership() {
     assert_eq!(remaining, 1);
     drop(connection);
 
+    let indexed_drift = sandbox.path().join("indexed-drift.sqlite");
+    fs::copy(&backup, &indexed_drift).unwrap();
+    let connection = rusqlite::Connection::open(&indexed_drift).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER raw_encounters_no_update;
+             UPDATE raw_encounters SET started_at = '1';
+             CREATE TRIGGER raw_encounters_no_update
+             BEFORE UPDATE ON raw_encounters
+             BEGIN
+                 SELECT RAISE(ABORT, 'raw encounter records are immutable');
+             END;",
+        )
+        .unwrap();
+    drop(connection);
+    assert!(list_encounters(&indexed_drift).is_err());
+    assert!(delete_all(&indexed_drift).is_err());
+
     let deleted = delete_encounter(&store, &imported.session_id, &imported.encounter_id).unwrap();
     assert_eq!(deleted.deleted_records, 1);
     assert!(list_encounters(&store).unwrap().is_empty());
