@@ -280,6 +280,12 @@ fn overflow_and_actor_limits_preserve_terminal_capacity_and_exact_loss() {
                 0, 0, "source", 1, "target", 2, index, 3, 4, true,
                 10000 + index, 20000 + index, 7001, 0)
         end
+        assert(EsoWeaveEncounterSaved.pending_partial_reason == "capture-overflow")
+        assert(EsoWeaveEncounterSaved.pending_loss_from ~= nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_to
+            - EsoWeaveEncounterSaved.pending_loss_from + 1
+            == EsoWeaveEncounterSaved.omitted_event_count)
+        assert(EsoWeaveEncounterSaved.pending_loss_reason == "capture-overflow")
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
 
         assert(EsoWeaveEncounterSaved.status == "partial")
@@ -298,6 +304,10 @@ fn overflow_and_actor_limits_preserve_terminal_capacity_and_exact_loss() {
         assert(terminal.kind == "encounter-end")
         assert(terminal.sequence == marker.sequence + 1)
         assert(terminal.payload.complete == false)
+        assert(EsoWeaveEncounterSaved.pending_partial_reason == nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_from == nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_to == nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_reason == nil)
         "#,
     );
 }
@@ -399,6 +409,63 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
         assert(EsoWeaveEncounterSaved.events[#EsoWeaveEncounterSaved.events].kind
             == "encounter-end")
         assert(EsoWeaveEncounterSaved.warnings.recovered_interruption == 1)
+        "#,
+    );
+
+    let overflow_recovery = harness(
+        r#"EsoWeaveEncounterSaved = {
+            schema_version = 1,
+            addon_version = 1,
+            status = "capturing",
+            channel = "live",
+            privacy_profile = "anonymous-local-v1",
+            source = { api_version = 101050, game_version = "12.0.7", locale = "en", platform = "1" },
+            session_id = "session-1788912000-1000",
+            encounter_id = "encounter-1788912000-1000",
+            started_at = "1788912000",
+            finished_at = "",
+            started_monotonic_ms = 1000,
+            ended_monotonic_ms = 5,
+            first_sequence = 1,
+            last_sequence = 3,
+            stored_event_count = 1,
+            omitted_event_count = 2,
+            estimated_bytes = 900,
+            partial_reason = nil,
+            pending_partial_reason = "capture-overflow",
+            pending_loss_from = 2,
+            pending_loss_to = 3,
+            pending_loss_reason = "capture-overflow",
+            warnings = {},
+            events = {{
+                session_id = "session-1788912000-1000",
+                encounter_id = "encounter-1788912000-1000",
+                sequence = 1,
+                monotonic_ms = 0,
+                kind = "encounter-start",
+                payload = { reason = "combat-started" },
+            }},
+        }"#,
+    );
+    run(
+        &overflow_recovery,
+        r#"
+        assert(EsoWeaveEncounterSaved.status == "partial")
+        assert(EsoWeaveEncounterSaved.partial_reason == "capture-overflow")
+        assert(EsoWeaveEncounterSaved.omitted_event_count == 2)
+        local marker = EsoWeaveEncounterSaved.events[2]
+        local terminal = EsoWeaveEncounterSaved.events[3]
+        assert(marker.kind == "discontinuity")
+        assert(marker.sequence == 4)
+        assert(marker.payload.missing_sequence_from == 2)
+        assert(marker.payload.missing_sequence_to == 3)
+        assert(marker.payload.reason == "capture-overflow")
+        assert(terminal.kind == "encounter-end")
+        assert(terminal.sequence == 5)
+        assert(EsoWeaveEncounterSaved.pending_partial_reason == nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_from == nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_to == nil)
+        assert(EsoWeaveEncounterSaved.pending_loss_reason == nil)
         "#,
     );
 }

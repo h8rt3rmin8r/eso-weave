@@ -23,6 +23,12 @@
 | `warnings` | table | Bounded numeric counters only |
 | `events` | array | Ordered raw events |
 
+While `status` is `capturing`, the SavedVariables table also retains the first
+partial reason and any open omitted sequence range as internal recovery fields.
+Recovery consumes those fields before emitting the terminal discontinuity and
+encounter end. They are removed from every complete or partial contract
+artifact, so they do not expand the import schema.
+
 ## CaptureState
 
 ```text

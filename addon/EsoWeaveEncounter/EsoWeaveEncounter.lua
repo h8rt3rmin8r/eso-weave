@@ -103,7 +103,10 @@ local function estimateEvent(kind, payload)
 end
 
 local function setPartialReason(reason)
-    if not runtime.partial_reason then runtime.partial_reason = reason end
+    if not runtime.partial_reason then
+        runtime.partial_reason = reason
+        EsoWeaveEncounterSaved.pending_partial_reason = reason
+    end
 end
 
 local function nextSequence()
@@ -148,6 +151,9 @@ local function noteOmitted(sequence, reason)
         runtime.loss_reason = reason
     end
     runtime.loss_to = sequence
+    EsoWeaveEncounterSaved.pending_loss_from = runtime.loss_from
+    EsoWeaveEncounterSaved.pending_loss_to = runtime.loss_to
+    EsoWeaveEncounterSaved.pending_loss_reason = runtime.loss_reason
     EsoWeaveEncounterSaved.omitted_event_count =
         EsoWeaveEncounterSaved.omitted_event_count + 1
     setPartialReason(reason)
@@ -285,6 +291,10 @@ local function finishCapture(reason, requestedComplete)
         complete = complete,
     })
 
+    EsoWeaveEncounterSaved.pending_partial_reason = nil
+    EsoWeaveEncounterSaved.pending_loss_from = nil
+    EsoWeaveEncounterSaved.pending_loss_to = nil
+    EsoWeaveEncounterSaved.pending_loss_reason = nil
     EsoWeaveEncounterSaved.status = complete and "complete" or "partial"
     EsoWeaveEncounterSaved.partial_reason = complete and nil or terminalReason
     EsoWeaveEncounterSaved.finished_at = tostring(GetTimeStamp())
@@ -641,10 +651,26 @@ local function recoverInterruptedSavedCapture()
     saved.warnings.recovered_interruption =
         (saved.warnings.recovered_interruption or 0) + 1
     local lastEvent = saved.events[#saved.events]
+    local sourceSequence = saved.last_sequence or (lastEvent and lastEvent.sequence) or 0
+    local pendingReason = saved.pending_partial_reason
+    if pendingReason ~= "capture-overflow" and pendingReason ~= "clock-reset" then
+        pendingReason = "player-deactivated"
+    end
+    local lossFrom = saved.pending_loss_from
+    local lossTo = saved.pending_loss_to
+    local lossReason = saved.pending_loss_reason
+    if type(lossFrom) ~= "number" or lossFrom < 1 or lossFrom ~= math.floor(lossFrom)
+        or type(lossTo) ~= "number" or lossTo < lossFrom
+        or lossTo ~= math.floor(lossTo) or lossTo > sourceSequence
+        or lossReason ~= "capture-overflow" then
+        lossFrom = nil
+        lossTo = nil
+        lossReason = nil
+    end
     runtime = {
         session_id = saved.session_id,
         encounter_id = saved.encounter_id,
-        source_sequence = saved.last_sequence or (lastEvent and lastEvent.sequence) or 0,
+        source_sequence = sourceSequence,
         elapsed_ms = saved.ended_monotonic_ms or (lastEvent and lastEvent.monotonic_ms) or 0,
         last_raw_ms = GetGameTimeMilliseconds(),
         last_boss_sample_raw = GetGameTimeMilliseconds(),
@@ -652,10 +678,10 @@ local function recoverInterruptedSavedCapture()
         actor_ids = {},
         actor_count = 0,
         boss_samples = {},
-        partial_reason = "player-deactivated",
-        loss_from = nil,
-        loss_to = nil,
-        loss_reason = nil,
+        partial_reason = pendingReason,
+        loss_from = lossFrom,
+        loss_to = lossTo,
+        loss_reason = lossReason,
     }
     finishCapture("player-deactivated", false)
 end
