@@ -18,12 +18,78 @@ import {
   validateContentCoverageRepository,
   validateCorpusSnapshot,
   validateGeneratedSite,
+  validateFormalGlossary,
+  validateGlossarySearchIndex,
   validateMigrationLedger,
   validateSourceTree,
   validateSettingsRuntimeClaims,
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const glossarySearchMap = [
+  { canonical: "Auto Potion", aliases: ["auto pot", "potion trigger"], target: "docs/src/features/auto-potion.md" },
+  { canonical: "Pixel Bus", aliases: ["pixelbus", "screen telemetry"], target: "docs/src/reference/pixel-bus-protocol.md" },
+  { canonical: "Weaving", aliases: ["weave", "animation cancel"], target: "docs/src/features/weaving.md" },
+];
+
+function glossaryEntry({ canonical, aliases, target }) {
+  const relative = path.posix.relative("docs/src/reference", target);
+  return `### ${canonical}\n\n**Aliases:** ${aliases.join(", ")}\n\n${canonical} is a substantive ESO Weave concept with enough explanatory context for a reader.\n\n**Related:** [Read about ${canonical}](${relative})\n`;
+}
+
+function validFormalGlossary() {
+  const extras = [
+    { canonical: "Managed Marker", aliases: ["X-ESO-Weave-Managed", "managed addon ownership", "Unmanaged"], target: "docs/src/features/pixelbeacon.md" },
+    { canonical: "Skill Slot", aliases: ["ability slot", "skills 1 through 5", "Ultimate slot", "Synergy slot"], target: "docs/src/features/weaving.md" },
+    { canonical: "Weave Type", aliases: ["LA", "HA", "BA", "BL", "attack pattern"], target: "docs/src/features/weaving.md" },
+  ];
+  const entries = [...glossarySearchMap, ...extras].sort((left, right) => left.canonical.toLowerCase().localeCompare(right.canonical.toLowerCase(), "en"));
+  const groups = new Map();
+  for (const entry of entries) {
+    const letter = entry.canonical[0].toUpperCase();
+    groups.set(letter, [...(groups.get(letter) ?? []), entry]);
+  }
+  const letters = [...groups.keys()];
+  const navigation = letters.map((letter) => `<a href="#${letter.toLowerCase()}">${letter}</a>`).join(" ");
+  const body = letters.map((letter) => `## ${letter}\n\n${groups.get(letter).map(glossaryEntry).join("\n")}`).join("\n");
+  return `# Glossary\n\nOne formal reference.\n\n<nav class="glossary-index" aria-label="Glossary alphabet">\n${navigation}\n</nav>\n\n${body}`;
+}
+
+test("S079 accepts one complete formal alphabetical glossary", () => {
+  assert.deepEqual(validateFormalGlossary(validFormalGlossary(), glossarySearchMap), []);
+});
+
+test("S079 rejects the split list, duplicate terms, and non-alphabetical groups", () => {
+  const split = `${validFormalGlossary()}\n\n## Search vocabulary\n\n- **Weave:** duplicate`;
+  assert.match(validateFormalGlossary(split, glossarySearchMap).join("\n"), /Search vocabulary/i);
+
+  const duplicate = validFormalGlossary().replace("## W\n", "## W\n\n### Weaving\n\n**Aliases:** duplicate\n\nDuplicate definition with enough text for policy.\n\n**Related:** [Weaving](../features/weaving.md)\n\n");
+  assert.match(validateFormalGlossary(duplicate, glossarySearchMap).join("\n"), /duplicate/i);
+
+  const reversed = validFormalGlossary().replace("## A", "## Z");
+  assert.match(validateFormalGlossary(reversed, glossarySearchMap).join("\n"), /letter|navigation|group/i);
+});
+
+test("S079 rejects missing aliases, definitions, targets, and alphabet links", () => {
+  const missingAlias = validFormalGlossary().replace("auto pot, ", "");
+  assert.match(validateFormalGlossary(missingAlias, glossarySearchMap).join("\n"), /alias.*auto pot/i);
+
+  const missingDefinition = validFormalGlossary().replace("Auto Potion is a substantive ESO Weave concept with enough explanatory context for a reader.\n\n", "");
+  assert.match(validateFormalGlossary(missingDefinition, glossarySearchMap).join("\n"), /definition/i);
+
+  const wrongTarget = validFormalGlossary().replace("../features/auto-potion.md", "../features/fishing.md");
+  assert.match(validateFormalGlossary(wrongTarget, glossarySearchMap).join("\n"), /related.*target/i);
+
+  const missingLetter = validFormalGlossary().replace('<a href="#p">P</a> ', "");
+  assert.match(validateFormalGlossary(missingLetter, glossarySearchMap).join("\n"), /navigation/i);
+});
+
+test("S079 requires generated search evidence for canonical and player vocabulary", () => {
+  const complete = "Glossary animation cancel key interception telemetry overlay screen telemetry config.json ring buffer WH_KEYBOARD_LL publish release mock backend X-ESO-Weave-Managed";
+  assert.deepEqual(validateGlossarySearchIndex(complete), []);
+  assert.match(validateGlossarySearchIndex(complete.replace("animation cancel", "")).join("\n"), /animation cancel/i);
+});
 
 test("S073 keeps catalog candidate automation pinned and read-only", async () => {
   const workflow = await readFile(".github/workflows/catalog-candidate.yml", "utf8");

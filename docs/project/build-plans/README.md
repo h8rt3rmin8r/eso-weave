@@ -9,11 +9,11 @@ Two documents use the word "plan" and serve different purposes:
 - A spec-kit feature plan under `specs/NNN-name/plan.md` describes the
   implementation of one slice.
 
-## Active Plan
+## Active Plans
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [038](plan-038.md) | Active | S078 quality-aware encounter history UI, issue #135 |
+| [039](plan-039.md) | Active | S079 formal alphabetical glossary, issue #120 |
 
 S068 merged in PR #130 and closed issue #112. S069 then merged in PR #137 and
 closed issue #113. S070 merged in PR #138 and closed issue #114. S071 merged in
@@ -21,7 +21,8 @@ PR #139 and closed issue #115. S072 merged in PR #140 and closed issue #116.
 S073 merged in PR #141 and closed issue #117. S074 merged in PR #142 and closed
 issue #118. S075 merged in PR #143 and closed issue #132. S076 merged in PR
 #144 and closed issue #133. S077 merged in PR #145 and closed issue #134. S078
-is now in progress under issue #135.
+merged in PR #146 and closed issue #135. S079 is now in progress under issue
+#120 as the first child of the documentation presentation plan.
 Installed v0.15.1 verification in issue #110, catalog field verification in
 issue #129, and live Combat Metrics verification in issue #131 remain
-independent; none blocks Plan 038.
+independent; none blocks Plan 039 or later implementation.

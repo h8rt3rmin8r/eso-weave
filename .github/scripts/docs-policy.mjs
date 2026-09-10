@@ -748,12 +748,162 @@ export function contentContractDigest(manifest) {
 }
 
 function glossaryExplainsAlias(markdown, alias, target) {
-  return markdown.split(/\n\s*\n/gu).some((block) => {
+  const formalEntries = markdown.split(/^###\s+/gmu).slice(1);
+  const blocks = formalEntries.length > 0 ? formalEntries : markdown.split(/\n\s*\n/gu);
+  return blocks.some((block) => {
     if (/^ {0,3}(?:`{3,}|~{3,})/mu.test(block)) return false;
     const prose = block.replace(/<!--[\s\S]*?-->/gu, "").replace(/`+/gu, "");
     return normalizedText(prose).includes(normalizedText(alias)) &&
       hasMarkdownLinkTo(block, "docs/src/reference/glossary.md", target);
   });
+}
+
+const GLOSSARY_LEGACY_ENTRIES = [
+  {
+    canonical: "Managed Marker",
+    aliases: ["X-ESO-Weave-Managed", "managed addon ownership", "Unmanaged"],
+    target: "docs/src/features/pixelbeacon.md",
+  },
+  {
+    canonical: "Skill Slot",
+    aliases: ["ability slot", "skills 1 through 5", "Ultimate slot", "Synergy slot"],
+    target: "docs/src/features/weaving.md",
+  },
+  {
+    canonical: "Weave Type",
+    aliases: ["LA", "HA", "BA", "BL", "attack pattern"],
+    target: "docs/src/features/weaving.md",
+  },
+];
+
+function compareGlossaryText(left, right) {
+  const normalizedLeft = left.toLowerCase();
+  const normalizedRight = right.toLowerCase();
+  return normalizedLeft < normalizedRight ? -1 : normalizedLeft > normalizedRight ? 1 : 0;
+}
+
+export function validateFormalGlossary(markdown, searchMap) {
+  const errors = [];
+  if (/^##\s+Search vocabulary\s*$/imu.test(markdown)) {
+    errors.push("S079 glossary must not retain a separate Search vocabulary section");
+  }
+  if (/^\s*[-*+]\s+\*\*[^*]+:\*\*/mu.test(markdown)) {
+    errors.push("S079 glossary canonical definitions must not use the former bullet structure");
+  }
+
+  const navMatch = markdown.match(/<nav\s+class=["']glossary-index["']\s+aria-label=["']Glossary alphabet["']>([\s\S]*?)<\/nav>/iu);
+  if (!navMatch) errors.push("S079 glossary requires labeled Glossary alphabet navigation");
+  const navLetters = navMatch ? [...navMatch[1].matchAll(/<a\s+href=["']#([a-z])["']>\s*([A-Z])\s*<\/a>/gu)] : [];
+  if (navLetters.some((match) => match[1].toUpperCase() !== match[2])) {
+    errors.push("S079 glossary navigation labels must match their letter targets");
+  }
+
+  const lines = markdown.split(/\r?\n/gu);
+  const groups = [];
+  const entries = [];
+  let currentGroup = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const groupMatch = lines[index].match(/^##\s+(.+?)\s*$/u);
+    if (groupMatch) {
+      if (!/^[A-Z]$/u.test(groupMatch[1])) {
+        errors.push(`S079 glossary letter group must be one uppercase letter: ${groupMatch[1]}`);
+        currentGroup = null;
+      } else {
+        currentGroup = groupMatch[1];
+        groups.push(currentGroup);
+      }
+      continue;
+    }
+    const entryMatch = lines[index].match(/^###\s+(.+?)\s*$/u);
+    if (!entryMatch) continue;
+    const canonical = entryMatch[1];
+    let end = index + 1;
+    while (end < lines.length && !/^#{2,3}\s+/u.test(lines[end])) end += 1;
+    entries.push({ canonical, group: currentGroup, block: lines.slice(index + 1, end).join("\n") });
+  }
+
+  const sortedGroups = [...groups].sort(compareGlossaryText);
+  if (new Set(groups).size !== groups.length) errors.push("S079 glossary contains a duplicate letter group");
+  if (groups.join("|") !== sortedGroups.join("|")) errors.push("S079 glossary letter groups are not alphabetical");
+  const navValues = navLetters.map((match) => match[2]);
+  if (navValues.join("|") !== groups.join("|")) {
+    errors.push("S079 glossary navigation must exactly match populated letter groups");
+  }
+
+  const seenTerms = new Set();
+  for (const entry of entries) {
+    const folded = entry.canonical.toLowerCase();
+    if (seenTerms.has(folded)) errors.push(`S079 glossary contains duplicate canonical term: ${entry.canonical}`);
+    seenTerms.add(folded);
+    if (!entry.group || entry.canonical[0].toUpperCase() !== entry.group) {
+      errors.push(`S079 glossary term is in the wrong letter group: ${entry.canonical}`);
+    }
+    const aliases = entry.block.match(/^\*\*Aliases:\*\*\s+(.+)$/mu);
+    if (!aliases) errors.push(`S079 glossary entry requires an Aliases field: ${entry.canonical}`);
+    const related = entry.block.match(/^\*\*Related:\*\*\s+(.+)$/mu);
+    if (!related) errors.push(`S079 glossary entry requires a Related field: ${entry.canonical}`);
+    const definition = entry.block
+      .replace(/^\*\*Aliases:\*\*.*$/gmu, "")
+      .replace(/^\*\*Related:\*\*.*$/gmu, "")
+      .replace(/\s+/gu, " ")
+      .trim();
+    if (definition.length < 40) errors.push(`S079 glossary entry requires a substantive definition: ${entry.canonical}`);
+  }
+
+  const groupedEntries = new Map();
+  for (const entry of entries) groupedEntries.set(entry.group, [...(groupedEntries.get(entry.group) ?? []), entry.canonical]);
+  for (const [letter, terms] of groupedEntries) {
+    const sorted = [...terms].sort(compareGlossaryText);
+    if (terms.join("|") !== sorted.join("|")) errors.push(`S079 glossary terms are not alphabetical in group ${letter}`);
+  }
+
+  const expectedEntries = [...(Array.isArray(searchMap) ? searchMap : []), ...GLOSSARY_LEGACY_ENTRIES];
+  const entryByTerm = new Map(entries.map((entry) => [entry.canonical.toLowerCase(), entry]));
+  for (const expected of expectedEntries) {
+    const entry = entryByTerm.get(expected.canonical.toLowerCase());
+    if (!entry) {
+      errors.push(`S079 glossary is missing canonical term: ${expected.canonical}`);
+      continue;
+    }
+    const aliasLine = entry.block.match(/^\*\*Aliases:\*\*\s+(.+)$/mu)?.[1] ?? "";
+    for (const alias of expected.aliases) {
+      if (!normalizedText(aliasLine).includes(normalizedText(alias))) {
+        errors.push(`S079 glossary ${expected.canonical} entry is missing alias: ${alias}`);
+      }
+    }
+    const hasDirectoryReadmeLink = expected.target === "docs/src/README.md" && /\]\(\.\.\/\)/u.test(entry.block);
+    if (!hasMarkdownLinkTo(entry.block, "docs/src/reference/glossary.md", expected.target) && !hasDirectoryReadmeLink) {
+      errors.push(`S079 glossary ${expected.canonical} entry is missing its related target: ${expected.target}`);
+    }
+  }
+  if (entries.length !== expectedEntries.length) {
+    errors.push(`S079 glossary requires exactly ${expectedEntries.length} canonical entries, found ${entries.length}`);
+  }
+  return errors;
+}
+
+const GLOSSARY_SEARCH_EVIDENCE = [
+  "animation cancel",
+  "key interception",
+  "telemetry overlay",
+  "screen telemetry",
+  "config.json",
+  "ring buffer",
+  "WH_KEYBOARD_LL",
+  "publish release",
+  "mock backend",
+  "X-ESO-Weave-Managed",
+];
+
+export function validateGlossarySearchIndex(searchIndex) {
+  const errors = [];
+  const normalized = searchIndex.toLowerCase();
+  for (const phrase of GLOSSARY_SEARCH_EVIDENCE) {
+    if (!normalized.includes(phrase.toLowerCase())) {
+      errors.push(`S079 generated search index is missing glossary phrase: ${phrase}`);
+    }
+  }
+  return errors;
 }
 
 export function validateContentCoverage(manifest, snapshot) {
@@ -2098,6 +2248,11 @@ async function run() {
   const encounterFixtureBytes = await readFile(encounterFixturePath);
   const encounterFixture = JSON.parse(encounterFixtureBytes);
   const encounterProjection = JSON.parse(await readFile(encounterProjectionPath, "utf8"));
+  const glossary = await readFile(path.join(docsRoot, "src", "reference", "glossary.md"), "utf8");
+  const searchIndexFiles = (await readdir(outputRoot)).filter((name) => /^searchindex-[0-9a-f]+\.js$/u.test(name));
+  const searchIndex = searchIndexFiles.length === 1
+    ? await readFile(path.join(outputRoot, searchIndexFiles[0]), "utf8")
+    : "";
   const errors = [
     ...(await validateSourceTree(docsRoot)),
     ...(await validateGeneratedSite(outputRoot)),
@@ -2106,6 +2261,9 @@ async function run() {
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
+    ...validateFormalGlossary(glossary, coverage.search_map),
+    ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
+    ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),
     ...validateEncounterModelContract(encounterModel),
     ...validateEncounterEvidence(encounterFixture, encounterProjection, encounterFixtureBytes),
