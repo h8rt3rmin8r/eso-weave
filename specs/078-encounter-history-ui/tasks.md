@@ -39,6 +39,6 @@
 - [x] T023 Run full formatting, strict Clippy, and locked Rust suite
 - [x] T024 Run optimized builds and complete repository/documentation CI parity
 - [x] T025 Record post-implementation analysis and mark implementation tasks complete
-- [ ] T026 Commit, push, publish PR, and move project state to PR review
+- [x] T026 Commit, push, publish PR, and move project state to PR review
 - [ ] T027 Process all CI and bot feedback with at most one second `@Codex` round
 - [ ] T028 Stop with green CI and satisfied reviews for the merge ritual
