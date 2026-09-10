@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-09-09",
+  "as_of": "2026-09-10",
   "source_snapshots": [
     {
       "id": "eso-api-live",
@@ -141,10 +141,20 @@
     {"id": "effect-uptime", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true},
     {"id": "ordered-cast-sequence", "algorithm_version": "s069-v1", "source_range_required": true, "quality_required": true}
   ],
+  "metrics_implementation": {
+    "state": "repository-implemented-live-verification-required",
+    "slice": "S077",
+    "schema_version": 1,
+    "algorithm_version": "s069-v1",
+    "derived_artifact": "explicit-canonical-json",
+    "player_source_type": 1,
+    "catalog_match": ["channel", "api-version"],
+    "live_verification_issue": 131
+  },
   "parity_roadmap": [
     {"capability": "encounter-boundaries", "source_event": "encounter-start and encounter-end", "calculation": "duration from clipped monotonic bounds", "confidence": "synthetic-proved", "privacy_impact": "none", "combat_metrics_evidence": "FightData combat-log start and end", "state": "fixture-proved", "target_phase": "capture", "acceptance": "synthetic boundary projection", "owner": "issue #113", "risk": "low"},
-    {"capability": "damage-and-healing", "source_event": "damage and healing", "calculation": "outgoing totals divided by encounter seconds and grouped by ability", "confidence": "synthetic-proved", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "combat and healing rows", "state": "fixture-proved", "target_phase": "calculation", "acceptance": "deterministic DPS and HPS", "owner": "issue #134", "risk": "medium"},
-    {"capability": "effect-uptime", "source_event": "effect gained and faded", "calculation": "union clipped active intervals", "confidence": "synthetic-proved", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "effect change rows", "state": "fixture-proved", "target_phase": "calculation", "acceptance": "clipped interval union", "owner": "issue #134", "risk": "medium"},
+    {"capability": "damage-and-healing", "source_event": "damage and healing", "calculation": "local-player totals divided by elapsed encounter seconds and grouped by ability", "confidence": "repository-implemented-live-verification-required", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "combat and healing rows", "state": "repository-implemented-live-verification-required", "target_phase": "calculation", "acceptance": "actual-schema deterministic DPS and HPS plus live comparison", "owner": "issue #131", "risk": "medium"},
+    {"capability": "effect-uptime", "source_event": "effect observations with recorded duration", "calculation": "event-anchored union of clipped active intervals", "confidence": "repository-implemented-live-verification-required", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "effect change rows", "state": "repository-implemented-live-verification-required", "target_phase": "calculation", "acceptance": "actual-schema clipped interval union plus live comparison", "owner": "issue #131", "risk": "medium"},
     {"capability": "resource-and-bars", "source_event": "resource, cast, and bar-change", "calculation": "ordered snapshots and deltas", "confidence": "repository-harness", "privacy_impact": "build inference", "combat_metrics_evidence": "power and skill timing rows", "state": "repository-implemented-live-verification-required", "target_phase": "capture", "acceptance": "executed Lua 5.1 harness plus live capture sample", "owner": "issue #132", "risk": "medium"},
     {"capability": "death-and-resurrection", "source_event": "death and resurrection", "calculation": "ordered life-state intervals", "confidence": "repository-harness", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "death and resurrection rows", "state": "repository-implemented-live-verification-required", "target_phase": "capture", "acceptance": "executed Lua 5.1 harness plus live capture sample", "owner": "issue #132", "risk": "medium"},
     {"capability": "boss-health-performance-quickslot", "source_event": "boss-health, performance, and quickslot", "calculation": "time-aligned samples", "confidence": "repository-harness", "privacy_impact": "performance samples", "combat_metrics_evidence": "boss HP, performance, and quickslot rows", "state": "repository-implemented-live-verification-required", "target_phase": "capture", "acceptance": "executed Lua 5.1 harness plus live capture sample", "owner": "issue #132", "risk": "medium"},

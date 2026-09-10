@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S077 adds deterministic algorithm-versioned encounter projections for observed
+  DPS, effective HPS, ability damage share, effect uptime, and cast order, with
+  explicit loss quality, exact catalog compatibility, known/unknown ID receipts,
+  later catalog reconciliation, and atomic rebuildable JSON output (issue #134).
 - S076 adds bounded non-executing import for terminal encounter SavedVariables,
   strict schema, payload, privacy, ordering, and loss validation, deterministic
   canonical SHA-256 identity, immutable user-owned SQLite storage, idempotent
@@ -62,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-10: Implement encounter calculation as an explicit schema-v1 canonical
+  JSON projection over the immutable S076 raw store and a verified exact-channel,
+  exact-API catalog. Retain algorithm ID `s069-v1`, omit creation time for byte
+  reproducibility, identify the local player by combat source type 1 rather than
+  allocation-order actor ID, exclude pets until ownership is observed, and derive
+  effect uptime from clipped unions of recorded durations anchored at elapsed
+  event time. Keep live semantic parity under issue #131 and defer any indexed
+  derived database to the history UI contract in issue #135.
 - 2026-09-10: Normalize validated terminal encounter facts into deterministic
   compact JSON and use their SHA-256 as immutable raw identity while retaining a
   separate source-byte hash for each import attempt. Keep those records in a
