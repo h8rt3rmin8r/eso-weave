@@ -155,6 +155,7 @@ impl UpdateRoots {
 
 pub struct CatalogResolution {
     pub access: CatalogAccess,
+    pub path: PathBuf,
     pub target: CatalogTarget,
     pub warning: Option<String>,
 }
@@ -460,10 +461,12 @@ impl CatalogUpdateService {
                 let candidate = self.roots.live_versions().join(candidate_sha256);
                 match self.validate_installed_candidate(&candidate, candidate_sha256) {
                     Ok(_) => {
-                        let access = CatalogAccess::open_or_empty(candidate.join("catalog.sqlite"));
+                        let path = candidate.join("catalog.sqlite");
+                        let access = CatalogAccess::open_or_empty(&path);
                         if access.is_available() {
                             CatalogResolution {
                                 access,
+                                path,
                                 target: selection.active,
                                 warning: None,
                             }
@@ -682,6 +685,7 @@ impl CatalogUpdateService {
     fn bundled_resolution(&self, warning: Option<String>) -> CatalogResolution {
         CatalogResolution {
             access: CatalogAccess::open_or_empty(&self.bundled_catalog),
+            path: self.bundled_catalog.clone(),
             target: CatalogTarget::Bundled,
             warning,
         }

@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 
@@ -65,7 +66,7 @@ impl HistoryDiagnostic {
 #[derive(Debug, Clone)]
 pub struct EncounterHistoryService {
     store_path: PathBuf,
-    catalog_path: PathBuf,
+    catalog_path: Arc<RwLock<PathBuf>>,
 }
 
 impl EncounterHistoryService {
@@ -82,12 +83,19 @@ impl EncounterHistoryService {
     pub fn from_paths(store_path: impl Into<PathBuf>, catalog_path: impl Into<PathBuf>) -> Self {
         Self {
             store_path: store_path.into(),
-            catalog_path: catalog_path.into(),
+            catalog_path: Arc::new(RwLock::new(catalog_path.into())),
         }
     }
 
     pub fn store_path(&self) -> &Path {
         &self.store_path
+    }
+
+    pub fn set_catalog_path(&self, catalog_path: impl Into<PathBuf>) {
+        *self
+            .catalog_path
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = catalog_path.into();
     }
 
     pub fn snapshot(&self) -> Result<Vec<EncounterSummary>, HistoryDiagnostic> {
@@ -139,7 +147,12 @@ impl EncounterHistoryService {
             )
         })?;
 
-        let catalog = CatalogAccess::open_or_empty(&self.catalog_path);
+        let catalog_path = self
+            .catalog_path
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let catalog = CatalogAccess::open_or_empty(catalog_path);
         if let Some(diagnostic) = catalog.diagnostic() {
             let (kind, message) = match diagnostic.kind {
                 CatalogDiagnosticKind::Missing | CatalogDiagnosticKind::Unavailable => (

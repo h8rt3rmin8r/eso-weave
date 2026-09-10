@@ -54,24 +54,26 @@ pub struct EncounterHistoryWorker {
     command_tx: Option<SyncSender<HistoryCommand>>,
     event_rx: Receiver<HistoryEvent>,
     join: Option<JoinHandle<()>>,
+    service: EncounterHistoryService,
 }
 
 impl EncounterHistoryWorker {
     pub fn spawn(service: EncounterHistoryService) -> Self {
         let (command_tx, command_rx) = mpsc::sync_channel(1);
         let (event_tx, event_rx) = mpsc::channel();
+        let thread_service = service.clone();
         let join = std::thread::spawn(move || {
             while let Ok(command) = command_rx.recv() {
                 let event = match command {
                     HistoryCommand::Refresh => {
-                        snapshot_event(&service, HistoryOperation::Refresh, None)
+                        snapshot_event(&thread_service, HistoryOperation::Refresh, None)
                     }
                     HistoryCommand::Import {
                         source_path,
                         expected_channel,
-                    } => match service.import_current(source_path, expected_channel) {
+                    } => match thread_service.import_current(source_path, expected_channel) {
                         Ok(receipt) => snapshot_event(
-                            &service,
+                            &thread_service,
                             HistoryOperation::Import,
                             Some(match receipt.outcome {
                                 ImportOutcome::Imported => "Encounter imported.".into(),
@@ -86,27 +88,29 @@ impl EncounterHistoryWorker {
                         },
                     },
                     HistoryCommand::LoadDetail(identity) => {
-                        let result = service.detail(&identity).map(Box::new);
+                        let result = thread_service.detail(&identity).map(Box::new);
                         HistoryEvent::Detail { identity, result }
                     }
-                    HistoryCommand::DeleteOne(identity) => match service.delete_one(&identity) {
+                    HistoryCommand::DeleteOne(identity) => {
+                        match thread_service.delete_one(&identity) {
+                            Ok(receipt) => snapshot_event(
+                                &thread_service,
+                                HistoryOperation::DeleteOne,
+                                Some(if receipt.deleted_records == 0 {
+                                    "The encounter was already absent.".into()
+                                } else {
+                                    "Encounter deleted from local history.".into()
+                                }),
+                            ),
+                            Err(diagnostic) => HistoryEvent::Failed {
+                                operation: HistoryOperation::DeleteOne,
+                                diagnostic,
+                            },
+                        }
+                    }
+                    HistoryCommand::DeleteAll => match thread_service.delete_all() {
                         Ok(receipt) => snapshot_event(
-                            &service,
-                            HistoryOperation::DeleteOne,
-                            Some(if receipt.deleted_records == 0 {
-                                "The encounter was already absent.".into()
-                            } else {
-                                "Encounter deleted from local history.".into()
-                            }),
-                        ),
-                        Err(diagnostic) => HistoryEvent::Failed {
-                            operation: HistoryOperation::DeleteOne,
-                            diagnostic,
-                        },
-                    },
-                    HistoryCommand::DeleteAll => match service.delete_all() {
-                        Ok(receipt) => snapshot_event(
-                            &service,
+                            &thread_service,
                             HistoryOperation::DeleteAll,
                             Some(format!(
                                 "Deleted {} local encounter record{}.",
@@ -134,7 +138,12 @@ impl EncounterHistoryWorker {
             command_tx: Some(command_tx),
             event_rx,
             join: Some(join),
+            service,
         }
+    }
+
+    pub fn set_catalog_path(&self, catalog_path: PathBuf) {
+        self.service.set_catalog_path(catalog_path);
     }
 
     pub fn refresh(&self) -> Result<(), HistoryWorkerBusy> {

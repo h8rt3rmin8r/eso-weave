@@ -39,8 +39,8 @@ use crate::catalog::Channel;
 use crate::catalog_pipeline::CandidateSummary;
 use crate::catalog_update::{
     candidate_compatibility, resolve_availability, AvailabilityInput, CaptureFingerprint,
-    CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateProgress,
-    UpdateStage, WorkerEvent,
+    CatalogResolution, CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState,
+    UpdateProgress, UpdateStage, WorkerEvent,
 };
 use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
@@ -291,6 +291,7 @@ pub struct EsoWeaveApp {
     encounter_history_detail: Option<Result<EncounterProjection, HistoryDiagnostic>>,
     encounter_history_diagnostic: Option<HistoryDiagnostic>,
     encounter_history_message: Option<String>,
+    encounter_history_catalog_refresh_pending: bool,
     encounter_delete_confirmation: Option<EncounterDeleteConfirmation>,
 }
 
@@ -372,6 +373,7 @@ impl EsoWeaveApp {
             encounter_history_detail: None,
             encounter_history_diagnostic: None,
             encounter_history_message: None,
+            encounter_history_catalog_refresh_pending: false,
             encounter_delete_confirmation: None,
         }
     }
@@ -675,9 +677,9 @@ impl EsoWeaveApp {
                     self.catalog_status_ready = true;
                     self.catalog_candidates = candidates;
                     self.choose_default_catalog_candidate();
-                    self.model.set_catalog(resolution.access);
+                    let warning = self.install_active_catalog(resolution);
                     let mut messages = Vec::new();
-                    if let Some(warning) = resolution.warning {
+                    if let Some(warning) = warning {
                         messages.push(warning);
                     }
                     if recovered_staging > 0 {
@@ -751,7 +753,7 @@ impl EsoWeaveApp {
                     outcome,
                     resolution,
                 } => {
-                    self.model.set_catalog(resolution.access);
+                    let warning = self.install_active_catalog(*resolution);
                     self.catalog_progress = Some(UpdateProgress {
                         stage: UpdateStage::Complete,
                         completed_bytes: outcome.candidate.total_bytes,
@@ -759,7 +761,7 @@ impl EsoWeaveApp {
                         elapsed_millis: 0,
                         message: "Catalog installed and selected. Restart safety verified.".into(),
                     });
-                    self.catalog_update_message = outcome.receipt_warning.or_else(|| {
+                    self.catalog_update_message = outcome.receipt_warning.or(warning).or_else(|| {
                         Some(format!(
                             "Installed Live catalog {}. The previous catalog remains available for rollback.",
                             outcome.candidate.catalog_version
@@ -770,7 +772,7 @@ impl EsoWeaveApp {
                     outcome,
                     resolution,
                 } => {
-                    self.model.set_catalog(resolution.access);
+                    let warning = self.install_active_catalog(*resolution);
                     self.catalog_progress = Some(UpdateProgress {
                         stage: UpdateStage::Complete,
                         completed_bytes: 0,
@@ -780,6 +782,7 @@ impl EsoWeaveApp {
                     });
                     self.catalog_update_message = outcome
                         .receipt_warning
+                        .or(warning)
                         .or_else(|| Some("Catalog rollback completed.".into()));
                 }
                 WorkerEvent::Failed(failure) => {
@@ -828,7 +831,26 @@ impl EsoWeaveApp {
                 self.collector_status_requested = worker.inspect_collector(root);
             }
         }
+        self.request_catalog_changed_history_detail();
         self.refresh_catalog_availability();
+    }
+
+    fn install_active_catalog(&mut self, resolution: CatalogResolution) -> Option<String> {
+        let CatalogResolution {
+            access,
+            path,
+            warning,
+            ..
+        } = resolution;
+        if let Some(worker) = &self.encounter_history_worker {
+            worker.set_catalog_path(path);
+        }
+        self.model.set_catalog(access);
+        if self.encounter_history_selected.is_some() {
+            self.encounter_history_detail = None;
+            self.encounter_history_catalog_refresh_pending = true;
+        }
+        warning
     }
 
     fn refresh_catalog_availability(&mut self) {
@@ -906,6 +928,7 @@ impl EsoWeaveApp {
             Some(Ok(())) => {
                 self.encounter_history_selected = Some(identity);
                 self.encounter_history_detail = None;
+                self.encounter_history_catalog_refresh_pending = false;
                 self.encounter_history_busy = true;
             }
             Some(Err(_)) => {
@@ -913,6 +936,28 @@ impl EsoWeaveApp {
                     Some("Encounter history is already processing another request.".into());
             }
             None => {}
+        }
+    }
+
+    fn request_catalog_changed_history_detail(&mut self) {
+        if !self.encounter_history_catalog_refresh_pending || self.encounter_history_busy {
+            return;
+        }
+        let Some(identity) = self.encounter_history_selected.clone() else {
+            self.encounter_history_catalog_refresh_pending = false;
+            return;
+        };
+        match self
+            .encounter_history_worker
+            .as_ref()
+            .map(|worker| worker.load_detail(identity))
+        {
+            Some(Ok(())) => {
+                self.encounter_history_catalog_refresh_pending = false;
+                self.encounter_history_busy = true;
+            }
+            Some(Err(_)) => {}
+            None => self.encounter_history_catalog_refresh_pending = false,
         }
     }
 
@@ -944,6 +989,7 @@ impl EsoWeaveApp {
                     if !selection_still_exists {
                         self.encounter_history_selected = None;
                         self.encounter_history_detail = None;
+                        self.encounter_history_catalog_refresh_pending = false;
                     }
                 }
                 HistoryEvent::Detail { identity, result } => {
@@ -957,6 +1003,7 @@ impl EsoWeaveApp {
                 }
             }
         }
+        self.request_catalog_changed_history_detail();
     }
 
     /// Renders one frame. Reachable without an `eframe::Frame`, a window, or a

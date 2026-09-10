@@ -17,8 +17,8 @@ use eso_weave::catalog::compiler::{build_catalog, BuildRequest};
 use eso_weave::catalog::Channel;
 use eso_weave::config::{LoggingPrefs, Settings};
 use eso_weave::encounter::{
-    EncounterHistoryService, EncounterIdentity, ImportOutcome, LossRange, MetricQuality,
-    MetricResult,
+    EncounterHistoryService, EncounterIdentity, HistoryDiagnosticKind, ImportOutcome, LossRange,
+    MetricQuality, MetricResult,
 };
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
@@ -199,6 +199,41 @@ fn worker_serializes_refresh_detail_and_deletion_results() {
         } => {
             assert_eq!(operation, HistoryOperation::DeleteOne);
             assert!(encounters.is_empty());
+        }
+        event => panic!("unexpected event: {event:?}"),
+    }
+}
+
+#[test]
+fn worker_uses_catalog_path_replacements_for_subsequent_details() {
+    let root = tempfile::tempdir().unwrap();
+    let service = seeded_service(root.path());
+    let identity = EncounterIdentity::from(&service.snapshot().unwrap()[0]);
+    let live = root.path().join("catalog.sqlite");
+    let pts = root.path().join("pts-catalog.sqlite");
+    build_catalog(&BuildRequest::new(
+        "specs/070-catalog-compiler/fixtures/minimal-pts.json",
+        &pts,
+        Channel::Pts,
+    ))
+    .unwrap();
+    service.set_catalog_path(&pts);
+    let worker = EncounterHistoryWorker::spawn(service);
+
+    worker.load_detail(identity.clone()).unwrap();
+    match worker.receive_timeout(Duration::from_secs(2)).unwrap() {
+        HistoryEvent::Detail { result, .. } => assert_eq!(
+            result.unwrap_err().kind,
+            HistoryDiagnosticKind::VersionMismatch
+        ),
+        event => panic!("unexpected event: {event:?}"),
+    }
+
+    worker.set_catalog_path(live);
+    worker.load_detail(identity).unwrap();
+    match worker.receive_timeout(Duration::from_secs(2)).unwrap() {
+        HistoryEvent::Detail { result, .. } => {
+            assert_eq!(result.unwrap().catalog_join.catalog_version, "s070-live-1");
         }
         event => panic!("unexpected event: {event:?}"),
     }

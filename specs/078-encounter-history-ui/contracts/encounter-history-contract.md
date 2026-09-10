@@ -17,6 +17,8 @@
    API compatibility.
 4. It calculates the S077 projection in memory and publishes no derived file or row.
 5. A detail failure does not discard or replace the current raw summary snapshot.
+6. Startup selection, installation, and rollback replace the active catalog path;
+   an already selected encounter is then reprojected against that replacement.
 
 ## Presentation
 

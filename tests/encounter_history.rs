@@ -173,3 +173,29 @@ fn missing_identity_does_not_mutate_the_store() {
     assert_eq!(service.delete_one(&missing).unwrap().deleted_records, 0);
     assert_eq!(service.snapshot().unwrap().len(), 1);
 }
+
+#[test]
+fn detail_projection_follows_active_catalog_path_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("capture.lua");
+    fs::write(&input, capture_lua()).unwrap();
+    let live = catalog(root.path(), LIVE_CATALOG, Channel::Live);
+    let pts = catalog(root.path(), PTS_CATALOG, Channel::Pts);
+    let service = EncounterHistoryService::new(root.path(), &pts);
+    service.import_current(&input, Channel::Live).unwrap();
+    let identity = EncounterIdentity::from(&service.snapshot().unwrap()[0]);
+
+    assert_eq!(
+        service.detail(&identity).unwrap_err().kind,
+        HistoryDiagnosticKind::VersionMismatch
+    );
+    service.set_catalog_path(live);
+    assert_eq!(
+        service
+            .detail(&identity)
+            .unwrap()
+            .catalog_join
+            .catalog_version,
+        "s070-live-1"
+    );
+}
