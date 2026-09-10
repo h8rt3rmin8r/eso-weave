@@ -1,8 +1,8 @@
 # Feature Specification: Versioned Encounter Metrics
 
-**Feature Branch**: `codex/s077-encounter-metrics`  
-**Created**: 2026-09-10  
-**Status**: In progress  
+**Feature Branch**: `codex/s077-encounter-metrics`
+**Created**: 2026-09-10
+**Status**: In progress
 **Input**: Issue #134 and the S069 encounter-analysis handoff
 
 ## User Scenarios and Testing

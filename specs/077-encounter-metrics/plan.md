@@ -1,6 +1,6 @@
 # Implementation Plan: Versioned Encounter Metrics
 
-**Branch**: `codex/s077-encounter-metrics` | **Date**: 2026-09-10 | **Spec**: `spec.md`  
+**Branch**: `codex/s077-encounter-metrics` | **Date**: 2026-09-10 | **Spec**: `spec.md`
 **Input**: Feature specification for issue #134
 
 ## Summary
@@ -13,15 +13,15 @@ the reusable library contract.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.96, edition 2021  
-**Primary Dependencies**: existing serde, serde_json, sha2, rusqlite, tempfile  
+**Language/Version**: Rust 1.96, edition 2021
+**Primary Dependencies**: existing serde, serde_json, sha2, rusqlite, tempfile
 **Storage**: read-only `encounters.sqlite`, read-only `catalog.sqlite`, explicit
-canonical projection JSON  
-**Testing**: unit and integration tests plus complete locked Cargo and docs gates  
-**Target Platform**: Windows and Linux desktop and CI  
-**Performance Goals**: bounded linear work over at most 100,000 imported events  
+canonical projection JSON
+**Testing**: unit and integration tests plus complete locked Cargo and docs gates
+**Target Platform**: Windows and Linux desktop and CI
+**Performance Goals**: bounded linear work over at most 100,000 imported events
 **Constraints**: no network, no raw/catalog writes, deterministic bytes, explicit
-loss, exact channel/API match, no sensitive payload output  
+loss, exact channel/API match, no sensitive payload output
 **Scale/Scope**: one encounter per invocation, five metric families, one receipt
 
 ## Constitution Check
