@@ -871,8 +871,9 @@ export function validateFormalGlossary(markdown, searchMap) {
         errors.push(`S079 glossary ${expected.canonical} entry is missing alias: ${alias}`);
       }
     }
-    const hasDirectoryReadmeLink = expected.target === "docs/src/README.md" && /\]\(\.\.\/\)/u.test(entry.block);
-    if (!hasMarkdownLinkTo(entry.block, "docs/src/reference/glossary.md", expected.target) && !hasDirectoryReadmeLink) {
+    const relatedLine = entry.block.match(/^\*\*Related:\*\*\s+(.+)$/mu)?.[1] ?? "";
+    const hasDirectoryReadmeLink = expected.target === "docs/src/README.md" && /\]\(\.\.\/\)/u.test(relatedLine);
+    if (!hasMarkdownLinkTo(relatedLine, "docs/src/reference/glossary.md", expected.target) && !hasDirectoryReadmeLink) {
       errors.push(`S079 glossary ${expected.canonical} entry is missing its related target: ${expected.target}`);
     }
   }

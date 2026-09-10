@@ -81,6 +81,14 @@ test("S079 rejects missing aliases, definitions, targets, and alphabet links", (
   const wrongTarget = validFormalGlossary().replace("../features/auto-potion.md", "../features/fishing.md");
   assert.match(validateFormalGlossary(wrongTarget, glossarySearchMap).join("\n"), /related.*target/i);
 
+  const definitionLeak = validFormalGlossary()
+    .replace(
+      "Auto Potion is a substantive ESO Weave concept with enough explanatory context for a reader.",
+      "Auto Potion has a substantive [canonical explanation](../features/auto-potion.md) with enough context.",
+    )
+    .replace("[Read about Auto Potion](../features/auto-potion.md)", "[Wrong page](../features/fishing.md)");
+  assert.match(validateFormalGlossary(definitionLeak, glossarySearchMap).join("\n"), /related.*target/i);
+
   const missingLetter = validFormalGlossary().replace('<a href="#p">P</a> ', "");
   assert.match(validateFormalGlossary(missingLetter, glossarySearchMap).join("\n"), /navigation/i);
 });
