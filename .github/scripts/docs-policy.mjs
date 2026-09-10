@@ -842,7 +842,7 @@ export function validateFormalGlossary(markdown, searchMap) {
     if (!aliases) errors.push(`S079 glossary entry requires an Aliases field: ${entry.canonical}`);
     const related = entry.block.match(/^\*\*Related:\*\*\s+(.+)$/mu);
     if (!related) errors.push(`S079 glossary entry requires a Related field: ${entry.canonical}`);
-    const definition = entry.block
+    const definition = visibleMarkdown(entry.block)
       .replace(/^\*\*Aliases:\*\*.*$/gmu, "")
       .replace(/^\*\*Related:\*\*.*$/gmu, "")
       .replace(/\s+/gu, " ")
@@ -866,8 +866,9 @@ export function validateFormalGlossary(markdown, searchMap) {
       continue;
     }
     const aliasLine = entry.block.match(/^\*\*Aliases:\*\*\s+(.+)$/mu)?.[1] ?? "";
+    const aliasItems = aliasLine.split(",").map(normalizedText);
     for (const alias of expected.aliases) {
-      if (!normalizedText(aliasLine).includes(normalizedText(alias))) {
+      if (!aliasItems.includes(normalizedText(alias))) {
         errors.push(`S079 glossary ${expected.canonical} entry is missing alias: ${alias}`);
       }
     }

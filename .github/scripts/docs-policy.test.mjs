@@ -78,6 +78,15 @@ test("S079 rejects missing aliases, definitions, targets, and alphabet links", (
   const missingDefinition = validFormalGlossary().replace("Auto Potion is a substantive ESO Weave concept with enough explanatory context for a reader.\n\n", "");
   assert.match(validateFormalGlossary(missingDefinition, glossarySearchMap).join("\n"), /definition/i);
 
+  const hiddenDefinition = validFormalGlossary().replace(
+    "Auto Potion is a substantive ESO Weave concept with enough explanatory context for a reader.",
+    "<!-- Auto Potion is a hidden definition with enough explanatory context to fool a raw length check. -->",
+  );
+  assert.match(validateFormalGlossary(hiddenDefinition, glossarySearchMap).join("\n"), /definition/i);
+
+  const partialAlias = validFormalGlossary().replace("LA, HA", "LATER, HA");
+  assert.match(validateFormalGlossary(partialAlias, glossarySearchMap).join("\n"), /alias.*LA/i);
+
   const wrongTarget = validFormalGlossary().replace("../features/auto-potion.md", "../features/fishing.md");
   assert.match(validateFormalGlossary(wrongTarget, glossarySearchMap).join("\n"), /related.*target/i);
 
