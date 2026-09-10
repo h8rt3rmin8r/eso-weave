@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S075 adds a separately identified, explicitly armed encounter addon that
+  records one bounded Live or PTS combat observation with encounter-local actors,
+  authoritative sequence and elapsed time, fourteen event families, declared
+  loss, local clearing, and no persisted personal names, upload, Pixel Bus
+  transport, or automation authority (issue #132).
 - S074 adds an accessible, user-initiated catalog update workflow with
   background Live and PTS status, verified local candidate discovery, explicit
   origin acknowledgement, immutable user-data installation, atomic selection,
@@ -46,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-09: Amend the constitution to 2.2.0 for a third narrow addon bridge,
+  keeping encounter capture separately identified from PixelBeacon and the
+  discovery collector. Require explicit one-encounter Live or PTS authority,
+  encounter-local actors, bounded events and conservative byte estimates,
+  reserved loss and terminal capacity, no personal names or upload, and no
+  action authority. Execute the exact addon under a vendored test-only Lua 5.1
+  runtime because source-string checks cannot prove consent, privacy, overflow,
+  recovery, or callback teardown. Leave hostile import and canonical SHA-256 to
+  issue #133 and live parity and storage measurement to issue #131.
 - 2026-09-09: Keep catalog updates local, explicit, and review-format based.
   Candidate SHA-256 proves integrity but not authenticated origin, so require a
   trusted-source acknowledgement and add no remote feed, silent download, or

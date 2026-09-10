@@ -26,13 +26,19 @@ accordance with the Apache License, Version 2.0 under which it is distributed.
 
 ESO Weave supports Windows 10 and 11 x64 and Linux x64. macOS, multi-account or
 multi-client orchestration, game memory access, packet manipulation, and in-game
-features beyond the two named local addon bridges are outside project scope.
+features beyond the three named local addon bridges are outside project scope.
 
 PixelBeacon ships only inside ESO Weave. It is not published to addon indexes.
 The separately managed ESO Weave Collector runs only after an explicit user
 command, reads documented public addon API values outside combat, and writes a
 bounded local SavedVariables capture. It does not drive gameplay or communicate
 over the network.
+
+ESO Weave Encounter is a distinct third addon. It remains dormant until the user
+explicitly arms one Live or PTS encounter, records bounded numeric observations
+with encounter-local anonymous actors, declares capture loss, then disarms. It
+stores no account, character, unit, ability, or effect names and does not use
+Pixel Bus, upload data, or drive gameplay.
 
 ## Privacy and network behavior
 
@@ -45,6 +51,11 @@ require an online account service.
 The optional collector records versioned, bounded catalog observations in the
 user's local SavedVariables. The desktop treats that file as hostile data, never
 executes it, never uploads it, and keeps user-collected localized text local.
+
+The optional encounter addon records one bounded local SavedVariables envelope.
+S075 does not import or upload it. A later importer must treat the file as
+hostile data, verify the fixed schema and loss declarations, and keep it in a
+user-owned store separate from the shipped catalog.
 
 The desktop application performs one best-effort background startup check against
 the official `esoui/esoui` live client-version source. That request is used only

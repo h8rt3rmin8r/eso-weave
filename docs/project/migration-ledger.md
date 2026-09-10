@@ -32,10 +32,11 @@ manifest, so changing a count cannot hide an omission or substitution.
   delivery evidence. Plan 037 is archived after S067 merged and shipped. Plan
   038 is active for the ordered game-data foundation. S068 merged in PR #130,
   S069 merged in PR #137, S070 merged in PR #138, S071 merged in PR #139, and
-  S072 merged in PR #140. S073 is in progress under issue #117. Independent release verification does
-  not reactivate a completed
-  plan or block the active plan. The policy requires the matching plan file and
-  index row for every state and rejects simultaneous current and archive copies.
+  S072 merged in PR #140. S073 merged in PR #141 and S074 merged in PR #142.
+  S075 is in progress under issue #132. Independent release verification does
+  not reactivate a completed plan or block the active plan. The policy requires
+  the matching plan file and index row for every state and rejects simultaneous
+  current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six
   safety invariants have named canonical destinations.
 
