@@ -68,12 +68,17 @@ partial result instead of a false complete result.
 ## Save and ownership boundary
 
 After capture, use `/reloadui`, log out, or exit ESO so the client writes
-`SavedVariables/EsoWeaveEncounter.lua`. The file stays on your system. S075 adds
-no upload, telemetry, network transfer, automatic sharing, or desktop import.
+`SavedVariables/EsoWeaveEncounter.lua`. The file stays on your system. Open File,
+Encounter History in the desktop and choose Import Current Capture to import it
+through the bounded non-executing path. The action uses the Live or PTS
+environment selected in Settings and stores accepted raw history only in the
+per-user application data directory.
 
-Issue #133 owns the future non-executing importer and user-owned raw store. It
-must treat the SavedVariables file as hostile text, validate every bound and
-sequence, compute the canonical hash, and preserve the prior store on failure.
+The importer treats the SavedVariables file as hostile text, validates every
+bound and sequence, computes the canonical hash, and preserves prior history on
+failure. Encounter History labels derived results as observed and exposes partial
+capture loss and unresolved catalog IDs. Deletion remains an explicit confirmed
+local action.
 
 Encounter capture does not use Pixel Bus and has no relationship to input
 authorization, Weaving, Fishing, or Auto Potion. It does not perform protected

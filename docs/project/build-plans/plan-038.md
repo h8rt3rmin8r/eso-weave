@@ -29,15 +29,20 @@ Sequence:
 9. S076 implemented bounded non-executing terminal import, deterministic
    canonical identity, immutable user-owned raw storage, and explicit listing,
    backup, and deletion. It merged in PR #144 and closed issue #133.
-10. S077 is in progress under issue #134. It implements algorithm-versioned DPS,
-    effective HPS, ability damage share, effect uptime, cast order, explicit loss
-    quality, compatible catalog receipts, and atomic rebuildable projections.
-11. Later slices continue the encounter pipeline through issues #135 and #136
-    according to their native dependency order. Issue #131 retains live Combat
-    Metrics parity verification after the repository calculation path exists.
+10. S077 implemented algorithm-versioned DPS, effective HPS, ability damage
+    share, effect uptime, cast order, explicit loss quality, compatible catalog
+    receipts, and atomic rebuildable projections. It merged in PR #145 and closed
+    issue #134.
+11. S078 is in progress under issue #135. It implements explicit local encounter
+    import, deterministic history summaries, on-demand observed projections,
+    visible loss and catalog knowledge, typed failure states, and confirmed local
+    deletion outside the GUI render thread.
+12. A later slice continues the encounter pipeline through issue #136 according
+    to its native dependencies. Issue #131 retains live Combat Metrics parity
+    verification after the repository calculation path exists.
 
-Issue #134 is the active dependency-ordered implementation and unlocks the
-quality-aware history interface in issue #135. Installed v0.15.1 verification in
-issue #110, catalog field verification in issue #129, and live Combat Metrics
+Issue #135 is the active dependency-ordered implementation and unlocks the UI
+portion required by recommendations issue #136. Installed v0.15.1 verification
+in issue #110, catalog field verification in issue #129, and live Combat Metrics
 verification in issue #131 remain independent verification work and do not block
 the active implementation sequence.

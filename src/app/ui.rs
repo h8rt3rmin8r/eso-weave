@@ -24,6 +24,9 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 
+use crate::app::encounter_history::{
+    metric_presentation, quality_label, EncounterHistoryWorker, HistoryEvent,
+};
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
 use crate::app::{
@@ -36,12 +39,16 @@ use crate::catalog::Channel;
 use crate::catalog_pipeline::CandidateSummary;
 use crate::catalog_update::{
     candidate_compatibility, resolve_availability, AvailabilityInput, CaptureFingerprint,
-    CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateProgress,
-    UpdateStage, WorkerEvent,
+    CatalogResolution, CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState,
+    UpdateProgress, UpdateStage, WorkerEvent,
 };
 use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
 use crate::documentation::{BrowserOpener, DocumentationService, NativeBrowser};
+use crate::encounter::{
+    EncounterHistoryService, EncounterIdentity, EncounterProjection, EncounterSummary,
+    HistoryDiagnostic, HistoryDiagnosticKind, MetricResult,
+};
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
 
@@ -275,6 +282,23 @@ pub struct EsoWeaveApp {
     collector_waiting_fingerprint: Option<CaptureFingerprint>,
     collector_status: Option<crate::collector::lifecycle::CollectorStatus>,
     collector_status_requested: bool,
+    encounter_history_worker: Option<EncounterHistoryWorker>,
+    encounter_history_open: bool,
+    encounter_history_initialized: bool,
+    encounter_history_busy: bool,
+    encounter_history: Vec<EncounterSummary>,
+    encounter_history_selected: Option<EncounterIdentity>,
+    encounter_history_detail: Option<Result<EncounterProjection, HistoryDiagnostic>>,
+    encounter_history_diagnostic: Option<HistoryDiagnostic>,
+    encounter_history_message: Option<String>,
+    encounter_history_catalog_refresh_pending: bool,
+    encounter_delete_confirmation: Option<EncounterDeleteConfirmation>,
+}
+
+#[derive(Debug, Clone)]
+enum EncounterDeleteConfirmation {
+    One(EncounterIdentity),
+    All,
 }
 
 impl EsoWeaveApp {
@@ -340,6 +364,17 @@ impl EsoWeaveApp {
             collector_waiting_fingerprint: None,
             collector_status: None,
             collector_status_requested: false,
+            encounter_history_worker: None,
+            encounter_history_open: false,
+            encounter_history_initialized: false,
+            encounter_history_busy: false,
+            encounter_history: Vec::new(),
+            encounter_history_selected: None,
+            encounter_history_detail: None,
+            encounter_history_diagnostic: None,
+            encounter_history_message: None,
+            encounter_history_catalog_refresh_pending: false,
+            encounter_delete_confirmation: None,
         }
     }
 
@@ -349,6 +384,21 @@ impl EsoWeaveApp {
         let _ = worker.startup();
         self.catalog_worker = Some(worker);
         self
+    }
+
+    /// Enables the local encounter-history worker. The worker remains idle until
+    /// the user opens the history surface or requests an operation.
+    pub fn with_encounter_history(mut self, service: EncounterHistoryService) -> Self {
+        self.encounter_history_worker = Some(EncounterHistoryWorker::spawn(service));
+        self
+    }
+
+    pub fn encounter_history_busy(&self) -> bool {
+        self.encounter_history_busy
+    }
+
+    pub fn encounter_history_count(&self) -> usize {
+        self.encounter_history.len()
     }
 
     /// Replaces the operating-system browser adapter. Production uses
@@ -627,9 +677,9 @@ impl EsoWeaveApp {
                     self.catalog_status_ready = true;
                     self.catalog_candidates = candidates;
                     self.choose_default_catalog_candidate();
-                    self.model.set_catalog(resolution.access);
+                    let warning = self.install_active_catalog(resolution);
                     let mut messages = Vec::new();
-                    if let Some(warning) = resolution.warning {
+                    if let Some(warning) = warning {
                         messages.push(warning);
                     }
                     if recovered_staging > 0 {
@@ -703,7 +753,7 @@ impl EsoWeaveApp {
                     outcome,
                     resolution,
                 } => {
-                    self.model.set_catalog(resolution.access);
+                    let warning = self.install_active_catalog(*resolution);
                     self.catalog_progress = Some(UpdateProgress {
                         stage: UpdateStage::Complete,
                         completed_bytes: outcome.candidate.total_bytes,
@@ -711,7 +761,7 @@ impl EsoWeaveApp {
                         elapsed_millis: 0,
                         message: "Catalog installed and selected. Restart safety verified.".into(),
                     });
-                    self.catalog_update_message = outcome.receipt_warning.or_else(|| {
+                    self.catalog_update_message = outcome.receipt_warning.or(warning).or_else(|| {
                         Some(format!(
                             "Installed Live catalog {}. The previous catalog remains available for rollback.",
                             outcome.candidate.catalog_version
@@ -722,7 +772,7 @@ impl EsoWeaveApp {
                     outcome,
                     resolution,
                 } => {
-                    self.model.set_catalog(resolution.access);
+                    let warning = self.install_active_catalog(*resolution);
                     self.catalog_progress = Some(UpdateProgress {
                         stage: UpdateStage::Complete,
                         completed_bytes: 0,
@@ -732,6 +782,7 @@ impl EsoWeaveApp {
                     });
                     self.catalog_update_message = outcome
                         .receipt_warning
+                        .or(warning)
                         .or_else(|| Some("Catalog rollback completed.".into()));
                 }
                 WorkerEvent::Failed(failure) => {
@@ -780,7 +831,26 @@ impl EsoWeaveApp {
                 self.collector_status_requested = worker.inspect_collector(root);
             }
         }
+        self.request_catalog_changed_history_detail();
         self.refresh_catalog_availability();
+    }
+
+    fn install_active_catalog(&mut self, resolution: CatalogResolution) -> Option<String> {
+        let CatalogResolution {
+            access,
+            path,
+            warning,
+            ..
+        } = resolution;
+        if let Some(worker) = &self.encounter_history_worker {
+            worker.set_catalog_path(path);
+        }
+        self.model.set_catalog(access);
+        if self.encounter_history_selected.is_some() {
+            self.encounter_history_detail = None;
+            self.encounter_history_catalog_refresh_pending = true;
+        }
+        warning
     }
 
     fn refresh_catalog_availability(&mut self) {
@@ -824,6 +894,118 @@ impl EsoWeaveApp {
         }
     }
 
+    fn request_history_refresh(&mut self) {
+        if self.encounter_history_busy {
+            return;
+        }
+        match self
+            .encounter_history_worker
+            .as_ref()
+            .map(EncounterHistoryWorker::refresh)
+        {
+            Some(Ok(())) => {
+                self.encounter_history_busy = true;
+                self.encounter_history_initialized = true;
+                self.encounter_history_diagnostic = None;
+            }
+            Some(Err(_)) => {
+                self.encounter_history_message =
+                    Some("Encounter history is already processing another request.".into());
+            }
+            None => {}
+        }
+    }
+
+    fn request_history_detail(&mut self, identity: EncounterIdentity) {
+        if self.encounter_history_busy {
+            return;
+        }
+        match self
+            .encounter_history_worker
+            .as_ref()
+            .map(|worker| worker.load_detail(identity.clone()))
+        {
+            Some(Ok(())) => {
+                self.encounter_history_selected = Some(identity);
+                self.encounter_history_detail = None;
+                self.encounter_history_catalog_refresh_pending = false;
+                self.encounter_history_busy = true;
+            }
+            Some(Err(_)) => {
+                self.encounter_history_message =
+                    Some("Encounter history is already processing another request.".into());
+            }
+            None => {}
+        }
+    }
+
+    fn request_catalog_changed_history_detail(&mut self) {
+        if !self.encounter_history_catalog_refresh_pending || self.encounter_history_busy {
+            return;
+        }
+        let Some(identity) = self.encounter_history_selected.clone() else {
+            self.encounter_history_catalog_refresh_pending = false;
+            return;
+        };
+        match self
+            .encounter_history_worker
+            .as_ref()
+            .map(|worker| worker.load_detail(identity))
+        {
+            Some(Ok(())) => {
+                self.encounter_history_catalog_refresh_pending = false;
+                self.encounter_history_busy = true;
+            }
+            Some(Err(_)) => {}
+            None => self.encounter_history_catalog_refresh_pending = false,
+        }
+    }
+
+    fn drain_encounter_history(&mut self) {
+        while let Some(Ok(event)) = self
+            .encounter_history_worker
+            .as_ref()
+            .map(EncounterHistoryWorker::try_receive)
+        {
+            self.encounter_history_busy = false;
+            match event {
+                HistoryEvent::Snapshot {
+                    encounters,
+                    message,
+                    ..
+                } => {
+                    self.encounter_history = encounters;
+                    self.encounter_history_message = message;
+                    self.encounter_history_diagnostic = None;
+                    let selection_still_exists = self
+                        .encounter_history_selected
+                        .as_ref()
+                        .is_some_and(|selected| {
+                            self.encounter_history.iter().any(|summary| {
+                                summary.session_id == selected.session_id
+                                    && summary.encounter_id == selected.encounter_id
+                            })
+                        });
+                    if !selection_still_exists {
+                        self.encounter_history_selected = None;
+                        self.encounter_history_detail = None;
+                        self.encounter_history_catalog_refresh_pending = false;
+                    }
+                }
+                HistoryEvent::Detail { identity, result } => {
+                    if self.encounter_history_selected.as_ref() == Some(&identity) {
+                        self.encounter_history_detail = Some(result.map(|projection| *projection));
+                    }
+                }
+                HistoryEvent::Failed { diagnostic, .. } => {
+                    self.encounter_history_message = None;
+                    self.encounter_history_diagnostic = Some(diagnostic);
+                }
+            }
+        }
+        self.request_catalog_changed_history_detail();
+    }
+
     /// Renders one frame. Reachable without an `eframe::Frame`, a window, or a
     /// GPU, so `tests/app_ui_sizing.rs` can assert the rendered geometry that the
     /// pure sizing helpers alone never proved (slice 030).
@@ -835,12 +1017,16 @@ impl EsoWeaveApp {
         self.drain_hotkey_toggles();
         self.drain_api_checks();
         self.drain_catalog_updates();
+        self.drain_encounter_history();
         if self
             .catalog_worker
             .as_ref()
             .is_some_and(CatalogUpdateWorker::is_busy)
         {
             ctx.request_repaint_after(Duration::from_millis(100));
+        }
+        if self.encounter_history_busy {
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
         let extreme_bg = ui.visuals().extreme_bg_color;
 
@@ -1029,6 +1215,18 @@ impl EsoWeaveApp {
                             .clicked()
                         {
                             self.catalog_update_open = true;
+                            ui.close();
+                        }
+                        if ui
+                            .button(strings::MENU_ENCOUNTER_HISTORY)
+                            .on_hover_text(strings::MENU_ENCOUNTER_HISTORY_TOOLTIP)
+                            .clickable()
+                            .clicked()
+                        {
+                            self.encounter_history_open = true;
+                            if !self.encounter_history_initialized {
+                                self.request_history_refresh();
+                            }
                             ui.close();
                         }
                         if ui.button(strings::MENU_EXIT).clickable().clicked() {
@@ -1232,6 +1430,14 @@ impl EsoWeaveApp {
 
         if self.catalog_update_open {
             self.catalog_update_modal(&ctx);
+        }
+
+        if self.encounter_history_open {
+            self.encounter_history_window(&ctx);
+        }
+
+        if self.encounter_delete_confirmation.is_some() {
+            self.encounter_delete_confirmation(&ctx);
         }
 
         if let Some(message) = self.documentation_error.clone() {
@@ -2202,6 +2408,247 @@ impl EsoWeaveApp {
         }
     }
 
+    fn encounter_history_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.encounter_history_open;
+        egui::Window::new("Encounter History")
+            .id(egui::Id::new("eso_weave_encounter_history"))
+            .open(&mut open)
+            .default_size(egui::vec2(620.0, 700.0))
+            .min_size(egui::vec2(360.0, 320.0))
+            .resizable(true)
+            .vscroll(true)
+            .show(ctx, |ui| {
+                ui.label(
+                    "Private local observations. Metrics are versioned observations, not complete encounter or Combat Metrics parity claims.",
+                );
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .add_enabled(
+                            !self.encounter_history_busy
+                                && self.encounter_history_worker.is_some(),
+                            egui::Button::new("Refresh"),
+                        )
+                        .clickable()
+                        .clicked()
+                    {
+                        self.request_history_refresh();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.encounter_history_busy
+                                && self.encounter_history_worker.is_some(),
+                            egui::Button::new("Import Current Capture"),
+                        )
+                        .on_hover_text(
+                            "Import the terminal ESO Weave Encounter capture from the selected Live or PTS environment.",
+                        )
+                        .clickable()
+                        .clicked()
+                    {
+                        self.request_history_import();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.encounter_history_busy && !self.encounter_history.is_empty(),
+                            egui::Button::new("Delete All"),
+                        )
+                        .clickable()
+                        .clicked()
+                    {
+                        self.encounter_delete_confirmation =
+                            Some(EncounterDeleteConfirmation::All);
+                    }
+                    if self.encounter_history_busy {
+                        ui.spinner();
+                        ui.label("Working...");
+                    }
+                });
+
+                if self.encounter_history_worker.is_none() {
+                    ui.separator();
+                    ui.strong("Store Unavailable");
+                    ui.label(
+                        "A per-user application data directory could not be resolved. Encounter history is disabled.",
+                    );
+                    return;
+                }
+                if let Some(message) = &self.encounter_history_message {
+                    ui.label(message);
+                }
+                if let Some(diagnostic) = &self.encounter_history_diagnostic {
+                    ui.separator();
+                    ui.strong(history_diagnostic_heading(diagnostic.kind));
+                    ui.label(&diagnostic.message);
+                }
+
+                ui.separator();
+                ui.heading("Local Encounters");
+                if self.encounter_history.is_empty() && !self.encounter_history_busy {
+                    ui.label("No local encounters. Import a terminal capture to begin.");
+                }
+
+                let mut selected = None;
+                egui::ScrollArea::vertical()
+                    .id_salt("encounter_history_list")
+                    .max_height(190.0)
+                    .show(ui, |ui| {
+                        for summary in self.encounter_history.iter().rev() {
+                            let identity = EncounterIdentity::from(summary);
+                            let active = self.encounter_history_selected.as_ref() == Some(&identity);
+                            ui.group(|ui| {
+                                if ui
+                                    .selectable_label(active, &summary.encounter_id)
+                                    .clickable()
+                                    .clicked()
+                                {
+                                    selected = Some(identity);
+                                }
+                                ui.label(format!(
+                                    "{} | {} capture | {} stored, {} omitted",
+                                    summary.channel,
+                                    capture_status_label(summary.status),
+                                    summary.stored_event_count,
+                                    summary.omitted_event_count
+                                ));
+                                ui.small(format!(
+                                    "{} to {} | Session {}",
+                                    summary.started_at, summary.finished_at, summary.session_id
+                                ));
+                            });
+                        }
+                    });
+                if let Some(identity) = selected {
+                    self.request_history_detail(identity);
+                }
+
+                if self.encounter_history_selected.is_some() {
+                    ui.separator();
+                    ui.horizontal_wrapped(|ui| {
+                        ui.heading("Selected Encounter");
+                        if ui
+                            .add_enabled(
+                                !self.encounter_history_busy,
+                                egui::Button::new("Delete Encounter"),
+                            )
+                            .clickable()
+                            .clicked()
+                        {
+                            self.encounter_delete_confirmation = self
+                                .encounter_history_selected
+                                .clone()
+                                .map(EncounterDeleteConfirmation::One);
+                        }
+                    });
+                    match &self.encounter_history_detail {
+                        Some(Ok(projection)) => render_encounter_projection(ui, projection),
+                        Some(Err(diagnostic)) => {
+                            ui.strong(history_diagnostic_heading(diagnostic.kind));
+                            ui.label(&diagnostic.message);
+                        }
+                        None if self.encounter_history_busy => {
+                            ui.label("Loading observed metrics...");
+                        }
+                        None => {
+                            ui.label("Select the encounter again to rebuild observed metrics.");
+                        }
+                    }
+                }
+            });
+        self.encounter_history_open = open;
+        if !open {
+            self.encounter_delete_confirmation = None;
+        }
+    }
+
+    fn request_history_import(&mut self) {
+        let Some((source_path, expected_channel)) = self.model.encounter_capture_source() else {
+            self.encounter_history_diagnostic = Some(HistoryDiagnostic::source_unavailable());
+            self.encounter_history_message = None;
+            return;
+        };
+        match self
+            .encounter_history_worker
+            .as_ref()
+            .map(|worker| worker.import_current(source_path, expected_channel))
+        {
+            Some(Ok(())) => {
+                self.encounter_history_busy = true;
+                self.encounter_history_diagnostic = None;
+                self.encounter_history_message = None;
+            }
+            Some(Err(_)) => {
+                self.encounter_history_message =
+                    Some("Encounter history is already processing another request.".into());
+            }
+            None => {}
+        }
+    }
+
+    fn encounter_delete_confirmation(&mut self, ctx: &egui::Context) {
+        let Some(confirmation) = self.encounter_delete_confirmation.clone() else {
+            return;
+        };
+        let (title, body, confirm_label) = match &confirmation {
+            EncounterDeleteConfirmation::One(identity) => (
+                "Delete Encounter?",
+                format!(
+                    "Delete local encounter {}? This removes its immutable raw record and cannot be undone.",
+                    identity.encounter_id
+                ),
+                "Confirm Delete Encounter",
+            ),
+            EncounterDeleteConfirmation::All => (
+                "Delete All Encounters?",
+                "Delete every local encounter raw record? This cannot be undone.".into(),
+                "Delete All Encounters",
+            ),
+        };
+        let mut cancel = false;
+        let mut confirm = false;
+        let modal =
+            egui::Modal::new(egui::Id::new("encounter_delete_confirmation")).show(ctx, |ui| {
+                ui.heading(title);
+                ui.label(body);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clickable().clicked() {
+                        cancel = true;
+                    }
+                    if ui.button(confirm_label).clickable().clicked() {
+                        confirm = true;
+                    }
+                });
+            });
+        if modal.should_close() || cancel {
+            self.encounter_delete_confirmation = None;
+            return;
+        }
+        if confirm {
+            let result = match confirmation {
+                EncounterDeleteConfirmation::One(identity) => self
+                    .encounter_history_worker
+                    .as_ref()
+                    .map(|worker| worker.delete_one(identity)),
+                EncounterDeleteConfirmation::All => self
+                    .encounter_history_worker
+                    .as_ref()
+                    .map(EncounterHistoryWorker::delete_all),
+            };
+            match result {
+                Some(Ok(())) => {
+                    self.encounter_history_busy = true;
+                    self.encounter_history_diagnostic = None;
+                    self.encounter_history_message = None;
+                }
+                Some(Err(_)) => {
+                    self.encounter_history_message =
+                        Some("Encounter history is already processing another request.".into());
+                }
+                None => {}
+            }
+            self.encounter_delete_confirmation = None;
+        }
+    }
+
     /// Renders settings as a full-frame modal over a dimmed backdrop. Changes are
     /// submitted to each setting's runtime contract and persisted automatically
     /// (coalesced), with no explicit save.
@@ -2312,6 +2759,183 @@ impl EsoWeaveApp {
             self.settings_draft = Some(draft);
         }
     }
+}
+
+fn history_diagnostic_heading(kind: HistoryDiagnosticKind) -> &'static str {
+    match kind {
+        HistoryDiagnosticKind::SourceUnavailable => "Capture Unavailable",
+        HistoryDiagnosticKind::StoreInvalid => "Store Unavailable",
+        HistoryDiagnosticKind::CatalogUnavailable => "Catalog Unavailable",
+        HistoryDiagnosticKind::CatalogInvalid => "Catalog Invalid",
+        HistoryDiagnosticKind::VersionMismatch => "Catalog Version Mismatch",
+        HistoryDiagnosticKind::EncounterMissing => "Encounter Missing",
+        HistoryDiagnosticKind::OperationFailed => "Operation Failed",
+    }
+}
+
+fn capture_status_label(status: crate::encounter::CaptureStatus) -> &'static str {
+    match status {
+        crate::encounter::CaptureStatus::Complete => "Complete",
+        crate::encounter::CaptureStatus::Partial => "Partial",
+    }
+}
+
+fn render_encounter_projection(ui: &mut egui::Ui, projection: &EncounterProjection) {
+    ui.label(format!("Encounter ID: {}", projection.encounter_id));
+    ui.label(format!("Session ID: {}", projection.session_id));
+    ui.label(format!(
+        "Duration: {:.2} seconds",
+        projection.duration_ms as f64 / 1000.0
+    ));
+
+    ui.strong("Observed Data Quality");
+    ui.label(quality_label(projection.observed_dps.quality));
+    render_virtual_rows(
+        ui,
+        "encounter_loss_ranges",
+        &projection.observed_dps.loss_ranges,
+        |ui, range| {
+            ui.label(format!(
+                "Sequences {}-{} ({})",
+                range.missing_sequence_from, range.missing_sequence_to, range.reason
+            ));
+        },
+    );
+
+    ui.separator();
+    ui.heading("Observed Metrics");
+    render_metric(ui, "Observed DPS", &projection.observed_dps);
+    render_metric(ui, "Observed Effective HPS", &projection.effective_hps);
+
+    ui.strong("Observed Ability Damage Share");
+    if projection.ability_damage_share.is_empty() {
+        ui.label("No observed outgoing ability damage.");
+    } else {
+        render_virtual_rows(
+            ui,
+            "encounter_damage_share",
+            &projection.ability_damage_share,
+            |ui, share| {
+                let view = metric_presentation("Ability Damage Share", &share.result);
+                ui.label(format!(
+                    "Ability {}: {} | Quality: {}",
+                    share.ability_id, view.value, view.quality
+                ));
+            },
+        );
+    }
+
+    ui.strong("Observed Effect Uptime");
+    if projection.effect_uptime.is_empty() {
+        ui.label("No observed effect intervals.");
+    } else {
+        render_virtual_rows(
+            ui,
+            "encounter_effect_uptime",
+            &projection.effect_uptime,
+            |ui, uptime| {
+                let view = metric_presentation("Effect Uptime", &uptime.result);
+                ui.label(format!(
+                    "Effect {}: {} | Quality: {}",
+                    uptime.ability_id, view.value, view.quality
+                ));
+            },
+        );
+    }
+
+    ui.strong("Observed Cast Order");
+    if projection.ordered_cast_sequence.ability_ids.is_empty() {
+        ui.label("No observed casts.");
+    } else {
+        ui.label(format!(
+            "{} observed casts in sequence order",
+            projection.ordered_cast_sequence.ability_ids.len()
+        ));
+        render_virtual_rows(
+            ui,
+            "encounter_cast_order",
+            &projection.ordered_cast_sequence.ability_ids,
+            |ui, ability_id| {
+                ui.label(format!("Ability {ability_id}"));
+            },
+        );
+    }
+    ui.label(format!(
+        "Quality: {}",
+        quality_label(projection.ordered_cast_sequence.quality)
+    ));
+
+    ui.separator();
+    ui.heading("Projection and Catalog Provenance");
+    ui.label(format!("Projection Schema: {}", projection.schema_version));
+    ui.label(format!(
+        "Algorithm Version: {}",
+        projection.algorithm_version
+    ));
+    ui.label(format!(
+        "Catalog Schema: {}",
+        projection.catalog_join.catalog_schema_version
+    ));
+    ui.label(format!(
+        "Catalog Version: {}",
+        projection.catalog_join.catalog_version
+    ));
+    ui.label(format!("Channel: {}", projection.catalog_join.channel));
+    ui.label(format!(
+        "API Version: {}",
+        projection.catalog_join.api_version
+    ));
+    ui.label(format!(
+        "Known Numeric IDs: {}",
+        projection.catalog_join.known_ids.len()
+    ));
+    ui.label(format!(
+        "Unknown Numeric IDs: {}",
+        projection.catalog_join.unknown_ids.len()
+    ));
+    render_virtual_rows(
+        ui,
+        "encounter_unknown_ids",
+        &projection.catalog_join.unknown_ids,
+        |ui, value| {
+            ui.label(value.to_string());
+        },
+    );
+    ui.label("Catalog Semantic SHA-256:");
+    ui.monospace(&projection.catalog_join.catalog_semantic_sha256);
+    ui.label("Raw Content SHA-256:");
+    ui.monospace(&projection.raw_content_sha256);
+}
+
+fn render_metric(ui: &mut egui::Ui, label: &str, result: &MetricResult) {
+    let view = metric_presentation(label, result);
+    ui.strong(view.label);
+    ui.label(&view.value);
+    ui.label(format!(
+        "Quality: {} | Source Sequences: {}-{}",
+        view.quality, result.first_sequence, result.last_sequence
+    ));
+}
+
+fn render_virtual_rows<T>(
+    ui: &mut egui::Ui,
+    id_salt: &'static str,
+    values: &[T],
+    mut render: impl FnMut(&mut egui::Ui, &T),
+) {
+    if values.is_empty() {
+        ui.label("None");
+        return;
+    }
+    let row_height = ui.text_style_height(&egui::TextStyle::Body);
+    egui::ScrollArea::vertical()
+        .id_salt(id_salt)
+        .max_height(120.0)
+        .show_rows(ui, row_height, values.len(), |ui, range| {
+            for value in &values[range] {
+                render(ui, value);
+            }
+        });
 }
 
 /// Renders the clustered settings body into the modal. Each option carries a

@@ -9,6 +9,7 @@
 //! former claim that a window could not be exercised headlessly (slice 030).
 
 pub mod beacon_light;
+pub mod encounter_history;
 pub mod log_view;
 pub mod routing;
 pub mod settings_form;
@@ -24,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
-use crate::catalog::{CatalogAccess, CatalogDiagnosticKind};
+use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
@@ -2219,6 +2220,24 @@ impl AppModel {
     pub fn catalog_collector_capture_path(&self) -> Option<PathBuf> {
         let root = self.catalog_collector_addons_root()?;
         crate::collector::lifecycle::saved_variables_path(&root)
+    }
+
+    /// Resolves the fixed terminal encounter capture for the explicitly selected
+    /// ESO environment. This composes from the existing AddOns authority and does
+    /// not scan, create, or inspect any path.
+    pub fn encounter_capture_source(&self) -> Option<(PathBuf, Channel)> {
+        let addons = self.catalog_collector_addons_root()?;
+        let environment_root = addons.parent()?;
+        let channel = match self.beacon_prefs.environment {
+            crate::beacon::Environment::Live => Channel::Live,
+            crate::beacon::Environment::Pts => Channel::Pts,
+        };
+        Some((
+            environment_root
+                .join("SavedVariables")
+                .join("EsoWeaveEncounter.lua"),
+            channel,
+        ))
     }
 
     pub fn catalog_collector_running_state(&self) -> crate::collector::lifecycle::RunningState {

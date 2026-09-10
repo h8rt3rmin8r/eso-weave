@@ -4,8 +4,8 @@ S069 defines the local encounter-analysis boundary: what ESO Weave collects, how
 that data remains private and reproducible, and which claims still require live
 comparison. S075 implements the explicitly armed, bounded addon capture. S076
 implements its hostile-data import and dedicated raw store. S077 implements
-versioned metric projection and catalog reconciliation. The desktop history
-interface and recommendations remain later work.
+versioned metric projection and catalog reconciliation. S078 implements the
+desktop history interface. Recommendations remain later work.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -43,6 +43,22 @@ contains raw and catalog hashes and versions rather than a creation timestamp, s
 equal inputs produce byte-identical output. A future derived database remains a
 history-UI decision rather than an extension of the raw store.
 
+S078 gives the desktop one private Encounter History window. UI imports go to
+`encounters/encounters.sqlite` beneath the per-user application root. The Import
+Current Capture action derives the fixed `SavedVariables/EsoWeaveEncounter.lua`
+source and expected channel from the explicitly selected Live or PTS AddOns
+environment. It performs no arbitrary scan and uses the same bounded,
+non-executing S076 import contract.
+
+Opening history does not create a missing store. Raw summaries remain visible
+when the active catalog is missing, invalid, or incompatible. Selecting one
+summary rebuilds its S077 projection in memory against the current catalog path
+and displays algorithm and catalog versions, hashes, complete or degraded
+quality, exact loss ranges, known coverage, and every unknown numeric ID. All
+values are labeled observed, and unavailable denominators remain unavailable
+rather than becoming zero. Import, listing, calculation, and deletion run on a
+serialized background worker so large captures do not block the GUI.
+
 There is no automatic upload. Account names, character names, chat, guild, and
 location are omitted by default. Actors use opaque encounter-local IDs because
 stable personal identity is unnecessary for encounter metrics.
@@ -54,6 +70,11 @@ consistent atomically published SQLite backup with a final SHA-256 receipt.
 There is no automatic pruning. Corrupt, unrelated, and unsupported future stores
 remain in place for user-directed recovery. Gzip remains an optional future local
 storage form, not a transport or upload mechanism.
+
+The desktop provides separately confirmed Delete Encounter and Delete All
+actions. Canceling or closing a confirmation performs no mutation. These actions
+remove only raw encounter records and do not affect settings, catalogs, addons,
+or action automation.
 
 ## Ordering and incomplete captures
 

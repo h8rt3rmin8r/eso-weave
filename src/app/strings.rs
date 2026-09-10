@@ -210,8 +210,11 @@ pub const MENU_DOCUMENTATION: &str = "Documentation";
 pub const MENU_DOCUMENTATION_TOOLTIP: &str = "Open the complete offline guide in your browser.";
 pub const MENU_SETTINGS: &str = "Settings";
 pub const MENU_CATALOG_UPDATE: &str = "Catalog Update...";
+pub const MENU_ENCOUNTER_HISTORY: &str = "Encounter History...";
 pub const MENU_CATALOG_UPDATE_TOOLTIP: &str =
     "Review imported Live catalog candidates, install one explicitly, or roll back.";
+pub const MENU_ENCOUNTER_HISTORY_TOOLTIP: &str =
+    "Import, inspect, and delete private encounter observations stored only on this computer.";
 pub const MENU_SETTINGS_TOOLTIP: &str = "Open settings.";
 pub const MENU_EXIT: &str = "Exit";
 pub const MENU_LOG_TOGGLE: &str = "Live Log";
@@ -469,6 +472,7 @@ pub fn all_labels() -> Vec<&'static str> {
         MENU_FILE,
         MENU_VIEW,
         MENU_SETTINGS,
+        MENU_ENCOUNTER_HISTORY,
         MENU_EXIT,
         MENU_LOG_TOGGLE,
         SAVED_TOAST,
@@ -517,6 +521,7 @@ pub fn all_tooltips() -> Vec<&'static str> {
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,
         MENU_SETTINGS_TOOLTIP,
+        MENU_ENCOUNTER_HISTORY_TOOLTIP,
         MENU_LOG_TOGGLE_TOOLTIP,
         FISHING_SETTINGS_APPLICATION_HELP,
         READER_SETTINGS_APPLICATION_HELP,
