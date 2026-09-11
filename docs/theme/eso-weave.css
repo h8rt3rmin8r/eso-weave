@@ -189,6 +189,74 @@ h6 {
   overflow-wrap: anywhere;
 }
 
+.docs-table-shell {
+  margin: 1em 0;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.docs-table-region {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.docs-table-region table {
+  margin: 0;
+  min-width: 100%;
+  width: 100%;
+}
+
+.table-wrapper th,
+.table-wrapper td {
+  line-height: 1.45;
+  overflow-wrap: normal;
+  vertical-align: top;
+  word-break: normal;
+}
+
+.docs-table--dense {
+  min-width: 46rem !important;
+}
+
+.docs-table--very-dense {
+  min-width: 58rem !important;
+}
+
+.docs-table--evidence {
+  min-width: 64rem !important;
+}
+
+.docs-table--state {
+  min-width: 52rem !important;
+}
+
+.docs-table--protocol {
+  min-width: 48rem !important;
+}
+
+.docs-table-region__hint {
+  color: var(--eso-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0 0 0.4rem;
+}
+
+.docs-table-shell[data-docs-table-overflow="true"] .docs-table-region {
+  border-inline-end: 2px solid var(--eso-focus);
+}
+
+.docs-table-region[data-docs-table-position="end"] {
+  border-inline-start: 2px solid var(--eso-focus);
+  border-inline-end-color: transparent;
+}
+
+.docs-table-region[data-docs-table-position="middle"] {
+  border-inline-start: 2px solid var(--eso-focus);
+}
+
 .brand-asset-gallery {
   display: grid;
   gap: 1rem;
@@ -550,6 +618,27 @@ a {
 }
 
 @media print {
+  .docs-table-region__hint {
+    display: none !important;
+  }
+
+  .docs-table-region {
+    border: 0 !important;
+    overflow: visible !important;
+  }
+
+  .docs-table-region table {
+    min-width: 0 !important;
+    table-layout: fixed;
+    width: 100% !important;
+  }
+
+  .table-wrapper th,
+  .table-wrapper td {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
   .docs-figure-trigger {
     appearance: none;
     border: 0;

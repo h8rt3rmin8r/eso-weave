@@ -32,10 +32,11 @@ Sequence:
 9. S087 completed in PR #159 and closed issue #157. It restores meaningful
    command and PowerShell highlighting, exact plain-block classification, AA
    token colors, and generated runtime evidence.
-10. S088 completes one accessible local expansion system and shared caption
-    hierarchy for screenshots, diagrams, illustrations, and brand examples under
-    issues #155 and #156.
-11. A later S089 slice audits and fixes responsive documentation tables under
+10. S088 completed in PR #160 and closed issues #155 and #156. It provides one
+    accessible local expansion system and shared caption hierarchy for
+    screenshots, diagrams, illustrations, and brand examples.
+11. S089 adds responsive semantic table containment, conditional keyboard
+    regions, print and script-free behavior, and complete corpus evidence under
     issue #127.
 
 Issues #120 through #123 close independently and change no runtime behavior. The

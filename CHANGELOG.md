@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S089 inventories all 54 published Markdown tables across 26 pages and adds
+  responsive semantic containment with compact, dense, very dense, and five
+  named-page profiles. Only genuinely overflowing tables receive a visible
+  scroll instruction, named keyboard focus region, deterministic arrow-key
+  scrolling, and tracked scroll state. Resize, font readiness, 200 percent page
+  scale, print, blocked-script fallback, generated semantics, and a 20-cell
+  Navy, Light, narrow, and wide browser matrix are enforced without adding a
+  dependency or alternate mobile markup (issue #127).
 - S088 gives all 20 meaningful documentation image placements one visible,
   keyboard-accessible expansion control and one shared native modal with close,
   backdrop, Escape, inert-background, caption-description, intrinsic-sizing, and
@@ -134,6 +142,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-11: Preserve semantic Markdown tables and mdBook's existing local
+  overflow wrapper as the script-free authority. Add one progressive geometry
+  enhancer instead of duplicate cards, hidden columns, smaller text, or a table
+  library. Only measured overflow creates a named and described focus region;
+  ResizeObserver, font readiness, and resize remove that state when it becomes
+  obsolete. Use normal token wrapping, named width profiles for the five
+  correctness-bearing references, and print-only fixed layout plus emergency
+  wrapping that fits every column on the page.
 - 2026-09-11: Replace mdBook's generated checkbox image modal at runtime with
   one local native dialog shared by Markdown diagrams and raw HTML figures. The
   checkbox behavior lacks the required obvious close control, dialog semantics,

@@ -88,5 +88,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/058-documentation-corpus/plan.md
+at specs/089-responsive-doc-tables/plan.md
 <!-- SPECKIT END -->
