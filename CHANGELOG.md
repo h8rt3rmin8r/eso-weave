@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S080 replaces the documentation landing-page square mark with the official
+  full-color wordmark, adds an accessible semantic build-time snapshot of the
+  package handle, applicability version, release date, and canonical repository,
+  and enforces those values plus local banner delivery against their repository
+  authorities (issue #121).
 - S079 replaces the split bullet glossary and Search vocabulary list with one
   formal alphabetical reference covering the complete established terminology
   map, explicit aliases, definitions, canonical related pages, accessible
@@ -76,6 +81,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-10: Keep landing-page project metadata as an explicitly static
+  build-time snapshot. Treat the package name, version, and repository in
+  `Cargo.toml` plus the matching dated release heading in `CHANGELOG.md` as its
+  existing authorities, and fail documentation policy when the authored block
+  drifts. Copy the approved full-color banner byte-for-byte into the mdBook source,
+  preserve ESO Weave Documentation as the accessible H1 while showing only
+  Documentation beside the visual wordmark, and add no preprocessor, network
+  query, second metadata file, or runtime behavior. Trigger documentation policy
+  whenever either metadata authority changes, enforce normal-text contrast for
+  metadata labels, and reject every hidden-text rule that removes the H1 wording
+  from assistive technology.
 - 2026-09-10: Use native H2 letter groups and H3 canonical terms for the formal
   glossary, with visible Aliases and Related fields plus one labeled wrapping
   alphabet navigation region. Preserve the complete S059 terminology map as well

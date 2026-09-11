@@ -44,6 +44,7 @@
 .rust {
   --bg: #f7f5f0;
   --fg: #14110b;
+  --eso-muted: #6b6455;
   --sidebar-bg: #ffffff;
   --sidebar-fg: #14110b;
   --sidebar-non-existant: #6b6455;
@@ -85,11 +86,56 @@ h6 {
   transform: translateY(0);
 }
 
-.content img[alt="ESO Weave mark"] {
+.landing-wordmark {
+  margin: 1rem 0 0.75rem;
+}
+
+.landing-wordmark img {
   display: block;
-  height: 5rem;
-  margin: 1rem auto;
-  width: 5rem;
+  height: auto;
+  margin: 0 auto;
+  max-width: min(100%, 38rem);
+  width: 100%;
+}
+
+.visually-hidden {
+  border: 0;
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.project-metadata {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1.25rem 0;
+}
+
+.project-metadata div {
+  background: var(--sidebar-bg);
+  border: 1px solid var(--table-border-color);
+  border-radius: 0.4rem;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.project-metadata dt {
+  color: var(--eso-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-metadata dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
 }
 
 a {
@@ -135,6 +181,10 @@ a {
 }
 
 @media (max-width: 40rem) {
+  .project-metadata {
+    grid-template-columns: 1fr;
+  }
+
   .glossary-index a,
   .icon-button,
   .mobile-nav-chapters,

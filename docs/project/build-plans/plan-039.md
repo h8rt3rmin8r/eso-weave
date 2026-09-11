@@ -4,12 +4,13 @@ Status: Active
 
 Sequence:
 
-1. S079 is in progress under issue #120. It replaces the split bullet glossary
+1. S079 completed in PR #147 and closed issue #120. It replaces the split bullet glossary
    with one formal alphabetical reference, preserves the complete S059 terminology
    map and legacy glossary inventory, adds accessible alphabet navigation, and
    enforces source and generated-search structure through documentation policy.
-2. A later slice replaces the landing-page icon with the official wordmark and
-   corrects repository metadata under issue #121.
+2. S080 is in progress under issue #121. It replaces the landing-page icon with
+   the official wordmark, publishes an authoritative build-time project metadata
+   snapshot, and enforces source and generated-output alignment.
 3. A later slice brings source brand assets and accessible color swatches into the
    Brand Standard under issue #122.
 4. A later slice adds purposeful top-down diagrams to high-value documentation
@@ -22,6 +23,7 @@ Sequence:
    and moves exact implementation symbols to layout-safe evidence under issue #126.
 8. A later slice audits and fixes responsive documentation tables under issue #127.
 
-Issue #120 is independently closeable and changes no runtime behavior. The only
-implementation dependency in this plan is #125 on #124. Public and bundled offline
-documentation must continue to share the same local sources, assets, and checks.
+Issues #120 and #121 are independently closeable and change no runtime behavior.
+The only implementation dependency in this plan is #125 on #124. Public and
+bundled offline documentation must continue to share the same local sources,
+assets, and checks.

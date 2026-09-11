@@ -1560,9 +1560,10 @@
       "lifecycle": "Active",
       "destination": "docs/project/build-plans/plan-039.md",
       "specs": [
-        "specs/079-formal-glossary"
+        "specs/079-formal-glossary",
+        "specs/080-docs-landing-identity"
       ],
-      "evidence": "S079 is in progress under issue #120."
+      "evidence": "S079 merged in PR #147 and closed issue #120; S080 is in progress under issue #121."
     }
   ],
   "safetyCrosswalk": [
