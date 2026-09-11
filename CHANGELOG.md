@@ -94,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   badge-less glyph on a light surface. Represent each palette token with a static,
   labeled chip beside visible role, hex, and use text, with a theme-independent
   boundary and no JavaScript, network request, image regeneration, or application
-  behavior.
+  behavior. Trigger the documentation and Pages workflow when any approved asset
+  authority changes so byte-identity policy cannot be bypassed by path filtering.
 - 2026-09-10: Keep landing-page project metadata as an explicitly static
   build-time snapshot. Treat the package name, version, and repository in
   `Cargo.toml` plus the matching dated release heading in `CHANGELOG.md` as its

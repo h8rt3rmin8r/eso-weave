@@ -189,6 +189,10 @@ h6 {
   width: min(100%, 6rem);
 }
 
+.brand-surface--light .brand-asset--mark {
+  grid-column: 1 / -1;
+}
+
 .brand-surface figcaption {
   border-top: 1px solid #65758b;
   padding: 0.85rem 1rem;

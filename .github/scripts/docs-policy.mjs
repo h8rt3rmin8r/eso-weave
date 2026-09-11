@@ -1001,6 +1001,9 @@ export function validateBrandStandardVisualCss(css) {
   if (!/border:\s*1px\s+solid/iu.test(swatch) || !/box-shadow:\s*inset/iu.test(swatch)) {
     errors.push("S081 swatch boundary must remain visible across fills and themes");
   }
+  if (!/\.brand-surface--light\s+\.brand-asset--mark\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/iu.test(css)) {
+    errors.push("S081 light-surface mark must span the grid to remain centered");
+  }
   if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.brand-asset-gallery\s*\{[\s\S]*?grid-template-columns:\s*1fr/iu.test(css)) {
     errors.push("S081 asset gallery CSS requires a one-column narrow layout");
   }
@@ -2405,7 +2408,13 @@ export function validateDocumentationAuthorityTriggers(workflow) {
   const errors = [];
   const triggerText = workflow.split(/^permissions:/mu)[0] ?? workflow;
   const triggers = yamlBlocks(triggerText, 2);
-  for (const authority of ["Cargo.toml", "CHANGELOG.md"]) {
+  for (const [slice, authority] of [
+    ["S080", "Cargo.toml"],
+    ["S080", "CHANGELOG.md"],
+    ["S081", "assets/eso-weave-banner.png"],
+    ["S081", "assets/brand/eso-weave-mark.svg"],
+    ["S081", "assets/brand/eso-weave-glyph.svg"],
+  ]) {
     const missing = [];
     for (const event of ["push", "pull_request"]) {
       const block = triggers.get(event) ?? "";
@@ -2413,7 +2422,7 @@ export function validateDocumentationAuthorityTriggers(workflow) {
       if (!path.test(block)) missing.push(event);
     }
     if (missing.length > 0) {
-      errors.push(`S080 documentation workflow must include ${authority} in ${missing.join(" and ")} paths`);
+      errors.push(`${slice} documentation workflow must include ${authority} in ${missing.join(" and ")} paths`);
     }
   }
   return errors;

@@ -113,10 +113,11 @@ test("S081 requires generated semantics and all local asset outputs", () => {
 });
 
 test("S081 requires bounded swatches, contained images, and narrow gallery reflow", () => {
-  const css = `.brand-asset-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.brand-surface { border: 1px solid #65758b; }\n.brand-surface--dark { background: #0e1116; }\n.brand-surface--light { background: #f7f5f0; }\n.brand-surface img { display: block; height: auto; max-width: 100%; }\n.brand-swatch { background: var(--swatch-color); border: 1px solid #65758b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); display: inline-block; height: 1.1rem; width: 1.1rem; }\n@media (max-width: 40rem) { .brand-asset-gallery { grid-template-columns: 1fr; } }`;
+  const css = `.brand-asset-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.brand-surface { border: 1px solid #65758b; }\n.brand-surface--dark { background: #0e1116; }\n.brand-surface--light { background: #f7f5f0; }\n.brand-surface img { display: block; height: auto; max-width: 100%; }\n.brand-surface--light .brand-asset--mark { grid-column: 1 / -1; }\n.brand-swatch { background: var(--swatch-color); border: 1px solid #65758b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); display: inline-block; height: 1.1rem; width: 1.1rem; }\n@media (max-width: 40rem) { .brand-asset-gallery { grid-template-columns: 1fr; } }`;
   assert.deepEqual(validateBrandStandardVisualCss(css), []);
   assert.match(validateBrandStandardVisualCss(css.replace("border: 1px solid #65758b; box-shadow", "box-shadow")).join("\n"), /swatch.*boundary/i);
   assert.match(validateBrandStandardVisualCss(css.replace("max-width: 100%;", "max-width: none;")).join("\n"), /image/i);
+  assert.match(validateBrandStandardVisualCss(css.replace("grid-column: 1 / -1;", "grid-column: auto;")).join("\n"), /light.*mark.*center/i);
   assert.match(validateBrandStandardVisualCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(2, 1fr);")).join("\n"), /narrow/i);
 });
 
@@ -182,11 +183,14 @@ test("S080 requires bounded wordmark, accessible hidden text, and narrow metadat
   assert.match(validateLandingCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(4, 1fr);")).join("\n"), /narrow/i);
 });
 
-test("S080 documentation checks follow both metadata authorities", () => {
-  const triggers = `on:\n  push:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n  pull_request:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n  workflow_dispatch:\n`;
+test("S080 and S081 documentation checks follow metadata and brand authorities", () => {
+  const triggers = `on:\n  push:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  pull_request:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  workflow_dispatch:\n`;
   assert.deepEqual(validateDocumentationAuthorityTriggers(triggers), []);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll('      - "Cargo.toml"\n', "")).join("\n"), /Cargo\.toml.*push.*pull_request/i);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replace('      - "CHANGELOG.md"\n', "")).join("\n"), /CHANGELOG\.md.*push/i);
+  for (const authority of ["assets/eso-weave-banner.png", "assets/brand/eso-weave-mark.svg", "assets/brand/eso-weave-glyph.svg"]) {
+    assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll(`      - "${authority}"\n`, "")).join("\n"), new RegExp(`${authority.replace(/[./-]/gu, "\\$&")}.*push.*pull_request`, "i"));
+  }
 });
 
 const glossarySearchMap = [

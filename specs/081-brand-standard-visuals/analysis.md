@@ -46,6 +46,7 @@ No critical, high, or unresolved ambiguity remains. Implementation may begin.
 - Generated output exposes all 25 chips as images with matching role and hexadecimal accessible names while preserving visible table text.
 - Local browser inspection confirms two balanced cards at 1280 CSS pixels and one-column reflow at the browser's 500 CSS pixel minimum. The same 40rem media rule covers 320 CSS pixels, and policy rejects its removal.
 - Light and navy theme checks confirm fixed surface colors, visible swatch boundaries, contained images, working local asset links, and no desktop horizontal overflow.
+- First-round review identified two gaps that are now covered by regression tests: approved asset-only changes trigger documentation validation, and the lone light-surface mark spans both grid columns to remain centered.
 - UTF-8, LF, mojibake, forbidden-dash, JSON, and diff-integrity checks pass.
 
 No critical, high, or unresolved post-implementation finding remains. The slice is ready for pull-request publication and hosted review.

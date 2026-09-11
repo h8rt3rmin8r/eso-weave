@@ -62,6 +62,7 @@ docs/src/assets/brand/                       # offline published copies
 docs/theme/eso-weave.css                     # scoped gallery and swatch presentation
 .github/scripts/docs-policy.mjs              # source/output contract
 .github/scripts/docs-policy.test.mjs         # focused regressions
+.github/workflows/docs.yml                   # authority-aware documentation triggers
 docs/project/build-plans/plan-039.md          # chronological slice status
 docs/project/migration-ledger.json            # active spec evidence
 CHANGELOG.md                                  # user-facing record and decisions

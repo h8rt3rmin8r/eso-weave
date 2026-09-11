@@ -35,6 +35,7 @@ Each pair must compare byte-for-byte.
 
 - `development/brand-standard.html` retains the asset gallery, surface labels, all chip labels, and local links.
 - `assets/brand/` contains all three generated output files.
+- Documentation pull-request and main-branch workflows trigger when any approved asset authority changes.
 - No remote image URL or page-time script is introduced by S081.
 
 ## Failure behavior
