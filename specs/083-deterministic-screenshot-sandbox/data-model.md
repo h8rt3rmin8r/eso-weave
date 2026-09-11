@@ -30,7 +30,7 @@ The Cartesian product of scene, theme, and viewport. Exactly 7 times 2 times 2 e
 
 ## Fixture root
 
-The validated output destination contains `.fixture-data/{scene}`. A scene may create only its own synthetic status-classification files below that root. It stores no user configuration, SavedVariables, log, catalog, or real addon data.
+During generation, the validated output destination temporarily contains `.fixture-data-*/{scene}`. A scene may create only its own synthetic status-classification files below that automatically removed root. It stores no user configuration, SavedVariables, log, catalog, or real addon data.
 
 ## Capture receipt
 
@@ -50,12 +50,12 @@ The manifest contains schema `1`, generator `S083 deterministic screenshot sandb
 
 ## State transitions
 
-1. Parse and validate the optional output authority.
+1. Parse and validate the dedicated optional capture marker and output authority.
 2. Validate static catalog and isolation contracts.
 3. Without authority, exit successfully.
 4. With authority, build one fixture for each scene.
 5. Validate the scene's `AppView` contract.
 6. Render each theme and viewport variant.
 7. Assert no input action was emitted.
-8. Write the exact PNG.
+8. Stage and publish the exact PNG without following an existing output link.
 9. After all variants succeed, stage and publish the complete manifest.

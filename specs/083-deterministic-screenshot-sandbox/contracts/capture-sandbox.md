@@ -3,10 +3,10 @@
 ## Invocation contract
 
 ```powershell
-cargo test --locked --test documentation_capture -- target/documentation-captures
+cargo test --locked --test documentation_capture -- --capture-to target/documentation-captures
 ```
 
-The path after `--` is the only capture authority. Omitting it runs validation only. Extra arguments fail with usage guidance.
+The `--capture-to` marker plus its path value is the only capture authority. Omitting the marker, including when Cargo supplies an ordinary test filter, runs validation only. A malformed marker invocation or extra argument beside the marker fails with usage guidance.
 
 ## Catalog contract
 
@@ -32,7 +32,7 @@ The model uses `config_dir = None`, a deterministic beacon path override, and no
 
 ## Filesystem contract
 
-The destination must resolve below the repository root, cannot equal that root, and cannot traverse a symlink. Only exact named outputs and fixture files are created. The harness never recursively deletes the destination or touches an existing unrelated file.
+The destination must resolve below the repository root, cannot equal that root, and cannot traverse a symlink. An exact generated filename must also be absent or a regular file, never a symlink or special entry. PNGs and the manifest are staged before publication. Only exact named outputs and fixture files are created. The harness never recursively deletes the destination or touches an existing unrelated file.
 
 ## Completion contract
 

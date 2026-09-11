@@ -13,7 +13,7 @@ use eframe::egui;
 use egui::TexturesDelta;
 use egui_kittest::{Harness, TestRenderer};
 use egui_wgpu::{wgpu, RenderState, RendererOptions, ScreenDescriptor, WgpuSetup};
-use image::RgbaImage;
+use image::{DynamicImage, ImageFormat, RgbaImage};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -183,6 +183,11 @@ struct CaptureManifest {
 struct SceneFixture {
     app: EsoWeaveApp,
     action_rx: ActionReceiver,
+}
+
+enum Invocation {
+    Validate,
+    Capture(PathBuf),
 }
 
 #[derive(Clone, Default)]
@@ -421,24 +426,70 @@ fn texture_to_image(
 
 pub fn run(args: impl Iterator<Item = OsString>) -> Result<(), String> {
     let args = args.collect::<Vec<_>>();
-    if args.len() > 1 {
-        return Err(
-            "usage: cargo test --locked --test documentation_capture -- <output-directory>"
-                .to_string(),
-        );
-    }
-
     validate_catalog()?;
     validate_production_isolation()?;
     validate_output_rejections()?;
-    if args.is_empty() {
-        validate_scene_models()?;
-        println!("documentation capture catalog and isolation checks passed");
-        return Ok(());
+    validate_invocation_contract()?;
+    match parse_invocation(&args)? {
+        Invocation::Validate => {
+            validate_scene_models()?;
+            println!("documentation capture catalog and isolation checks passed");
+            Ok(())
+        }
+        Invocation::Capture(argument) => {
+            let output = resolve_output_root(&argument)?;
+            generate_captures(&output)
+        }
     }
+}
 
-    let output = resolve_output_root(Path::new(&args[0]))?;
-    generate_captures(&output)
+fn parse_invocation(args: &[OsString]) -> Result<Invocation, String> {
+    let capture_marker = args.iter().position(|argument| argument == "--capture-to");
+    match (capture_marker, args) {
+        (None, _) => Ok(Invocation::Validate),
+        (Some(0), [_, output]) => Ok(Invocation::Capture(PathBuf::from(output))),
+        _ => Err(
+            "usage: cargo test --locked --test documentation_capture -- --capture-to <output-directory>"
+                .to_string(),
+        ),
+    }
+}
+
+fn validate_invocation_contract() -> Result<(), String> {
+    ensure(
+        matches!(parse_invocation(&[])?, Invocation::Validate),
+        "empty invocation must remain validation-only",
+    )?;
+    ensure(
+        matches!(
+            parse_invocation(&[OsString::from("ordinary-test-filter")])?,
+            Invocation::Validate
+        ),
+        "a positional Cargo test filter must remain validation-only",
+    )?;
+    ensure(
+        matches!(
+            parse_invocation(&[
+                OsString::from("--capture-to"),
+                OsString::from("target/capture-contract")
+            ])?,
+            Invocation::Capture(_)
+        ),
+        "the exact marker and value must arm capture",
+    )?;
+    ensure(
+        parse_invocation(&[OsString::from("--capture-to")]).is_err(),
+        "a capture marker without a value must fail",
+    )?;
+    ensure(
+        parse_invocation(&[
+            OsString::from("ordinary-test-filter"),
+            OsString::from("--capture-to"),
+            OsString::from("target/capture-contract"),
+        ])
+        .is_err(),
+        "a mixed filter and capture invocation must fail",
+    )
 }
 
 fn validate_catalog() -> Result<(), String> {
@@ -566,12 +617,34 @@ fn validate_output_rejections() -> Result<(), String> {
     let link = sandbox.path().join("linked-output");
     fs::create_dir(&link_target)
         .map_err(|error| format!("could not create symlink target fixture: {error}"))?;
-    create_directory_symlink(&link_target, &link)
-        .map_err(|error| format!("could not create symlink rejection fixture: {error}"))?;
-    ensure(
-        resolve_output_root(&link).is_err(),
-        "capture output must reject a symlinked destination",
-    )?;
+    match create_directory_symlink(&link_target, &link) {
+        Ok(()) => {
+            ensure(
+                resolve_output_root(&link).is_err(),
+                "capture output must reject a symlinked destination",
+            )?;
+            let file_target = sandbox.path().join("file-target");
+            let file_link = sandbox.path().join("expected-output.png");
+            fs::write(&file_target, b"outside image")
+                .map_err(|error| format!("could not create file-link target fixture: {error}"))?;
+            create_file_symlink(&file_target, &file_link)
+                .map_err(|error| format!("could not create output-link fixture: {error}"))?;
+            ensure(
+                ensure_replaceable_output(&file_link).is_err(),
+                "capture output must reject a symlinked PNG entry",
+            )?;
+        }
+        Err(error) if symlink_fixture_privilege_unavailable(&error) => {
+            println!(
+                "documentation capture symlink probe skipped because Windows denied fixture creation"
+            );
+        }
+        Err(error) => {
+            return Err(format!(
+                "could not create symlink rejection fixture: {error}"
+            ));
+        }
+    }
 
     let completion_root = sandbox.path().join("completion-marker");
     fs::create_dir(&completion_root)
@@ -591,9 +664,29 @@ fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
     std::os::windows::fs::symlink_dir(target, link)
 }
 
+#[cfg(windows)]
+fn create_file_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(target, link)
+}
+
+#[cfg(windows)]
+fn symlink_fixture_privilege_unavailable(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::PermissionDenied
+}
+
 #[cfg(unix)]
 fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(unix)]
+fn create_file_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(unix)]
+fn symlink_fixture_privilege_unavailable(_error: &std::io::Error) -> bool {
+    false
 }
 
 fn generate_captures(output: &Path) -> Result<(), String> {
@@ -618,9 +711,7 @@ fn generate_captures(output: &Path) -> Result<(), String> {
                 )?;
                 let filename = variant_filename(scene, theme, viewport);
                 let path = output.join(&filename);
-                image
-                    .save(&path)
-                    .map_err(|error| format!("could not write {}: {error}", path.display()))?;
+                publish_png(&path, &image)?;
                 let hash =
                     sha256(&fs::read(&path).map_err(|error| {
                         format!("could not verify {}: {error}", path.display())
@@ -1074,6 +1165,62 @@ fn variant_filename(scene: Scene, theme: CaptureTheme, viewport: CaptureViewport
 
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn publish_png(destination: &Path, image: &RgbaImage) -> Result<(), String> {
+    ensure_replaceable_output(destination)?;
+    let output = destination
+        .parent()
+        .ok_or_else(|| "capture PNG has no output directory".to_string())?;
+    let mut candidate = tempfile::NamedTempFile::new_in(output)
+        .map_err(|error| format!("could not stage capture PNG: {error}"))?;
+    DynamicImage::ImageRgba8(image.clone())
+        .write_to(candidate.as_file_mut(), ImageFormat::Png)
+        .map_err(|error| format!("could not encode {}: {error}", destination.display()))?;
+    candidate
+        .as_file()
+        .sync_all()
+        .map_err(|error| format!("could not sync {}: {error}", destination.display()))?;
+    remove_replaceable_output(destination)?;
+    candidate.persist(destination).map_err(|error| {
+        format!(
+            "could not publish {}: {}",
+            destination.display(),
+            error.error
+        )
+    })?;
+    Ok(())
+}
+
+fn ensure_replaceable_output(path: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(format!(
+            "capture output entry cannot be a symlink: {}",
+            path.display()
+        )),
+        Ok(metadata) if metadata.is_file() => Ok(()),
+        Ok(_) => Err(format!(
+            "capture output entry is not a regular file: {}",
+            path.display()
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "could not inspect capture output {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn remove_replaceable_output(path: &Path) -> Result<(), String> {
+    ensure_replaceable_output(path)?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "could not replace capture output {}: {error}",
+            path.display()
+        )),
+    }
 }
 
 fn publish_manifest(output: &Path, bytes: &[u8]) -> Result<(), String> {

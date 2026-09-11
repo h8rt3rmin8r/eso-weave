@@ -13,7 +13,7 @@ Expected: the catalog and isolation contracts pass without initializing a render
 ## Generate the complete capture matrix
 
 ```powershell
-cargo test --locked --test documentation_capture -- target/documentation-captures
+cargo test --locked --test documentation_capture -- --capture-to target/documentation-captures
 ```
 
 Expected: 28 PNGs and `capture-manifest.json` appear under `target/documentation-captures`. No native window or prompt appears.

@@ -101,13 +101,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 2026-09-11: Keep deterministic documentation capture structurally outside the
   shipped application as a no-harness integration-test target. Require an explicit
-  repository-local destination before initializing WGPU or retaining generated
-  files, exercise the real application frame seam with bundled fonts, and use only
-  synthetic deterministic scene state. The published egui_kittest WGPU feature
-  currently requests unavailable `pollster ^1.0`, so retain egui_kittest for frame
-  driving and adapt its upstream offscreen design through matching test-only
-  egui-wgpu plus available pollster 0.4. This proportional dependency deviation
-  preserves production isolation without building a parallel painter.
+  `--capture-to` marker and repository-local destination before initializing WGPU
+  or retaining generated files, and stage every exact output without following
+  symlink collisions. Exercise the real application frame seam with bundled fonts
+  and use only synthetic deterministic scene state. The published egui_kittest
+  WGPU feature currently requests unavailable `pollster ^1.0`, so retain
+  egui_kittest for frame driving and adapt its upstream offscreen design through
+  matching test-only egui-wgpu plus available pollster 0.4. This proportional
+  dependency deviation preserves production isolation without building a parallel
+  painter.
 - 2026-09-11: Use four checked-in static SVG files as both editable source and
   delivered documentation assets for the selected architecture, authorization,
   recovery, and validation flows. Avoid Mermaid, a browser renderer, a build-time

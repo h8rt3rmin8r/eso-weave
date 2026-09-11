@@ -13,7 +13,7 @@
 ### Session 2026-09-11
 
 - The sandbox is a Cargo test target with `harness = false`, not a production feature, command-line option, or application mode.
-- Running the target without a destination validates the catalog and exits without initializing a renderer. An explicit repository-local output directory arms PNG generation.
+- Running the target without the dedicated `--capture-to` marker validates the catalog and exits without initializing a renderer. The marker plus an explicit repository-local output directory arms PNG generation.
 - The scene catalog owns seven named application states: first launch, healthy System and State, lost PixelBeacon, unmanaged addon, weaving configuration, Auto Potion ready, and Auto Potion blocked.
 - Every named scene supports dark and light themes plus narrow and wide documentation viewports. Capture output is generated evidence and is not checked in by this slice.
 - Fixtures use only in-memory model state, a no-op fishing sink, an unconsumed input-engine channel, repository data, and an isolated synthetic root. Generation keeps that root below the caller-supplied output directory; validation uses an automatically removed temporary root.
@@ -29,8 +29,8 @@ A maintainer can generate stable PNGs of every state needed for documentation wi
 
 **Acceptance Scenarios**:
 
-1. **Given** an explicit output directory, **When** the capture target runs, **Then** it writes every named scene in both themes and both viewports plus one deterministic manifest.
-2. **Given** no output directory, **When** the ordinary test suite runs, **Then** the target validates its catalog without initializing graphics or writing capture files.
+1. **Given** the dedicated capture marker and an explicit output directory, **When** the capture target runs, **Then** it writes every named scene in both themes and both viewports plus one deterministic manifest.
+2. **Given** no capture marker, including an ordinary Cargo test filter, **When** the ordinary test suite runs, **Then** the target validates its catalog without initializing graphics or writing capture files.
 
 ---
 
@@ -62,7 +62,7 @@ A documentation author can identify each output by scene, theme, and viewport an
 ### Edge Cases
 
 - A missing, duplicated, or reordered required scene fails catalog validation.
-- An unknown argument, relative output path outside the repository, symlinked output root, or non-directory output target fails closed before fixture creation.
+- A missing or malformed capture-marker value, relative output path outside the repository, symlinked output root or generated filename, or non-directory output target fails closed before fixture creation or publication. Ordinary Cargo test filters remain validation-only.
 - An output file collision is replaced only for the exact named PNG or manifest below the validated destination; the destination itself is never recursively deleted.
 - A renderer or adapter failure exits nonzero and does not label partial output complete.
 - A viewport smaller than the application minimum still renders the contracted narrow documentation canvas without opening a native window.
@@ -72,7 +72,7 @@ A documentation author can identify each output by scene, theme, and viewport an
 
 ### Functional Requirements
 
-- **FR-001**: The repository MUST provide one documented, non-interactive capture command with an explicit absolute or repository-relative output directory.
+- **FR-001**: The repository MUST provide one documented, non-interactive capture command with a dedicated `--capture-to` marker and an explicit absolute or repository-relative output directory.
 - **FR-002**: The capture entry point MUST exist only as a non-production Cargo test target and MUST NOT be reachable from the shipped application binary.
 - **FR-003**: Running the ordinary test suite without capture arguments MUST validate the catalog without initializing the graphics renderer or writing generated capture files.
 - **FR-004**: The catalog MUST contain exactly seven ordered named scenes covering first launch, healthy System and State, lost PixelBeacon, unmanaged addon, weaving configuration, Auto Potion ready, and Auto Potion blocked.
@@ -84,7 +84,7 @@ A documentation author can identify each output by scene, theme, and viewport an
 - **FR-010**: Rendering every scene MUST leave the input-engine output channel empty.
 - **FR-011**: The output MUST include a deterministic manifest naming the schema, generator, scene, theme, viewport, dimensions, and PNG path for every successful capture.
 - **FR-012**: The capture path MUST open no native window, steal no focus, require no interactive prompt, and launch no project-owned console child process.
-- **FR-013**: Tests MUST validate scene completeness, ordering, identifiers, display labels, themes, viewports, model-state expectations, output containment, production isolation, and no emitted input.
+- **FR-013**: Tests MUST validate scene completeness, ordering, identifiers, display labels, themes, viewports, model-state expectations, capture-marker behavior, output containment, production isolation, and no emitted input. Symlink rejection MUST execute where the operating system grants fixture-creation authority and MUST remain enforced by production-independent path checks everywhere.
 - **FR-014**: Generated PNGs and fixture files MUST remain outside version control and MUST NOT be published into the manual by S083.
 - **FR-015**: CI parity, UTF-8, LF, forbidden-dash, mojibake, and diff-integrity gates MUST pass.
 

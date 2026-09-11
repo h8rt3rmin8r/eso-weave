@@ -14,7 +14,7 @@ Three placements were evaluated:
 2. A Cargo feature still compiles capture authority into a production-capable binary and can be enabled by `--all-features`.
 3. A named `harness = false` integration-test target links application library code and development dependencies but is not part of the shipped binary.
 
-Option 3 is selected. No-argument execution performs catalog and isolation checks only. A caller must pass a destination after Cargo's `--` separator to arm rendering.
+Option 3 is selected. Execution without the dedicated `--capture-to` marker performs catalog and isolation checks only, including when Cargo supplies an ordinary test filter. A caller must pass that marker and a destination after Cargo's `--` separator to arm rendering.
 
 ## Renderer decision
 
@@ -51,7 +51,7 @@ Every scene supports dark and light themes and 760 by 1000 narrow and 1280 by 90
 
 ## Output safety decision
 
-The caller supplies the destination. The harness rejects repository escape, the repository root itself, existing non-directory targets, and any symlink in the destination chain. It creates only the exact variant PNGs, `capture-manifest.json`, and a `.fixture-data` subtree. Existing unrelated files remain untouched.
+The caller supplies the destination. The harness rejects repository escape, the repository root itself, existing non-directory targets, any symlink in the destination chain, and symlinks or special files at exact generated names. PNGs and the manifest are staged before publication. It creates only the exact variant PNGs, `capture-manifest.json`, and an automatically removed `.fixture-data-*` subtree. Existing unrelated files remain untouched.
 
 ## Test seams
 

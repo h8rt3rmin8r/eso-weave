@@ -103,7 +103,7 @@ a native window, resolving a personal configuration directory, installing an add
 capturing the desktop, or constructing an operating-system input backend:
 
 ```text
-cargo test --locked --test documentation_capture -- target/documentation-captures
+cargo test --locked --test documentation_capture -- --capture-to target/documentation-captures
 ```
 
 Generated captures are review evidence for issue #125 and are not source assets in

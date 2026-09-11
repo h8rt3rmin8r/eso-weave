@@ -86,7 +86,7 @@ Output: [research.md](research.md)
 
 1. Define the seven-scene ordered catalog and pre-render state assertions.
 2. Define the two themes, two viewports, filename grammar, and manifest.
-3. Define no-argument validation and explicit-argument rendering behavior.
+3. Define validation without a capture marker and explicit `--capture-to` rendering behavior.
 4. Define production, input, screen, addon, path, and privacy isolation tests.
 
 Outputs: [data-model.md](data-model.md), [capture sandbox contract](contracts/capture-sandbox.md), and [quickstart.md](quickstart.md)

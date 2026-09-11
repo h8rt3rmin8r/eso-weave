@@ -24,7 +24,7 @@
 
 - Spec, research, plan, model, contract, quickstart, and tasks agree on seven scenes and 28 variants.
 - Every artifact places capture in a no-harness integration-test target with validation-only default behavior.
-- Every artifact requires explicit repository-local output authority before rendering or writes.
+- Every artifact requires the dedicated capture marker and explicit repository-local output authority before rendering or persistent writes.
 - Every artifact keeps final image publication in issue #125.
 - Scene state, production isolation, output containment, no-input, and canonical receipt evidence are explicit.
 
@@ -39,6 +39,9 @@
 7. Using addon install helpers to prepare status scenes would exercise mutation authority. Minimal fixture files are written directly under the synthetic output subtree for read-only classification.
 8. Recursively clearing a caller directory risks unrelated data. The target overwrites only its exact generated names and never removes the destination.
 9. The published `egui_kittest` WGPU feature requests unavailable `pollster ^1.0` and cannot resolve. The target keeps egui_kittest for frame driving and applies the same upstream offscreen design directly through matching `egui-wgpu` plus available `pollster` 0.4.
+10. A positional Cargo test filter could be mistaken for output authority. Only the dedicated `--capture-to` marker can arm rendering; all marker-free runner arguments stay validation-only.
+11. Direct PNG writes could follow an expected-name symlink. Every PNG is now staged and published only after rejecting symlink and special-file collisions.
+12. Windows may deny symlink fixture creation without elevation or Developer Mode. The enforcement remains unconditional, while that environment-dependent probe reports a skip only for the specific permission denial.
 
 No critical, high, or unresolved ambiguity remains. Implementation may begin.
 
