@@ -26,6 +26,7 @@ test seams. Platform modules contain operating-system calls.
 | Encounter Capture Addon | One explicitly armed Live or PTS encounter, numeric public-API observations, encounter-local actors, ordered elapsed time, bounded SavedVariables, and declared loss | Pixel Bus transport, personal names, desktop import, metric calculation, upload, input generation, or gameplay mutation |
 | Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing restricted parsing, terminal validation, canonical content identity, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
 | Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
+| Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog reads and mutation, persistence, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
 
 ## Thread model
 
@@ -144,6 +145,16 @@ channel and API match, keeps unknown positive IDs visible, and can rebuild a new
 catalog receipt without rewriting raw data. The output is outside both SQLite
 authorities and contains no wall-clock creation time, so equal inputs reproduce
 equal bytes.
+
+Selected encounter advice continues through one downstream display-only path:
+
+`immutable in-memory S077 projection -> s090-v1 evidence gates -> bounded provisional report -> encounter-history presentation`
+
+The recommendation domain reopens no catalog or raw store. The history worker
+builds the report from the exact projection placed in the selected detail, so a
+catalog replacement cannot mix versions. Observed metrics render first and remain
+the independent fact authority. Recommendation output has no UI intent, action,
+sink, callback, persistence, logging, network, telemetry, or automation consumer.
 
 Optional icon transformation follows a separate user-local path:
 

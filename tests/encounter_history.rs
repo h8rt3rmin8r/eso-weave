@@ -126,6 +126,13 @@ fn explicit_import_lists_and_projects_truthful_quality_and_catalog_coverage() {
     );
     assert_eq!(projection.catalog_join.known_ids, vec![100, 200]);
     assert_eq!(projection.catalog_join.unknown_ids, vec![101, 999999]);
+    assert_eq!(projection.catalog_join.known_ability_ids, vec![100]);
+    assert_eq!(
+        projection.catalog_join.unknown_ability_ids,
+        vec![101, 999999]
+    );
+    assert_eq!(projection.catalog_join.known_effect_ids, vec![200]);
+    assert!(projection.catalog_join.unknown_effect_ids.is_empty());
 }
 
 #[test]

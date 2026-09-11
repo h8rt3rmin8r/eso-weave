@@ -13,19 +13,15 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [039](plan-039.md) | Active | S089 responsive documentation tables, issue #127 |
+| [040](plan-040.md) | Active | S090 evidence-scoped encounter recommendations, issue #136 |
 
-S068 merged in PR #130 and closed issue #112. S069 then merged in PR #137 and
-closed issue #113. S070 merged in PR #138 and closed issue #114. S071 merged in
-PR #139 and closed issue #115. S072 merged in PR #140 and closed issue #116.
-S073 merged in PR #141 and closed issue #117. S074 merged in PR #142 and closed
-issue #118. S075 merged in PR #143 and closed issue #132. S076 merged in PR
-#144 and closed issue #133. S077 merged in PR #145 and closed issue #134. S078
-merged in PR #146 and closed issue #135. S079 through S085 merged in PRs #147
-through #153 and closed issues #120 through #126. S086 merged in PR #158 and
-closed issue #154. S087 merged in PR #159 and closed issue #157. S088 merged in
-PR #160 and closed issues #155 and #156. S089 is now in progress under issue
-#127 as the responsive-table slice of the documentation presentation plan.
-Installed v0.15.1 verification in issue #110, catalog field verification in
+S068 through S078 completed the game-data foundation from contract research to
+quality-aware encounter history. S079 through S089 completed Plan 039, ending
+when PR #161 closed issue #127 and enabled epic #119 and its milestone to close.
+Plan 039 is now archived. S090 is in progress under issue #136 as the final
+implementation outcome from the S069 encounter roadmap.
+
+Installed v0.15.1 verification in issue #110, catalog-field verification in
 issue #129, and live Combat Metrics verification in issue #131 remain
-independent; none blocks Plan 039 or later implementation.
+independent Release verification work. None blocks Plan 040 implementation or
+closure.

@@ -665,11 +665,19 @@ const WORK_SLICE_ALGORITHM_PAGES = new Set([
   "reference/encounter-data-and-metrics.html",
 ]);
 
+const WORK_SLICE_ALGORITHM_IDENTIFIERS = ["s069-v1", "s090-v1"];
+
 function validateVisibleWorkSliceText(text, relative) {
   const errors = [];
   text = decodeVisibleEntities(text);
   const visible = WORK_SLICE_ALGORITHM_PAGES.has(relative)
-    ? text.replace(/(?<![A-Za-z0-9_-])s069-v1(?![A-Za-z0-9_-])/gu, "       ")
+    ? WORK_SLICE_ALGORITHM_IDENTIFIERS.reduce(
+      (value, identifier) => value.replace(
+        new RegExp(`(?<![A-Za-z0-9_-])${identifier}(?![A-Za-z0-9_-])`, "gu"),
+        " ".repeat(identifier.length),
+      ),
+      text,
+    )
     : text;
   const findings = [
     /\bslice(?:[ \t_-]+|[ \t]*[:#][ \t]*)(?:[Ss][ \t_:#-]*\d+|\d+)\b/giu,
@@ -1908,7 +1916,7 @@ const DOCUMENTATION_TABLE_COUNTS = new Map([
   ["getting-started/troubleshooting.md", 2],
   ["reference/catalog-sources-and-rights.md", 3],
   ["reference/configuration.md", 1],
-  ["reference/encounter-data-and-metrics.md", 2],
+  ["reference/encounter-data-and-metrics.md", 3],
   ["reference/logging.md", 1],
   ["reference/pixel-bus-protocol.md", 2],
   ["reference/settings.md", 8],
@@ -1946,8 +1954,8 @@ export function validateDocumentationTableInventory(pages) {
   for (const [page, expected] of DOCUMENTATION_TABLE_COUNTS) {
     if (!pages.has(page)) errors.push(`S089 table inventory is missing ${page} with ${expected} expected table(s)`);
   }
-  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 54) {
-    errors.push(`S089 table inventory requires 54 tables across 26 pages; found ${total} across ${pages.size} pages`);
+  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 55) {
+    errors.push(`S089 table inventory requires 55 tables across 26 pages; found ${total} across ${pages.size} pages`);
   }
   return [...new Set(errors)];
 }
@@ -2743,7 +2751,7 @@ export function validateEncounterModelContract(contract) {
   if (integrity.derived_rebuildable !== true) errors.push("derived analysis must be rebuildable");
   if (integrity.execute_input !== false || integrity.bounded_import !== true || integrity.atomic_import !== true) errors.push("encounter imports must be bounded, atomic, and non-executing");
   const join = contract.catalog_join_policy ?? {};
-  if (join.retain_unknown_ids !== true || join.rejoin_without_raw_mutation !== true || join.preserve_channel !== true) errors.push("catalog joins must preserve unknown IDs, raw content, and channel provenance");
+  if (join.retain_unknown_ids !== true || join.preserve_entity_kind !== true || join.rejoin_without_raw_mutation !== true || join.preserve_channel !== true) errors.push("catalog joins must preserve entity kinds, unknown IDs, raw content, and channel provenance");
   const transport = contract.transport_policy ?? {};
   if (transport.pixel_bus_bulk_transport !== false) errors.push("Pixel Bus cannot be the bulk encounter transport");
   if (transport.automation_independent !== true) errors.push("encounter observation and calculation must remain independent of automation");
@@ -2755,6 +2763,16 @@ export function validateEncounterModelContract(contract) {
   if (retention.production_budget !== "verification-required") errors.push("encounter production storage budget must remain verification-required");
   const recommendations = contract.recommendation_policy ?? {};
   if (recommendations.requires_encounter_version !== true || recommendations.requires_catalog_version !== true || recommendations.requires_metric_quality !== true || recommendations.correlation_is_not_causation !== true || recommendations.action_automation_coupling !== false) errors.push("recommendations must be versioned, quality-scoped, non-causal, and automation-independent");
+  if (recommendations.state !== "repository-implemented-provisional" || recommendations.slice !== "S090" || recommendations.schema_version !== 1 || recommendations.policy_version !== "s090-v1" || recommendations.input !== "versioned-metric-projection" || recommendations.confidence !== "provisional") errors.push("recommendations must declare the implemented provisional S090 schema 1 and s090-v1 policy over versioned metric projections");
+  if (recommendations.projection_schema_version !== 1 || recommendations.metric_algorithm_version !== "s069-v1" || recommendations.reject_unsupported_projection !== true) errors.push("recommendations must require the supported projection schema 1 and s069-v1 algorithm");
+  if (recommendations.reject_invalid_metric_evidence !== true || recommendations.reject_invalid_loss_ranges !== true) errors.push("recommendations must fail closed for inconsistent metric quality and invalid loss ranges");
+  if (!Number.isInteger(recommendations.max_advice_items) || recommendations.max_advice_items < 0 || recommendations.max_advice_items > 2) errors.push("recommendations must produce at most two advice items");
+  const recommendationThresholds = recommendations.thresholds ?? {};
+  if (recommendationThresholds.min_duration_ms !== 10000 || recommendationThresholds.min_casts !== 3 || recommendationThresholds.material_loss_percent !== 10 || recommendationThresholds.dominant_damage_share_percent !== 40 || recommendationThresholds.low_effect_uptime_percent !== 50 || recommendationThresholds.material_unknown_damage_share_percent !== 25) errors.push("recommendations must preserve the s090-v1 provisional thresholds");
+  const recommendationUnknownIds = recommendations.unknown_ids ?? {};
+  if (recommendationUnknownIds.qualify_known_advice !== true || recommendationUnknownIds.omit_unknown_targets !== true || recommendationUnknownIds.suppress_only_affected_rule !== true) errors.push("recommendation unknown IDs must qualify known advice, omit unknown targets, and suppress only the affected rule");
+  if (recommendations.facts_separate_from_advice !== true) errors.push("recommendation facts must remain separate from advice");
+  if (recommendations.persisted !== false || recommendations.network_dependency !== false || recommendations.telemetry !== false) errors.push("recommendations must remain local in-memory data without network or telemetry dependencies");
   const catalogRequirements = contract.catalog_schema_requirements ?? {};
   if (!Array.isArray(catalogRequirements.entities) || catalogRequirements.entities.length === 0 || !Array.isArray(catalogRequirements.relationships) || catalogRequirements.relationships.length === 0 || catalogRequirements.unknown_id_supported !== true) errors.push("encounter model requires concrete catalog entities, relationships, and unknown-ID support");
 

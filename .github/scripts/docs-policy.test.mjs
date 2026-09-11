@@ -501,11 +501,30 @@ function validEncounterContract() {
     loss_policy: { marker: "discontinuity", degrade_spanning_metrics: true, expose_ranges: true },
     privacy_policy: { local_only_default: true, upload_default: false, omitted_by_default: ["account-name", "character-name", "chat", "guild", "location"] },
     integrity_policy: { raw_immutable: true, derived_rebuildable: true, execute_input: false, bounded_import: true, atomic_import: true },
-    catalog_join_policy: { retain_unknown_ids: true, rejoin_without_raw_mutation: true, preserve_channel: true },
+    catalog_join_policy: { retain_unknown_ids: true, preserve_entity_kind: true, rejoin_without_raw_mutation: true, preserve_channel: true },
     actor_policy: { identity: "encounter-local-opaque", roles: ["player", "pet", "npc", "boss"], pet_owner_relationship: "encounter-local-actor-id", ability_aliases: "derived-versioned-catalog-relationship" },
     build_snapshot_policy: { retention: "derived-versioned", catalog_version_required: true, consent_required_for_personal_identity: true },
     retention_policy: { export: "explicit-user-action", delete: "user-controlled-by-encounter-or-all", backup: "user-owned-with-schema-and-hash", corruption_recovery: "reject-invalid-import-and-preserve-last-valid-store", compression: "optional-local-gzip", production_budget: "verification-required" },
-    recommendation_policy: { requires_encounter_version: true, requires_catalog_version: true, requires_metric_quality: true, correlation_is_not_causation: true, action_automation_coupling: false },
+    recommendation_policy: {
+      state: "repository-implemented-provisional", slice: "S090", schema_version: 1,
+      policy_version: "s090-v1", input: "versioned-metric-projection", confidence: "provisional",
+      projection_schema_version: 1, metric_algorithm_version: "s069-v1",
+      reject_unsupported_projection: true, reject_invalid_metric_evidence: true,
+      reject_invalid_loss_ranges: true,
+      max_advice_items: 2, requires_encounter_version: true, requires_catalog_version: true,
+      requires_metric_quality: true, facts_separate_from_advice: true,
+      correlation_is_not_causation: true, persisted: false, network_dependency: false,
+      telemetry: false, action_automation_coupling: false,
+      thresholds: {
+        min_duration_ms: 10000, min_casts: 3, material_loss_percent: 10,
+        dominant_damage_share_percent: 40, low_effect_uptime_percent: 50,
+        material_unknown_damage_share_percent: 25,
+      },
+      unknown_ids: {
+        qualify_known_advice: true, omit_unknown_targets: true,
+        suppress_only_affected_rule: true,
+      },
+    },
     catalog_schema_requirements: { entities: ["ability"], relationships: ["ability-alias"], join_key: "stable-numeric-source-id-plus-channel-and-api-version", unknown_id_supported: true },
     transport_policy: { pixel_bus_bulk_transport: false, automation_independent: true, future_transport: "bounded-saved-variables-import" },
     event_kinds: requiredEncounterKinds.map((id) => ({ id, raw: true })),
@@ -940,7 +959,7 @@ test("S085 accepts compact references and narrow literal exceptions", () => {
 
 [slice]: https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md
 
-\`s069-v1\`
+\`s069-v1\` and \`s090-v1\`
 
 <!-- s060_hidden_comment -->
 
@@ -953,11 +972,11 @@ fn s060_literal_code_sample() {}
     "development/architecture.md",
   ), []);
   assert.deepEqual(validateWorkSliceHtml(
-    '<p><a href="/specs/060-safety-boundaries/spec.md">S060</a> <code>s069-v1</code></p><pre><code>s060_literal_code_sample</code></pre>',
+    '<p><a href="/specs/060-safety-boundaries/spec.md">S060</a> <code>s069-v1</code> <code>s090-v1</code></p><pre><code>s060_literal_code_sample</code></pre>',
     "development/architecture.html",
   ), []);
   assert.deepEqual(validateWorkSliceHtml(
-    "<p><code>s069-v1</code></p>",
+    "<p><code>s069-v1</code> <code>s090-v1</code></p>",
     "print.html",
   ), []);
 });
@@ -1056,11 +1075,17 @@ test("S085 scans tables, link labels, captions, alternative text, and inline cod
   }
 });
 
-test("S085 limits the algorithm exception to its exact identifier and pages", () => {
-  assert.deepEqual(validateWorkSliceMarkdown(
-    "# Metrics\n\nAlgorithm `s069-v1`.\n",
-    "reference/encounter-data-and-metrics.md",
-  ), []);
+test("S085 limits algorithm exceptions to their exact identifiers and pages", () => {
+  for (const identifier of ["s069-v1", "s090-v1"]) {
+    assert.deepEqual(validateWorkSliceMarkdown(
+      `# Metrics\n\nAlgorithm \`${identifier}\`.\n`,
+      "reference/encounter-data-and-metrics.md",
+    ), []);
+    assert.notDeepEqual(validateWorkSliceMarkdown(
+      `# Other\n\nAlgorithm \`${identifier}\`.\n`,
+      "development/test-strategy.md",
+    ), []);
+  }
   assert.notDeepEqual(validateWorkSliceMarkdown(
     "# Other\n\nAlgorithm `s069-v1`.\n",
     "development/test-strategy.md",
@@ -1071,6 +1096,10 @@ test("S085 limits the algorithm exception to its exact identifier and pages", ()
   ), []);
   assert.notDeepEqual(validateWorkSliceMarkdown(
     "# Metrics\n\nAlgorithm `s069-v1-extra`.\n",
+    "reference/encounter-data-and-metrics.md",
+  ), []);
+  assert.notDeepEqual(validateWorkSliceMarkdown(
+    "# Metrics\n\nAlgorithm `s090-v1-extra`.\n",
     "reference/encounter-data-and-metrics.md",
   ), []);
 });
@@ -2236,14 +2265,40 @@ test("rejects unsafe encounter transport, privacy, storage, and derivation polic
   contract.storage_planes.raw = "catalog.sqlite";
   contract.privacy_policy.upload_default = true;
   contract.integrity_policy.raw_immutable = false;
+  contract.catalog_join_policy.preserve_entity_kind = false;
   contract.transport_policy.pixel_bus_bulk_transport = true;
   contract.transport_policy.automation_independent = false;
   const errors = validateEncounterModelContract(contract).join("\n");
   assert.match(errors, /raw observations.*separate/i);
   assert.match(errors, /uploaded by default/i);
   assert.match(errors, /raw observations must be immutable/i);
+  assert.match(errors, /preserve entity kinds/i);
   assert.match(errors, /Pixel Bus/i);
   assert.match(errors, /automation/i);
+});
+
+test("S090 requires provisional bounded local recommendation policy", () => {
+  const contract = validEncounterContract();
+  contract.recommendation_policy.policy_version = "latest";
+  contract.recommendation_policy.projection_schema_version = 99;
+  contract.recommendation_policy.reject_invalid_metric_evidence = false;
+  contract.recommendation_policy.reject_invalid_loss_ranges = false;
+  contract.recommendation_policy.max_advice_items = 100;
+  contract.recommendation_policy.thresholds.material_loss_percent = 0;
+  contract.recommendation_policy.unknown_ids.suppress_only_affected_rule = false;
+  contract.recommendation_policy.facts_separate_from_advice = false;
+  contract.recommendation_policy.persisted = true;
+  contract.recommendation_policy.network_dependency = true;
+  contract.recommendation_policy.telemetry = true;
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /s090-v1/i);
+  assert.match(errors, /supported projection/i);
+  assert.match(errors, /quality.*loss/i);
+  assert.match(errors, /two advice items/i);
+  assert.match(errors, /provisional thresholds/i);
+  assert.match(errors, /unknown IDs.*affected rule/i);
+  assert.match(errors, /facts.*advice/i);
+  assert.match(errors, /local.*in-memory/i);
 });
 
 test("requires every encounter family, metric traceability, and synthetic evidence boundary", () => {
@@ -2549,7 +2604,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
   }
 });
 
-test("S089 inventories all 54 Markdown tables across 26 published pages", async () => {
+test("S089 inventories all 55 Markdown tables across 26 published pages", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationTableInventory(pages), []);
   assert.deepEqual(extractDocumentationTables("| Name | Value |\n| --- | --- |\n| one | two |\n"), [
@@ -2562,7 +2617,7 @@ test("S089 inventories all 54 Markdown tables across 26 published pages", async 
 
   const unexpected = new Map(pages);
   unexpected.set("README.md", `${unexpected.get("README.md")}\n| New | Table |\n| --- | --- |\n| one | two |\n`);
-  assert.match(validateDocumentationTableInventory(unexpected).join("\n"), /README.*0 table|54 tables/i);
+  assert.match(validateDocumentationTableInventory(unexpected).join("\n"), /README.*0 table|55 tables/i);
 });
 
 test("S089 requires generated mdBook wrappers with semantic table structure", async () => {

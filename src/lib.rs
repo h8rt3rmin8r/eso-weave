@@ -25,6 +25,7 @@ pub mod logging;
 pub mod pixelbus;
 pub mod platform;
 pub mod potion;
+pub mod recommendation;
 mod saved_variables;
 pub mod weave;
 

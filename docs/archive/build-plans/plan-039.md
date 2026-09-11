@@ -1,6 +1,6 @@
 # Plan 039: Documentation Presentation Refresh
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -35,11 +35,11 @@ Sequence:
 10. S088 completed in PR #160 and closed issues #155 and #156. It provides one
     accessible local expansion system and shared caption hierarchy for
     screenshots, diagrams, illustrations, and brand examples.
-11. S089 adds responsive semantic table containment, conditional keyboard
-    regions, print and script-free behavior, and complete corpus evidence under
-    issue #127.
+11. S089 completed in PR #161 and closed issue #127. It adds responsive semantic
+    table containment, conditional keyboard regions, print and script-free
+    behavior, and complete corpus evidence.
 
-Issues #120 through #123 close independently and change no runtime behavior. The
-only implementation dependency in this plan is #125 on #124. Public and bundled
-offline documentation must continue to share the same local sources, assets, and
+All ordered work is complete. Epic #119 and the Post-v0.15.1 Documentation
+presentation refresh milestone closed after S089 merged. Public and bundled
+offline documentation continue to share the same local sources, assets, and
 checks.

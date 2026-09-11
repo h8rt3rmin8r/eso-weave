@@ -4,7 +4,7 @@ S089 keeps every published Markdown table semantic, readable, and locally contai
 
 ## Maintained inventory
 
-The canonical source contains 54 tables across 26 published pages. Documentation policy freezes each page count, preserves generated `table`, `thead`, `th`, `tbody`, and `td` structure, and rejects unplanned additions, removals, or wrapper changes.
+The canonical source contains 55 tables across 26 published pages. Documentation policy freezes each page count, preserves generated `table`, `thead`, `th`, `tbody`, and `td` structure, and rejects unplanned additions, removals, or wrapper changes.
 
 Five high-density references receive explicit profiles because their column relationships are correctness-bearing:
 

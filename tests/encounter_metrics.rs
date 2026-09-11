@@ -114,6 +114,32 @@ fn baseline_projection_is_deterministic_loss_aware_and_actor_safe() {
     );
     assert_eq!(first.catalog_join.known_ids, vec![100, 200]);
     assert_eq!(first.catalog_join.unknown_ids, vec![101, 999999]);
+    assert_eq!(first.catalog_join.known_ability_ids, vec![100]);
+    assert_eq!(first.catalog_join.unknown_ability_ids, vec![101, 999999]);
+    assert_eq!(first.catalog_join.known_effect_ids, vec![200]);
+    assert!(first.catalog_join.unknown_effect_ids.is_empty());
+}
+
+#[test]
+fn catalog_join_keeps_resolution_scoped_to_entity_kind() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let catalog_path = catalog(sandbox.path(), LIVE_CATALOG, "catalog.sqlite");
+    let catalog = CatalogAccess::open_or_empty(&catalog_path);
+    let mut capture: EncounterCapture = serde_json::from_str(CAPTURE).unwrap();
+    capture
+        .events
+        .iter_mut()
+        .find(|event| event.kind == "effect")
+        .unwrap()
+        .payload
+        .insert("ability_id".into(), PayloadValue::Integer(100));
+
+    let projection = calculate_projection(&capture, &catalog).unwrap();
+    assert_eq!(projection.catalog_join.known_ability_ids, vec![100]);
+    assert_eq!(projection.catalog_join.unknown_effect_ids, vec![100]);
+    assert_eq!(projection.catalog_join.known_effect_ids, vec![200]);
+    assert!(projection.catalog_join.known_ids.contains(&100));
+    assert!(projection.catalog_join.unknown_ids.contains(&100));
 }
 
 #[test]
