@@ -771,6 +771,27 @@ fn s060_literal_code_sample() {}
   ), []);
 });
 
+test("S085 masks multiline reference destinations", () => {
+  const markdown = `# References
+
+[S060][slice]
+
+[slice]:
+  https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md
+`;
+  assert.deepEqual(validateWorkSliceMarkdown(
+    markdown,
+    "development/test-strategy.md",
+  ), []);
+});
+
+test("S085 does not treat unmatched inline-link punctuation as hidden content", () => {
+  assert.match(validateWorkSliceMarkdown(
+    "# Page\n\n](s060_long_test_name)\n",
+    "development/test-strategy.md",
+  ).join("\n"), /S085 work-slice reference/i);
+});
+
 test("S085 rejects malformed and expanded work-slice references", () => {
   for (const invalid of [
     "S60",

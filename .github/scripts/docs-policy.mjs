@@ -326,6 +326,40 @@ function decodeVisibleEntities(text) {
   });
 }
 
+function maskMarkdownReferenceDefinitions(characters) {
+  const text = characters.join("");
+  const lines = [];
+  let offset = 0;
+  for (const value of text.match(/.*(?:\r?\n|$)/gu) ?? []) {
+    const content = value.replace(/\r?\n$/u, "");
+    lines.push({ content, offset, length: value.length });
+    offset += value.length;
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const definition = line.content.match(/^ {0,3}\[[^\]\r\n]+\]:[ \t]*(?<destination>.*)$/u);
+    if (!definition) continue;
+    maskCharacters(characters, line.offset, line.offset + line.length);
+
+    let destinationLine = index;
+    if (!definition.groups.destination.trim()) {
+      const continuation = lines[index + 1];
+      if (!continuation || !/^ {0,3}(?:<[^>\r\n]+>|\S+)/u.test(continuation.content)) continue;
+      maskCharacters(characters, continuation.offset, continuation.offset + continuation.length);
+      destinationLine = index + 1;
+    }
+
+    const title = lines[destinationLine + 1];
+    if (title && /^ {0,3}(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\)\r\n]*\))[ \t]*$/u.test(title.content)) {
+      maskCharacters(characters, title.offset, title.offset + title.length);
+      index = destinationLine + 1;
+    } else {
+      index = destinationLine;
+    }
+  }
+}
+
 function maskMarkdownWorkSliceExceptions(markdown) {
   const characters = markdown.split("");
   const lines = markdown.match(/.*(?:\r?\n|$)/gu) ?? [];
@@ -351,18 +385,24 @@ function maskMarkdownWorkSliceExceptions(markdown) {
   }
   maskHtmlTags(characters);
 
-  const withoutTags = characters.join("");
-  for (const match of withoutTags.matchAll(/^ {0,3}\[[^\]\r\n]+\]:[^\r\n]*(?:\r?\n|$)/gmu)) {
-    maskCharacters(characters, match.index, match.index + match[0].length);
-  }
+  maskMarkdownReferenceDefinitions(characters);
 
-  for (let cursor = 0; cursor < characters.length - 1; cursor += 1) {
-    if (characters[cursor] !== "]" || characters[cursor + 1] !== "(") continue;
+  const linkSyntax = maskMarkdownCode(characters.join(""));
+  for (let cursor = 0; cursor < linkSyntax.length; cursor += 1) {
+    const image = linkSyntax[cursor] === "!" && linkSyntax[cursor + 1] === "[";
+    const labelStart = image ? cursor + 1 : cursor;
+    if (linkSyntax[labelStart] !== "[") continue;
+    let labelEnd = labelStart + 1;
+    for (; labelEnd < linkSyntax.length; labelEnd += 1) {
+      if (linkSyntax[labelEnd] === "\\") labelEnd += 1;
+      else if (linkSyntax[labelEnd] === "]") break;
+    }
+    if (linkSyntax[labelEnd] !== "]" || linkSyntax[labelEnd + 1] !== "(") continue;
     let depth = 0;
     let quote = "";
-    let destinationEnd = cursor + 2;
-    for (; destinationEnd < characters.length; destinationEnd += 1) {
-      const character = characters[destinationEnd];
+    let destinationEnd = labelEnd + 2;
+    for (; destinationEnd < linkSyntax.length; destinationEnd += 1) {
+      const character = linkSyntax[destinationEnd];
       if (character === "\\") {
         destinationEnd += 1;
         continue;
@@ -371,7 +411,7 @@ function maskMarkdownWorkSliceExceptions(markdown) {
         if (character === quote) quote = "";
         continue;
       }
-      if ((character === '"' || character === "'") && /\s/u.test(characters[destinationEnd - 1] ?? "")) {
+      if ((character === '"' || character === "'") && /\s/u.test(linkSyntax[destinationEnd - 1] ?? "")) {
         quote = character;
         continue;
       }
@@ -379,8 +419,8 @@ function maskMarkdownWorkSliceExceptions(markdown) {
       else if (character === ")" && depth > 0) depth -= 1;
       else if (character === ")") break;
     }
-    if (characters[destinationEnd] !== ")") continue;
-    maskCharacters(characters, cursor + 2, destinationEnd);
+    if (linkSyntax[destinationEnd] !== ")") continue;
+    maskCharacters(characters, labelEnd + 2, destinationEnd);
     cursor = destinationEnd;
   }
   return characters.join("");
