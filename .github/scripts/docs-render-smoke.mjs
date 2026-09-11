@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 export const PASS_SENTINEL = "ESO_WEAVE_DIAGRAM_SMOKE_PASS_V1";
 export const SYNTAX_PASS_SENTINEL = "ESO_WEAVE_SYNTAX_SMOKE_PASS_V1";
 export const FIGURE_PASS_SENTINEL = "ESO_WEAVE_FIGURE_SMOKE_PASS_V1";
+export const TABLE_PASS_SENTINEL = "ESO_WEAVE_TABLE_SMOKE_PASS_V1";
 
 const DIAGRAMS = [
   { id: "S082-D01", page: "development/architecture.html", asset: "architecture-ownership.svg", alt: "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers" },
@@ -32,6 +33,14 @@ const FIGURE_CASES = [
   { id: "S088-BRAND", page: "development/brand-standard.html", selector: "figure.brand-surface--dark .docs-figure-trigger", lightSelector: "figure.brand-surface--light .docs-figure-trigger", alternative: "ESO Weave full-color banner wordmark", lightAlternative: "ESO Weave full-color banner wordmark on light", captionRequired: true },
 ];
 const FIGURE_THEMES = ["navy", "light"];
+const TABLE_CASES = [
+  { id: "S089-COVERAGE", page: "development/coverage-matrix.html" },
+  { id: "S089-TEST", page: "development/test-strategy.html" },
+  { id: "S089-STATE", page: "development/state-machines.html" },
+  { id: "S089-STATUS", page: "reference/status-reference.html" },
+  { id: "S089-PROTOCOL", page: "reference/pixel-bus-protocol.html" },
+];
+const TABLE_THEMES = ["navy", "light"];
 
 function observationKey(observation) {
   return `${observation.diagramId}|${observation.theme}|${observation.viewportWidth}|${observation.state}`;
@@ -241,6 +250,47 @@ export function validateFigureReceipt(receipt) {
   if (Array.isArray(receipt?.figureFailures) && receipt.figureFailures.length > 0) {
     errors.push(...receipt.figureFailures.map((failure) => `S088 browser: ${failure}`));
   }
+  return [...new Set(errors)];
+}
+
+function tableObservationKey(observation) {
+  return `${observation.caseId}|${observation.theme}|${observation.viewportWidth}`;
+}
+
+export function validateTableObservation(observation) {
+  const errors = [];
+  const prefix = `${observation?.caseId ?? "unknown"} ${observation?.theme ?? "unknown"} ${observation?.viewportWidth ?? "unknown"}`;
+  if (observation?.surface !== "generated-loopback") errors.push(`${prefix}: observation surface must be generated-loopback`);
+  if (!observation?.semantic) errors.push(`${prefix}: table must preserve table, header, and cell semantics`);
+  if (!observation?.locallyContained || !observation?.pageContained) errors.push(`${prefix}: overflow must remain local without page-level clipping`);
+  if (!observation?.columnsVisible || !observation?.readableTokens || !(observation?.fontSize >= 14)) errors.push(`${prefix}: columns and tokens must remain readable without collapse or character stacking`);
+  if (observation?.overflowing) {
+    if (!observation?.focusable || !observation?.namedRegion || !observation?.described || !observation?.hintVisible) errors.push(`${prefix}: overflowing table requires a named, described, visible, focusable scroll region`);
+  } else if (observation?.focusable || observation?.namedRegion || observation?.described || observation?.hintVisible) {
+    errors.push(`${prefix}: fitting table must not create redundant focus or region semantics`);
+  }
+  return errors;
+}
+
+export function validateTableReceipt(receipt) {
+  const errors = [];
+  if (receipt?.tableSentinel !== TABLE_PASS_SENTINEL) errors.push("S089 table receipt pass sentinel is missing");
+  const observations = Array.isArray(receipt?.tableObservations) ? receipt.tableObservations : [];
+  const expectedKeys = new Set();
+  for (const tableCase of TABLE_CASES) {
+    for (const theme of TABLE_THEMES) {
+      for (const viewportWidth of VIEWPORTS) expectedKeys.add(`${tableCase.id}|${theme}|${viewportWidth}`);
+    }
+  }
+  const actualKeys = new Set(observations.map(tableObservationKey));
+  if (observations.length !== 20 || actualKeys.size !== 20 || [...expectedKeys].some((key) => !actualKeys.has(key))) errors.push("S089 table rendering matrix requires 20 unique observations");
+  for (const observation of observations) errors.push(...validateTableObservation(observation));
+  if (!receipt?.tableKeyboard?.focused || !receipt?.tableKeyboard?.scrolled || !receipt?.tableKeyboard?.pageStayedPut) errors.push(`S089 table receipt requires trusted keyboard scrolling without page drift: ${JSON.stringify(receipt?.tableKeyboard)}`);
+  if (!receipt?.tableResize?.narrowOverflow || receipt?.tableResize?.narrowFocusable !== true || receipt?.tableResize?.wideOverflow !== false || receipt?.tableResize?.wideFocusable !== false) errors.push(`S089 table receipt requires resize-driven overflow and focus-state removal: ${JSON.stringify(receipt?.tableResize)}`);
+  if (!(receipt?.tableZoom?.scale >= 1.99) || !receipt?.tableZoom?.locallyContained || !receipt?.tableZoom?.pageContained || !receipt?.tableZoom?.conditionalSemantics) errors.push(`S089 table receipt requires contained 200 percent zoom rendering with conditional guidance: ${JSON.stringify(receipt?.tableZoom)}`);
+  if (!receipt?.tablePrint?.semantic || !receipt?.tablePrint?.hintHidden || !receipt?.tablePrint?.overflowVisible || !receipt?.tablePrint?.screenMinWidthRemoved) errors.push(`S089 table receipt requires readable static print rendering: ${JSON.stringify(receipt?.tablePrint)}`);
+  if (!receipt?.tableNoScript?.semantic || !receipt?.tableNoScript?.localOverflow || !receipt?.tableNoScript?.pageContained || !receipt?.tableNoScript?.enhancementAbsent || !receipt?.tableNoScript?.readableTokens || !(receipt?.tableNoScript?.fontSize >= 14)) errors.push(`S089 table receipt requires semantic, readable, local no-JavaScript fallback: ${JSON.stringify(receipt?.tableNoScript)}`);
+  if (Array.isArray(receipt?.tableFailures) && receipt.tableFailures.length > 0) errors.push(...receipt.tableFailures.map((failure) => `S089 browser: ${failure}`));
   return [...new Set(errors)];
 }
 
@@ -723,6 +773,118 @@ return {
 })()`;
 }
 
+function tableObservationExpression(tableCase, theme, viewportWidth) {
+  const configuration = JSON.stringify({ tableCase, theme, viewportWidth });
+  return `(async () => {
+const configuration = ${configuration};
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+document.documentElement.classList.remove("ayu", "coal", "light", "navy", "rust");
+document.documentElement.classList.add(configuration.theme);
+await document.fonts?.ready;
+await nextFrame();
+const regions = [...document.querySelectorAll(".docs-table-region")];
+const details = regions.map((region) => {
+  const table = region.querySelector(":scope > table");
+  const cells = [...table.querySelectorAll("th, td")];
+  const overflow = region.scrollWidth > region.clientWidth + 1;
+  const hint = region.closest(".docs-table-shell")?.querySelector(":scope > .docs-table-region__hint");
+  const hintVisible = hint ? getComputedStyle(hint).display !== "none" && !hint.hidden : false;
+  return {
+    semantic: table?.tagName === "TABLE" && Boolean(table.tHead?.querySelector("th")) && Boolean(table.tBodies[0]?.querySelector("td")),
+    overflow,
+    focusable: region.tabIndex === 0,
+    namedRegion: region.getAttribute("role") === "region" && Boolean(region.getAttribute("aria-label")),
+    described: Boolean(hint?.id) && region.getAttribute("aria-describedby") === hint.id,
+    hintVisible,
+    locallyContained: table.scrollWidth <= region.scrollWidth + 1 && region.getBoundingClientRect().right <= innerWidth + 1,
+    columnsVisible: [...table.tHead.rows[0].cells].every((cell) => cell.getBoundingClientRect().width >= 44),
+    readableTokens: cells.every((cell) => getComputedStyle(cell).wordBreak === "normal" && getComputedStyle(cell).overflowWrap === "normal"),
+    fontSize: Math.min(...cells.map((cell) => Number.parseFloat(getComputedStyle(cell).fontSize))),
+  };
+});
+const conditional = details.every((item) => item.overflow
+  ? item.focusable && item.namedRegion && item.described && item.hintVisible
+  : !item.focusable && !item.namedRegion && !item.described && !item.hintVisible);
+const overflowing = details.some((item) => item.overflow);
+return {
+  caseId: configuration.tableCase.id,
+  surface: "generated-loopback",
+  theme: configuration.theme,
+  viewportWidth: configuration.viewportWidth,
+  semantic: details.length > 0 && details.every((item) => item.semantic),
+  locallyContained: details.length > 0 && details.every((item) => item.locallyContained),
+  pageContained: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+  columnsVisible: details.length > 0 && details.every((item) => item.columnsVisible),
+  readableTokens: details.length > 0 && details.every((item) => item.readableTokens),
+  fontSize: details.length > 0 ? Math.min(...details.map((item) => item.fontSize)) : 0,
+  overflowing,
+  focusable: overflowing ? conditional : details.some((item) => item.focusable),
+  namedRegion: overflowing ? conditional : details.some((item) => item.namedRegion),
+  described: overflowing ? conditional : details.some((item) => item.described),
+  hintVisible: overflowing ? conditional : details.some((item) => item.hintVisible),
+  tableCount: details.length,
+};
+})()`;
+}
+
+function tableStateExpression() {
+  return `(() => {
+const regions = [...document.querySelectorAll(".docs-table-region")];
+const region = regions.find((candidate) => candidate.scrollWidth > candidate.clientWidth + 1) ?? regions[0];
+const hint = region?.closest(".docs-table-shell")?.querySelector(":scope > .docs-table-region__hint");
+const table = region?.querySelector(":scope > table");
+return region ? {
+  overflow: region.scrollWidth > region.clientWidth + 1,
+  focusable: region.tabIndex === 0,
+  scrollLeft: region.scrollLeft,
+  windowScrollX: window.scrollX,
+  focused: document.activeElement === region,
+  hintVisible: hint ? !hint.hidden && getComputedStyle(hint).display !== "none" : false,
+  locallyContained: table ? table.scrollWidth <= region.scrollWidth + 1 && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1 : false,
+} : null;
+})()`;
+}
+
+function tableKeyboardSetupExpression() {
+  return `(() => {
+const region = [...document.querySelectorAll(".docs-table-region")].find((candidate) => candidate.scrollWidth > candidate.clientWidth + 1);
+if (!region) return null;
+region.scrollLeft = 0;
+region.focus({ preventScroll: true });
+return { focused: document.activeElement === region, scrollLeft: region.scrollLeft, windowScrollX: window.scrollX };
+})()`;
+}
+
+function tablePrintExpression() {
+  return `(() => {
+const region = document.querySelector(".docs-table-region");
+const table = region?.querySelector(":scope > table");
+const hint = region?.closest(".docs-table-shell")?.querySelector(":scope > .docs-table-region__hint");
+return {
+  semantic: table?.tagName === "TABLE" && Boolean(table.tHead?.querySelector("th")) && Boolean(table.tBodies[0]?.querySelector("td")),
+  hintHidden: hint ? getComputedStyle(hint).display === "none" : false,
+  overflowVisible: region ? getComputedStyle(region).overflowX === "visible" : false,
+  screenMinWidthRemoved: table ? Number.parseFloat(getComputedStyle(table).minWidth) === 0 : false,
+};
+})()`;
+}
+
+function tableNoScriptExpression() {
+  return `(() => {
+const wrapper = document.querySelector(".table-wrapper");
+const table = wrapper?.querySelector(":scope > table");
+const cells = table ? [...table.querySelectorAll("th, td")] : [];
+return {
+  semantic: table?.tagName === "TABLE" && Boolean(table.tHead?.querySelector("th")) && Boolean(table.tBodies[0]?.querySelector("td")),
+  localOverflow: wrapper ? ["auto", "scroll"].includes(getComputedStyle(wrapper).overflowX) : false,
+  pageContained: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+  enhancementAbsent: document.querySelectorAll(".docs-table-shell, .docs-table-region__hint").length === 0,
+  readableTokens: cells.length > 0 && cells.every((cell) => getComputedStyle(cell).wordBreak === "normal" && getComputedStyle(cell).overflowWrap === "normal"),
+  fontSize: cells.length > 0 ? Math.min(...cells.map((cell) => Number.parseFloat(getComputedStyle(cell).fontSize))) : 0,
+};
+})()`;
+}
+
 async function startServer(siteRoot) {
   const diagramRequests = new Map();
   const resolvedRoot = await realpath(siteRoot);
@@ -938,6 +1100,14 @@ export async function run(siteRoot) {
     figurePrint: null,
     figureNoScript: null,
     figureFailures: [],
+    tableSentinel: TABLE_PASS_SENTINEL,
+    tableObservations: [],
+    tableKeyboard: null,
+    tableResize: null,
+    tableZoom: null,
+    tablePrint: null,
+    tableNoScript: null,
+    tableFailures: [],
   };
   let browserProcess;
   let client;
@@ -1115,12 +1285,81 @@ export async function run(siteRoot) {
     };
     await client.send("Network.setBlockedURLs", { urls: [] });
 
-    const errors = [...validateRenderingReceipt(receipt), ...validateSyntaxReceipt(receipt), ...validateFigureReceipt(receipt)];
+    for (const theme of TABLE_THEMES) {
+      for (const viewportWidth of VIEWPORTS) {
+        await client.send("Emulation.setDeviceMetricsOverride", { width: viewportWidth, height: 920, deviceScaleFactor: 1, mobile: false });
+        for (const tableCase of TABLE_CASES) {
+          await navigateToFigure(tableCase);
+          const observation = await evaluateValue(tableObservationExpression(tableCase, theme, viewportWidth), true);
+          if (!observation) throw new Error(`browser table evaluation failed for ${tableCase.id} ${theme} ${viewportWidth}`);
+          receipt.tableObservations.push(observation);
+        }
+      }
+    }
+
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 320, height: 920, deviceScaleFactor: 1, mobile: false });
+    await navigateToFigure(TABLE_CASES[3]);
+    const keyboardBefore = await evaluateValue(tableKeyboardSetupExpression());
+    await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+    await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+    await nextBrowserFrames();
+    const keyboardAfter = await evaluateValue(tableStateExpression());
+    receipt.tableKeyboard = {
+      focused: keyboardBefore?.focused === true,
+      scrolled: keyboardAfter?.scrollLeft > keyboardBefore?.scrollLeft,
+      pageStayedPut: keyboardAfter?.windowScrollX === keyboardBefore?.windowScrollX,
+      before: keyboardBefore,
+      after: keyboardAfter,
+    };
+
+    await navigateToFigure({ page: "features/interface.html" });
+    const narrowTable = await evaluateValue(tableStateExpression());
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
+    await nextBrowserFrames();
+    const wideTable = await evaluateValue(tableStateExpression());
+    receipt.tableResize = {
+      narrowOverflow: narrowTable?.overflow === true,
+      narrowFocusable: narrowTable?.focusable === true,
+      wideOverflow: wideTable?.overflow === true,
+      wideFocusable: wideTable?.focusable === true,
+      narrow: narrowTable,
+      wide: wideTable,
+    };
+
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 920, deviceScaleFactor: 1, mobile: true });
+    await navigateToFigure(TABLE_CASES[2]);
+    await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+    await nextBrowserFrames();
+    const zoomTable = await evaluateValue(tableStateExpression());
+    receipt.tableZoom = {
+      scale: await evaluateValue("visualViewport.scale"),
+      locallyContained: zoomTable?.locallyContained === true,
+      pageContained: await evaluateValue("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"),
+      hintVisible: zoomTable?.hintVisible === true,
+      conditionalSemantics: zoomTable?.overflow ? zoomTable?.focusable && zoomTable?.hintVisible : !zoomTable?.focusable && !zoomTable?.hintVisible,
+      observation: zoomTable,
+    };
+    await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
+
+    await navigateToFigure(TABLE_CASES[4]);
+    await client.send("Emulation.setEmulatedMedia", { media: "print" });
+    receipt.tablePrint = await evaluateValue(tablePrintExpression());
+    await client.send("Emulation.setEmulatedMedia", { media: "screen" });
+
+    await client.send("Network.setBlockedURLs", { urls: ["*.js"] });
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 320, height: 920, deviceScaleFactor: 1, mobile: false });
+    await navigateToFigure(TABLE_CASES[3]);
+    receipt.tableNoScript = await evaluateValue(tableNoScriptExpression());
+    await client.send("Network.setBlockedURLs", { urls: [] });
+
+    const errors = [...validateRenderingReceipt(receipt), ...validateSyntaxReceipt(receipt), ...validateFigureReceipt(receipt), ...validateTableReceipt(receipt)];
     if (errors.length > 0) throw new Error(errors.join("\n"));
     console.log(JSON.stringify(receipt, null, 2));
     console.log(PASS_SENTINEL);
     console.log(SYNTAX_PASS_SENTINEL);
     console.log(FIGURE_PASS_SENTINEL);
+    console.log(TABLE_PASS_SENTINEL);
   } finally {
     if (client) {
       await client.send("Browser.close").catch(() => {});

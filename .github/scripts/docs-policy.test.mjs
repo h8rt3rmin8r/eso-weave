@@ -29,6 +29,11 @@ import {
   validateDocumentationFigureCss,
   validateDocumentationFigureInventory,
   validateDocumentationFigureJavascript,
+  extractDocumentationTables,
+  validateDocumentationTableCss,
+  validateDocumentationTableInventory,
+  validateDocumentationTableJavascript,
+  validateDocumentationTablesGenerated,
   validateDocumentationCodeBlocksGenerated,
   validateDocumentationCodeFences,
   validateDocumentationScreenshotCss,
@@ -2541,5 +2546,61 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
     ["@media print", "@media screen", /print/i],
   ]) {
     assert.match(validateDocumentationFigureCss(css.replace(needle, replacement)).join("\n"), expected);
+  }
+});
+
+test("S089 inventories all 54 Markdown tables across 26 published pages", async () => {
+  const pages = await markdownPageMap(path.resolve("docs", "src"));
+  assert.deepEqual(validateDocumentationTableInventory(pages), []);
+  assert.deepEqual(extractDocumentationTables("| Name | Value |\n| --- | --- |\n| one | two |\n"), [
+    { line: 1, columns: 2, headers: ["Name", "Value"] },
+  ]);
+
+  const missing = new Map(pages);
+  missing.set("development/coverage-matrix.md", missing.get("development/coverage-matrix.md").replace("| --- | --- | --- | --- |", "not a table separator"));
+  assert.match(validateDocumentationTableInventory(missing).join("\n"), /coverage-matrix.*2 table/i);
+
+  const unexpected = new Map(pages);
+  unexpected.set("README.md", `${unexpected.get("README.md")}\n| New | Table |\n| --- | --- |\n| one | two |\n`);
+  assert.match(validateDocumentationTableInventory(unexpected).join("\n"), /README.*0 table|54 tables/i);
+});
+
+test("S089 requires generated mdBook wrappers with semantic table structure", async () => {
+  const sourcePages = await markdownPageMap(path.resolve("docs", "src"));
+  const generatedPages = new Map();
+  for (const [page, content] of sourcePages) {
+    const count = extractDocumentationTables(content).length;
+    if (count === 0) continue;
+    generatedPages.set(page.replace(/\.md$/u, ".html"), '<div class="table-wrapper"><table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Value</td></tr></tbody></table></div>'.repeat(count));
+  }
+  assert.deepEqual(validateDocumentationTablesGenerated(sourcePages, generatedPages), []);
+  generatedPages.set("development/state-machines.html", generatedPages.get("development/state-machines.html").replace("<thead>", "<div>"));
+  assert.match(validateDocumentationTablesGenerated(sourcePages, generatedPages).join("\n"), /state-machines.*semantic/i);
+});
+
+test("S089 requires geometry-driven, conditional, keyboard-accessible table enhancement", async () => {
+  const script = await readFile(path.resolve("docs", "theme", "eso-weave.js"), "utf8");
+  assert.deepEqual(validateDocumentationTableJavascript(script), []);
+  for (const [needle, replacement, expected] of [
+    ["scrollWidth > wrapper.clientWidth", "scrollWidth > innerWidth", /geometry-driven/i],
+    ['setAttribute("role", "region")', 'setAttribute("role", "group")', /focus region/i],
+    ['removeAttribute("tabindex")', 'removeAttribute("unused")', /fitting tables/i],
+    ['wrapper.addEventListener("scroll"', 'wrapper.addEventListener("unused"', /scroll state/i],
+    ['wrapper.addEventListener("keydown"', 'wrapper.addEventListener("unused"', /arrow-key/i],
+  ]) {
+    assert.match(validateDocumentationTableJavascript(script.replace(needle, replacement)).join("\n"), expected);
+  }
+});
+
+test("S089 requires local containment, readable tokens, visible guidance, and static print", async () => {
+  const css = await readFile(path.resolve("docs", "theme", "eso-weave.css"), "utf8");
+  assert.deepEqual(validateDocumentationTableCss(css), []);
+  for (const [needle, replacement, expected] of [
+    ["overflow-x: auto", "overflow-x: visible", /containment/i],
+    ["word-break: normal", "word-break: break-all", /tokens|stacking/i],
+    [".docs-table--protocol", ".docs-table--unused", /width profiles/i],
+    ["overflow: visible !important", "overflow: hidden !important", /print/i],
+  ]) {
+    assert.match(validateDocumentationTableCss(css.replace(needle, replacement)).join("\n"), expected);
   }
 });

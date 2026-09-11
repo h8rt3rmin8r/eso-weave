@@ -68,4 +68,4 @@ The figure system adds no dependency, remote resource, browser download, or seco
 6. Do not add a second modal library or per-image dialog.
 7. When adding a new figure kind, update source inventory policy, a representative browser case when necessary, print behavior, and this record in the same slice.
 
-General table responsiveness and unrelated page overflow remain owned by issue #127.
+Responsive table behavior is owned by the S089 table system and issue #127.

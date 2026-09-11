@@ -5,12 +5,15 @@ import {
   FIGURE_PASS_SENTINEL,
   PASS_SENTINEL,
   SYNTAX_PASS_SENTINEL,
+  TABLE_PASS_SENTINEL,
   validateFigureObservation,
   validateFigureReceipt,
   validateObservation,
   validateRenderingReceipt,
   validateSyntaxObservation,
   validateSyntaxReceipt,
+  validateTableObservation,
+  validateTableReceipt,
 } from "./docs-render-smoke.mjs";
 
 const validObservation = {
@@ -303,4 +306,77 @@ test("S088 requires the complete matrix and all pointer plus keyboard journeys",
   assert.match(validateFigureReceipt({ ...receipt, figurePrint: { ...receipt.figurePrint, dialogHidden: false } }).join("\n"), /print rendering/i);
   assert.match(validateFigureReceipt({ ...receipt, figureNoScript: { ...receipt.figureNoScript, interactiveChromeAbsent: false } }).join("\n"), /no-JavaScript/i);
   assert.match(validateFigureReceipt({ ...receipt, figureFailures: ["runtime failed"] }).join("\n"), /runtime failed/i);
+});
+
+const validTableObservation = {
+  caseId: "S089-COVERAGE",
+  surface: "generated-loopback",
+  theme: "navy",
+  viewportWidth: 320,
+  semantic: true,
+  locallyContained: true,
+  pageContained: true,
+  columnsVisible: true,
+  readableTokens: true,
+  fontSize: 16,
+  overflowing: true,
+  focusable: true,
+  namedRegion: true,
+  described: true,
+  hintVisible: true,
+};
+
+test("S089 accepts readable tables with conditional overflow semantics", () => {
+  assert.deepEqual(validateTableObservation(validTableObservation), []);
+  assert.deepEqual(validateTableObservation({
+    ...validTableObservation,
+    viewportWidth: 1280,
+    overflowing: false,
+    focusable: false,
+    namedRegion: false,
+    described: false,
+    hintVisible: false,
+  }), []);
+});
+
+test("S089 rejects lost semantics, containment, readability, and conditional focus", () => {
+  for (const [change, expected] of [
+    [{ semantic: false }, /semantics/i],
+    [{ locallyContained: false }, /local/i],
+    [{ pageContained: false }, /page-level/i],
+    [{ columnsVisible: false }, /columns/i],
+    [{ readableTokens: false }, /tokens/i],
+    [{ fontSize: 13.9 }, /readable/i],
+    [{ focusable: false }, /focusable/i],
+    [{ hintVisible: false }, /visible/i],
+  ]) assert.match(validateTableObservation({ ...validTableObservation, ...change }).join("\n"), expected);
+  assert.match(validateTableObservation({ ...validTableObservation, overflowing: false }).join("\n"), /redundant/i);
+});
+
+test("S089 requires the 20-cell matrix and keyboard, resize, zoom, print, and fallback evidence", () => {
+  const observations = [];
+  for (const caseId of ["S089-COVERAGE", "S089-TEST", "S089-STATE", "S089-STATUS", "S089-PROTOCOL"]) {
+    for (const theme of ["navy", "light"]) {
+      for (const viewportWidth of [320, 1280]) observations.push({ ...validTableObservation, caseId, theme, viewportWidth });
+    }
+  }
+  const receipt = {
+    tableSentinel: TABLE_PASS_SENTINEL,
+    tableObservations: observations,
+    tableKeyboard: { focused: true, scrolled: true, pageStayedPut: true },
+    tableResize: { narrowOverflow: true, narrowFocusable: true, wideOverflow: false, wideFocusable: false },
+    tableZoom: { scale: 2, locallyContained: true, pageContained: true, hintVisible: true, conditionalSemantics: true },
+    tablePrint: { semantic: true, hintHidden: true, overflowVisible: true, screenMinWidthRemoved: true },
+    tableNoScript: { semantic: true, localOverflow: true, pageContained: true, enhancementAbsent: true, readableTokens: true, fontSize: 16 },
+    tableFailures: [],
+  };
+  assert.deepEqual(validateTableReceipt(receipt), []);
+  assert.match(validateTableReceipt({ ...receipt, tableSentinel: "wrong" }).join("\n"), /sentinel/i);
+  assert.match(validateTableReceipt({ ...receipt, tableObservations: observations.slice(1) }).join("\n"), /20 unique/i);
+  assert.match(validateTableReceipt({ ...receipt, tableKeyboard: { ...receipt.tableKeyboard, scrolled: false } }).join("\n"), /keyboard/i);
+  assert.match(validateTableReceipt({ ...receipt, tableResize: { ...receipt.tableResize, wideFocusable: true } }).join("\n"), /resize/i);
+  assert.match(validateTableReceipt({ ...receipt, tableZoom: { ...receipt.tableZoom, scale: 1 } }).join("\n"), /200 percent/i);
+  assert.match(validateTableReceipt({ ...receipt, tablePrint: { ...receipt.tablePrint, hintHidden: false } }).join("\n"), /print/i);
+  assert.match(validateTableReceipt({ ...receipt, tableNoScript: { ...receipt.tableNoScript, enhancementAbsent: false } }).join("\n"), /no-JavaScript/i);
+  assert.match(validateTableReceipt({ ...receipt, tableFailures: ["runtime failed"] }).join("\n"), /runtime failed/i);
 });

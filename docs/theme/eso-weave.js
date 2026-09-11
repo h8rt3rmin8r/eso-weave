@@ -240,3 +240,112 @@ function initializeDocumentationFigures() {
 }
 
 initializeDocumentationFigures();
+
+function initializeDocumentationTables() {
+  if (document.documentElement.dataset.docsTableSystem === "ready") return;
+  const wrappers = [...document.querySelectorAll(".content .table-wrapper")]
+    .filter((wrapper) => wrapper.querySelector(":scope > table"));
+  if (wrappers.length === 0) return;
+
+  const profileByPage = new Map([
+    ["development/coverage-matrix.html", "evidence"],
+    ["development/test-strategy.html", "evidence"],
+    ["development/state-machines.html", "state"],
+    ["reference/status-reference.html", "state"],
+    ["reference/pixel-bus-protocol.html", "protocol"],
+  ]);
+  const pending = new Set();
+  let frame = null;
+
+  function precedingHeading(wrapper) {
+    const headings = [...document.querySelectorAll("main h1, main h2, main h3, main h4, main h5, main h6")];
+    return headings.filter((heading) => Boolean(heading.compareDocumentPosition(wrapper) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+  }
+
+  function updatePosition(wrapper) {
+    const maximum = Math.max(0, wrapper.scrollWidth - wrapper.clientWidth);
+    wrapper.dataset.docsTablePosition = wrapper.scrollLeft <= 1
+      ? "start"
+      : wrapper.scrollLeft >= maximum - 1 ? "end" : "middle";
+  }
+
+  function refresh(wrapper) {
+    const shell = wrapper.closest(".docs-table-shell");
+    const hint = shell?.querySelector(":scope > .docs-table-region__hint");
+    if (!shell || !hint) return;
+    const overflowing = wrapper.scrollWidth > wrapper.clientWidth + 1;
+    shell.dataset.docsTableOverflow = String(overflowing);
+    wrapper.dataset.docsTableOverflow = String(overflowing);
+    if (overflowing) {
+      wrapper.setAttribute("tabindex", "0");
+      wrapper.setAttribute("role", "region");
+      wrapper.setAttribute("aria-label", wrapper.dataset.docsTableLabel);
+      wrapper.setAttribute("aria-describedby", hint.id);
+      hint.hidden = false;
+    } else {
+      wrapper.removeAttribute("tabindex");
+      wrapper.removeAttribute("role");
+      wrapper.removeAttribute("aria-label");
+      wrapper.removeAttribute("aria-describedby");
+      wrapper.scrollLeft = 0;
+      hint.hidden = true;
+    }
+    updatePosition(wrapper);
+  }
+
+  function schedule(wrapper) {
+    if (wrapper) pending.add(wrapper);
+    else for (const candidate of wrappers) pending.add(candidate);
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      for (const candidate of pending) refresh(candidate);
+      pending.clear();
+      frame = null;
+    });
+  }
+
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) schedule(entry.target.closest(".docs-table-region") ?? entry.target);
+  });
+
+  wrappers.forEach((wrapper, index) => {
+    const table = wrapper.querySelector(":scope > table");
+    const heading = precedingHeading(wrapper);
+    const context = heading?.textContent.trim() || document.title.replace(/\s*-\s*ESO Weave.*$/u, "").trim() || "Documentation";
+    const shell = document.createElement("div");
+    const hint = document.createElement("p");
+    shell.className = "docs-table-shell";
+    hint.className = "docs-table-region__hint";
+    hint.id = `docs-table-hint-${index + 1}`;
+    hint.textContent = "Scroll horizontally to see all columns.";
+    hint.hidden = true;
+    wrapper.before(shell);
+    shell.append(hint, wrapper);
+    wrapper.classList.add("docs-table-region");
+    wrapper.dataset.docsTableLabel = `${context} table ${index + 1}`;
+    table.classList.add("docs-table");
+
+    const columns = table.tHead?.rows[0]?.cells.length ?? table.rows[0]?.cells.length ?? 0;
+    table.classList.add(columns >= 5 ? "docs-table--very-dense" : columns >= 3 ? "docs-table--dense" : "docs-table--compact");
+    const page = [...profileByPage.keys()].find((candidate) => location.pathname.endsWith(candidate));
+    if (page) table.classList.add(`docs-table--${profileByPage.get(page)}`);
+
+    wrapper.addEventListener("scroll", () => updatePosition(wrapper), { passive: true });
+    wrapper.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (wrapper.scrollWidth <= wrapper.clientWidth + 1) return;
+      event.preventDefault();
+      const direction = event.key === "ArrowRight" ? 1 : -1;
+      wrapper.scrollBy({ left: direction * Math.max(48, wrapper.clientWidth * 0.25), behavior: "auto" });
+    });
+    observer.observe(wrapper);
+    observer.observe(table);
+    schedule(wrapper);
+  });
+
+  document.fonts?.ready.then(() => schedule());
+  window.addEventListener("resize", () => schedule(), { passive: true });
+  document.documentElement.dataset.docsTableSystem = "ready";
+}
+
+initializeDocumentationTables();

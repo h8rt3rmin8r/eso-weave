@@ -1887,6 +1887,111 @@ function markdownImages(content) {
   return [...content.matchAll(/!\[([^\]]*)\]\([^\r\n)]+\)/gu)];
 }
 
+const DOCUMENTATION_TABLE_COUNTS = new Map([
+  ["concepts/action-authorization.md", 1],
+  ["concepts/scope-and-platform.md", 1],
+  ["development/architecture.md", 2],
+  ["development/brand-standard.md", 2],
+  ["development/coverage-matrix.md", 2],
+  ["development/release-and-packaging.md", 2],
+  ["development/screenshot-maintenance.md", 1],
+  ["development/state-machines.md", 4],
+  ["development/test-strategy.md", 2],
+  ["features/auto-potion.md", 1],
+  ["features/encounter-capture.md", 1],
+  ["features/fishing.md", 1],
+  ["features/interface.md", 1],
+  ["features/pixelbeacon.md", 1],
+  ["features/weaving.md", 3],
+  ["getting-started/first-launch.md", 1],
+  ["getting-started/installation.md", 1],
+  ["getting-started/troubleshooting.md", 2],
+  ["reference/catalog-sources-and-rights.md", 3],
+  ["reference/configuration.md", 1],
+  ["reference/encounter-data-and-metrics.md", 2],
+  ["reference/logging.md", 1],
+  ["reference/pixel-bus-protocol.md", 2],
+  ["reference/settings.md", 8],
+  ["reference/status-reference.md", 7],
+  ["reference/weave-delay-defaults.md", 1],
+]);
+
+export function extractDocumentationTables(content) {
+  const lines = content.split(/\r?\n/u);
+  const tables = [];
+  let fenced = false;
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    if (/^\s*(```|~~~)/u.test(lines[index])) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced || !lines[index].includes("|")) continue;
+    if (!/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/u.test(lines[index + 1])) continue;
+    const headers = lines[index].replace(/^\s*\||\|\s*$/gu, "").split("|").map((cell) => cell.trim());
+    tables.push({ line: index + 1, columns: headers.length, headers });
+  }
+  return tables;
+}
+
+export function validateDocumentationTableInventory(pages) {
+  if (!(pages instanceof Map)) return ["S089 table inventory requires a source page map"];
+  const errors = [];
+  let total = 0;
+  for (const [page, content] of pages) {
+    const count = extractDocumentationTables(content).length;
+    total += count;
+    const expected = DOCUMENTATION_TABLE_COUNTS.get(page) ?? 0;
+    if (count !== expected) errors.push(`S089 ${page} requires ${expected} table(s); found ${count}`);
+  }
+  for (const [page, expected] of DOCUMENTATION_TABLE_COUNTS) {
+    if (!pages.has(page)) errors.push(`S089 table inventory is missing ${page} with ${expected} expected table(s)`);
+  }
+  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 54) {
+    errors.push(`S089 table inventory requires 54 tables across 26 pages; found ${total} across ${pages.size} pages`);
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationTablesGenerated(sourcePages, generatedPages) {
+  if (!(sourcePages instanceof Map) || !(generatedPages instanceof Map)) return ["S089 generated table validation requires source and generated page maps"];
+  const errors = [];
+  for (const [sourcePage, expected] of DOCUMENTATION_TABLE_COUNTS) {
+    const outputPage = sourcePage.replace(/\.md$/u, ".html");
+    const html = generatedPages.get(outputPage) ?? "";
+    const wrappers = html.match(/<div class="table-wrapper">\s*<table>[\s\S]*?<\/table>\s*<\/div>/gu) ?? [];
+    const semanticTables = wrappers.filter((block) => /<thead>[\s\S]*?<th[ >][\s\S]*?<tbody>[\s\S]*?<td[ >]/u.test(block));
+    if (wrappers.length !== expected || semanticTables.length !== expected) {
+      errors.push(`S089 generated ${outputPage} must preserve ${expected} semantic table wrapper(s); found ${wrappers.length} wrapped and ${semanticTables.length} semantic`);
+    }
+    if (extractDocumentationTables(sourcePages.get(sourcePage) ?? "").length !== expected) {
+      errors.push(`S089 generated validation source inventory drifted for ${sourcePage}`);
+    }
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationTableJavascript(script) {
+  const errors = [];
+  if (!/dataset\.docsTableSystem/u.test(script) || !/\.content \.table-wrapper/u.test(script)) errors.push("S089 table system requires idempotent enhancement of every mdBook table wrapper");
+  if (!/document\.createElement\(["']div["']\)/u.test(script) || !/docs-table-shell/u.test(script) || !/docs-table-region__hint/u.test(script)) errors.push("S089 table system requires one shell and visible scroll instruction per table");
+  if (!/scrollWidth\s*>\s*wrapper\.clientWidth/u.test(script) || !/ResizeObserver/u.test(script) || !/document\.fonts\?\.ready/u.test(script) || !/requestAnimationFrame/u.test(script)) errors.push("S089 table system requires geometry-driven batched overflow updates");
+  if (!/setAttribute\(["']tabindex["'],\s*["']0["']\)/u.test(script) || !/setAttribute\(["']role["'],\s*["']region["']\)/u.test(script) || !/aria-label/u.test(script) || !/aria-describedby/u.test(script)) errors.push("S089 overflowing tables require a named, described keyboard focus region");
+  if (!/removeAttribute\(["']tabindex["']\)/u.test(script) || !/removeAttribute\(["']role["']\)/u.test(script) || !/wrapper\.scrollLeft\s*=\s*0/u.test(script)) errors.push("S089 fitting tables must remove redundant focus semantics and reset stale scroll state");
+  if (!/wrapper\.addEventListener\(["']scroll["']/u.test(script) || !/docsTablePosition/u.test(script)) errors.push("S089 table system requires visible start, middle, and end scroll state updates");
+  if (!/wrapper\.addEventListener\(["']keydown["'][\s\S]*?ArrowLeft[\s\S]*?ArrowRight[\s\S]*?preventDefault\(\)[\s\S]*?scrollBy/u.test(script)) errors.push("S089 table system requires deterministic left and right arrow-key scrolling");
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationTableCss(css) {
+  const errors = [];
+  if (!/\.docs-table-shell\s*\{[\s\S]*?max-width:\s*100%/u.test(css) || !/\.docs-table-region\s*\{[\s\S]*?overflow-x:\s*auto/u.test(css)) errors.push("S089 table shell requires local horizontal containment");
+  if (!/\.docs-table-region__hint\s*\{/u.test(css) || !/data-docs-table-overflow=["']true["']/u.test(css)) errors.push("S089 overflow requires a visible, state-aware scroll instruction");
+  if (!/\.docs-table--dense\s*\{[\s\S]*?min-width:/u.test(css) || !/\.docs-table--very-dense\s*\{[\s\S]*?min-width:/u.test(css) || !/\.docs-table--protocol\s*\{[\s\S]*?min-width:/u.test(css)) errors.push("S089 table CSS requires compact, dense, very dense, and named-page width profiles");
+  if (!/word-break:\s*normal/u.test(css) || !/overflow-wrap:\s*normal/u.test(css) || /word-break:\s*break-all/u.test(css)) errors.push("S089 table cells must preserve readable tokens without character stacking");
+  if (!/@media\s+print[\s\S]*?\.docs-table-region__hint[\s\S]*?display:\s*none\s*!important[\s\S]*?\.docs-table-region\s*\{[\s\S]*?overflow:\s*visible\s*!important/u.test(css)) errors.push("S089 print rendering must hide interactive guidance and remove screen overflow clipping");
+  return [...new Set(errors)];
+}
+
 export function validateDocumentationFigureInventory(pages) {
   if (!(pages instanceof Map)) return ["S088 figure inventory requires a source page map"];
   const errors = [];
@@ -3661,6 +3766,10 @@ async function run() {
     ...validateDocumentationFigureInventory(sourceMarkdownPages),
     ...validateDocumentationFigureJavascript(themeScript),
     ...validateDocumentationFigureCss(css),
+    ...validateDocumentationTableInventory(sourceMarkdownPages),
+    ...validateDocumentationTablesGenerated(sourceMarkdownPages, generatedHtmlPages),
+    ...validateDocumentationTableJavascript(themeScript),
+    ...validateDocumentationTableCss(css),
     ...validateDocumentationCodeBlocksGenerated(sourceMarkdownPages, generatedHtmlPages, outputPaths),
     ...validateHighlightingExtension(themeScript),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
