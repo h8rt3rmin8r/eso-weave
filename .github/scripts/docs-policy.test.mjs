@@ -501,7 +501,7 @@ function validEncounterContract() {
     loss_policy: { marker: "discontinuity", degrade_spanning_metrics: true, expose_ranges: true },
     privacy_policy: { local_only_default: true, upload_default: false, omitted_by_default: ["account-name", "character-name", "chat", "guild", "location"] },
     integrity_policy: { raw_immutable: true, derived_rebuildable: true, execute_input: false, bounded_import: true, atomic_import: true },
-    catalog_join_policy: { retain_unknown_ids: true, rejoin_without_raw_mutation: true, preserve_channel: true },
+    catalog_join_policy: { retain_unknown_ids: true, preserve_entity_kind: true, rejoin_without_raw_mutation: true, preserve_channel: true },
     actor_policy: { identity: "encounter-local-opaque", roles: ["player", "pet", "npc", "boss"], pet_owner_relationship: "encounter-local-actor-id", ability_aliases: "derived-versioned-catalog-relationship" },
     build_snapshot_policy: { retention: "derived-versioned", catalog_version_required: true, consent_required_for_personal_identity: true },
     retention_policy: { export: "explicit-user-action", delete: "user-controlled-by-encounter-or-all", backup: "user-owned-with-schema-and-hash", corruption_recovery: "reject-invalid-import-and-preserve-last-valid-store", compression: "optional-local-gzip", production_budget: "verification-required" },
@@ -2265,12 +2265,14 @@ test("rejects unsafe encounter transport, privacy, storage, and derivation polic
   contract.storage_planes.raw = "catalog.sqlite";
   contract.privacy_policy.upload_default = true;
   contract.integrity_policy.raw_immutable = false;
+  contract.catalog_join_policy.preserve_entity_kind = false;
   contract.transport_policy.pixel_bus_bulk_transport = true;
   contract.transport_policy.automation_independent = false;
   const errors = validateEncounterModelContract(contract).join("\n");
   assert.match(errors, /raw observations.*separate/i);
   assert.match(errors, /uploaded by default/i);
   assert.match(errors, /raw observations must be immutable/i);
+  assert.match(errors, /preserve entity kinds/i);
   assert.match(errors, /Pixel Bus/i);
   assert.match(errors, /automation/i);
 });

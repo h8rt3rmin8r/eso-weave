@@ -2751,7 +2751,7 @@ export function validateEncounterModelContract(contract) {
   if (integrity.derived_rebuildable !== true) errors.push("derived analysis must be rebuildable");
   if (integrity.execute_input !== false || integrity.bounded_import !== true || integrity.atomic_import !== true) errors.push("encounter imports must be bounded, atomic, and non-executing");
   const join = contract.catalog_join_policy ?? {};
-  if (join.retain_unknown_ids !== true || join.rejoin_without_raw_mutation !== true || join.preserve_channel !== true) errors.push("catalog joins must preserve unknown IDs, raw content, and channel provenance");
+  if (join.retain_unknown_ids !== true || join.preserve_entity_kind !== true || join.rejoin_without_raw_mutation !== true || join.preserve_channel !== true) errors.push("catalog joins must preserve entity kinds, unknown IDs, raw content, and channel provenance");
   const transport = contract.transport_policy ?? {};
   if (transport.pixel_bus_bulk_transport !== false) errors.push("Pixel Bus cannot be the bulk encounter transport");
   if (transport.automation_independent !== true) errors.push("encounter observation and calculation must remain independent of automation");

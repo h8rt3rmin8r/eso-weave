@@ -27,7 +27,9 @@ Invariants:
 - `projection_compatible`: supported projection schema and algorithm gate
 - `loss_ranges_valid`: every declared range is forward and countable
 - `metric_evidence_valid`: algorithm, source range, quality, and loss consistency
-- `known_ids`, `unknown_ids`: sorted positive catalog receipt IDs
+- `known_ids`, `unknown_ids`: sorted positive aggregate catalog receipt IDs
+- `known_ability_ids`, `unknown_ability_ids`: kind-scoped ability resolution evidence
+- `known_effect_ids`, `unknown_effect_ids`: kind-scoped effect resolution evidence
 - `unknown_damage_share`: sum of valid damage-share values for unknown abilities
 - `loss_ranges`: exact sorted projection loss ranges and reasons
 - `citation`: shared `RecommendationCitation`

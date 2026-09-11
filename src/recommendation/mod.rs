@@ -122,13 +122,22 @@ pub struct RecommendationReport {
 
 pub fn generate_recommendations(projection: &EncounterProjection) -> RecommendationReport {
     let citation = citation(projection);
-    let known_ids = positive_ids(&projection.catalog_join.known_ids);
-    let known_set = known_ids.iter().copied().collect::<BTreeSet<_>>();
-    let unknown_ids = positive_ids(&projection.catalog_join.unknown_ids)
+    let known_ability_ids = positive_ids(&projection.catalog_join.known_ability_ids);
+    let known_ability_set = known_ability_ids.iter().copied().collect::<BTreeSet<_>>();
+    let known_effect_ids = positive_ids(&projection.catalog_join.known_effect_ids);
+    let known_effect_set = known_effect_ids.iter().copied().collect::<BTreeSet<_>>();
+    let unknown_ability_ids = positive_ids(&projection.catalog_join.unknown_ability_ids)
         .into_iter()
-        .filter(|id| !known_set.contains(id))
+        .filter(|id| !known_ability_set.contains(id))
         .collect::<Vec<_>>();
-    let unknown_set = unknown_ids.iter().copied().collect::<BTreeSet<_>>();
+    let unknown_ability_set = unknown_ability_ids.iter().copied().collect::<BTreeSet<_>>();
+    let unknown_effect_ids = positive_ids(&projection.catalog_join.unknown_effect_ids)
+        .into_iter()
+        .filter(|id| !known_effect_set.contains(id))
+        .collect::<Vec<_>>();
+    let unknown_effect_set = unknown_effect_ids.iter().copied().collect::<BTreeSet<_>>();
+    let known_ids = union_ids(&known_ability_ids, &known_effect_ids);
+    let unknown_ids = union_ids(&unknown_ability_ids, &unknown_effect_ids);
     let loss_ranges = declared_loss_ranges(projection);
     let loss_ranges_valid = loss_ranges
         .iter()
@@ -144,7 +153,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
     let unknown_damage_share = projection
         .ability_damage_share
         .iter()
-        .filter(|share| unknown_set.contains(&share.ability_id))
+        .filter(|share| unknown_ability_set.contains(&share.ability_id))
         .filter_map(|share| valid_ratio(share.result.value))
         .sum::<f64>();
     let material_loss = valid_span
@@ -240,10 +249,10 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
     }
 
     let unknown_target_omitted = projection.ability_damage_share.iter().any(|share| {
-        unknown_set.contains(&share.ability_id)
+        unknown_ability_set.contains(&share.ability_id)
             && valid_ratio(share.result.value).is_some_and(|value| value >= DOMINANT_DAMAGE_SHARE)
     }) || projection.effect_uptime.iter().any(|uptime| {
-        unknown_set.contains(&uptime.ability_id)
+        unknown_effect_set.contains(&uptime.ability_id)
             && valid_ratio(uptime.result.value).is_some_and(|value| value <= LOW_EFFECT_UPTIME)
     });
     if unknown_target_omitted {
@@ -279,7 +288,9 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
         };
 
         if !material_unknown_damage {
-            if let Some((target_id, observed_ratio)) = dominant_damage(projection, &known_set) {
+            if let Some((target_id, observed_ratio)) =
+                dominant_damage(projection, &known_ability_set)
+            {
                 advice.push(AdviceItem {
                     rule: AdviceRule::DominantDamageShare,
                     target_kind: AdviceTargetKind::Ability,
@@ -290,7 +301,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
                 });
             }
         }
-        if let Some((target_id, observed_ratio)) = low_uptime(projection, &known_set) {
+        if let Some((target_id, observed_ratio)) = low_uptime(projection, &known_effect_set) {
             advice.push(AdviceItem {
                 rule: AdviceRule::LowEffectUptime,
                 target_kind: AdviceTargetKind::Effect,
@@ -348,6 +359,15 @@ fn positive_ids(ids: &[i64]) -> Vec<i64> {
     ids.iter()
         .copied()
         .filter(|id| *id > 0)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn union_ids(left: &[i64], right: &[i64]) -> Vec<i64> {
+    left.iter()
+        .chain(right)
+        .copied()
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()

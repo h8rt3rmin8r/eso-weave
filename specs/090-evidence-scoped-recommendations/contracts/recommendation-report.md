@@ -32,6 +32,8 @@
 ## Catalog uncertainty
 
 1. Any unknown positive ID qualifies otherwise eligible known-target advice.
+   Resolution is entity-kind scoped, so an ability and effect sharing one
+   numeric ID cannot make each other eligible.
 2. An unknown target never produces a recommendation.
 3. Valid damage share belonging to unknown ability IDs is summed.
 4. Unknown damage share at or above 25 percent suppresses only the dominant-damage

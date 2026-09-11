@@ -103,6 +103,10 @@ pub struct CatalogJoinReceipt {
     pub channel: Channel,
     pub api_version: u32,
     pub raw_content_sha256: String,
+    pub known_ability_ids: Vec<i64>,
+    pub unknown_ability_ids: Vec<i64>,
+    pub known_effect_ids: Vec<i64>,
+    pub unknown_effect_ids: Vec<i64>,
     pub known_ids: Vec<i64>,
     pub unknown_ids: Vec<i64>,
 }
@@ -421,22 +425,44 @@ fn join_catalog(
     abilities: BTreeSet<i64>,
     effects: BTreeSet<i64>,
 ) -> Result<CatalogJoinReceipt, EncounterError> {
-    let all = abilities.union(&effects).copied().collect::<BTreeSet<_>>();
-    let mut known = BTreeSet::new();
-    for id in &all {
-        let ability = catalog
+    let mut known_abilities = BTreeSet::new();
+    for id in &abilities {
+        if catalog
             .entity(EntityKind::Ability, *id)
             .map_err(catalog_lookup_error)?
-            .is_some();
-        let effect = effects.contains(id)
-            && catalog
-                .entity(EntityKind::Effect, *id)
-                .map_err(catalog_lookup_error)?
-                .is_some();
-        if ability || effect {
-            known.insert(*id);
+            .is_some()
+        {
+            known_abilities.insert(*id);
         }
     }
+    let unknown_abilities = abilities
+        .difference(&known_abilities)
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    let mut known_effects = BTreeSet::new();
+    for id in &effects {
+        if catalog
+            .entity(EntityKind::Effect, *id)
+            .map_err(catalog_lookup_error)?
+            .is_some()
+        {
+            known_effects.insert(*id);
+        }
+    }
+    let unknown_effects = effects
+        .difference(&known_effects)
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    let known = known_abilities
+        .union(&known_effects)
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let unknown = unknown_abilities
+        .union(&unknown_effects)
+        .copied()
+        .collect::<BTreeSet<_>>();
     Ok(CatalogJoinReceipt {
         catalog_schema_version: release.schema_version,
         catalog_version: release.catalog_version.clone(),
@@ -444,8 +470,12 @@ fn join_catalog(
         channel: release.channel,
         api_version: release.api_version,
         raw_content_sha256,
+        known_ability_ids: known_abilities.into_iter().collect(),
+        unknown_ability_ids: unknown_abilities.into_iter().collect(),
+        known_effect_ids: known_effects.into_iter().collect(),
+        unknown_effect_ids: unknown_effects.into_iter().collect(),
         known_ids: known.iter().copied().collect(),
-        unknown_ids: all.difference(&known).copied().collect(),
+        unknown_ids: unknown.into_iter().collect(),
     })
 }
 

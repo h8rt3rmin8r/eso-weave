@@ -40,6 +40,10 @@ fn projection() -> EncounterProjection {
             channel: Channel::Live,
             api_version: 101070,
             raw_content_sha256: "raw090".into(),
+            known_ability_ids: vec![10],
+            unknown_ability_ids: Vec::new(),
+            known_effect_ids: vec![20],
+            unknown_effect_ids: Vec::new(),
             known_ids: vec![10, 20],
             unknown_ids: Vec::new(),
         },
@@ -349,6 +353,7 @@ fn unsupported_projection_versions_fail_closed() {
 fn unknown_ids_qualify_and_material_unknown_damage_is_rule_local() {
     let mut input = projection();
     input.catalog_join.unknown_ids = vec![999];
+    input.catalog_join.unknown_ability_ids = vec![999];
     input.ability_damage_share = vec![
         AbilityDamageShare {
             ability_id: 10,
@@ -379,6 +384,8 @@ fn unknown_ids_qualify_and_material_unknown_damage_is_rule_local() {
 fn unknown_targets_are_omitted_without_blocking_known_candidates() {
     let mut input = projection();
     input.catalog_join.unknown_ids = vec![7, 8];
+    input.catalog_join.unknown_ability_ids = vec![7];
+    input.catalog_join.unknown_effect_ids = vec![8];
     input.ability_damage_share.push(AbilityDamageShare {
         ability_id: 7,
         result: metric("ability-damage-share", Some(0.10)),
@@ -400,9 +407,59 @@ fn unknown_targets_are_omitted_without_blocking_known_candidates() {
 }
 
 #[test]
+fn catalog_entity_kinds_prevent_cross_kind_target_confusion() {
+    let mut input = projection();
+    input.catalog_join.known_ids = vec![10, 20];
+    input.catalog_join.unknown_ids = vec![10, 20];
+    input.catalog_join.known_ability_ids = vec![10];
+    input.catalog_join.unknown_ability_ids = vec![20];
+    input.catalog_join.known_effect_ids = vec![20];
+    input.catalog_join.unknown_effect_ids = vec![10];
+    input.ability_damage_share = vec![
+        AbilityDamageShare {
+            ability_id: 10,
+            result: metric("ability-damage-share", Some(0.40)),
+        },
+        AbilityDamageShare {
+            ability_id: 20,
+            result: metric("ability-damage-share", Some(0.10)),
+        },
+    ];
+    input.effect_uptime = vec![
+        EffectUptime {
+            ability_id: 10,
+            result: metric("effect-uptime", Some(0.10)),
+        },
+        EffectUptime {
+            ability_id: 20,
+            result: metric("effect-uptime", Some(0.40)),
+        },
+    ];
+
+    let report = generate_recommendations(&input);
+    assert_eq!(report.availability, RecommendationAvailability::Qualified);
+    assert_eq!(
+        report
+            .advice
+            .iter()
+            .map(|item| (item.target_kind, item.target_id))
+            .collect::<Vec<_>>(),
+        vec![
+            (AdviceTargetKind::Ability, 10),
+            (AdviceTargetKind::Effect, 20),
+        ]
+    );
+    assert_eq!(report.evidence.known_ids, vec![10, 20]);
+    assert_eq!(report.evidence.unknown_ids, vec![10, 20]);
+    assert!(reason_kinds(&report).contains(&RecommendationReasonKind::UnknownTargetOmitted));
+}
+
+#[test]
 fn selection_uses_fixed_rule_order_and_numeric_tie_breakers() {
     let mut input = projection();
     input.catalog_join.known_ids = vec![10, 11, 20, 21];
+    input.catalog_join.known_ability_ids = vec![10, 11];
+    input.catalog_join.known_effect_ids = vec![20, 21];
     input.ability_damage_share.push(AbilityDamageShare {
         ability_id: 11,
         result: metric("ability-damage-share", Some(0.60)),
@@ -426,6 +483,9 @@ fn exact_rule_thresholds_are_inclusive_and_evidence_ids_are_normalized() {
     let mut input = projection();
     input.catalog_join.known_ids = vec![20, 10, 20, 0, -1];
     input.catalog_join.unknown_ids = vec![30, 30, 0, -2, 10];
+    input.catalog_join.known_ability_ids = vec![10, 10, 0, -1];
+    input.catalog_join.known_effect_ids = vec![20, 20, 0];
+    input.catalog_join.unknown_ability_ids = vec![30, 30, 0, -2, 10];
     input.ability_damage_share[0].result.value = Some(0.40);
     input.effect_uptime[0].result.value = Some(0.50);
 
@@ -438,6 +498,10 @@ fn exact_rule_thresholds_are_inclusive_and_evidence_ids_are_normalized() {
 
     input.catalog_join.known_ids.clear();
     input.catalog_join.unknown_ids.clear();
+    input.catalog_join.known_ability_ids.clear();
+    input.catalog_join.unknown_ability_ids.clear();
+    input.catalog_join.known_effect_ids.clear();
+    input.catalog_join.unknown_effect_ids.clear();
     input.ability_damage_share.clear();
     input.effect_uptime.clear();
     let empty_join = generate_recommendations(&input);

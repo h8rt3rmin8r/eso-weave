@@ -97,9 +97,11 @@ same-parse parity remain issues #129 and #131.
 ## Raw events and catalog knowledge
 
 Raw events retain numeric ability and effect IDs even if the selected catalog
-does not know them. A catalog join produces a receipt containing known and
-unknown IDs plus the raw-content hash. When a later catalog learns an ID, a new
-receipt can resolve it without changing a raw byte or invalidating provenance.
+does not know them. A catalog join produces a receipt containing kind-scoped
+known and unknown IDs plus aggregate display lists and the raw-content hash. An
+ability and effect may share a numeric ID without either kind falsely resolving
+the other. When a later catalog learns an ID, a new receipt can resolve it
+without changing a raw byte or invalidating provenance.
 
 Live and PTS evidence also stays distinct. A different channel cannot silently
 upgrade or reinterpret a capture.
@@ -153,11 +155,11 @@ catalog-compiler encounter-project \
 ```
 
 The selected catalog must exactly match capture channel and API version. Ability
-references join as abilities, while effect callback IDs may resolve as catalog
-effects or abilities. The receipt exposes sorted known and unknown positive IDs,
-catalog semantic identity, and immutable raw-content identity. Rebuilding with a
-later compatible catalog can resolve an unknown ID without changing raw bytes or
-metric values.
+references join as abilities and effect callback IDs join as effects. The
+receipt exposes sorted kind-scoped and aggregate known and unknown positive IDs,
+catalog semantic identity, and immutable raw-content identity. Rebuilding with
+a later compatible catalog can resolve an unknown ID without changing raw bytes
+or metric values.
 
 ## Provisional recommendations
 
@@ -203,10 +205,11 @@ reversed loss ranges fail closed.
 | Unknown abilities own at least 25 percent of observed damage | Suppress only damage-concentration advice |
 
 Unknown IDs from unrelated entity families do not erase a valid known-effect
-prompt. This rule-local treatment prevents incomplete catalog knowledge from
-becoming a false global blocker. A suppressed report still shows the complete
-observed metrics and its exact evidence reasons. A qualified prompt repeats each
-applicable qualification next to the prompt.
+prompt, and a same-numbered entity of another kind cannot make an unresolved
+target eligible. This rule-local treatment prevents incomplete catalog
+knowledge from becoming a false global blocker. A suppressed report still shows
+the complete observed metrics and its exact evidence reasons. A qualified prompt
+repeats each applicable qualification next to the prompt.
 
 Every prompt cites recommendation schema and policy, encounter and session IDs,
 raw-content SHA-256, projection schema, metric algorithm, catalog schema and

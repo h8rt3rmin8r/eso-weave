@@ -62,6 +62,7 @@
   },
   "catalog_join_policy": {
     "retain_unknown_ids": true,
+    "preserve_entity_kind": true,
     "rejoin_without_raw_mutation": true,
     "preserve_channel": true
   },
