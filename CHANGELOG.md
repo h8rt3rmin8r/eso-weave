@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- S092 repairs the v0.16.0 main-branch CI regression by making collector-capture
+  integration requests use the current package version and aligning the committed
+  capture fixture with that same authority (issue #165).
+
+### Decisions
+
+- 2026-09-11: Amend the pinned release rollover and documentation-policy checks
+  so every future package version bump also updates the committed collector-capture
+  fixture with exact cardinality. This prevents a successful release from leaving
+  the following main-branch CI run red because of a stale fixture version.
+
 ## [0.16.0] - 2026-09-11
 
 ### Highlights

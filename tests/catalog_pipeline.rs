@@ -251,7 +251,7 @@ fn collector_capture_mode_builds_a_catalog_but_never_copies_the_capture() {
         "12.0.8",
         101050,
         "s073-capture",
-        "0.15.1",
+        env!("CARGO_PKG_VERSION"),
         json!(["en"]),
     );
     request["sources"][0]["revision"] =
