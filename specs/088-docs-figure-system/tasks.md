@@ -39,9 +39,9 @@
 
 ## Phase 6: Delivery
 
-- [ ] T023 Commit S088 as `feat(088): complete documentation figure system` with issue linkage and attribution.
-- [ ] T024 Push the authorized feature branch and open the official pull request closing #155 and #156.
-- [ ] T025 Set both project items to Status In Progress, Stage PR review, and Slice S088.
+- [x] T023 Commit S088 as `feat(088): complete documentation figure system` with issue linkage and attribution.
+- [x] T024 Push the authorized feature branch and open the official pull request closing #155 and #156.
+- [x] T025 Set both project items to Status In Progress, Stage PR review, and Slice S088.
 - [ ] T026 Address every first-round CI, Codex, security, and reviewer finding.
 - [ ] T027 Request and address at most one authorized second Codex review round.
 - [ ] T028 Confirm every review conversation resolved and every required check green.
