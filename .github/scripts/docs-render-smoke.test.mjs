@@ -17,6 +17,7 @@ const validObservation = {
   naturalHeight: 650,
   renderedWidth: 280,
   renderedHeight: 455,
+  visible: true,
   contained: true,
   opaqueCoverage: 1,
   opaqueColorCount: 12,
@@ -30,6 +31,7 @@ test("S086 accepts a decoded, proportionate, contained, nonblank observation", (
 test("S086 rejects blank, collapsed, distorted, and clipped observations", () => {
   assert.match(validateObservation({ ...validObservation, naturalWidth: 0 }).join("\n"), /decode/i);
   assert.match(validateObservation({ ...validObservation, renderedHeight: 300 }).join("\n"), /aspect ratio/i);
+  assert.match(validateObservation({ ...validObservation, visible: false }).join("\n"), /visibly painted/i);
   assert.match(validateObservation({ ...validObservation, contained: false }).join("\n"), /containment/i);
   assert.match(validateObservation({ ...validObservation, opaqueCoverage: 0.5 }).join("\n"), /opaque/i);
   assert.match(validateObservation({ ...validObservation, opaqueColorCount: 1 }).join("\n"), /colors/i);

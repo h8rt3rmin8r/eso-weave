@@ -17,6 +17,7 @@ One loopback server serves the generated site under a restrictive content securi
 For each cell, a DevTools observation verifies the generated figure nesting and adjacency, waits for decode, and records:
 
 - positive natural and rendered dimensions;
+- computed visibility and the hidden-to-visible expanded-state transition;
 - rendered ratio within a small tolerance of intrinsic ratio;
 - normal wrapper or expanded viewport containment;
 - at least 95 percent opaque raster coverage;

@@ -33,6 +33,7 @@ export function validateObservation(observation) {
   if (Math.abs(naturalRatio - renderedRatio) / naturalRatio > 0.015) {
     errors.push(`${prefix}: rendered aspect ratio differs from intrinsic geometry`);
   }
+  if (!observation.visible) errors.push(`${prefix}: image is not visibly painted in its required state`);
   if (!observation.contained) errors.push(`${prefix}: image containment failed`);
   if (!(observation.opaqueCoverage >= 0.95)) errors.push(`${prefix}: opaque pixel coverage must be at least 95 percent`);
   if (!(observation.opaqueColorCount >= 4)) errors.push(`${prefix}: rendered image needs at least four opaque colors`);
@@ -117,6 +118,12 @@ const configuration = ${configuration};
 const observations = [];
 const failures = [];
 function nextFrame() { return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); }
+function isVisiblyPainted(element) {
+  const rectangle = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  return rectangle.width > 0 && rectangle.height > 0 && style.display !== "none" &&
+    style.visibility !== "hidden" && style.visibility !== "collapse" && Number.parseFloat(style.opacity) > 0;
+}
 function paintStats(image) {
   const width = 160;
   const height = Math.max(1, Math.round(width * image.naturalHeight / image.naturalWidth));
@@ -154,6 +161,7 @@ function observe(diagramId, state, image, boundary) {
     naturalHeight: image.naturalHeight,
     renderedWidth: rectangle.width - horizontalDecoration,
     renderedHeight: rectangle.height - verticalDecoration,
+    visible: isVisiblyPainted(image),
     contained: rectangle.left >= boundary.left - tolerance && rectangle.top >= boundary.top - tolerance && rectangle.right <= boundary.right + tolerance && rectangle.bottom <= boundary.bottom + tolerance,
     ...paintStats(image),
   };
@@ -165,8 +173,9 @@ try {
   const figure = figures.length === 1 ? figures[0] : null;
   const control = figure?.querySelector(":scope > p > label.checkbox-label > input.checkbox-img");
   const primary = figure?.querySelector(":scope > p > label.checkbox-label > input.checkbox-img + img");
+  const wrapper = figure?.querySelector(":scope > p > label.checkbox-label > span.img-wrapper");
   const expanded = figure?.querySelector(":scope > p > label.checkbox-label > span.img-wrapper > img");
-  if (!figure || !control || !primary || !expanded) throw new Error("expected generated zoom DOM nesting and adjacency are missing");
+  if (!figure || !control || !primary || !wrapper || !expanded) throw new Error("expected generated zoom DOM nesting and adjacency are missing");
   const expectedPath = "/eso-weave/assets/diagrams/" + configuration.diagram.asset;
   if (new URL(primary.currentSrc).pathname !== expectedPath || new URL(expanded.currentSrc).pathname !== expectedPath) {
     throw new Error("generated image source does not match the expected local asset");
@@ -174,10 +183,13 @@ try {
   if (primary.alt !== configuration.diagram.alt) throw new Error("primary image alternative is incorrect");
   await Promise.all([primary.decode(), expanded.decode()]);
   await nextFrame();
+  if (!isVisiblyPainted(primary)) throw new Error("primary image is not visible before expansion");
+  if (isVisiblyPainted(expanded) || wrapper.getClientRects().length !== 0) throw new Error("expanded image is visible before activation");
   observations.push(observe(configuration.diagram.id, "normal", primary, figure.getBoundingClientRect()));
   control.checked = true;
   control.dispatchEvent(new Event("change", { bubbles: true }));
   await nextFrame();
+  if (!isVisiblyPainted(expanded) || wrapper.getClientRects().length === 0) throw new Error("expanded image did not become visible after activation");
   observations.push(observe(configuration.diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }));
   if (expanded.alt !== "" || expanded.getAttribute("aria-hidden") !== "true") throw new Error("expanded clone is not decorative");
   control.checked = false;

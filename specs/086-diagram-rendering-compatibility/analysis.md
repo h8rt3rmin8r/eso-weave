@@ -38,8 +38,8 @@ Result: RED. The failures matched the intended implementation seams.
   passed.
 - Independent code, security, and accessibility review findings were resolved,
   including bounded CDP deadlines, browser cleanup, realpath containment, direct
-  testing of actual generated pages, and a restrictive server content security
-  policy.
+  testing of actual generated pages, computed visibility and expansion-state
+  transitions, and a restrictive server content security policy.
 
 Result: GREEN. S086 satisfies the finite compatibility contract without adding
 a package dependency or changing application behavior.

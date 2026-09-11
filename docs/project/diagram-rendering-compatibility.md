@@ -38,10 +38,11 @@ generated mdBook figure DOM and styles.
 | States | Normal, Expanded |
 | Total observations | 32 |
 
-All 32 observations passed image decode, positive geometry, intrinsic aspect
-ratio, container or viewport containment, at least 95 percent opaque pixels, at
-least four opaque colors, and more than 1 percent non-background paint. The four
-asset requests returned 200 as `image/svg+xml`.
+All 32 observations passed image decode, positive geometry, computed visibility,
+intrinsic aspect ratio, container or viewport containment, at least 95 percent
+opaque pixels, at least four opaque colors, and more than 1 percent
+non-background paint. The expanded wrapper was hidden before activation and
+visible afterward. The four asset requests returned 200 as `image/svg+xml`.
 
 ## Delivery evidence
 
