@@ -109,7 +109,16 @@ fn validate_release_manifest(files: &[(String, PathBuf)]) {
             .iter()
             .any(|(path, _)| path.starts_with(prefix) && path.ends_with(suffix))
     };
-    for required in ["index.html", "404.html", "print.html", "toc.html"] {
+    for required in [
+        "index.html",
+        "404.html",
+        "print.html",
+        "toc.html",
+        "assets/diagrams/architecture-ownership.svg",
+        "assets/diagrams/action-authorization.svg",
+        "assets/diagrams/safety-recovery.svg",
+        "assets/diagrams/pixel-bus-validation.svg",
+    ] {
         assert!(
             contains(required),
             "release documentation is missing {required}"

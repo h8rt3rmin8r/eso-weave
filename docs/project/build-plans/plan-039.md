@@ -22,10 +22,13 @@ Sequence:
 6. S084 completed in PR #152 and closed issue #125. It adds guided setup and
    feature screenshots using deterministic application fixtures, one
    maintainer-supplied Windows image, and a clearly labeled synthetic overlay.
-7. S085 enforces compact `S###` work-slice references in published prose and
-   replaces long slice-prefixed test names with behavioral evidence and compact
-   repository links under issue #126.
-8. A later slice audits and fixes responsive documentation tables under issue #127.
+7. S085 completed in PR #153 and closed issue #126. It enforces compact `S###`
+   work-slice references in published prose and replaces long slice-prefixed test
+   names with behavioral evidence and compact repository links.
+8. S086 hardens the four flow diagrams with explicit intrinsic geometry,
+   source-to-generated identity, expanded-state sizing and accessibility, and a
+   dependency-free browser rendering matrix under issue #154.
+9. A later slice audits and fixes responsive documentation tables under issue #127.
 
 Issues #120 through #123 close independently and change no runtime behavior. The
 only implementation dependency in this plan is #125 on #124. Public and bundled

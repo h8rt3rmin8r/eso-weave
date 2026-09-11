@@ -11,3 +11,8 @@ if (main) {
   skipLink.addEventListener("click", () => main.focus({ preventScroll: false }));
   document.body.prepend(skipLink);
 }
+
+for (const image of document.querySelectorAll(".docs-flow-diagram .img-wrapper > img")) {
+  image.alt = "";
+  image.setAttribute("aria-hidden", "true");
+}
