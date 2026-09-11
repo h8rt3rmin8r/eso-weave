@@ -34,8 +34,8 @@
 
 ## Phase 5: Delivery
 
-- [ ] T021 Commit and push S084 with issue linkage.
-- [ ] T022 Open the official closing pull request and set project Stage to PR review.
+- [x] T021 Commit and push S084 with issue linkage.
+- [x] T022 Open the official closing pull request and set project Stage to PR review.
 - [ ] T023 Address every first-round review and CI finding.
 - [ ] T024 Request and address at most one second Codex review round.
 - [ ] T025 Confirm all review threads resolved and every required check green.
