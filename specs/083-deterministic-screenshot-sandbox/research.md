@@ -51,7 +51,7 @@ Every scene supports dark and light themes and 760 by 1000 narrow and 1280 by 90
 
 ## Output safety decision
 
-The caller supplies the destination. The harness rejects repository escape, the repository root itself, existing non-directory targets, any symlink in the destination chain, and symlinks or special files at exact generated names. PNGs and the manifest are staged before publication. It creates only the exact variant PNGs, `capture-manifest.json`, and an automatically removed `.fixture-data-*` subtree. Existing unrelated files remain untouched.
+The caller supplies the destination. The harness rejects repository escape, the repository root itself, existing non-directory targets, any symlink in the destination chain, and symlinks or special files at exact generated names. PNGs and the manifest are staged before publication. It creates only the exact variant PNGs, `capture-manifest.json`, and an automatically removed `.fixture-data-*` subtree. Validation-only filesystem probes use a writable temporary mock repository and do not require writes to the source checkout. Existing unrelated files remain untouched.
 
 ## Test seams
 

@@ -585,11 +585,16 @@ fn validate_scene_models() -> Result<(), String> {
 }
 
 fn validate_output_rejections() -> Result<(), String> {
-    let repository = repository_root()
+    let sandbox = tempfile::tempdir()
+        .map_err(|error| format!("could not create output validation sandbox: {error}"))?;
+    let repository = sandbox.path().join("mock-repository");
+    fs::create_dir(&repository)
+        .map_err(|error| format!("could not create output validation repository: {error}"))?;
+    let repository = repository
         .canonicalize()
-        .map_err(|error| format!("could not resolve repository root: {error}"))?;
+        .map_err(|error| format!("could not resolve output validation repository: {error}"))?;
     ensure(
-        resolve_output_root(&repository).is_err(),
+        resolve_output_root_in(&repository, &repository).is_err(),
         "capture output must reject the repository root",
     )?;
     let outside = repository
@@ -597,34 +602,34 @@ fn validate_output_rejections() -> Result<(), String> {
         .ok_or_else(|| "repository root has no parent for escape validation".to_string())?
         .join("eso-weave-capture-escape-probe");
     ensure(
-        resolve_output_root(&outside).is_err(),
+        resolve_output_root_in(&outside, &repository).is_err(),
         "capture output must reject repository escape",
     )?;
 
-    let sandbox = tempfile::Builder::new()
+    let fixtures = tempfile::Builder::new()
         .prefix(".documentation-capture-validation-")
         .tempdir_in(&repository)
         .map_err(|error| format!("could not create output validation root: {error}"))?;
-    let collision = sandbox.path().join("file-collision");
+    let collision = fixtures.path().join("file-collision");
     fs::write(&collision, b"not a directory")
         .map_err(|error| format!("could not create output collision fixture: {error}"))?;
     ensure(
-        resolve_output_root(&collision).is_err(),
+        resolve_output_root_in(&collision, &repository).is_err(),
         "capture output must reject a non-directory collision",
     )?;
 
-    let link_target = sandbox.path().join("link-target");
-    let link = sandbox.path().join("linked-output");
+    let link_target = fixtures.path().join("link-target");
+    let link = fixtures.path().join("linked-output");
     fs::create_dir(&link_target)
         .map_err(|error| format!("could not create symlink target fixture: {error}"))?;
     match create_directory_symlink(&link_target, &link) {
         Ok(()) => {
             ensure(
-                resolve_output_root(&link).is_err(),
+                resolve_output_root_in(&link, &repository).is_err(),
                 "capture output must reject a symlinked destination",
             )?;
-            let file_target = sandbox.path().join("file-target");
-            let file_link = sandbox.path().join("expected-output.png");
+            let file_target = fixtures.path().join("file-target");
+            let file_link = fixtures.path().join("expected-output.png");
             fs::write(&file_target, b"outside image")
                 .map_err(|error| format!("could not create file-link target fixture: {error}"))?;
             create_file_symlink(&file_target, &file_link)
@@ -646,7 +651,7 @@ fn validate_output_rejections() -> Result<(), String> {
         }
     }
 
-    let completion_root = sandbox.path().join("completion-marker");
+    let completion_root = fixtures.path().join("completion-marker");
     fs::create_dir(&completion_root)
         .map_err(|error| format!("could not create completion-marker fixture: {error}"))?;
     let prior_manifest = completion_root.join(MANIFEST_FILE);
@@ -1255,7 +1260,11 @@ fn clear_completion_marker(output: &Path) -> Result<(), String> {
 }
 
 fn resolve_output_root(argument: &Path) -> Result<PathBuf, String> {
-    let repository = repository_root()
+    resolve_output_root_in(argument, &repository_root())
+}
+
+fn resolve_output_root_in(argument: &Path, repository: &Path) -> Result<PathBuf, String> {
+    let repository = repository
         .canonicalize()
         .map_err(|error| format!("could not resolve repository root: {error}"))?;
     let candidate = if argument.is_absolute() {

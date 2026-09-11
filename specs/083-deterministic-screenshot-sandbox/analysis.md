@@ -42,6 +42,7 @@
 10. A positional Cargo test filter could be mistaken for output authority. Only the dedicated `--capture-to` marker can arm rendering; all marker-free runner arguments stay validation-only.
 11. Direct PNG writes could follow an expected-name symlink. Every PNG is now staged and published only after rejecting symlink and special-file collisions.
 12. Windows may deny symlink fixture creation without elevation or Developer Mode. The enforcement remains unconditional, while that environment-dependent probe reports a skip only for the specific permission denial.
+13. Validation-only output probes originally required a writable source checkout. They now exercise identical repository-containment logic against an automatically removed writable mock repository, preserving read-only-source builds.
 
 No critical, high, or unresolved ambiguity remains. Implementation may begin.
 
@@ -50,7 +51,8 @@ No critical, high, or unresolved ambiguity remains. Implementation may begin.
 **Gate**: PASS
 
 - The no-argument path validates the complete scene catalog, isolation contract,
-  and every scene model without initializing WGPU or creating persistent output.
+  and every scene model without initializing WGPU, creating persistent output,
+  or requiring a writable source checkout.
 - The explicitly armed path renders 28 PNGs through `EsoWeaveApp::frame_ui`,
   publishes the ordered receipt manifest, and verifies a representative repeat
   is byte-identical within the same process.

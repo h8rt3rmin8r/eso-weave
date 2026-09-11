@@ -34,6 +34,8 @@ The model uses `config_dir = None`, a deterministic beacon path override, and no
 
 The destination must resolve below the repository root, cannot equal that root, and cannot traverse a symlink. An exact generated filename must also be absent or a regular file, never a symlink or special entry. PNGs and the manifest are staged before publication. Only exact named outputs and fixture files are created. The harness never recursively deletes the destination or touches an existing unrelated file.
 
+Validation-only output-policy probes operate below an automatically removed writable temporary mock repository. They never require the actual source checkout to be writable.
+
 ## Completion contract
 
 `capture-manifest.json` is written only after every requested PNG succeeds. A nonzero exit leaves no receipt that claims a partial run is complete.
