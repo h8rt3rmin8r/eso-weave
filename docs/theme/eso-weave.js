@@ -88,3 +88,143 @@ for (const image of document.querySelectorAll(".docs-flow-diagram .img-wrapper >
   image.alt = "";
   image.setAttribute("aria-hidden", "true");
 }
+
+function initializeDocumentationFigures() {
+  if (document.documentElement.dataset.docsFigureSystem === "ready") return;
+
+  const images = [...new Set([
+    ...document.querySelectorAll(".docs-screenshot > img"),
+    ...document.querySelectorAll(".docs-flow-diagram .checkbox-img + img"),
+    ...document.querySelectorAll(".brand-surface__assets > img"),
+  ])].filter((image) => image.getAttribute("alt")?.trim());
+  if (images.length === 0) return;
+
+  const dialog = document.createElement("dialog");
+  dialog.className = "docs-figure-dialog";
+  dialog.setAttribute("data-docs-figure-dialog", "true");
+
+  const panel = document.createElement("div");
+  panel.className = "docs-figure-dialog__panel";
+
+  const header = document.createElement("div");
+  header.className = "docs-figure-dialog__header";
+
+  const title = document.createElement("p");
+  title.className = "docs-figure-dialog__title";
+
+  const closeButton = document.createElement("button");
+  closeButton.className = "docs-figure-dialog__close";
+  closeButton.type = "button";
+  closeButton.textContent = "Close";
+  closeButton.setAttribute("aria-label", "Close expanded image");
+
+  const expandedImage = document.createElement("img");
+  expandedImage.className = "docs-figure-dialog__image";
+  expandedImage.alt = "";
+  expandedImage.setAttribute("aria-hidden", "true");
+
+  const caption = document.createElement("div");
+  caption.className = "docs-figure-dialog__caption";
+  caption.id = "docs-figure-dialog-caption";
+  caption.hidden = true;
+
+  header.append(title, closeButton);
+  panel.append(header, expandedImage, caption);
+  dialog.append(panel);
+  document.body.append(dialog);
+
+  let activeTrigger = null;
+
+  function closeDialog() {
+    if (dialog.open) dialog.close();
+  }
+
+  function openDialog(trigger, sourceImage, alternative, sourceCaption) {
+    activeTrigger = trigger;
+    dialog.setAttribute("aria-label", alternative);
+    title.textContent = alternative;
+    expandedImage.src = sourceImage.currentSrc || sourceImage.src;
+
+    caption.replaceChildren();
+    if (sourceCaption) {
+      caption.append(...[...sourceCaption.childNodes].map((node) => node.cloneNode(true)));
+      caption.hidden = false;
+      dialog.setAttribute("aria-describedby", caption.id);
+    } else {
+      caption.hidden = true;
+      dialog.removeAttribute("aria-describedby");
+    }
+
+    dialog.showModal();
+    closeButton.focus({ preventScroll: true });
+  }
+
+  closeButton.addEventListener("click", closeDialog);
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      closeButton.focus({ preventScroll: true });
+      return;
+    }
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeDialog();
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target !== dialog) return;
+    const bounds = panel.getBoundingClientRect();
+    const outsidePanel = event.clientX < bounds.left || event.clientX > bounds.right
+      || event.clientY < bounds.top || event.clientY > bounds.bottom;
+    if (outsidePanel) closeDialog();
+  });
+  dialog.addEventListener("close", () => {
+    expandedImage.removeAttribute("src");
+    caption.replaceChildren();
+    caption.hidden = true;
+    dialog.removeAttribute("aria-describedby");
+    const trigger = activeTrigger;
+    activeTrigger = null;
+    trigger?.focus({ preventScroll: true });
+  });
+
+  for (const image of images) {
+    const alternative = image.getAttribute("alt").trim();
+    const figure = image.closest("figure");
+    const sourceCaption = figure?.querySelector(":scope > figcaption") ?? null;
+    const trigger = document.createElement("button");
+    trigger.className = "docs-figure-trigger";
+    trigger.type = "button";
+    trigger.setAttribute("data-docs-figure-trigger", "true");
+    trigger.setAttribute("aria-label", `Expand image: ${alternative}`);
+
+    for (const className of image.classList) {
+      if (className.startsWith("brand-asset--")) trigger.classList.add(className);
+    }
+
+    if (image.closest(".docs-flow-diagram")) {
+      const generatedLabel = image.closest(".checkbox-label");
+      if (generatedLabel) {
+        image.remove();
+        generatedLabel.replaceWith(trigger);
+      } else {
+        image.replaceWith(trigger);
+      }
+    } else {
+      image.replaceWith(trigger);
+    }
+
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    trigger.append(image);
+    trigger.addEventListener("click", () => openDialog(trigger, image, alternative, sourceCaption));
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openDialog(trigger, image, alternative, sourceCaption);
+    });
+  }
+
+  document.documentElement.dataset.docsFigureSystem = "ready";
+}
+
+initializeDocumentationFigures();
