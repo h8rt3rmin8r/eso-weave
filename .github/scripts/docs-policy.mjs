@@ -1185,6 +1185,10 @@ function pngDimensions(bytes) {
   return [view.getUint32(16), view.getUint32(20)];
 }
 
+function screenshotFigureBlocks(content) {
+  return content.match(/<figure\b[^>]*\bclass=["'][^"']*\bdocs-screenshot\b[^"']*["'][^>]*>[\s\S]*?<\/figure>/giu) ?? [];
+}
+
 export function validateDocumentationScreenshots({ manifest, assets, pages }) {
   const errors = [];
   if (!manifest || !Array.isArray(manifest.assets) || !(assets instanceof Map) || !(pages instanceof Map)) {
@@ -1275,8 +1279,13 @@ export function validateDocumentationScreenshots({ manifest, assets, pages }) {
       if (!markdown.includes(`<figcaption>${record.caption}</figcaption>`)) {
         errors.push(`S084 ${record.id} page ${page} lost its exact adjacent caption`);
       }
-      if (!/<figure\s+class=["'][^"']*docs-screenshot[^"']*["']>/iu.test(markdown)) {
-        errors.push(`S084 ${record.id} page ${page} requires a screenshot figure`);
+      const associatedFigure = screenshotFigureBlocks(markdown).some((figure) => (
+        figure.includes(`src="${relative}"`)
+        && figure.includes(`alt="${record.alt}"`)
+        && figure.includes(`<figcaption>${record.caption}</figcaption>`)
+      ));
+      if (!associatedFigure) {
+        errors.push(`S084 ${record.id} page ${page} requires its own screenshot figure`);
       }
     }
   }
@@ -1305,8 +1314,12 @@ export function validateDocumentationScreenshotsGenerated({ manifest, pages, out
       const outputPage = page.replace("docs/src/", "").replace(/\.md$/u, ".html");
       const html = pages.get(outputPage) ?? "";
       const relative = path.posix.relative(path.posix.dirname(page), record.destination);
-      if (!html.includes('class="docs-screenshot') || !html.includes(`src="${relative}"`)
-          || !html.includes(`alt="${record.alt}"`) || !html.includes(record.caption)) {
+      const associatedFigure = screenshotFigureBlocks(html).some((figure) => (
+        figure.includes(`src="${relative}"`)
+        && figure.includes(`alt="${record.alt}"`)
+        && figure.includes(`<figcaption>${record.caption}</figcaption>`)
+      ));
+      if (!associatedFigure) {
         errors.push(`S084 generated page lost ${record.id} figure semantics: ${outputPage}`);
       }
     }

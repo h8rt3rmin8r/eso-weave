@@ -54,6 +54,14 @@ async function documentationScreenshotArguments() {
   return { manifest, pages, assets };
 }
 
+function unwrapDocumentationScreenshot(markdown, record, page) {
+  const relative = path.posix.relative(path.posix.dirname(page), record.destination);
+  const image = `<img src="${relative}" alt="${record.alt}" width="${record.width}" height="${record.height}">`;
+  const caption = `<figcaption>${record.caption}</figcaption>`;
+  const figure = `<figure class="docs-screenshot">\n${image}\n${caption}\n</figure>`;
+  return markdown.replace(figure, `${image}\n${caption}`);
+}
+
 const brandTokens = [
   ["Ink base", "#0E1116"], ["Panel", "#151B23"], ["Elevated", "#1C2530"],
   ["Stroke", "#2A3340"], ["Gold (action)", "#F2B03C"], ["Gold hover", "#FBCB6B"],
@@ -2040,6 +2048,12 @@ test("S084 rejects screenshot digest drift and missing accessible guidance", asy
   const pages = new Map(args.pages);
   pages.set(record.pages[0], pages.get(record.pages[0]).replace(record.alt, "generic image"));
   assert.match(validateDocumentationScreenshots({ ...args, pages }).join("\n"), /alternative text/i);
+
+  const unwrappedPages = new Map(args.pages);
+  unwrappedPages.set(record.pages[0], unwrapDocumentationScreenshot(
+    unwrappedPages.get(record.pages[0]), record, record.pages[0],
+  ));
+  assert.match(validateDocumentationScreenshots({ ...args, pages: unwrappedPages }).join("\n"), /own screenshot figure/i);
 });
 
 test("S084 requires generated local assets and figure semantics", async () => {
@@ -2060,6 +2074,16 @@ test("S084 requires generated local assets and figure semantics", async () => {
     pages: generatedPages,
     outputPaths,
   }).join("\n"), /generated asset/i);
+  const record = args.manifest.assets[1];
+  const outputPage = record.pages[0].replace("docs/src/", "").replace(/\.md$/u, ".html");
+  generatedPages.set(outputPage, unwrapDocumentationScreenshot(
+    generatedPages.get(outputPage), record, record.pages[0],
+  ));
+  assert.match(validateDocumentationScreenshotsGenerated({
+    manifest: args.manifest,
+    pages: generatedPages,
+    outputPaths: new Set(args.manifest.assets.map((asset) => asset.destination.replace("docs/src/", ""))),
+  }).join("\n"), /figure semantics/i);
 });
 
 test("S084 requires contained responsive screenshot presentation", () => {
