@@ -128,7 +128,7 @@ const diagramRecords = [
   ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"]],
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"]],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"]],
-  ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow suppresses corrupt frames and routes only one completely validated frame", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Missing or corrupt evidence cannot route payload", "Only the validated same-frame payload reaches consumers"]],
+  ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"]],
 ];
 
 function diagramFixture() {
@@ -138,7 +138,7 @@ function diagramFixture() {
     ["architecture-ownership.svg", ["Physical input", "Observed evidence", "Named consumers"]],
     ["action-authorization.svg", ["Physical event", "Positive gates", "Authorized", "Fails closed"]],
     ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
-    ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Decode payload", "Invalidate", "Route consumers"]],
+    ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"]],
   ]);
   for (const [page, asset, alt, heading, anchors] of diagramRecords) {
     pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n`);
@@ -187,6 +187,10 @@ test("S082 rejects horizontal, inaccessible, active, remote, and color-only SVGs
   const remoteCssPaint = diagramFixture();
   remoteCssPaint.svgs.set("pixel-bus-validation.svg", remoteCssPaint.svgs.get("pixel-bus-validation.svg").replace('fill="#0e1116"', 'style="fill: url(/remote.svg#paint)"'));
   assert.match(validateDocumentationDiagrams(remoteCssPaint).join("\n"), /active or external content/i);
+
+  const remoteCssImport = diagramFixture();
+  remoteCssImport.svgs.set("pixel-bus-validation.svg", remoteCssImport.svgs.get("pixel-bus-validation.svg").replace("</svg>", '<style>@import "/remote.css";</style></svg>'));
+  assert.match(validateDocumentationDiagrams(remoteCssImport).join("\n"), /active or external content/i);
 
   const colorOnly = diagramFixture();
   colorOnly.svgs.set("action-authorization.svg", colorOnly.svgs.get("action-authorization.svg").replace("Fails closed", "Denied"));

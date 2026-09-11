@@ -7,7 +7,7 @@
 | Architecture input and observation paths | Diagram | Two independently owned paths converge on input-producing consumers. A visual clarifies separation and ownership better than two inline arrow strings. |
 | Action authorization | Diagram | Multiple positive gates converge on one authorization decision while every negative branch fails closed. The branch relationship is difficult to scan in prose. |
 | Safety recovery | Diagram | Closure must precede synchronization, and recovery must republish a coherent baseline before reopening. Ordering is correctness-bearing. |
-| Pixel Bus frame validation | Diagram | One-frame capture, header validation, payload decode, pre-routing closure, and recovery form a branching sequence with distinct corruption and signal-loss outcomes. |
+| Pixel Bus frame validation | Diagram | One-frame capture, the header and layout gate, heartbeat loss, independent per-block decoding, and recovery form a branching sequence with distinct failure scopes. |
 | Individual Fishing cycle | Keep table | The transition table already names every state, event, side effect, deadline, and recovery more precisely than a compact image. |
 | Auto Potion eligibility | Keep table | The ordered failure table is already the exact decision algorithm and supports search and copy better than a second rendering. |
 | Configuration lifecycle | Keep table and prose | Settings and session ownership have several orthogonal attributes, so a matrix is clearer than a flow. |

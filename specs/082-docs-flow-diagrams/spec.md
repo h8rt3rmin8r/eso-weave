@@ -37,7 +37,7 @@ A reviewer can follow where physical input and observed game evidence travel, wh
 
 ### User Story 2 - Follow safety recovery and frame validation (Priority: P1)
 
-A maintainer can understand how unsafe observations close gates before recovery and how one Pixel Bus frame is validated before any payload reaches consumers.
+A maintainer can understand how unsafe observations close gates before recovery and how a Pixel Bus frame establishes a valid layout before its payload blocks are independently decoded.
 
 **Why this priority**: The ordering is correctness-bearing and a top-down visual makes closure, synchronization, and coherent reopening explicit.
 

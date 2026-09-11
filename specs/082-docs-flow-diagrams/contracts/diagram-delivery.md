@@ -7,7 +7,7 @@
 | S082-D01 | `docs/src/development/architecture.md` | `docs/src/assets/diagrams/architecture-ownership.svg` | Separate input and observation ownership paths |
 | S082-D02 | `docs/src/concepts/action-authorization.md` | `docs/src/assets/diagrams/action-authorization.svg` | Positive authorization gates and fail-closed branches |
 | S082-D03 | `docs/src/development/state-machines.md` | `docs/src/assets/diagrams/safety-recovery.svg` | Close, synchronize, republish, and reopen order |
-| S082-D04 | `docs/src/reference/pixel-bus-protocol.md` | `docs/src/assets/diagrams/pixel-bus-validation.svg` | Same-frame validation and invalidation branches |
+| S082-D04 | `docs/src/reference/pixel-bus-protocol.md` | `docs/src/assets/diagrams/pixel-bus-validation.svg` | Header and layout gate with independent payload validation and signal-loss branches |
 
 ## Source contract
 

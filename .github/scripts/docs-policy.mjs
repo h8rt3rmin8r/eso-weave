@@ -1062,14 +1062,14 @@ const DOCUMENTATION_DIAGRAMS = [
     page: "reference/pixel-bus-protocol.md",
     outputPage: "reference/pixel-bus-protocol.html",
     asset: "pixel-bus-validation.svg",
-    alt: "Pixel Bus validation flow suppresses corrupt frames and routes only one completely validated frame",
+    alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals",
     heading: "Pixel Bus validation text equivalent",
     anchors: [
       "Capture the header from one displayed frame",
-      "Missing or corrupt evidence cannot route payload",
-      "Only the validated same-frame payload reaches consumers",
+      "Header or layout corruption suppresses all payload sampling",
+      "Each payload block then validates independently",
     ],
-    svgAnchors: ["Capture one frame", "Validate header", "Decode payload", "Invalidate", "Route consumers"],
+    svgAnchors: ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"],
   },
 ];
 
@@ -1111,7 +1111,8 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
       }
       return !target.startsWith("#");
     });
-    if (hasNonFragmentCssUrl || /<(?:script|foreignObject|animate|set|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=\s*["'](?!#)|https?:\/\//iu.test(svg.replace('xmlns="http://www.w3.org/2000/svg"', ""))) {
+    const hasCssImport = /@import\b/iu.test(svg);
+    if (hasNonFragmentCssUrl || hasCssImport || /<(?:script|foreignObject|animate|set|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=\s*["'](?!#)|https?:\/\//iu.test(svg.replace('xmlns="http://www.w3.org/2000/svg"', ""))) {
       errors.push(`S082 ${record.label} SVG contains active or external content`);
     }
     if (!/<rect\b(?=[^>]*\bwidth=["']400["'])(?=[^>]*\bfill=["']#0e1116["'])[^>]*>/iu.test(svg)) {

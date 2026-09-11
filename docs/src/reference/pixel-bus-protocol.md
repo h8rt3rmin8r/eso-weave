@@ -197,7 +197,7 @@ signal, so partial layouts are never accepted.
 
 <figure class="docs-flow-diagram">
 
-![Pixel Bus validation flow suppresses corrupt frames and routes only one completely validated frame](../assets/diagrams/pixel-bus-validation.svg)
+![Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals](../assets/diagrams/pixel-bus-validation.svg)
 
 </figure>
 
@@ -205,12 +205,14 @@ signal, so partial layouts are never accepted.
 
 Capture the header from one displayed frame at the current client extent.
 Validate H0, H1, H2, the complete occupied geometry, the current or positively
-identified legacy layout, and the B0 heartbeat before decoding. Missing or
-corrupt evidence cannot route payload: a recognized invalid header suppresses
-payload immediately, while a heartbeat absent past its timeout raises Signal
-Lost and clears authorizing observations. Only the validated same-frame payload
-reaches consumers after marker and complement checks. A fresh valid frame after
-loss republishes the complete current baseline rather than reusing stale state.
+identified legacy layout before decoding. Header or layout corruption suppresses
+all payload sampling immediately. With a valid layout, require the B0 heartbeat;
+its absence past the timeout raises Signal Lost and clears authorizing
+observations. Each payload block then validates independently against its marker,
+complement, and value rules. A malformed block follows that signal's documented
+unavailable or hold behavior without preventing other valid blocks from
+publishing. A fresh valid frame after loss republishes the complete current
+baseline rather than reusing stale state.
 
 A reader
 diagnosing **Signal unavailable** should first use the
