@@ -25,7 +25,7 @@ Result: RED. The failures matched the intended implementation seams.
 
 ## Final verification receipt
 
-- Focused policy and browser helper suite: 114 passed, 0 failed.
+- Focused policy and browser helper suite: 113 passed, 0 failed.
 - `mdbook test docs` and `mdbook build docs`: passed.
 - Generated documentation policy: passed.
 - Chrome 152.0.7977.83 browser smoke: all 32 matrix observations passed and
@@ -37,8 +37,9 @@ Result: RED. The failures matched the intended implementation seams.
 - `typos`, `cargo fmt`, `cargo clippy`, `cargo test`, and `git diff --check`:
   passed.
 - Independent code, security, and accessibility review findings were resolved,
-  including bounded CDP deadlines, browser cleanup, realpath containment, inert
-  harness reconstruction, and a restrictive harness content security policy.
+  including bounded CDP deadlines, browser cleanup, realpath containment, direct
+  testing of actual generated pages, and a restrictive server content security
+  policy.
 
 Result: GREEN. S086 satisfies the finite compatibility contract without adding
 a package dependency or changing application behavior.

@@ -12,9 +12,9 @@ The primary image may use `width: 100%` inside its bounded figure. The expanded 
 
 ## Browser smoke contract
 
-One loopback server serves generated files and an in-memory same-origin harness. One directly spawned Chrome-compatible process runs headless, without a shell or visible Windows child window. It loads all four pages in navy and light at 320 and 1280 CSS pixels.
+One loopback server serves the generated site under a restrictive content security policy. One directly spawned Chrome-compatible process runs headless, without a shell or visible Windows child window. It loads all four actual generated pages in navy and light at 320 and 1280 CSS pixels.
 
-For each cell, the harness waits for decode and records:
+For each cell, a DevTools observation verifies the generated figure nesting and adjacency, waits for decode, and records:
 
 - positive natural and rendered dimensions;
 - rendered ratio within a small tolerance of intrinsic ratio;
@@ -23,7 +23,7 @@ For each cell, the harness waits for decode and records:
 - at least four opaque RGB colors; and
 - more than 1 percent pixels differing from the dominant background.
 
-Every diagram request must return 200 and `image/svg+xml`. The harness writes a versioned JSON receipt and a unique pass sentinel into dumped DOM. Missing sentinel, browser failure, request mismatch, or failed observation fails the command.
+Every diagram request must return 200 and `image/svg+xml`. The smoke writes a versioned JSON receipt and a unique pass sentinel to standard output. Missing sentinel, browser failure, request mismatch, or failed observation fails the command.
 
 ## Accessibility contract
 

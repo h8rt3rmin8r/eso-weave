@@ -110,42 +110,9 @@ function contentType(filename) {
   }
 }
 
-export function buildSafeFigure(diagram, generatedHtml) {
-  const figure = generatedHtml.match(/<figure\s+class=["']docs-flow-diagram["']>[\s\S]*?<\/figure>/iu)?.[0] ?? "";
-  const localSource = `../assets/diagrams/${diagram.asset}`;
-  const references = figure.split(`src="${localSource}"`).length - 1;
-  if (!figure.includes('class="checkbox-label"') || !figure.includes('class="checkbox-img"') ||
-      !figure.includes('class="img-wrapper"') || !figure.includes(`alt="${diagram.alt}"`) || references !== 2) {
-    throw new Error(`generated zoom DOM is invalid for ${diagram.page}`);
-  }
-  const source = `/eso-weave/assets/diagrams/${diagram.asset}`;
-  return `<figure class="docs-flow-diagram" data-diagram-id="${diagram.id}"><p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="${source}" alt="${diagram.alt}"><span class="img-wrapper"><img src="${source}" alt="${diagram.alt}"></span></label></p></figure>`;
-}
-
-async function prepareHarness(siteRoot) {
-  const figures = [];
-  let representativePage = "";
-  for (const diagram of DIAGRAMS) {
-    const html = await readFile(path.join(siteRoot, ...diagram.page.split("/")), "utf8");
-    representativePage ||= html;
-    figures.push(buildSafeFigure(diagram, html));
-  }
-  const styles = [...representativePage.matchAll(/<link\s+rel=["']stylesheet["'][^>]*\bhref=["']\.\.\/([^"']+)["'][^>]*>/giu)]
-    .map((match) => {
-      if (!/^[a-z0-9/_-]+\.css$/iu.test(match[1]) || match[1].includes("..")) throw new Error(`unsafe generated stylesheet path: ${match[1]}`);
-      const media = /\bmedia=["']print["']/iu.test(match[0]) ? ' media="print"' : "";
-      return `<link rel="stylesheet" href="/eso-weave/${match[1]}"${media}>`;
-    })
-    .join("\n");
-  const themeScript = representativePage.match(/<script\s+src=["']\.\.\/(theme\/eso-weave-[^"']+\.js)["'][^>]*><\/script>/iu)?.[1];
-  if (!themeScript) throw new Error("generated custom theme script is missing");
-  return { figures: figures.join("\n"), styles, themeScript };
-}
-
-function harnessHtml(prepared, theme, viewportWidth) {
-  const configuration = JSON.stringify({ diagrams: DIAGRAMS, theme, viewportWidth, sentinel: PASS_SENTINEL });
-  return `<!doctype html><html lang="en" class="${theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>pending</title>${prepared.styles}</head><body><main class="content">${prepared.figures}</main><script src="/eso-weave/${prepared.themeScript}"></script><script nonce="s086-diagram-smoke">
-globalThis.__diagramSmokePromise = (async () => {
+function browserObservationExpression(diagram, theme, viewportWidth) {
+  const configuration = JSON.stringify({ diagram, theme, viewportWidth, sentinel: PASS_SENTINEL });
+  return `(async () => {
 const configuration = ${configuration};
 const observations = [];
 const failures = [];
@@ -191,39 +158,38 @@ function observe(diagramId, state, image, boundary) {
     ...paintStats(image),
   };
 }
-for (const diagram of configuration.diagrams) {
-  try {
-    const figure = document.querySelector('[data-diagram-id="' + diagram.id + '"]');
-    const control = figure?.querySelector(".checkbox-img");
-    const primary = figure?.querySelector(".checkbox-img + img");
-    const expanded = figure?.querySelector(".img-wrapper > img");
-    if (!figure || !control || !primary || !expanded) throw new Error("expected generated zoom DOM is missing");
-    await Promise.all([primary.decode(), expanded.decode()]);
-    await nextFrame();
-    observations.push(observe(diagram.id, "normal", primary, figure.getBoundingClientRect()));
-    control.checked = true;
-    control.dispatchEvent(new Event("change", { bubbles: true }));
-    await nextFrame();
-    observations.push(observe(diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }));
-    if (expanded.alt !== "" || expanded.getAttribute("aria-hidden") !== "true") throw new Error("expanded clone is not decorative");
-    control.checked = false;
-    await nextFrame();
-  } catch (error) {
-    failures.push(diagram.id + ": " + error.message);
+try {
+  document.documentElement.classList.remove("ayu", "coal", "light", "navy", "rust");
+  document.documentElement.classList.add(configuration.theme);
+  const figures = document.querySelectorAll("figure.docs-flow-diagram");
+  const figure = figures.length === 1 ? figures[0] : null;
+  const control = figure?.querySelector(":scope > p > label.checkbox-label > input.checkbox-img");
+  const primary = figure?.querySelector(":scope > p > label.checkbox-label > input.checkbox-img + img");
+  const expanded = figure?.querySelector(":scope > p > label.checkbox-label > span.img-wrapper > img");
+  if (!figure || !control || !primary || !expanded) throw new Error("expected generated zoom DOM nesting and adjacency are missing");
+  const expectedPath = "/eso-weave/assets/diagrams/" + configuration.diagram.asset;
+  if (new URL(primary.currentSrc).pathname !== expectedPath || new URL(expanded.currentSrc).pathname !== expectedPath) {
+    throw new Error("generated image source does not match the expected local asset");
   }
+  if (primary.alt !== configuration.diagram.alt) throw new Error("primary image alternative is incorrect");
+  await Promise.all([primary.decode(), expanded.decode()]);
+  await nextFrame();
+  observations.push(observe(configuration.diagram.id, "normal", primary, figure.getBoundingClientRect()));
+  control.checked = true;
+  control.dispatchEvent(new Event("change", { bubbles: true }));
+  await nextFrame();
+  observations.push(observe(configuration.diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }));
+  if (expanded.alt !== "" || expanded.getAttribute("aria-hidden") !== "true") throw new Error("expanded clone is not decorative");
+  control.checked = false;
+  await nextFrame();
+} catch (error) {
+  failures.push(configuration.diagram.id + ": " + error.message);
 }
-const receipt = { schemaVersion: 1, sentinel: failures.length === 0 ? configuration.sentinel : "FAILED", observations, failures };
-document.title = "ESO_WEAVE_RECEIPT_" + btoa(unescape(encodeURIComponent(JSON.stringify(receipt))));
-const output = document.createElement("pre");
-output.id = "diagram-smoke-receipt";
-output.textContent = JSON.stringify(receipt);
-document.body.append(output);
-return receipt;
-})();
-</script></body></html>`;
+return { schemaVersion: 1, sentinel: failures.length === 0 ? configuration.sentinel : "FAILED", observations, failures };
+})()`;
 }
 
-async function startServer(siteRoot, prepared) {
+async function startServer(siteRoot) {
   const diagramRequests = new Map();
   const resolvedRoot = await realpath(siteRoot);
   const server = createServer(async (request, response) => {
@@ -234,17 +200,6 @@ async function startServer(siteRoot, prepared) {
         return;
       }
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      if (url.pathname === "/__diagram-smoke") {
-        const theme = THEMES.includes(url.searchParams.get("theme")) ? url.searchParams.get("theme") : "navy";
-        const viewportWidth = Number(url.searchParams.get("viewport"));
-        response.writeHead(200, {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store",
-          "Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self' 'nonce-s086-diagram-smoke'; img-src 'self' data:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
-        });
-        response.end(request.method === "HEAD" ? undefined : harnessHtml(prepared, theme, viewportWidth));
-        return;
-      }
       const relative = decodeURIComponent(url.pathname).replace(/^\/eso-weave\//u, "").replace(/^\/+/, "");
       if (relative.includes("\\") || relative.includes("\0")) throw new Error("ambiguous request path");
       const lexicalFilename = path.resolve(resolvedRoot, relative || "index.html");
@@ -255,7 +210,12 @@ async function startServer(siteRoot, prepared) {
       if (!metadata.isFile()) throw new Error("not a file");
       const type = contentType(filename);
       const body = await readFile(filename);
-      response.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
+      response.writeHead(200, {
+        "Content-Type": type,
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+        "X-Content-Type-Options": "nosniff",
+      });
       response.end(request.method === "HEAD" ? undefined : body);
       const asset = DIAGRAMS.find((diagram) => relative.endsWith(`assets/diagrams/${diagram.asset}`))?.asset;
       if (asset) diagramRequests.set(asset, { asset, status: 200, contentType: type });
@@ -425,9 +385,8 @@ async function pageDebuggerUrl(browserWebSocketUrl) {
 
 export async function run(siteRoot) {
   const browser = await findBrowserExecutable();
-  const prepared = await prepareHarness(path.resolve(siteRoot));
   const profileRoot = await mkdtemp(path.join(tmpdir(), "eso-weave-docs-browser-"));
-  const { server, port, diagramRequests } = await startServer(siteRoot, prepared);
+  const { server, port, diagramRequests } = await startServer(siteRoot);
   const receipt = { schemaVersion: 1, sentinel: PASS_SENTINEL, browser: "pending", observations: [], requests: [], failures: [] };
   let browserProcess;
   let client;
@@ -441,19 +400,21 @@ export async function run(siteRoot) {
     for (const theme of THEMES) {
       for (const viewportWidth of VIEWPORTS) {
         await client.send("Emulation.setDeviceMetricsOverride", { width: viewportWidth, height: 920, deviceScaleFactor: 1, mobile: false });
-        const url = `http://127.0.0.1:${port}/__diagram-smoke?theme=${theme}&viewport=${viewportWidth}`;
-        const loaded = client.waitFor("Page.loadEventFired");
-        await client.send("Page.navigate", { url });
-        await loaded;
-        const evaluated = await client.send("Runtime.evaluate", {
-          expression: "globalThis.__diagramSmokePromise",
-          awaitPromise: true,
-          returnByValue: true,
-        });
-        if (evaluated.exceptionDetails || !evaluated.result?.value) throw new Error(`browser evaluation failed for ${theme} ${viewportWidth}`);
-        const partial = evaluated.result.value;
-        receipt.observations.push(...(partial.observations ?? []));
-        receipt.failures.push(...(partial.failures ?? []).map((failure) => `${theme} ${viewportWidth}: ${failure}`));
+        for (const diagram of DIAGRAMS) {
+          const url = `http://127.0.0.1:${port}/eso-weave/${diagram.page}`;
+          const loaded = client.waitFor("Page.loadEventFired");
+          await client.send("Page.navigate", { url });
+          await loaded;
+          const evaluated = await client.send("Runtime.evaluate", {
+            expression: browserObservationExpression(diagram, theme, viewportWidth),
+            awaitPromise: true,
+            returnByValue: true,
+          });
+          if (evaluated.exceptionDetails || !evaluated.result?.value) throw new Error(`browser evaluation failed for ${diagram.id} ${theme} ${viewportWidth}`);
+          const partial = evaluated.result.value;
+          receipt.observations.push(...(partial.observations ?? []));
+          receipt.failures.push(...(partial.failures ?? []).map((failure) => `${theme} ${viewportWidth}: ${failure}`));
+        }
       }
     }
     receipt.requests = [...diagramRequests.values()];

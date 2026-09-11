@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   PASS_SENTINEL,
-  buildSafeFigure,
   validateObservation,
   validateRenderingReceipt,
 } from "./docs-render-smoke.mjs";
@@ -36,14 +35,6 @@ test("S086 rejects blank, collapsed, distorted, and clipped observations", () =>
   assert.match(validateObservation({ ...validObservation, opaqueColorCount: 1 }).join("\n"), /colors/i);
   assert.match(validateObservation({ ...validObservation, nonBackgroundCoverage: 0.001 }).join("\n"), /background/i);
   assert.match(validateObservation({ ...validObservation, surface: "other" }).join("\n"), /surface/i);
-});
-
-test("S086 reconstructs fixed zoom markup without carrying active generated attributes", () => {
-  const diagram = { id: "S082-D01", page: "development/architecture.html", asset: "architecture-ownership.svg", alt: "Architecture flow" };
-  const html = `<figure class="docs-flow-diagram"><label class="checkbox-label" onclick="fetch('https://example.com')"><input class="checkbox-img" type="checkbox"><img src="../assets/diagrams/architecture-ownership.svg" alt="Architecture flow" onerror="alert(1)"><span class="img-wrapper"><img src="../assets/diagrams/architecture-ownership.svg" alt="Architecture flow"></span></label><script>alert(1)</script></figure>`;
-  const safe = buildSafeFigure(diagram, html);
-  assert.match(safe, /data-diagram-id="S082-D01"/u);
-  assert.doesNotMatch(safe, /onerror|onclick|script|https?:/iu);
 });
 
 test("S086 requires the complete receipt, SVG media types, and pass sentinel", () => {
