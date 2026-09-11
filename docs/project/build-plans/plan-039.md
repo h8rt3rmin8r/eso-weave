@@ -17,10 +17,11 @@ Sequence:
 4. S082 completed in PR #150 and closed issue #123. It adds purposeful top-down
    diagrams to high-value architecture, authorization, safety-recovery, and Pixel
    Bus flows.
-5. S083 implements the isolated deterministic screenshot sandbox under issue #124
-   before screenshot content begins.
-6. After #124, a later slice adds guided setup and feature screenshots under issue
-   #125 without requiring a live game capture.
+5. S083 completed in PR #151 and closed issue #124. It provides the isolated
+   deterministic screenshot sandbox used by later documentation work.
+6. S084 implements guided setup and feature screenshots under issue #125 using
+   deterministic application fixtures, one maintainer-supplied Windows image,
+   and a clearly labeled synthetic overlay without requiring live game capture.
 7. A later slice enforces compact `S###` work-slice references in published prose
    and moves exact implementation symbols to layout-safe evidence under issue #126.
 8. A later slice audits and fixes responsive documentation tables under issue #127.

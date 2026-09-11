@@ -37,6 +37,14 @@ Download the MSI. If Windows marks it as downloaded from the internet, right
 click it, choose Properties, and select Unblock before running it. The final
 installer page can launch ESO Weave immediately.
 
+<figure class="docs-screenshot docs-screenshot--portrait">
+<img src="../assets/screenshots/windows-msi-properties-unblock.png" alt="Windows MSI Properties dialog with the Unblock checkbox selected and emphasized" width="435" height="590">
+<figcaption>On the General tab, select Unblock only when Windows displays this downloaded-file security notice, then choose Apply or OK.</figcaption>
+</figure>
+
+The checkbox is conditional. If Windows does not show the security notice and
+**Unblock** control, close Properties and continue without changing anything.
+
 The installer always creates a Start Menu shortcut under ESO Weave. A desktop
 shortcut is optional on the installer feature page. The default installation
 directory is `C:\Program Files\ESO Weave\`. When file

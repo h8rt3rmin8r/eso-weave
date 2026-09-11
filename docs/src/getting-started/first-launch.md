@@ -9,6 +9,11 @@ Launch ESO Weave from its installed shortcut or package. The window contains a
 Live HUD, System and State, Skills, and an optional Live Log. **ESO Weave** should
 show **Active** unless you intentionally suspended it.
 
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/first-launch.png" alt="ESO Weave at first launch with ESO inactive and initial System and State information" width="1280" height="640">
+<figcaption>Deterministic first-launch state: ESO is inactive, ESO Weave is active, and Install is the available PixelBeacon action.</figcaption>
+</figure>
+
 Open **Settings** from the File menu and confirm the theme and platform-specific
 options are usable. Changes are saved automatically. All Fishing controls and
 the Pixel Bus tolerance and sampling intervals apply live. Only Pixel Bus Block
@@ -42,6 +47,11 @@ System and State shows **Unmanaged (not modified)** and offers no lifecycle
 buttons. Move or remove only that exact target manually before using **Install**.
 ESO Weave does not overwrite an unproven target.
 
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/pixelbeacon-unmanaged.png" alt="ESO Weave showing an unmanaged PixelBeacon target that will not be modified" width="1280" height="640">
+<figcaption>Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.</figcaption>
+</figure>
+
 ## 4. Verify fresh telemetry
 
 Focus the ESO game window and enter the world. Wait for loading to finish. A
@@ -60,6 +70,22 @@ healthy baseline has:
 Health, Stamina, Magicka, and Ultimate should become numeric when their current
 protocol fields are available. A zero resource is a valid numeric reading;
 **Signal unavailable**, **Not detected**, and **Unknown** are not zero.
+
+<div class="docs-screenshot-grid">
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing a healthy running game and detected PixelBeacon signal" width="1280" height="640">
+<figcaption>Deterministic healthy baseline: the game and world are active, the managed addon is current, and PixelBeacon Signal is detected.</figcaption>
+</figure>
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/pixelbeacon-signal-lost.png" alt="ESO Weave showing PixelBeacon installed but its signal lost" width="1280" height="640">
+<figcaption>Deterministic lost-signal state: the addon remains installed, but current telemetry is unavailable until visibility returns.</figcaption>
+</figure>
+</div>
+
+**Not installed** means the managed addon files are absent. **Signal lost** means
+the addon is installed but the reader no longer sees a valid current frame.
+**Signal detected** is the healthy state. These distinctions remain explicit in
+the text even when the images are unavailable.
 
 Open and close an ESO menu to confirm **Game Context** changes away from and back
 to **Gameplay**. This is an observation test, not an invitation to automate.

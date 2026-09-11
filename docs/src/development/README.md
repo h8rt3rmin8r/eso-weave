@@ -10,6 +10,7 @@ Published developer references include:
 - [Local Icon Cache](local-icon-cache.md)
 - [State Machines](state-machines.md)
 - [Test Strategy](test-strategy.md)
+- [Documentation Screenshot Maintenance](screenshot-maintenance.md)
 - [Release and Packaging](release-and-packaging.md)
 - [Coverage Matrix](coverage-matrix.md)
 - [Brand Standard](brand-standard.md)

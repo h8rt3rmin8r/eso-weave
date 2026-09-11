@@ -39,6 +39,7 @@
   - [Local Icon Cache](development/local-icon-cache.md)
   - [State Machines](development/state-machines.md)
   - [Test Strategy](development/test-strategy.md)
+  - [Screenshot Maintenance](development/screenshot-maintenance.md)
   - [Release and Packaging](development/release-and-packaging.md)
   - [Coverage Matrix](development/coverage-matrix.md)
   - [Brand Standard](development/brand-standard.md)

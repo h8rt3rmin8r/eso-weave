@@ -26,6 +26,15 @@ redeployed, `/reloadui` is run, and ESO Weave restarts.
 The overlay cannot be moved. Its origin is part of the shared protocol; changing
 only one side would create an undetectable geometry disagreement.
 
+<figure class="docs-screenshot docs-screenshot--illustration">
+<img src="../assets/illustrations/pixelbeacon-overlay-example.svg" alt="Synthetic game-window diagram with PixelBeacon color blocks anchored at the top-left" width="960" height="480">
+<figcaption>Synthetic example, not live gameplay: PixelBeacon begins at the game client top-left origin, and other interface elements must not cover its cells.</figcaption>
+</figure>
+
+The colored cells in the illustration are explanatory only. The actual payload
+varies with current telemetry, but its origin remains fixed and every cell must
+stay unobscured.
+
 ## AddOns directory discovery
 
 On Windows, ESO Weave resolves the Documents known folder through the shell API,
@@ -57,6 +66,11 @@ The on-disk manifest is classified as:
 | Installed (current) | The marker and embedded version match |
 | Installed (outdated) | The marker exists but versions differ |
 
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing a healthy running game and detected PixelBeacon signal" width="1280" height="640">
+<figcaption>Deterministic healthy baseline: the game and world are active, the managed addon is current, and PixelBeacon Signal is detected.</figcaption>
+</figure>
+
 The interface shows **Unmanaged (not modified)** when the target exists but
 ownership cannot be proven. It exposes no Install, Update, or Uninstall action
 for that state. Move or remove only that exact `PixelBeacon` target manually
@@ -72,6 +86,11 @@ the directory first. Lua is prepared before the manifest commit marker. A failed
 fresh install removes the directory it just created, while a failed managed
 update restores the previous embedded bytes on a best-effort basis and reports
 the original error.
+
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/pixelbeacon-unmanaged.png" alt="ESO Weave showing an unmanaged PixelBeacon target that will not be modified" width="1280" height="640">
+<figcaption>Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.</figcaption>
+</figure>
 
 When ESO is running during an install, update, or removal, use `/reloadui` or
 relog before expecting the change in game.
