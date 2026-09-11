@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 700" role="img" focusable="false" aria-labelledby="action-authorization-title action-authorization-desc" data-flow-direction="top-down">
+  <title id="action-authorization-title">Action authorization gate flow</title>
+  <desc id="action-authorization-desc">A physical event may pass through or enter bounded handoff. Generated actions require every current positive gate. Unsafe or unavailable evidence fails closed.</desc>
+  <rect width="400" height="700" rx="12" fill="#0e1116" stroke="#65758b"/>
+  <defs>
+    <marker id="authorization-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/>
+    </marker>
+  </defs>
+  <text x="200" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#e6edf3">Generated input needs proof</text>
+  <rect x="70" y="58" width="260" height="58" rx="8" fill="#1c2530" stroke="#2dd4bf"/>
+  <text x="200" y="92" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Physical event</text>
+  <path d="M200 116 V152" stroke="#f2b03c" stroke-width="3" marker-end="url(#authorization-arrow)"/>
+  <rect x="70" y="164" width="260" height="68" rx="8" fill="#1c2530" stroke="#65758b"/>
+  <text x="200" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Focus-scoped decision</text>
+  <text x="200" y="215" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Pass through or bounded handoff</text>
+  <path d="M200 232 V270" stroke="#f2b03c" stroke-width="3" marker-end="url(#authorization-arrow)"/>
+  <rect x="70" y="282" width="260" height="112" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="200" y="311" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Positive gates</text>
+  <text x="200" y="337" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Current epoch, focus, runtime</text>
+  <text x="200" y="359" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">menu, life, world, travel</text>
+  <text x="200" y="381" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">and feature prerequisites</text>
+  <path d="M70 338 H35 V442" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#authorization-arrow)"/>
+  <text x="43" y="326" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f87171">No</text>
+  <path d="M250 394 V442" stroke="#34d399" stroke-width="3" marker-end="url(#authorization-arrow)"/>
+  <text x="260" y="426" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#34d399">Yes</text>
+  <rect x="160" y="454" width="220" height="104" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+  <text x="270" y="496" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Authorized</text>
+  <text x="270" y="522" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Emit the bounded action</text>
+  <rect x="20" y="454" width="120" height="104" rx="8" fill="#3a1d22" stroke="#f87171" stroke-width="2"/>
+  <text x="80" y="486" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#f7c3c3">Fails closed</text>
+  <text x="80" y="512" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Pass through,</text>
+  <text x="80" y="533" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">cancel, or wait</text>
+  <path d="M270 558 V610" stroke="#f2b03c" stroke-width="3" marker-end="url(#authorization-arrow)"/>
+  <rect x="70" y="622" width="260" height="56" rx="8" fill="#151b23" stroke="#65758b"/>
+  <text x="200" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Never replay cancelled work</text>
+</svg>

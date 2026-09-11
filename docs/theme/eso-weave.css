@@ -210,6 +210,22 @@ h6 {
   width: 1.1rem;
 }
 
+.docs-flow-diagram {
+  border: 1px solid #65758b;
+  border-radius: 0.75rem;
+  margin: 1.5rem auto;
+  max-width: 40rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.docs-flow-diagram img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: 100%;
+}
+
 a {
   text-decoration-thickness: 0.1em;
   text-underline-offset: 0.16em;
@@ -253,6 +269,10 @@ a {
 }
 
 @media (max-width: 40rem) {
+  .docs-flow-diagram {
+    max-width: 100%;
+  }
+
   .brand-asset-gallery {
     grid-template-columns: 1fr;
   }

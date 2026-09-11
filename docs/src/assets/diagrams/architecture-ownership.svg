@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 650" role="img" focusable="false" aria-labelledby="architecture-ownership-title architecture-ownership-desc" data-flow-direction="top-down">
+  <title id="architecture-ownership-title">Architecture ownership flow</title>
+  <desc id="architecture-ownership-desc">Physical input and observed evidence travel through separate owners. Named consumers combine only the evidence they own, and platform synthesis occurs only after authorization.</desc>
+  <rect width="400" height="650" rx="12" fill="#0e1116" stroke="#65758b"/>
+  <defs>
+    <marker id="architecture-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/>
+    </marker>
+  </defs>
+  <text x="200" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#e6edf3">Separate evidence paths</text>
+  <rect x="20" y="60" width="170" height="64" rx="8" fill="#151b23" stroke="#2dd4bf"/>
+  <text x="105" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Physical input</text>
+  <text x="105" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Keyboard event</text>
+  <rect x="210" y="60" width="170" height="64" rx="8" fill="#151b23" stroke="#2dd4bf"/>
+  <text x="295" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Observed evidence</text>
+  <text x="295" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Process and pixels</text>
+  <path d="M105 124 V168" stroke="#f2b03c" stroke-width="3" marker-end="url(#architecture-arrow)"/>
+  <path d="M295 124 V168" stroke="#f2b03c" stroke-width="3" marker-end="url(#architecture-arrow)"/>
+  <rect x="20" y="180" width="170" height="74" rx="8" fill="#1c2530" stroke="#65758b"/>
+  <text x="105" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Input Engine</text>
+  <text x="105" y="231" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Pass or hand off</text>
+  <rect x="210" y="180" width="170" height="74" rx="8" fill="#1c2530" stroke="#65758b"/>
+  <text x="295" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Pixel Bus Reader</text>
+  <text x="295" y="231" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Validate and publish</text>
+  <path d="M105 254 V315 H185" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#architecture-arrow)"/>
+  <path d="M295 254 V315 H215" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#architecture-arrow)"/>
+  <rect x="62" y="328" width="276" height="86" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="200" y="358" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Named consumers</text>
+  <text x="200" y="382" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Weave Engine and controllers</text>
+  <text x="200" y="402" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">apply their owned policy</text>
+  <path d="M200 414 V468" stroke="#f2b03c" stroke-width="3" marker-end="url(#architecture-arrow)"/>
+  <rect x="62" y="480" width="276" height="72" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+  <text x="200" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Authorized action only</text>
+  <text x="200" y="533" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Bounded worker handoff</text>
+  <path d="M200 552 V590" stroke="#f2b03c" stroke-width="3" marker-end="url(#architecture-arrow)"/>
+  <rect x="90" y="600" width="220" height="38" rx="8" fill="#151b23" stroke="#65758b"/>
+  <text x="200" y="624" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Platform synthesis</text>
+</svg>

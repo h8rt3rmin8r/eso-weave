@@ -195,19 +195,24 @@ signal, so partial layouts are never accepted.
 
 ## Diagnostic sequence
 
-```text
-capture current client extent
-  -> validate H0, H1, H2 and complete occupied geometry
-  -> require current or positively identified legacy layout
-  -> require B0 heartbeat
-  -> decode each supported payload with marker and complement checks
-  -> publish changes to consumers
-invalid header -> suppress payload immediately
-heartbeat absent past timeout -> Signal lost and clear authorizing observations
-fresh valid frame -> republish the complete current baseline
-```
+<figure class="docs-flow-diagram">
 
-This sequence is also the text alternative for the protocol flow. A reader
+![Pixel Bus validation flow suppresses corrupt frames and routes only one completely validated frame](../assets/diagrams/pixel-bus-validation.svg)
+
+</figure>
+
+### Pixel Bus validation text equivalent
+
+Capture the header from one displayed frame at the current client extent.
+Validate H0, H1, H2, the complete occupied geometry, the current or positively
+identified legacy layout, and the B0 heartbeat before decoding. Missing or
+corrupt evidence cannot route payload: a recognized invalid header suppresses
+payload immediately, while a heartbeat absent past its timeout raises Signal
+Lost and clears authorizing observations. Only the validated same-frame payload
+reaches consumers after marker and complement checks. A fresh valid frame after
+loss republishes the complete current baseline rather than reusing stale state.
+
+A reader
 diagnosing **Signal unavailable** should first use the
 [PixelBeacon troubleshooting path](../getting-started/troubleshooting.md#pixelbeacon-signal-is-missing-or-lost),
 then inspect byte-level details here only when the shared lifecycle is healthy.

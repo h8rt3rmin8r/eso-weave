@@ -23,6 +23,25 @@ without authorizing a worker or controller to synthesize anything.
 - **Pass through** means the player's original physical event continues to ESO.
 - **Dropped** means queued or attempted work is discarded and is not replayed.
 
+## Authorization flow
+
+<figure class="docs-flow-diagram">
+
+![Action authorization flow requires every positive gate or fails closed without generated input](../assets/diagrams/action-authorization.svg)
+
+</figure>
+
+### Authorization flow text equivalent
+
+A physical event first reaches the focus-scoped decision. It passes through to
+ESO when it is not accepted, or it is suppressed and offered to the bounded
+handoff without blocking the interception callback. Every generated action
+requires positive current evidence for its named path, including its current
+authorization epoch and applicable runtime, focus, suspension, menu, life,
+world, travel, timing, and feature gates. Unsafe or unavailable evidence fails
+closed: the physical event passes through where applicable, queued or running
+work cancels, or the requested controller waits without emitting input.
+
 ## Cross-feature truth table
 
 Each cell describes the effect when the row's unsafe or unavailable condition is

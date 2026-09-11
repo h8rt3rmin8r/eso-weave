@@ -58,6 +58,23 @@ and decoder behavior can be tested with deterministic mocks.
 
 ## Data flow
 
+<figure class="docs-flow-diagram">
+
+![Architecture ownership flow keeps physical input and observed game evidence separate until named consumers](../assets/diagrams/architecture-ownership.svg)
+
+</figure>
+
+### Ownership flow text equivalent
+
+Physical input remains on the input path: a platform keyboard event reaches the
+focus-scoped Input Engine decision, then either passes to ESO or enters the
+bounded action queue. Observed game evidence remains on the observation path:
+process, focus, and displayed pixels reach the Pixel Bus Reader, which validates
+and publishes observations. Named engines and controllers consume only their
+owned inputs. The Weave Engine and feature controllers may combine a handed-off
+request with current positive evidence, but platform synthesis follows only
+after that consumer authorizes a bounded action.
+
 Physical input follows this text sequence:
 
 `platform event -> Input Engine decision -> pass to ESO OR suppress -> bounded action queue -> weave worker -> platform synthesis`
