@@ -1968,6 +1968,11 @@ export function validateDocumentationFigureJavascript(script) {
   if (!/dialog\.showModal\(\)/u.test(script) || !/closeButton\.focus\(/u.test(script)) {
     errors.push("S088 figure system requires native modal opening and initial close-control focus");
   }
+  if (!/globalThis\.visualViewport/u.test(script)
+      || !/--docs-figure-viewport-width/u.test(script)
+      || !/--docs-figure-viewport-height/u.test(script)) {
+    errors.push("S088 figure dialog requires visual-viewport synchronization for browser zoom");
+  }
   if (!/closeButton\.addEventListener\(["']click["']/u.test(script)
       || !/dialog\.addEventListener\(["']click["']/u.test(script)
       || !/event\.target\s*!==\s*dialog/u.test(script)) {
@@ -2012,13 +2017,16 @@ export function validateDocumentationFigureCss(css) {
   if (!/\.docs-figure-trigger:hover::after,[\s\S]*\.docs-figure-trigger:focus-visible::after/iu.test(css)) {
     errors.push("S088 figure affordance requires hover and focus-visible treatment");
   }
-  if (!/height:\s*100vh/iu.test(dialog) || !/width:\s*100vw/iu.test(dialog)
+  if (!/height:\s*var\(--docs-figure-viewport-height,\s*100vh\)/iu.test(dialog)
+      || !/width:\s*var\(--docs-figure-viewport-width,\s*100vw\)/iu.test(dialog)
       || !/\.docs-figure-dialog::backdrop\s*\{/u.test(css)) {
     errors.push("S088 native dialog requires a full-viewport modal and backdrop");
   }
   if (!/display:\s*block/iu.test(dialogImage) || !/height:\s*auto/iu.test(dialogImage)
-      || !/width:\s*auto/iu.test(dialogImage) || !/max-height:\s*calc\(100vh/iu.test(dialogImage)
-      || !/max-width:\s*calc\(100vw/iu.test(dialogImage) || !/object-fit:\s*contain/iu.test(dialogImage)) {
+      || !/width:\s*auto/iu.test(dialogImage)
+      || !/max-width:\s*calc\(var\(--docs-figure-viewport-width,\s*100vw\)/iu.test(dialogImage)
+      || !/max-height:\s*calc\(var\(--docs-figure-viewport-height,\s*100vh\)/iu.test(dialogImage)
+      || !/object-fit:\s*contain/iu.test(dialogImage)) {
     errors.push("S088 expanded figure must preserve intrinsic geometry without upscaling and remain viewport-contained");
   }
   const fontSize = Number(caption.match(/font-size:\s*(\d+(?:\.\d+)?)em/iu)?.[1]);

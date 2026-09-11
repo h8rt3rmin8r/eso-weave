@@ -135,6 +135,15 @@ function initializeDocumentationFigures() {
 
   let activeTrigger = null;
 
+  function syncDialogViewport() {
+    const viewport = globalThis.visualViewport;
+    if (!viewport) return;
+    dialog.style.setProperty("--docs-figure-viewport-width", `${viewport.width}px`);
+    dialog.style.setProperty("--docs-figure-viewport-height", `${viewport.height}px`);
+    dialog.style.setProperty("--docs-figure-viewport-left", `${viewport.offsetLeft}px`);
+    dialog.style.setProperty("--docs-figure-viewport-top", `${viewport.offsetTop}px`);
+  }
+
   function closeDialog() {
     if (dialog.open) dialog.close();
   }
@@ -155,6 +164,7 @@ function initializeDocumentationFigures() {
       dialog.removeAttribute("aria-describedby");
     }
 
+    syncDialogViewport();
     dialog.showModal();
     closeButton.focus({ preventScroll: true });
   }
@@ -186,6 +196,8 @@ function initializeDocumentationFigures() {
     activeTrigger = null;
     trigger?.focus({ preventScroll: true });
   });
+  globalThis.visualViewport?.addEventListener("resize", syncDialogViewport);
+  globalThis.visualViewport?.addEventListener("scroll", syncDialogViewport);
 
   for (const image of images) {
     const alternative = image.getAttribute("alt").trim();

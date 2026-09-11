@@ -656,8 +656,8 @@ const modalStyle = getComputedStyle(modalCaption);
 const withinViewport = (rectangle) => rectangle.left >= viewport.offsetLeft - 1 && rectangle.top >= viewport.offsetTop - 1
   && rectangle.right <= viewport.offsetLeft + viewport.width + 1 && rectangle.bottom <= viewport.offsetTop + viewport.height + 1;
 return {
-  scale: devicePixelRatio,
-  visualScale: viewport.scale,
+  scale: viewport.scale,
+  devicePixelRatio,
   sourceCaptionWrapped: sourceCaption.scrollWidth <= sourceCaption.clientWidth + 1 && sourceCaption.scrollHeight > Number.parseFloat(sourceStyle.lineHeight),
   sourceCaptionContained: sourceRectangle.width > 0 && sourceRectangle.height > 0 && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
   sourceCaptionFontSize: Number.parseFloat(sourceStyle.fontSize),
@@ -1086,9 +1086,12 @@ export async function run(siteRoot) {
       receipt.figureJourneys.push({ id, opened: openedState.opened, closed: closedState.closed, focusReturned: closedState.focusReturned });
     }
 
-    await client.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 460, deviceScaleFactor: 2, mobile: false });
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: true });
     await navigateToFigure(FIGURE_CASES[1]);
+    await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+    await nextBrowserFrames();
     receipt.figureZoom = await evaluateValue(figureZoomExpression(FIGURE_CASES[1]), true);
+    await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
     await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
 
     await navigateToFigure(FIGURE_CASES[1]);

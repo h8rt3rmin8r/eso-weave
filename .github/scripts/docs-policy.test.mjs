@@ -2518,6 +2518,7 @@ test("S088 requires one idempotent native figure dialog and complete focus lifec
   for (const [needle, replacement, expected] of [
     ['document.createElement("dialog")', 'document.createElement("div")', /native dialog/i],
     ["showModal()", "show()", /modal/i],
+    ["--docs-figure-viewport-width", "--docs-figure-unused-width", /browser zoom/i],
     ['event.key === "Tab"', 'event.key === "ArrowDown"', /Tab containment/i],
     ['addEventListener("close"', 'addEventListener("closed"', /focus return/i],
     ['closest(".docs-flow-diagram")', 'closest(".unused")', /mdBook/i],
