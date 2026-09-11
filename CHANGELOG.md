@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Capture one privacy-minimized encounter with a dedicated addon, import it into
+  local history, inspect loss-aware DPS, HPS, ability share, effect uptime, and
+  cast order, then review deterministic provisional prompts with complete
+  evidence provenance.
+- Use the new bundled versioned ESO catalog, bounded discovery collector,
+  reviewed Live and PTS candidate pipeline, explicit user-initiated updates, and
+  placeholder-first local icon cache without redistributing game artwork.
+- Browse substantially refreshed offline documentation with official branding,
+  a formal glossary, guided screenshots, accessible diagrams and figure
+  expansion, restored code highlighting, and responsive keyboard-accessible
+  tables.
+
 ### Added
 
 - S090 adds deterministic `s090-v1` encounter review prompts over one immutable
@@ -137,6 +151,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S091 prepares the v0.16.0 game-data and encounter-analysis release candidate,
+  reconciles the cargo-release rollover with the bundled documentation snapshot,
+  and validates that both landing metadata fields advance with exact
+  cardinality. The detailed record covers all 23 merged pull requests since
+  v0.15.1, while three independent field-verification issues remain nonblocking
+  (issue #163).
 - S076 centralizes the collector and encounter data-only SavedVariables grammar
   in one bounded non-executing parser while preserving separate roots, limits,
   schemas, and destinations.
@@ -151,6 +171,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-11: Target v0.16.0 because the versioned game-data catalog, user-owned
+  encounter capture and history, observed metrics, evidence-scoped prompts, and
+  substantial offline manual improvements are backward-compatible capabilities.
+  Amend the pinned release configuration and guide because S080 introduced
+  enforced documentation version and date fields without adding them to the
+  one-command rollover. Match each semantic metadata field with exact
+  cardinality, share cargo-release's version and date templates, enforce the
+  contract in documentation policy, and trigger that policy whenever the release
+  configuration changes. Clarify that Cargo controls application and package
+  versions while addon manifests retain independent contract versions.
 - 2026-09-11: Implement encounter recommendations as a pure top-level domain over
   an immutable versioned projection, not as part of Encounter Metrics, storage,
   catalog lookup, or egui rendering. Keep every prompt provisional and bounded to

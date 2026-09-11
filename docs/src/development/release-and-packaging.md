@@ -41,10 +41,11 @@ changelog rather than being copied into the release page.
 | Linux x86_64 | Versioned AppImage | Release binary assembled from `packaging/appimage/AppDir` | SHA-256 entry in `SHA256SUMS` |
 | Linux x86_64 | Versioned `.tar.gz` | Release binary, README, and license archive | SHA-256 entry in `SHA256SUMS` |
 
-PixelBeacon is embedded in the application binary and installed from the
-application interface. It is not a separate release asset. Container images,
-macOS packages, and Linux aarch64 packages are outside the current artifact
-contract.
+PixelBeacon and the catalog collector are embedded in the application binary
+and installed from the application interface. Neither is a separate release
+asset. The encounter-capture addon remains a repository-source developer tool
+for manual installation. Container images, macOS packages, and Linux aarch64
+packages are outside the current artifact contract.
 
 The searchable documentation site is also embedded directly in every executable.
 Generated HTML remains ignored build output. A release-profile Cargo build fails

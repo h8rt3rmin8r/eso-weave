@@ -13,15 +13,17 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [040](plan-040.md) | Active | S090 evidence-scoped encounter recommendations, issue #136 |
+| [041](plan-041.md) | Active | S091 v0.16.0 release, issue #163 |
 
 S068 through S078 completed the game-data foundation from contract research to
 quality-aware encounter history. S079 through S089 completed Plan 039, ending
 when PR #161 closed issue #127 and enabled epic #119 and its milestone to close.
-Plan 039 is now archived. S090 is in progress under issue #136 as the final
-implementation outcome from the S069 encounter roadmap.
+Plan 039 completed the documentation presentation program. Plan 040 completed
+the final encounter-roadmap implementation outcome when PR #162 merged and
+closed issue #136. Both plans are archived. S091 now prepares and publishes the
+v0.16.0 release under issue #163.
 
 Installed v0.15.1 verification in issue #110, catalog-field verification in
 issue #129, and live Combat Metrics verification in issue #131 remain
-independent Release verification work. None blocks Plan 040 implementation or
-closure.
+independent Release verification work. None blocks Plan 041 or release
+publication.

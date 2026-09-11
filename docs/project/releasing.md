@@ -32,11 +32,13 @@ cargo release X.Y.Z --execute
 That command (configured in `release.toml`):
 
 1. Bumps the crate version in `Cargo.toml`. This is the single source of the application
-   version, the MSI version, and the PixelBeacon addon version embedded in the binary.
+   and package version. Addon contract versions remain independent manifest authorities.
 2. Rewrites `CHANGELOG.md`, renaming `## [Unreleased]` to `## [X.Y.Z] - DATE` and opening a fresh
    empty `## [Unreleased]`.
-3. Commits the change as `release: vX.Y.Z`.
-4. Tags `vX.Y.Z` and pushes the commit and tag.
+3. Rewrites the root README badge and bundled documentation snapshot version and date from the
+   same release version and date.
+4. Commits the change as `release: vX.Y.Z`.
+5. Tags `vX.Y.Z` and pushes the commit and tag.
 
 Pushing the tag triggers `.github/workflows/release.yml`.
 
@@ -58,6 +60,9 @@ Note: the README version badge is a static shields.io badge (`version-X.Y.Z-2ea4
 `cargo release` rollover bumps it in lockstep with the version via a `[[pre-release-replacements]]`
 entry in `release.toml`, so it never drifts from the released version. Do not hand-edit the badge
 version; let the release command set it.
+
+The bundled documentation landing page is governed the same way. During the dry run, inspect
+both its `Applies to` version and `Released` date. Do not hand-edit those fields before release.
 
 ## What the pipeline guarantees
 
@@ -84,10 +89,11 @@ the machine's job, and steps 1 through 3 catch the common omissions before any a
 
 Current decision (2026-07-10): Windows x64 MSI; Linux x86_64 `.deb`, AppImage, and tarball; a
 combined `SHA256SUMS` file. No container images (this is a desktop application). macOS is out of
-scope per the specification. Linux aarch64 is deferred until an end user needs it. PixelBeacon is
-not a separate release asset: the addon ships embedded inside the application binary and is
-installed from the application UI. Change this shape only with a dated decision recorded in
-`CHANGELOG.md`.
+scope per the specification. Linux aarch64 is deferred until an end user needs it. PixelBeacon
+and the catalog collector are not separate release assets: both ship embedded inside the
+application binary and are installed from the application UI. The encounter-capture addon remains
+a repository-source developer tool for manual installation. Change this shape only with a dated
+decision recorded in `CHANGELOG.md`.
 
 ## Supporting scripts
 

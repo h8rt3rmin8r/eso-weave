@@ -1264,6 +1264,52 @@ export function validateLandingIdentity({ landingMarkdown, cargoToml, changelog,
   return errors;
 }
 
+function releaseReplacementBlocks(releaseToml) {
+  return releaseToml.split(/^\[\[pre-release-replacements\]\]\s*$/gmu).slice(1);
+}
+
+function releaseReplacementValue(block, key) {
+  const raw = block.match(new RegExp(`^${escapeRegExp(key)}\\s*=\\s*("(?:[^"\\\\]|\\\\.)*")\\s*$`, "mu"))?.[1];
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+export function validateReleaseRollover(releaseToml) {
+  const errors = [];
+  const requirements = [
+    {
+      label: "documentation version",
+      search: "<dt>Applies to</dt>\\s*<dd>v[0-9]+\\.[0-9]+\\.[0-9]+</dd>",
+      replace: "<dt>Applies to</dt>\n    <dd>v{{version}}</dd>",
+    },
+    {
+      label: "documentation release date",
+      search: '<dt>Released</dt>\\s*<dd><time datetime="[0-9]{4}-[0-9]{2}-[0-9]{2}">[0-9]{4}-[0-9]{2}-[0-9]{2}</time></dd>',
+      replace: '<dt>Released</dt>\n    <dd><time datetime="{{date}}">{{date}}</time></dd>',
+    },
+  ];
+  const blocks = releaseReplacementBlocks(releaseToml);
+  const documentationBlocks = blocks.filter((block) =>
+    releaseReplacementValue(block, "file") === "docs/src/README.md");
+  if (documentationBlocks.length !== requirements.length) {
+    errors.push("S091 release rollover permits only the two approved documentation snapshot replacements");
+  }
+  for (const requirement of requirements) {
+    const matches = documentationBlocks.filter((block) =>
+      releaseReplacementValue(block, "search") === requirement.search &&
+      releaseReplacementValue(block, "replace") === requirement.replace &&
+      /^exactly\s*=\s*1\s*$/mu.test(block));
+    if (matches.length !== 1) {
+      errors.push(`S091 release rollover requires exactly one cardinality-checked ${requirement.label} replacement`);
+    }
+  }
+  return errors;
+}
+
 export function validateLandingGenerated(indexHtml, outputPaths) {
   const errors = [];
   if (!/<p\s+class=["']landing-wordmark["']>[\s\S]*?<img\s+src=["']assets\/brand\/eso-weave-banner\.png["']\s+alt=["']["']/iu.test(indexHtml)) {
@@ -3572,6 +3618,7 @@ export function validateDocumentationAuthorityTriggers(workflow) {
   for (const [slice, authority] of [
     ["S080", "Cargo.toml"],
     ["S080", "CHANGELOG.md"],
+    ["S091", "release.toml"],
     ["S081", "assets/eso-weave-banner.png"],
     ["S081", "assets/brand/eso-weave-mark.svg"],
     ["S081", "assets/brand/eso-weave-glyph.svg"],
@@ -3714,6 +3761,7 @@ async function run() {
   ]));
   const cargoToml = await readFile(path.join(repositoryRoot, "Cargo.toml"), "utf8");
   const changelog = await readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8");
+  const releaseToml = await readFile(path.join(repositoryRoot, "release.toml"), "utf8");
   const approvedBanner = await readFile(path.join(repositoryRoot, "assets", "eso-weave-banner.png"));
   const publishedBanner = await readFile(path.join(docsRoot, "src", "assets", "brand", "eso-weave-banner.png"));
   const approvedMark = await readFile(path.join(repositoryRoot, "assets", "brand", "eso-weave-mark.svg"));
@@ -3764,6 +3812,7 @@ async function run() {
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
     ...validateFormalGlossary(glossary, coverage.search_map),
     ...validateLandingIdentity({ landingMarkdown, cargoToml, changelog, approvedBanner, publishedBanner }),
+    ...validateReleaseRollover(releaseToml),
     ...validateLandingGenerated(landingHtml, outputPaths),
     ...validateBrandStandard({
       markdown: brandStandardMarkdown,

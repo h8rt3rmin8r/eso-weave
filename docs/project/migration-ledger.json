@@ -1576,13 +1576,23 @@
     },
     {
       "id": "040",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-040.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-040.md",
       "specs": [
         "specs/090-evidence-scoped-recommendations"
       ],
-      "evidence": "Issue #136 tracks S090 evidence-scoped encounter recommendations; issues #110, #129, and #131 remain independent non-blocking verification."
+      "evidence": "S090 merged in PR #162 and closed issue #136; issues #110, #129, and #131 remain independent non-blocking verification."
+    },
+    {
+      "id": "041",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-041.md",
+      "specs": [
+        "specs/091-v016-release-prep"
+      ],
+      "evidence": "Issue #163 tracks S091 v0.16.0 release preparation and publication; issues #110, #129, and #131 remain independent non-blocking verification."
     }
   ],
   "safetyCrosswalk": [
