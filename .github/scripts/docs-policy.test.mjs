@@ -785,6 +785,30 @@ test("S085 masks multiline reference destinations", () => {
   ), []);
 });
 
+test("S085 masks fenced samples nested in Markdown containers", () => {
+  const markdown = `# Samples
+
+> \`\`\`text
+> s060_block_quote_literal
+> \`\`\`
+
+- \`\`\`text
+  s060_list_literal
+  \`\`\`
+`;
+  assert.deepEqual(validateWorkSliceMarkdown(
+    markdown,
+    "development/test-strategy.md",
+  ), []);
+});
+
+test("S085 masks destinations after balanced nested link labels", () => {
+  assert.deepEqual(validateWorkSliceMarkdown(
+    "# References\n\n[see [S060]](https://example.com/specs/060-safety-boundaries/spec.md)\n",
+    "development/test-strategy.md",
+  ), []);
+});
+
 test("S085 does not treat unmatched inline-link punctuation as hidden content", () => {
   assert.match(validateWorkSliceMarkdown(
     "# Page\n\n](s060_long_test_name)\n",

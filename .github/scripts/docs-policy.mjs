@@ -360,6 +360,23 @@ function maskMarkdownReferenceDefinitions(characters) {
   }
 }
 
+function markdownContainerContent(line) {
+  let content = line;
+  while (true) {
+    const blockQuote = content.match(/^ {0,3}>[ \t]?/u);
+    if (blockQuote) {
+      content = content.slice(blockQuote[0].length);
+      continue;
+    }
+    const listItem = content.match(/^ {0,3}(?:[-+*]|\d{1,9}[\.\)])[ \t]+/u);
+    if (listItem) {
+      content = content.slice(listItem[0].length);
+      continue;
+    }
+    return content;
+  }
+}
+
 function maskMarkdownWorkSliceExceptions(markdown) {
   const characters = markdown.split("");
   const lines = markdown.match(/.*(?:\r?\n|$)/gu) ?? [];
@@ -367,9 +384,10 @@ function maskMarkdownWorkSliceExceptions(markdown) {
   let fence = null;
 
   for (const line of lines) {
-    const opening = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+    const containerContent = markdownContainerContent(line);
+    const opening = containerContent.match(/^ {0,3}(`{3,}|~{3,})/u);
     const closing = fence
-      ? line.match(new RegExp(`^ {0,3}${fence.character}{${fence.length},}\\s*$`, "u"))
+      ? containerContent.match(new RegExp(`^ {0,3}${fence.character}{${fence.length},}\\s*$`, "u"))
       : null;
     if (fence || opening) {
       maskCharacters(characters, offset, offset + line.length);
@@ -392,9 +410,12 @@ function maskMarkdownWorkSliceExceptions(markdown) {
     const image = linkSyntax[cursor] === "!" && linkSyntax[cursor + 1] === "[";
     const labelStart = image ? cursor + 1 : cursor;
     if (linkSyntax[labelStart] !== "[") continue;
+    let labelDepth = 0;
     let labelEnd = labelStart + 1;
     for (; labelEnd < linkSyntax.length; labelEnd += 1) {
       if (linkSyntax[labelEnd] === "\\") labelEnd += 1;
+      else if (linkSyntax[labelEnd] === "[") labelDepth += 1;
+      else if (linkSyntax[labelEnd] === "]" && labelDepth > 0) labelDepth -= 1;
       else if (linkSyntax[labelEnd] === "]") break;
     }
     if (linkSyntax[labelEnd] !== "]" || linkSyntax[labelEnd + 1] !== "(") continue;
