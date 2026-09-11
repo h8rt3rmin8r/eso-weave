@@ -17,8 +17,9 @@ import {
   validateContentCoverage,
   validateContentCoverageRepository,
   validateCorpusSnapshot,
-  validateGeneratedSite,
+  validateDocumentationAuthorityTriggers,
   validateFormalGlossary,
+  validateGeneratedSite,
   validateGlossarySearchIndex,
   validateLandingCss,
   validateLandingGenerated,
@@ -86,8 +87,17 @@ test("S080 requires bounded wordmark, accessible hidden text, and narrow metadat
   assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "display: none;")).join("\n"), /visually hidden/i);
   assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "clip-path: inset(50%); display: none;")).join("\n"), /assistive technology/i);
   assert.match(validateLandingCss(css.replace("clip-path: inset(50%);", "clip-path: inset(50%); visibility: hidden;")).join("\n"), /assistive technology/i);
+  assert.match(validateLandingCss(`${css}\n.visually-hidden { display: none; }`).join("\n"), /assistive technology/i);
+  assert.match(validateLandingCss(`${css}\n.other, .visually-hidden { visibility: hidden; }`).join("\n"), /assistive technology/i);
   assert.match(validateLandingCss(css.replace("--eso-muted: #6b6455", "--eso-muted: #c0c0c0")).join("\n"), /label contrast/i);
   assert.match(validateLandingCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(4, 1fr);")).join("\n"), /narrow/i);
+});
+
+test("S080 documentation checks follow both metadata authorities", () => {
+  const triggers = `on:\n  push:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n  pull_request:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n  workflow_dispatch:\n`;
+  assert.deepEqual(validateDocumentationAuthorityTriggers(triggers), []);
+  assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll('      - "Cargo.toml"\n', "")).join("\n"), /Cargo\.toml.*push.*pull_request/i);
+  assert.match(validateDocumentationAuthorityTriggers(triggers.replace('      - "CHANGELOG.md"\n', "")).join("\n"), /CHANGELOG\.md.*push/i);
 });
 
 const glossarySearchMap = [

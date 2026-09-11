@@ -45,7 +45,7 @@ No critical, high, or unresolved ambiguity remains. Implementation may begin.
 
 **Gate**: PASS
 
-- The focused policy suite passes all 84 tests, including S080 source, generated
+- The focused policy suite passes all 85 tests, including S080 source, generated
   HTML, metadata-drift, CSS, and banner-byte cases.
 - `mdbook test`, `mdbook build`, the generated-site policy, spelling, Rust
   formatting, Clippy, the full locked test suite, and the locked release build pass.

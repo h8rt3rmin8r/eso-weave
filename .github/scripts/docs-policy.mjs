@@ -851,13 +851,16 @@ export function validateLandingCss(css) {
       !/max-width:\s*min\(100%,\s*38rem\)/iu.test(wordmark) || !/width:\s*100%/iu.test(wordmark)) {
     errors.push("S080 wordmark CSS must bound the responsive banner");
   }
-  const hidden = css.match(/\.visually-hidden\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const hiddenRules = [...css.matchAll(/(?<selectors>[^{}]+)\{(?<body>[^{}]*)\}/gu)]
+    .filter((match) => match.groups.selectors.split(",").some((selector) => selector.trim() === ".visually-hidden"))
+    .map((match) => match.groups.body);
+  const hidden = hiddenRules.join("\n");
   if (!/clip-path:\s*inset\(50%\)/iu.test(hidden) || !/height:\s*1px/iu.test(hidden) ||
       !/overflow:\s*hidden/iu.test(hidden) || !/position:\s*absolute/iu.test(hidden) ||
       !/white-space:\s*nowrap/iu.test(hidden) || !/width:\s*1px/iu.test(hidden)) {
     errors.push("S080 visually hidden CSS must preserve accessible text");
   }
-  if (/\b(?:display:\s*none|visibility:\s*hidden)\b/iu.test(hidden)) {
+  if (hiddenRules.some((rule) => /\b(?:display:\s*none|visibility:\s*hidden)\b/iu.test(rule))) {
     errors.push("S080 visually hidden CSS must not remove text from assistive technology");
   }
   if (!/\.project-metadata\s*\{[\s\S]*?display:\s*grid/iu.test(css)) {
@@ -2281,6 +2284,24 @@ export function validateWorkflowText(workflow) {
   return errors;
 }
 
+export function validateDocumentationAuthorityTriggers(workflow) {
+  const errors = [];
+  const triggerText = workflow.split(/^permissions:/mu)[0] ?? workflow;
+  const triggers = yamlBlocks(triggerText, 2);
+  for (const authority of ["Cargo.toml", "CHANGELOG.md"]) {
+    const missing = [];
+    for (const event of ["push", "pull_request"]) {
+      const block = triggers.get(event) ?? "";
+      const path = new RegExp(`^\\s+- ["']?${escapeRegExp(authority)}["']?\\s*$`, "mu");
+      if (!path.test(block)) missing.push(event);
+    }
+    if (missing.length > 0) {
+      errors.push(`S080 documentation workflow must include ${authority} in ${missing.join(" and ")} paths`);
+    }
+  }
+  return errors;
+}
+
 export function validateCatalogCandidateWorkflow(text) {
   const errors = [];
   if (!/^  workflow_dispatch:\s*$/mu.test(text) || !/^  schedule:\s*$/mu.test(text)) {
@@ -2388,6 +2409,7 @@ async function run() {
   const landingHtml = await readFile(path.join(outputRoot, "index.html"), "utf8");
   const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
   const css = await readFile(cssPath, "utf8");
+  const workflow = await readFile(workflowPath, "utf8");
   const searchIndexFiles = (await readdir(outputRoot)).filter((name) => /^searchindex-[0-9a-f]+\.js$/u.test(name));
   const searchIndex = searchIndexFiles.length === 1
     ? await readFile(path.join(outputRoot, searchIndexFiles[0]), "utf8")
@@ -2397,7 +2419,8 @@ async function run() {
     ...(await validateGeneratedSite(outputRoot)),
     ...validateBrandCss(css),
     ...validateLandingCss(css),
-    ...validateWorkflowText(await readFile(workflowPath, "utf8")),
+    ...validateWorkflowText(workflow),
+    ...validateDocumentationAuthorityTriggers(workflow),
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),

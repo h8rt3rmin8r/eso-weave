@@ -11,6 +11,8 @@ on:
       - ".github/scripts/docs-policy.test.mjs"
       - ".github/workflows/docs.yml"
       - ".typos.toml"
+      - "Cargo.toml"
+      - "CHANGELOG.md"
       - "docs/**"
   pull_request:
     branches: [main]
@@ -19,6 +21,8 @@ on:
       - ".github/scripts/docs-policy.test.mjs"
       - ".github/workflows/docs.yml"
       - ".typos.toml"
+      - "Cargo.toml"
+      - "CHANGELOG.md"
       - "docs/**"
   workflow_dispatch:
 
