@@ -36,5 +36,5 @@
 - [x] T020 Open the official closing pull request and set project Stage to PR review.
 - [x] T021 Address every first-round review and CI finding.
 - [x] T022 Request and address at most one second Codex review round.
-- [ ] T023 Confirm every review conversation resolved and every required check green.
-- [ ] T024 Hand off to the maintainer for final review and merge.
+- [x] T023 Confirm every review conversation resolved and every required check green.
+- [x] T024 Hand off to the maintainer for final review and merge.
