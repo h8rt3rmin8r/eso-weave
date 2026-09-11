@@ -1236,6 +1236,8 @@ const DOCUMENTATION_DIAGRAMS = [
     page: "development/architecture.md",
     outputPage: "development/architecture.html",
     asset: "architecture-ownership.svg",
+    width: 400,
+    height: 650,
     alt: "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers",
     heading: "Ownership flow text equivalent",
     anchors: [
@@ -1251,6 +1253,8 @@ const DOCUMENTATION_DIAGRAMS = [
     page: "concepts/action-authorization.md",
     outputPage: "concepts/action-authorization.html",
     asset: "action-authorization.svg",
+    width: 400,
+    height: 700,
     alt: "Action authorization flow requires every positive gate or fails closed without generated input",
     heading: "Authorization flow text equivalent",
     anchors: [
@@ -1266,6 +1270,8 @@ const DOCUMENTATION_DIAGRAMS = [
     page: "development/state-machines.md",
     outputPage: "development/state-machines.html",
     asset: "safety-recovery.svg",
+    width: 400,
+    height: 690,
     alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline",
     heading: "Safety recovery text equivalent",
     anchors: [
@@ -1281,6 +1287,8 @@ const DOCUMENTATION_DIAGRAMS = [
     page: "reference/pixel-bus-protocol.md",
     outputPage: "reference/pixel-bus-protocol.html",
     asset: "pixel-bus-validation.svg",
+    width: 400,
+    height: 820,
     alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals",
     heading: "Pixel Bus validation text equivalent",
     anchors: [
@@ -1317,6 +1325,13 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
     if (!/<svg\b(?=[^>]*\bxmlns=["']http:\/\/www\.w3\.org\/2000\/svg["'])(?=[^>]*\bviewBox=["']0 0 \d+ \d+["'])(?=[^>]*\brole=["']img["'])(?=[^>]*\bfocusable=["']false["'])(?=[^>]*\baria-labelledby=["'][^"']+-title [^"']+-desc["'])(?=[^>]*\bdata-flow-direction=["']top-down["'])[^>]*>/iu.test(svg)) {
       errors.push(`S082 ${record.label} SVG requires a top-down accessible root`);
     }
+    const root = svg.match(/<svg\b[^>]*>/iu)?.[0] ?? "";
+    const width = Number(root.match(/\swidth=["'](\d+(?:\.\d+)?)["']/iu)?.[1]);
+    const height = Number(root.match(/\sheight=["'](\d+(?:\.\d+)?)["']/iu)?.[1]);
+    const viewBox = root.match(/\bviewBox=["']0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)["']/iu)?.slice(1).map(Number) ?? [];
+    if (width !== record.width || height !== record.height || viewBox[0] !== record.width || viewBox[1] !== record.height) {
+      errors.push(`S086 ${record.label} SVG intrinsic geometry must exactly match its viewBox`);
+    }
     const titleId = svg.match(/<title\s+id=["']([^"']+-title)["']>/iu)?.[1];
     const descId = svg.match(/<desc\s+id=["']([^"']+-desc)["']>/iu)?.[1];
     const labelled = svg.match(/aria-labelledby=["']([^"']+)["']/iu)?.[1]?.split(/\s+/u) ?? [];
@@ -1334,8 +1349,12 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
     if (hasNonFragmentCssUrl || hasCssImport || /<(?:script|foreignObject|animate|set|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=\s*["'](?!#)|https?:\/\//iu.test(svg.replace('xmlns="http://www.w3.org/2000/svg"', ""))) {
       errors.push(`S082 ${record.label} SVG contains active or external content`);
     }
-    if (!/<rect\b(?=[^>]*\bwidth=["']400["'])(?=[^>]*\bfill=["']#0e1116["'])[^>]*>/iu.test(svg)) {
+    if (!new RegExp(`<rect\\b(?=[^>]*\\bwidth=["']${record.width}["'])(?=[^>]*\\bheight=["']${record.height}["'])(?=[^>]*\\bfill=["']#0e1116["'])[^>]*>`, "iu").test(svg)) {
       errors.push(`S082 ${record.label} SVG requires the opaque ink canvas`);
+    }
+    const paintedColors = new Set([...svg.matchAll(/\b(?:fill|stroke)=["'](#[0-9a-f]{6})["']/giu)].map((match) => match[1].toLowerCase()));
+    if (paintedColors.size < 4 || !/<path\b/iu.test(svg)) {
+      errors.push(`S086 ${record.label} SVG requires multicolor painted labels and connectors`);
     }
     for (const size of [...svg.matchAll(/font-size=["'](\d+(?:\.\d+)?)["']/giu)].map((match) => Number(match[1]))) {
       if (size < 14) errors.push(`S082 ${record.label} SVG label size must be at least 14`);
@@ -1348,7 +1367,7 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
   return [...new Set(errors)];
 }
 
-export function validateDocumentationDiagramsGenerated(pages, outputPaths) {
+export function validateDocumentationDiagramsGenerated(pages, outputPaths, sourceSvgs, generatedSvgs, script = "") {
   const errors = [];
   if (!(pages instanceof Map)) return ["S082 generated diagram validation requires a page map"];
   for (const record of DOCUMENTATION_DIAGRAMS) {
@@ -1356,13 +1375,27 @@ export function validateDocumentationDiagramsGenerated(pages, outputPaths) {
     if (!html.includes('class="docs-flow-diagram"') || !html.includes(`src="../assets/diagrams/${record.asset}"`) || !html.includes(`alt="${record.alt}"`)) {
       errors.push(`S082 generated ${record.label} page lost its local diagram or meaningful alternative`);
     }
+    const figure = html.match(/<figure\s+class=["']docs-flow-diagram["']>[\s\S]*?<\/figure>/iu)?.[0] ?? "";
+    const assetReferences = [...figure.matchAll(new RegExp(`src=["']\\.\\.\/assets\/diagrams\/${escapeRegExp(record.asset)}["']`, "giu"))].length;
+    if (!figure.includes('class="checkbox-label"') || !figure.includes('class="checkbox-img"') ||
+        !figure.includes('class="img-wrapper"') || assetReferences !== 2) {
+      errors.push(`S086 generated ${record.label} page requires the expected zoom DOM`);
+    }
     if (!html.includes(record.heading)) errors.push(`S082 generated ${record.label} page lost its text equivalent`);
     if (!(outputPaths instanceof Set) || !outputPaths.has(`assets/diagrams/${record.asset}`)) {
       errors.push(`S082 generated asset is missing: ${record.asset}`);
     }
+    if (!(sourceSvgs instanceof Map) || !(generatedSvgs instanceof Map) || sourceSvgs.get(record.asset) !== generatedSvgs.get(record.asset)) {
+      errors.push(`S086 generated ${record.label} SVG must be byte-identical to source`);
+    }
     if (/\b(?:mermaid|https?:\/\/)/iu.test(html.match(/<figure\s+class=["']docs-flow-diagram["']>[\s\S]*?<\/figure>/iu)?.[0] ?? "")) {
       errors.push(`S082 generated ${record.label} diagram must not require a remote renderer`);
     }
+  }
+  if (!/querySelectorAll\(["']\.docs-flow-diagram \.img-wrapper > img["']\)/u.test(script) ||
+      !/(?:\.alt\s*=\s*["']["']|setAttribute\(["']alt["'],\s*["']["']\))/u.test(script) ||
+      !/setAttribute\(["']aria-hidden["'],\s*["']true["']\)/u.test(script)) {
+    errors.push("S086 generated expanded diagram clones must become decorative");
   }
   return [...new Set(errors)];
 }
@@ -1371,12 +1404,19 @@ export function validateDocumentationDiagramCss(css) {
   const errors = [];
   const figure = css.match(/\.docs-flow-diagram\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const image = css.match(/\.docs-flow-diagram\s+img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const primary = css.match(/\.docs-flow-diagram\s+\.checkbox-img\s*\+\s*img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const expanded = css.match(/\.docs-flow-diagram\s+\.img-wrapper\s*>\s*img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   if (!/border:\s*1px\s+solid/iu.test(figure) || !/max-width:\s*40rem/iu.test(figure) || !/width:\s*100%/iu.test(figure)) {
     errors.push("S082 diagram wrapper requires a bounded visible frame");
   }
   if (!/overflow:\s*hidden/iu.test(figure)) errors.push("S082 diagram wrapper must contain overflow");
-  if (!/display:\s*block/iu.test(image) || !/height:\s*auto/iu.test(image) || !/max-width:\s*100%/iu.test(image) || !/width:\s*100%/iu.test(image)) {
+  if (!/display:\s*block/iu.test(image) || !/height:\s*auto/iu.test(image) || !/max-width:\s*100%/iu.test(image)) {
     errors.push("S082 diagram image must preserve aspect ratio and content containment");
+  }
+  if (!/width:\s*100%/iu.test(primary)) errors.push("S086 primary diagram image must fill its bounded wrapper");
+  if (!/height:\s*auto/iu.test(expanded) || !/width:\s*auto/iu.test(expanded) ||
+      !/max-height:\s*100vh/iu.test(expanded) || !/max-width:\s*100vw/iu.test(expanded)) {
+    errors.push("S086 expanded diagram image must preserve intrinsic sizing and viewport containment");
   }
   if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.docs-flow-diagram\s*\{[\s\S]*?max-width:\s*100%/iu.test(css)) {
     errors.push("S082 diagram CSS requires a full-width narrow layout");
@@ -3176,12 +3216,17 @@ async function run() {
     record.outputPage,
     await readFile(path.join(outputRoot, ...record.outputPage.split("/")), "utf8"),
   ])));
+  const generatedDiagramSvgs = new Map(await Promise.all(DOCUMENTATION_DIAGRAMS.map(async (record) => [
+    record.asset,
+    await readFile(path.join(outputRoot, "assets", "diagrams", record.asset), "utf8"),
+  ])));
   const generatedScreenshotPages = new Map(await Promise.all([...new Set(screenshotManifest.assets.flatMap((record) => record.pages))].map(async (page) => {
     const outputPage = page.replace("docs/src/", "").replace(/\.md$/u, ".html");
     return [outputPage, await readFile(path.join(outputRoot, ...outputPage.split("/")), "utf8")];
   })));
   const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
   const css = await readFile(cssPath, "utf8");
+  const themeScript = await readFile(path.join(docsRoot, "theme", "eso-weave.js"), "utf8");
   const workflow = await readFile(workflowPath, "utf8");
   const searchIndexFiles = (await readdir(outputRoot)).filter((name) => /^searchindex-[0-9a-f]+\.js$/u.test(name));
   const searchIndex = searchIndexFiles.length === 1
@@ -3212,7 +3257,7 @@ async function run() {
     }),
     ...validateBrandStandardGenerated(brandStandardHtml, outputPaths),
     ...validateDocumentationDiagrams({ pages: diagramPages, svgs: diagramSvgs }),
-    ...validateDocumentationDiagramsGenerated(generatedDiagramPages, outputPaths),
+    ...validateDocumentationDiagramsGenerated(generatedDiagramPages, outputPaths, diagramSvgs, generatedDiagramSvgs, themeScript),
     ...validateDocumentationDiagramCss(css),
     ...validateDocumentationScreenshots({ manifest: screenshotManifest, assets: screenshotAssets, pages: screenshotPages }),
     ...validateDocumentationScreenshotsGenerated({ manifest: screenshotManifest, pages: generatedScreenshotPages, outputPaths }),

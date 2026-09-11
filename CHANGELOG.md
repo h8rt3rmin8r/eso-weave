@@ -109,8 +109,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in one bounded non-executing parser while preserving separate roots, limits,
   schemas, and destinations.
 
+### Fixed
+
+- S086 gives all four documentation flow diagrams explicit intrinsic geometry,
+  preserves the aspect ratio of mdBook's expanded clones, removes duplicate
+  assistive-technology announcements, and adds source-to-generated identity,
+  zoom-DOM, media-type, and dependency-free browser rendering regressions across
+  light and navy themes at narrow and wide viewports (issue #154).
+
 ### Decisions
 
+- 2026-09-11: Retain the four static local SVG diagrams as their own delivery
+  authority and harden their compatibility contract instead of adding Mermaid,
+  alternate raster assets, or a page-time renderer. Require intrinsic dimensions
+  equal to each viewBox, byte-identical generated assets, scoped normal and
+  expanded sizing, and one decorative expanded clone. Add a single
+  dependency-free Chrome DevTools smoke that serves only generated local files,
+  uses a host-provided headless browser with hidden Windows process creation, and
+  validates semantic geometry and raster paint rather than brittle screenshot
+  hashes. The pinned documentation workflow runs this bounded matrix after build.
 - 2026-09-11: Keep deterministic documentation capture structurally outside the
   shipped application as a no-harness integration-test target. Require an explicit
   `--capture-to` marker and repository-local destination before initializing WGPU

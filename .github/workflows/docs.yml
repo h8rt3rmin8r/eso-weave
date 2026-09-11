@@ -9,6 +9,8 @@ on:
     paths:
       - ".github/scripts/docs-policy.mjs"
       - ".github/scripts/docs-policy.test.mjs"
+      - ".github/scripts/docs-render-smoke.mjs"
+      - ".github/scripts/docs-render-smoke.test.mjs"
       - ".github/workflows/docs.yml"
       - ".typos.toml"
       - "Cargo.toml"
@@ -22,6 +24,8 @@ on:
     paths:
       - ".github/scripts/docs-policy.mjs"
       - ".github/scripts/docs-policy.test.mjs"
+      - ".github/scripts/docs-render-smoke.mjs"
+      - ".github/scripts/docs-render-smoke.test.mjs"
       - ".github/workflows/docs.yml"
       - ".typos.toml"
       - "Cargo.toml"
@@ -56,7 +60,7 @@ jobs:
         run: typos docs/src docs/README.md README.md
 
       - name: Test documentation policy
-        run: node --test .github/scripts/docs-policy.test.mjs
+        run: node --test .github/scripts/docs-policy.test.mjs .github/scripts/docs-render-smoke.test.mjs
 
       - name: Test book examples
         run: mdbook test docs
@@ -66,6 +70,9 @@ jobs:
 
       - name: Validate generated site
         run: node .github/scripts/docs-policy.mjs docs target/docs-site/html
+
+      - name: Smoke test diagram rendering
+        run: node .github/scripts/docs-render-smoke.mjs --site target/docs-site/html
 
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
