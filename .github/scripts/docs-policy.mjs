@@ -1104,7 +1104,14 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
     if (!titleId || !descId || !labelled.includes(titleId) || !labelled.includes(descId)) {
       errors.push(`S082 ${record.label} SVG title and description must match aria-labelledby`);
     }
-    if (/<(?:script|foreignObject|animate|set|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=\s*["'](?!#)|https?:\/\//iu.test(svg.replace('xmlns="http://www.w3.org/2000/svg"', ""))) {
+    const hasNonFragmentCssUrl = [...svg.matchAll(/\burl\s*\(\s*([^)]+?)\s*\)/giu)].some((match) => {
+      let target = match[1].trim();
+      if ((target.startsWith('"') && target.endsWith('"')) || (target.startsWith("'") && target.endsWith("'"))) {
+        target = target.slice(1, -1).trim();
+      }
+      return !target.startsWith("#");
+    });
+    if (hasNonFragmentCssUrl || /<(?:script|foreignObject|animate|set|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=\s*["'](?!#)|https?:\/\//iu.test(svg.replace('xmlns="http://www.w3.org/2000/svg"', ""))) {
       errors.push(`S082 ${record.label} SVG contains active or external content`);
     }
     if (!/<rect\b(?=[^>]*\bwidth=["']400["'])(?=[^>]*\bfill=["']#0e1116["'])[^>]*>/iu.test(svg)) {

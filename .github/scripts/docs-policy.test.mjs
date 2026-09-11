@@ -184,6 +184,10 @@ test("S082 rejects horizontal, inaccessible, active, remote, and color-only SVGs
   remote.svgs.set("pixel-bus-validation.svg", remote.svgs.get("pixel-bus-validation.svg").replace("</svg>", '<image href="https://example.com/image.png"/></svg>'));
   assert.match(validateDocumentationDiagrams(remote).join("\n"), /active or external content/i);
 
+  const remoteCssPaint = diagramFixture();
+  remoteCssPaint.svgs.set("pixel-bus-validation.svg", remoteCssPaint.svgs.get("pixel-bus-validation.svg").replace('fill="#0e1116"', 'style="fill: url(/remote.svg#paint)"'));
+  assert.match(validateDocumentationDiagrams(remoteCssPaint).join("\n"), /active or external content/i);
+
   const colorOnly = diagramFixture();
   colorOnly.svgs.set("action-authorization.svg", colorOnly.svgs.get("action-authorization.svg").replace("Fails closed", "Denied"));
   assert.match(validateDocumentationDiagrams(colorOnly).join("\n"), /fails closed label/i);
