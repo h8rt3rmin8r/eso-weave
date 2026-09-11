@@ -64,10 +64,21 @@ winresource = "0.1"
 # test build; the version tracks the eframe/egui release. Recorded as a dated
 # decision in CHANGELOG.md.
 egui_kittest = { version = "0.36.1", default-features = false }
+# Headless documentation capture uses egui's own renderer directly because the
+# matching egui_kittest WGPU feature currently declares an unavailable pollster
+# 1.x range. These dependencies remain test-only and never enter release builds.
+egui-wgpu = { version = "0.36.1", default-features = false }
+wgpu = { version = "30", default-features = false, features = ["std", "dx12", "vulkan", "gles"] }
+pollster = "0.4"
 # Executes the exact encounter addon under ESO-compatible Lua 5.1 semantics.
 # Vendoring keeps the privacy and loss state-machine tests deterministic on both
 # CI platforms without adding Lua to the shipped application.
 mlua = { version = "0.11", features = ["lua51", "vendored"] }
+
+[[test]]
+name = "documentation_capture"
+path = "tests/documentation_capture.rs"
+harness = false
 
 # Debian package metadata for cargo-deb (built by the pinned release pipeline with
 # `cargo deb --no-build`). Pinned packaging config: changes are recorded as dated

@@ -14,10 +14,11 @@ Sequence:
 3. S081 completed in PR #149 and closed issue #122. It brings approved source
    brand assets, valid surface examples, reproduction guidance, and accessible
    color swatches into the Brand Standard.
-4. S082 is in progress under issue #123. It adds purposeful top-down diagrams to
-   high-value architecture, authorization, safety-recovery, and Pixel Bus flows.
-5. A later slice builds the isolated deterministic screenshot sandbox under issue
-   #124 before screenshot content begins.
+4. S082 completed in PR #150 and closed issue #123. It adds purposeful top-down
+   diagrams to high-value architecture, authorization, safety-recovery, and Pixel
+   Bus flows.
+5. S083 implements the isolated deterministic screenshot sandbox under issue #124
+   before screenshot content begins.
 6. After #124, a later slice adds guided setup and feature screenshots under issue
    #125 without requiring a live game capture.
 7. A later slice enforces compact `S###` work-slice references in published prose
