@@ -5,7 +5,8 @@ that data remains private and reproducible, and which claims still require live
 comparison. S075 implements the explicitly armed, bounded addon capture. S076
 implements its hostile-data import and dedicated raw store. S077 implements
 versioned metric projection and catalog reconciliation. S078 implements the
-desktop history interface. Recommendations remain later work.
+desktop history interface. S090 adds provisional, evidence-scoped encounter
+review prompts.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -157,6 +158,66 @@ effects or abilities. The receipt exposes sorted known and unknown positive IDs,
 catalog semantic identity, and immutable raw-content identity. Rebuilding with a
 later compatible catalog can resolve an unknown ID without changing raw bytes or
 metric values.
+
+## Provisional recommendations
+
+S090 adds a separate local `s090-v1` recommendation policy after S077 metric
+projection. It consumes one immutable in-memory projection, reopens no catalog or
+raw file, performs no network or model call, and writes no recommendation file,
+database row, setting, log, or telemetry event. A catalog replacement discards the
+selected detail and rebuilds its facts and prompts together.
+
+The Encounter History window always renders Observed Metrics before Provisional
+Recommendations. A prompt is a deterministic question for review, not a claim of
+cause, an optimal build or rotation, a guaranteed improvement, or Combat Metrics
+parity. The first policy has two bounded rules:
+
+- identify at most one known ability contributing at least 40 percent of observed
+  outgoing ability damage, then ask whether that concentration matches the user's
+  intended encounter context;
+- identify at most one known effect with observed uptime at or below 50 percent,
+  then ask whether the observed gaps match the user's intended uptime.
+
+The policy generates no more than two prompts. Higher damage share wins the first
+rule, lower uptime wins the second, and ascending numeric ID breaks equal values.
+Invalid, unavailable, non-finite, negative, or greater-than-one ratios produce no
+prompt. Numeric IDs remain explicit because the projection carries catalog
+identity but not localized names.
+
+Evidence gates are versioned policy thresholds rather than ESO performance
+targets. The first policy accepts only projection schema 1 and the `s069-v1`
+metric algorithm. It also requires each recommendation-bearing metric to carry a
+matching algorithm, source range, and internally consistent quality plus exact
+loss evidence. Unsupported versions, contradictory quality evidence, and
+reversed loss ranges fail closed.
+
+| Evidence | `s090-v1` result |
+| --- | --- |
+| Projection is not schema 1 with `s069-v1` metrics | Suppress all advice |
+| Metric quality, coverage, algorithm, or a loss range is inconsistent | Suppress all advice |
+| Duration below 10 seconds | Suppress all advice |
+| Fewer than three observed casts | Suppress all advice |
+| Declared loss below 10 percent of the inclusive sequence span | Qualify retained advice and show the exact loss |
+| Declared loss at or above 10 percent | Suppress all advice |
+| Any unknown positive ID | Qualify known-target advice and omit unknown targets |
+| Unknown abilities own at least 25 percent of observed damage | Suppress only damage-concentration advice |
+
+Unknown IDs from unrelated entity families do not erase a valid known-effect
+prompt. This rule-local treatment prevents incomplete catalog knowledge from
+becoming a false global blocker. A suppressed report still shows the complete
+observed metrics and its exact evidence reasons. A qualified prompt repeats each
+applicable qualification next to the prompt.
+
+Every prompt cites recommendation schema and policy, encounter and session IDs,
+raw-content SHA-256, projection schema, metric algorithm, catalog schema and
+version, catalog semantic SHA-256, channel, and API version. These identities make
+the prompt reproducible without treating it as stored truth.
+
+Recommendations have no apply or execute control and cannot enqueue, synthesize,
+or authorize input. Weaving, Fishing, Auto Potion, Pixel Bus, game focus, addon
+lifecycle, catalogs, and raw encounter storage do not consume recommendation
+output. Live comparison in issue #131 may justify a later policy version, but it
+does not block `s090-v1` implementation or use.
 
 ## Deterministic synthetic spike
 

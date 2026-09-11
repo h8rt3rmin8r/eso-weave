@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-09-10",
+  "as_of": "2026-09-11",
   "source_snapshots": [
     {
       "id": "eso-api-live",
@@ -86,11 +86,40 @@
     "production_budget": "verification-required"
   },
   "recommendation_policy": {
+    "state": "repository-implemented-provisional",
+    "slice": "S090",
+    "schema_version": 1,
+    "policy_version": "s090-v1",
+    "input": "versioned-metric-projection",
+    "projection_schema_version": 1,
+    "metric_algorithm_version": "s069-v1",
+    "reject_unsupported_projection": true,
+    "reject_invalid_metric_evidence": true,
+    "reject_invalid_loss_ranges": true,
+    "confidence": "provisional",
+    "max_advice_items": 2,
     "requires_encounter_version": true,
     "requires_catalog_version": true,
     "requires_metric_quality": true,
+    "facts_separate_from_advice": true,
     "correlation_is_not_causation": true,
-    "action_automation_coupling": false
+    "persisted": false,
+    "network_dependency": false,
+    "telemetry": false,
+    "action_automation_coupling": false,
+    "thresholds": {
+      "min_duration_ms": 10000,
+      "min_casts": 3,
+      "material_loss_percent": 10,
+      "dominant_damage_share_percent": 40,
+      "low_effect_uptime_percent": 50,
+      "material_unknown_damage_share_percent": 25
+    },
+    "unknown_ids": {
+      "qualify_known_advice": true,
+      "omit_unknown_targets": true,
+      "suppress_only_affected_rule": true
+    }
   },
   "catalog_schema_requirements": {
     "entities": ["ability", "effect", "item", "item-set", "champion-skill", "mundus-effect", "class", "race", "food", "trait", "enchantment"],
@@ -159,7 +188,7 @@
     {"capability": "death-and-resurrection", "source_event": "death and resurrection", "calculation": "ordered life-state intervals", "confidence": "repository-harness", "privacy_impact": "encounter-local actors", "combat_metrics_evidence": "death and resurrection rows", "state": "repository-implemented-live-verification-required", "target_phase": "capture", "acceptance": "executed Lua 5.1 harness plus live capture sample", "owner": "issue #132", "risk": "medium"},
     {"capability": "boss-health-performance-quickslot", "source_event": "boss-health, performance, and quickslot", "calculation": "time-aligned samples", "confidence": "repository-harness", "privacy_impact": "performance samples", "combat_metrics_evidence": "boss HP, performance, and quickslot rows", "state": "repository-implemented-live-verification-required", "target_phase": "capture", "acceptance": "executed Lua 5.1 harness plus live capture sample", "owner": "issue #132", "risk": "medium"},
     {"capability": "same-parse-combat-metrics-parity", "source_event": "representative live capture", "calculation": "metric-by-metric comparison with tolerances", "confidence": "verification-required", "privacy_impact": "local-only parse", "combat_metrics_evidence": "representative exported fight", "state": "verification-required", "target_phase": "verification", "acceptance": "same-parse comparison with declared tolerances", "owner": "issue #131", "risk": "high"},
-    {"capability": "recommendations", "source_event": "versioned metric projections", "calculation": "separate evidence-scoped consumer", "confidence": "deferred", "privacy_impact": "build and performance inference", "combat_metrics_evidence": "not a capture parity feature", "state": "deferred", "target_phase": "recommendations", "acceptance": "separate product acceptance criteria", "owner": "issue #136", "risk": "high"}
+    {"capability": "recommendations", "source_event": "versioned metric projections", "calculation": "s090-v1 evidence gates plus bounded dominant-damage and low-uptime review prompts", "confidence": "repository-implemented-provisional", "privacy_impact": "local in-memory performance inference", "combat_metrics_evidence": "not a capture parity feature", "state": "repository-implemented-provisional", "target_phase": "recommendations", "acceptance": "deterministic local reports with complete per-item provenance and no action authority", "owner": "issue #136", "risk": "medium"}
   ],
   "follow_up_order": ["capture", "import", "calculation", "ui", "recommendations"],
   "follow_up_issues": {

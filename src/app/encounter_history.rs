@@ -8,6 +8,10 @@ use crate::encounter::{
     EncounterHistoryService, EncounterIdentity, EncounterProjection, EncounterSummary,
     HistoryDiagnostic, ImportOutcome, LossRange, MetricQuality, MetricResult,
 };
+use crate::recommendation::{
+    generate_recommendations, AdviceQualification, AdviceRule, RecommendationAvailability,
+    RecommendationReport,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoryOperation {
@@ -39,7 +43,7 @@ pub enum HistoryEvent {
     },
     Detail {
         identity: EncounterIdentity,
-        result: Result<Box<EncounterProjection>, HistoryDiagnostic>,
+        result: Result<Box<EncounterDetail>, HistoryDiagnostic>,
     },
     Failed {
         operation: HistoryOperation,
@@ -88,7 +92,10 @@ impl EncounterHistoryWorker {
                         },
                     },
                     HistoryCommand::LoadDetail(identity) => {
-                        let result = thread_service.detail(&identity).map(Box::new);
+                        let result = thread_service
+                            .detail(&identity)
+                            .map(EncounterDetail::from_projection)
+                            .map(Box::new);
                         HistoryEvent::Detail { identity, result }
                     }
                     HistoryCommand::DeleteOne(identity) => {
@@ -190,6 +197,22 @@ impl EncounterHistoryWorker {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EncounterDetail {
+    pub projection: EncounterProjection,
+    pub recommendations: RecommendationReport,
+}
+
+impl EncounterDetail {
+    fn from_projection(projection: EncounterProjection) -> Self {
+        let recommendations = generate_recommendations(&projection);
+        Self {
+            projection,
+            recommendations,
+        }
+    }
+}
+
 impl Drop for EncounterHistoryWorker {
     fn drop(&mut self) {
         if let Some(sender) = self.command_tx.take() {
@@ -264,5 +287,130 @@ fn metric_value(result: &MetricResult) -> String {
         "damage-per-second" => format!("{value:.2} damage/s"),
         "effective-healing-per-second" => format!("{value:.2} effective healing/s"),
         unit => format!("{value:.2} {unit}"),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecommendationPresentation {
+    pub heading: &'static str,
+    pub status: &'static str,
+    pub summary: &'static str,
+    pub reasons: Vec<String>,
+    pub items: Vec<AdvicePresentation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdvicePresentation {
+    pub title: &'static str,
+    pub body: String,
+    pub qualification: &'static str,
+    pub qualification_reasons: Vec<String>,
+    pub citation: String,
+}
+
+pub fn recommendation_presentation(report: &RecommendationReport) -> RecommendationPresentation {
+    let status = match report.availability {
+        RecommendationAvailability::Ready => "Evidence status: Ready",
+        RecommendationAvailability::Qualified => "Evidence status: Qualified",
+        RecommendationAvailability::Suppressed => "Evidence status: Suppressed",
+    };
+    let summary = match report.availability {
+        RecommendationAvailability::Suppressed => {
+            "Advice is suppressed because the evidence did not pass every s090-v1 gate."
+        }
+        _ if report.advice.is_empty() => {
+            "No provisional review prompt crossed the s090-v1 thresholds."
+        }
+        _ => {
+            "These deterministic review prompts are provisional and do not claim cause or an optimal rotation."
+        }
+    };
+    let items = report
+        .advice
+        .iter()
+        .map(|item| {
+            let (title, body) = match item.rule {
+                AdviceRule::DominantDamageShare => (
+                    "Review dominant observed damage share",
+                    format!(
+                        "Ability {} contributed {:.1}% of observed outgoing ability damage. Compare that concentration with your intended encounter context.",
+                        item.target_id,
+                        item.observed_ratio * 100.0
+                    ),
+                ),
+                AdviceRule::LowEffectUptime => (
+                    "Review low observed effect uptime",
+                    format!(
+                        "Effect {} had {:.1}% observed uptime. Compare the observed gaps with the uptime you intended for this encounter.",
+                        item.target_id,
+                        item.observed_ratio * 100.0
+                    ),
+                ),
+            };
+            let qualification = match item.qualification {
+                AdviceQualification::Provisional => "Provisional review prompt",
+                AdviceQualification::ProvisionalQualified => {
+                    "Provisional, qualified review prompt"
+                }
+            };
+            let citation = format!(
+                "Evidence: encounter {} in session {} | raw {} | projection schema {} | metric algorithm {} | catalog {} (schema {}, semantic {}) | {} API {} | recommendation {} (schema {})",
+                item.citation.encounter_id,
+                item.citation.session_id,
+                item.citation.raw_content_sha256,
+                item.citation.projection_schema_version,
+                item.citation.metric_algorithm_version,
+                item.citation.catalog_version,
+                item.citation.catalog_schema_version,
+                item.citation.catalog_semantic_sha256,
+                item.citation.channel,
+                item.citation.api_version,
+                item.citation.recommendation_policy_version,
+                item.citation.recommendation_schema_version
+            );
+            AdvicePresentation {
+                title,
+                body,
+                qualification,
+                qualification_reasons: if matches!(
+                    item.qualification,
+                    AdviceQualification::ProvisionalQualified
+                ) {
+                    let mut reasons = report
+                        .reasons
+                        .iter()
+                        .filter(|reason| {
+                            matches!(
+                                reason.kind,
+                                crate::recommendation::RecommendationReasonKind::DeclaredCaptureLoss
+                                    | crate::recommendation::RecommendationReasonKind::UnknownCatalogIds
+                            )
+                        })
+                        .map(|reason| reason.message.clone())
+                        .collect::<Vec<_>>();
+                    if report.reasons.iter().any(|reason| {
+                        reason.kind
+                            == crate::recommendation::RecommendationReasonKind::DeclaredCaptureLoss
+                    }) {
+                        reasons.extend(loss_labels(&report.evidence.loss_ranges));
+                    }
+                    reasons
+                } else {
+                    Vec::new()
+                },
+                citation,
+            }
+        })
+        .collect();
+    RecommendationPresentation {
+        heading: "Provisional Recommendations",
+        status,
+        summary,
+        reasons: report
+            .reasons
+            .iter()
+            .map(|reason| reason.message.clone())
+            .collect(),
+        items,
     }
 }

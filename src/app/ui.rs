@@ -25,7 +25,8 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::app::encounter_history::{
-    metric_presentation, quality_label, EncounterHistoryWorker, HistoryEvent,
+    metric_presentation, quality_label, recommendation_presentation, EncounterDetail,
+    EncounterHistoryWorker, HistoryEvent,
 };
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
@@ -288,7 +289,7 @@ pub struct EsoWeaveApp {
     encounter_history_busy: bool,
     encounter_history: Vec<EncounterSummary>,
     encounter_history_selected: Option<EncounterIdentity>,
-    encounter_history_detail: Option<Result<EncounterProjection, HistoryDiagnostic>>,
+    encounter_history_detail: Option<Result<EncounterDetail, HistoryDiagnostic>>,
     encounter_history_diagnostic: Option<HistoryDiagnostic>,
     encounter_history_message: Option<String>,
     encounter_history_catalog_refresh_pending: bool,
@@ -993,8 +994,12 @@ impl EsoWeaveApp {
                     }
                 }
                 HistoryEvent::Detail { identity, result } => {
-                    if self.encounter_history_selected.as_ref() == Some(&identity) {
-                        self.encounter_history_detail = Some(result.map(|projection| *projection));
+                    if should_accept_history_detail(
+                        self.encounter_history_selected.as_ref(),
+                        self.encounter_history_catalog_refresh_pending,
+                        &identity,
+                    ) {
+                        self.encounter_history_detail = Some(result.map(|detail| *detail));
                     }
                 }
                 HistoryEvent::Failed { diagnostic, .. } => {
@@ -2540,7 +2545,11 @@ impl EsoWeaveApp {
                         }
                     });
                     match &self.encounter_history_detail {
-                        Some(Ok(projection)) => render_encounter_projection(ui, projection),
+                        Some(Ok(detail)) => render_encounter_projection(
+                            ui,
+                            &detail.projection,
+                            &detail.recommendations,
+                        ),
                         Some(Err(diagnostic)) => {
                             ui.strong(history_diagnostic_heading(diagnostic.kind));
                             ui.label(&diagnostic.message);
@@ -2780,7 +2789,11 @@ fn capture_status_label(status: crate::encounter::CaptureStatus) -> &'static str
     }
 }
 
-fn render_encounter_projection(ui: &mut egui::Ui, projection: &EncounterProjection) {
+fn render_encounter_projection(
+    ui: &mut egui::Ui,
+    projection: &EncounterProjection,
+    recommendations: &crate::recommendation::RecommendationReport,
+) {
     ui.label(format!("Encounter ID: {}", projection.encounter_id));
     ui.label(format!("Session ID: {}", projection.session_id));
     ui.label(format!(
@@ -2865,6 +2878,8 @@ fn render_encounter_projection(ui: &mut egui::Ui, projection: &EncounterProjecti
         quality_label(projection.ordered_cast_sequence.quality)
     ));
 
+    render_encounter_recommendations(ui, recommendations);
+
     ui.separator();
     ui.heading("Projection and Catalog Provenance");
     ui.label(format!("Projection Schema: {}", projection.schema_version));
@@ -2907,6 +2922,31 @@ fn render_encounter_projection(ui: &mut egui::Ui, projection: &EncounterProjecti
     ui.monospace(&projection.raw_content_sha256);
 }
 
+fn render_encounter_recommendations(
+    ui: &mut egui::Ui,
+    report: &crate::recommendation::RecommendationReport,
+) {
+    let view = recommendation_presentation(report);
+    ui.separator();
+    ui.heading(view.heading);
+    ui.strong(view.status);
+    ui.label(view.summary);
+    for reason in &view.reasons {
+        ui.label(reason);
+    }
+    for item in &view.items {
+        ui.group(|ui| {
+            ui.strong(item.title);
+            ui.label(&item.body);
+            ui.small(item.qualification);
+            for reason in &item.qualification_reasons {
+                ui.small(reason);
+            }
+            ui.small(&item.citation);
+        });
+    }
+}
+
 fn render_metric(ui: &mut egui::Ui, label: &str, result: &MetricResult) {
     let view = metric_presentation(label, result);
     ui.strong(view.label);
@@ -2915,6 +2955,14 @@ fn render_metric(ui: &mut egui::Ui, label: &str, result: &MetricResult) {
         "Quality: {} | Source Sequences: {}-{}",
         view.quality, result.first_sequence, result.last_sequence
     ));
+}
+
+fn should_accept_history_detail(
+    selected: Option<&EncounterIdentity>,
+    catalog_refresh_pending: bool,
+    received: &EncounterIdentity,
+) -> bool {
+    !catalog_refresh_pending && selected == Some(received)
 }
 
 fn render_virtual_rows<T>(
@@ -3456,5 +3504,30 @@ fn live_state_label(state: LiveUpdateState) -> &'static str {
         LiveUpdateState::CatalogUnavailable => {
             "No usable active catalog is available; review the bundled catalog or imports."
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_accept_history_detail;
+    use crate::encounter::EncounterIdentity;
+
+    #[test]
+    fn catalog_replacement_discards_an_in_flight_detail_from_the_old_catalog() {
+        let selected = EncounterIdentity {
+            session_id: "session-090".into(),
+            encounter_id: "encounter-090".into(),
+        };
+
+        assert!(should_accept_history_detail(
+            Some(&selected),
+            false,
+            &selected
+        ));
+        assert!(!should_accept_history_detail(
+            Some(&selected),
+            true,
+            &selected
+        ));
     }
 }

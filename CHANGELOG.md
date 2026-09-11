@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S090 adds deterministic `s090-v1` encounter review prompts over one immutable
+  S077 projection. At most one dominant known-ability damage prompt and one low
+  known-effect uptime prompt appear after observed facts, each with complete
+  encounter, projection, calculation, catalog, channel, API, raw-hash, and policy
+  provenance. Exact duration, cast-count, loss, and rule-local unknown-ID gates
+  qualify or suppress advice without persistence, network or model calls,
+  telemetry, or any gameplay-action authority (issue #136).
+  The new policy table advances the maintained documentation inventory to 55
+  published tables across 26 pages.
 - S089 inventories all 54 published Markdown tables across 26 pages and adds
   responsive semantic containment with compact, dense, very dense, and five
   named-page profiles. Only genuinely overflowing tables receive a visible
@@ -142,6 +151,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-11: Implement encounter recommendations as a pure top-level domain over
+  an immutable versioned projection, not as part of Encounter Metrics, storage,
+  catalog lookup, or egui rendering. Keep every prompt provisional and bounded to
+  evidence the current projection actually supplies. Suppress globally only for
+  duration below 10 seconds, fewer than three casts, invalid sequence evidence,
+  or at least 10 percent declared loss. Unknown IDs qualify known-target advice,
+  unknown targets are omitted, and at least 25 percent unknown damage share
+  suppresses only the damage rule so unrelated uncertainty cannot become a false
+  global blocker. Archive completed Plan 039 and activate Plan 040 for S090.
 - 2026-09-11: Preserve semantic Markdown tables and mdBook's existing local
   overflow wrapper as the script-free authority. Add one progressive geometry
   enhancer instead of duplicate cards, hidden columns, smaller text, or a table

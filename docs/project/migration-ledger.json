@@ -1556,9 +1556,9 @@
     },
     {
       "id": "039",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-039.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-039.md",
       "specs": [
         "specs/079-formal-glossary",
         "specs/080-docs-landing-identity",
@@ -1568,9 +1568,21 @@
         "specs/084-guided-documentation-screenshots",
         "specs/085-docs-slice-references",
         "specs/086-diagram-rendering-compatibility",
-        "specs/087-docs-syntax-highlighting"
+        "specs/087-docs-syntax-highlighting",
+        "specs/088-docs-figure-system",
+        "specs/089-responsive-doc-tables"
       ],
-      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 merged in PR #149 and closed issue #122; S082 merged in PR #150 and closed issue #123; S083 merged in PR #151 and closed issue #124; S084 merged in PR #152 and closed issue #125; S085 merged in PR #153 and closed issue #126; S086 merged in PR #158 and closed issue #154; S087 is in progress under issue #157."
+      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 merged in PR #149 and closed issue #122; S082 merged in PR #150 and closed issue #123; S083 merged in PR #151 and closed issue #124; S084 merged in PR #152 and closed issue #125; S085 merged in PR #153 and closed issue #126; S086 merged in PR #158 and closed issue #154; S087 merged in PR #159 and closed issue #157; S088 merged in PR #160 and closed issues #155 and #156; S089 merged in PR #161 and closed issue #127, enabling epic #119 and its milestone to close."
+    },
+    {
+      "id": "040",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-040.md",
+      "specs": [
+        "specs/090-evidence-scoped-recommendations"
+      ],
+      "evidence": "Issue #136 tracks S090 evidence-scoped encounter recommendations; issues #110, #129, and #131 remain independent non-blocking verification."
     }
   ],
   "safetyCrosswalk": [
