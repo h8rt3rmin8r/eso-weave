@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S081 turns the Brand Standard into a visual reference with byte-identical local
+  copies of the approved banner, badged mark, and badge-less glyph, valid dark and
+  light surface examples, reproduction and compatibility-output guidance, and
+  accessible bounded chips beside all 25 dark and light palette tokens. Source,
+  asset identity, responsive styling, and generated offline delivery are enforced
+  by documentation policy (issue #122).
 - S080 replaces the documentation landing-page square mark with the official
   full-color wordmark, adds an accessible semantic build-time snapshot of the
   package handle, applicability version, release date, and canonical repository,
@@ -81,6 +87,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-10: Treat the full-color banner, badged mark SVG, and badge-less glyph
+  SVG as the approved Brand Standard set. Publish byte-identical local copies for
+  Pages and bundled documentation, label older clear and white raster logos as
+  generated compatibility outputs rather than masters, and never demonstrate the
+  badge-less glyph on a light surface. Represent each palette token with a static,
+  labeled chip beside visible role, hex, and use text, with a theme-independent
+  boundary and no JavaScript, network request, image regeneration, or application
+  behavior.
 - 2026-09-10: Keep landing-page project metadata as an explicitly static
   build-time snapshot. Treat the package name, version, and repository in
   `Cargo.toml` plus the matching dated release heading in `CHANGELOG.md` as its

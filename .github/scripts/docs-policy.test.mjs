@@ -8,6 +8,9 @@ import {
   contrastRatio,
   validateBrandCss,
   validateBrandJavascript,
+  validateBrandStandard,
+  validateBrandStandardGenerated,
+  validateBrandStandardVisualCss,
   validateCatalogCandidateWorkflow,
   validateCatalogSourceContract,
   projectEncounterMetrics,
@@ -30,6 +33,92 @@ import {
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+const brandTokens = [
+  ["Ink base", "#0E1116"], ["Panel", "#151B23"], ["Elevated", "#1C2530"],
+  ["Stroke", "#2A3340"], ["Gold (action)", "#F2B03C"], ["Gold hover", "#FBCB6B"],
+  ["Gold deep", "#D18F22"], ["Teal (support)", "#2DD4BF"], ["Text", "#E6EDF3"],
+  ["Muted", "#8B97A7"], ["Status ok", "#34D399"], ["Status warn", "#FB9E3C"],
+  ["Status err", "#F87171"], ["Base", "#F7F5F0"], ["Panel", "#FFFFFF"],
+  ["Elevated", "#ECE8DE"], ["Stroke", "#DCD9D0"], ["Gold (action)", "#E7A42C"],
+  ["Gold deep", "#C6871F"], ["Teal (support)", "#0D9488"], ["Text", "#14110B"],
+  ["Muted", "#6B6455"], ["Status ok", "#059669"], ["Status warn", "#B45309"],
+  ["Status err", "#DC2626"],
+];
+
+const brandRow = ([role, hex]) => `| ${role} | <span class="brand-swatch" role="img" aria-label="${role}, ${hex} color swatch" style="--swatch-color: ${hex}"></span> \`${hex}\` | Use |`;
+const brandMarkdown = `# ESO Weave Brand Standard v1
+
+<div class="brand-asset-gallery">
+<figure class="brand-surface brand-surface--dark" aria-label="Dark ink surface">
+<img src="../assets/brand/eso-weave-banner.png" alt="ESO Weave full-color banner wordmark">
+<img src="../assets/brand/eso-weave-mark.svg" alt="ESO Weave badged mark">
+<img src="../assets/brand/eso-weave-glyph.svg" alt="ESO Weave badge-less glyph">
+</figure>
+<figure class="brand-surface brand-surface--light" aria-label="Light surface">
+<img src="../assets/brand/eso-weave-banner.png" alt="ESO Weave full-color banner wordmark on light">
+<img src="../assets/brand/eso-weave-mark.svg" alt="ESO Weave badged mark on light">
+</figure>
+</div>
+
+Full-color banner is the wordmark. Badged mark is the universal icon. Badge-less glyph is for ink-surface lockups only.
+The files \`eso-weave-logo-clear.png\` and \`eso-weave-logo-white.png\` are generated compatibility outputs, not masters.
+[Download full-color banner](../assets/brand/eso-weave-banner.png)
+[Download badged mark](../assets/brand/eso-weave-mark.svg)
+[Download badge-less glyph](../assets/brand/eso-weave-glyph.svg)
+Preserve aspect ratio. Use clear space equal to one strand width. Minimum sizes are 16 CSS pixels for the badged mark, 32 CSS pixels for the glyph, and 160 CSS pixels for the banner. Do not recolor.
+
+### Dark (default)
+| Role | Hex | Use |
+| --- | --- | --- |
+${brandTokens.slice(0, 13).map(brandRow).join("\n")}
+
+### Light
+| Role | Hex | Use |
+| --- | --- | --- |
+${brandTokens.slice(13).map(brandRow).join("\n")}
+`;
+const brandAssetBytes = Uint8Array.from([1, 3, 5, 7]);
+const brandArguments = (markdown = brandMarkdown) => ({
+  markdown,
+  approvedBanner: brandAssetBytes,
+  publishedBanner: brandAssetBytes,
+  approvedMark: brandAssetBytes,
+  publishedMark: brandAssetBytes,
+  approvedGlyph: brandAssetBytes,
+  publishedGlyph: brandAssetBytes,
+});
+
+test("S081 accepts approved assets, valid surfaces, local links, and complete palette chips", () => {
+  assert.deepEqual(validateBrandStandard(brandArguments()), []);
+});
+
+test("S081 rejects asset drift, missing identity guidance, and light-surface glyph use", () => {
+  assert.match(validateBrandStandard({ ...brandArguments(), publishedGlyph: Uint8Array.from([9]) }).join("\n"), /glyph.*bytes/i);
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("generated compatibility outputs, not masters", "logos"))).join("\n"), /compatibility.*masters/i);
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace('<figure class="brand-surface brand-surface--light" aria-label="Light surface">', '<figure class="brand-surface brand-surface--light" aria-label="Light surface">\n<img src="../assets/brand/eso-weave-glyph.svg" alt="glyph on light">'))).join("\n"), /glyph.*light/i);
+});
+
+test("S081 rejects missing, recolored, and mislabeled palette chips", () => {
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace(brandRow(brandTokens[0]), ""))).join("\n"), /Ink base|palette/i);
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("--swatch-color: #F7F5F0", "--swatch-color: #000000"))).join("\n"), /Base|fill/i);
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("Status err, #DC2626 color swatch", "Error red"))).join("\n"), /Status err|accessible/i);
+});
+
+test("S081 requires generated semantics and all local asset outputs", () => {
+  const outputPaths = new Set(["assets/brand/eso-weave-banner.png", "assets/brand/eso-weave-mark.svg", "assets/brand/eso-weave-glyph.svg"]);
+  assert.deepEqual(validateBrandStandardGenerated(brandMarkdown, outputPaths), []);
+  assert.match(validateBrandStandardGenerated(brandMarkdown, new Set()).join("\n"), /asset output/i);
+  assert.match(validateBrandStandardGenerated(brandMarkdown.replace("brand-asset-gallery", "other-gallery"), outputPaths).join("\n"), /gallery/i);
+});
+
+test("S081 requires bounded swatches, contained images, and narrow gallery reflow", () => {
+  const css = `.brand-asset-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.brand-surface { border: 1px solid #65758b; }\n.brand-surface--dark { background: #0e1116; }\n.brand-surface--light { background: #f7f5f0; }\n.brand-surface img { display: block; height: auto; max-width: 100%; }\n.brand-swatch { background: var(--swatch-color); border: 1px solid #65758b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); display: inline-block; height: 1.1rem; width: 1.1rem; }\n@media (max-width: 40rem) { .brand-asset-gallery { grid-template-columns: 1fr; } }`;
+  assert.deepEqual(validateBrandStandardVisualCss(css), []);
+  assert.match(validateBrandStandardVisualCss(css.replace("border: 1px solid #65758b; box-shadow", "box-shadow")).join("\n"), /swatch.*boundary/i);
+  assert.match(validateBrandStandardVisualCss(css.replace("max-width: 100%;", "max-width: none;")).join("\n"), /image/i);
+  assert.match(validateBrandStandardVisualCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(2, 1fr);")).join("\n"), /narrow/i);
+});
 
 const landingCargo = `[package]\nname = "eso-weave"\nversion = "0.15.1"\nrepository = "https://github.com/h8rt3rmin8r/eso-weave"\n`;
 const landingChangelog = "# Changelog\n\n## [Unreleased]\n\n## [0.15.1] - 2026-09-09\n";
