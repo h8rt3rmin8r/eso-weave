@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S088 gives all 20 meaningful documentation image placements one visible,
+  keyboard-accessible expansion control and one shared native modal with close,
+  backdrop, Escape, inert-background, caption-description, intrinsic-sizing, and
+  exact focus-return behavior. It also establishes a readable body-relative
+  caption hierarchy and adds source policy plus a 20-cell light, dark, narrow,
+  and wide browser matrix without a dependency or network resource. Trusted
+  pointer hit tests, sequential focus, 200 percent scale, print, blocked-script,
+  modal-caption, and both brand-surface observations complete the browser receipt
+  (issues #155 and #156).
 - S087 inventories all 23 documentation fences, corrects 12 prompt-free
   commands to accurate Bash metadata, explicitly binds eight intentional plain
   blocks, extends mdBook's bundled Highlight.js runtime with local command and
@@ -125,6 +134,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-11: Replace mdBook's generated checkbox image modal at runtime with
+  one local native dialog shared by Markdown diagrams and raw HTML figures. The
+  checkbox behavior lacks the required obvious close control, dialog semantics,
+  caption association, background inertness, and exact focus return; patching it
+  would retain duplicate modal state and invalid nested interaction. Keep every
+  authored figure readable without JavaScript, preserve the diagram rendering
+  evidence, add no viewer dependency, and use `0.9em` for captions because
+  mdBook's 10-pixel root would make the initially suggested `0.9rem` only 9
+  pixels rather than the required body-relative 14.4 pixels.
 - 2026-09-11: Retain the four static local SVG diagrams as their own delivery
   authority and harden their compatibility contract instead of adding Mermaid,
   alternate raster assets, or a page-time renderer. Require intrinsic dimensions

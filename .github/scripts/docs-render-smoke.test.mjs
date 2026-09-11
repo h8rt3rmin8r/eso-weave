@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  FIGURE_PASS_SENTINEL,
   PASS_SENTINEL,
   SYNTAX_PASS_SENTINEL,
+  validateFigureObservation,
+  validateFigureReceipt,
   validateObservation,
   validateRenderingReceipt,
   validateSyntaxObservation,
@@ -155,4 +158,149 @@ test("S087 requires the complete 40-cell syntax receipt", () => {
   assert.match(validateSyntaxReceipt({ ...receipt, syntaxObservations: observations.slice(1) }).join("\n"), /40 unique/i);
   assert.match(validateSyntaxReceipt({ ...receipt, syntaxObservations: [...observations, observations[0]] }).join("\n"), /40 unique/i);
   assert.match(validateSyntaxReceipt({ ...receipt, syntaxFailures: ["runtime failed"] }).join("\n"), /runtime failed/i);
+});
+
+const validFigureObservation = {
+  caseId: "S088-LANDSCAPE",
+  surface: "generated-loopback",
+  theme: "navy",
+  viewportWidth: 320,
+  alternative: "ESO Weave showing a healthy running game",
+  triggerSemantic: true,
+  triggerName: "Expand image: ESO Weave showing a healthy running game",
+  visibleAffordance: true,
+  dialogCount: 1,
+  legacyModalCount: 0,
+  modalOpen: true,
+  closeFocused: true,
+  backgroundInert: true,
+  dialogLabel: "ESO Weave showing a healthy running game",
+  captionRequired: true,
+  captionAssociated: true,
+  naturalWidth: 1280,
+  naturalHeight: 640,
+  renderedWidth: 288,
+  renderedHeight: 144,
+  contained: true,
+  upscaled: false,
+  captionFontSize: 14.4,
+  captionLineHeight: 22.32,
+  captionContrast: 12,
+  captionContained: true,
+  modalCaptionFontSize: 14.4,
+  modalCaptionLineHeight: 22.32,
+  modalCaptionContrast: 12,
+  modalCaptionContained: true,
+  brandSurface: null,
+  pageContained: true,
+};
+
+test("S088 accepts an accessible, contained, non-upscaled figure observation", () => {
+  assert.deepEqual(validateFigureObservation(validFigureObservation), []);
+  assert.deepEqual(validateFigureObservation({
+    ...validFigureObservation,
+    caseId: "S088-DIAGRAM",
+    captionRequired: false,
+    captionFontSize: null,
+    captionLineHeight: null,
+    captionContrast: null,
+    captionContained: null,
+    modalCaptionFontSize: null,
+    modalCaptionLineHeight: null,
+    modalCaptionContrast: null,
+    modalCaptionContained: null,
+  }), []);
+});
+
+test("S088 rejects incomplete controls, modal lifecycle, geometry, and caption hierarchy", () => {
+  for (const [change, expected] of [
+    [{ triggerSemantic: false }, /button/i],
+    [{ triggerName: "" }, /accessible name/i],
+    [{ visibleAffordance: false }, /affordance/i],
+    [{ dialogCount: 2 }, /one shared dialog/i],
+    [{ legacyModalCount: 1 }, /legacy|duplicate/i],
+    [{ modalOpen: false }, /native modal/i],
+    [{ closeFocused: false }, /close control/i],
+    [{ backgroundInert: false }, /inert/i],
+    [{ dialogLabel: "wrong" }, /dialog label/i],
+    [{ renderedHeight: 120 }, /aspect ratio/i],
+    [{ upscaled: true }, /upscal/i],
+    [{ contained: false }, /containment/i],
+    [{ captionFontSize: 13.9 }, /caption.*size/i],
+    [{ captionLineHeight: 15 }, /caption.*line/i],
+    [{ captionContrast: 4.49 }, /caption.*contrast/i],
+    [{ captionContained: false }, /caption.*contain/i],
+    [{ modalCaptionFontSize: 13.9 }, /modal caption.*size/i],
+    [{ modalCaptionLineHeight: 15 }, /modal caption.*line/i],
+    [{ modalCaptionContrast: 4.49 }, /modal caption.*contrast/i],
+    [{ modalCaptionContained: false }, /modal caption.*contain/i],
+    [{ pageContained: false }, /page-level overflow/i],
+  ]) {
+    assert.match(validateFigureObservation({ ...validFigureObservation, ...change }).join("\n"), expected);
+  }
+  assert.match(validateFigureObservation({ ...validFigureObservation, caseId: "S088-BRAND", brandSurface: "light" }).join("\n"), /matching light or dark surface/i);
+});
+
+test("S088 requires the complete matrix and all pointer plus keyboard journeys", () => {
+  const observations = [];
+  for (const caseId of ["S088-DIAGRAM", "S088-LANDSCAPE", "S088-PORTRAIT", "S088-ILLUSTRATION", "S088-BRAND"]) {
+    for (const theme of ["navy", "light"]) {
+      for (const viewportWidth of [320, 1280]) {
+        observations.push({
+          ...validFigureObservation,
+          caseId,
+          theme,
+          viewportWidth,
+          captionRequired: caseId !== "S088-DIAGRAM",
+          brandSurface: caseId === "S088-BRAND" ? (theme === "light" ? "light" : "dark") : null,
+        });
+      }
+    }
+  }
+  const journeys = [
+    { id: "keyboard-enter-escape", opened: true, closed: true, focusReturned: true },
+    { id: "keyboard-space-escape", opened: true, closed: true, focusReturned: true },
+    { id: "keyboard-focus-cycle", opened: true, closed: true, focusReturned: true, tabForwardContained: true, tabReverseContained: true },
+    { id: "pointer-close-button", opened: true, closed: true, focusReturned: true },
+    { id: "pointer-backdrop", opened: true, closed: true, focusReturned: true },
+  ];
+  const receipt = {
+    figureSentinel: FIGURE_PASS_SENTINEL,
+    figureObservations: observations,
+    figureJourneys: journeys,
+    figureZoom: {
+      scale: 2,
+      sourceCaptionWrapped: true,
+      sourceCaptionContained: true,
+      sourceCaptionFontSize: 14.4,
+      modalCaptionWrapped: true,
+      modalCaptionContained: true,
+      modalCaptionFontSize: 14.4,
+      modalImageContained: true,
+      captionAssociated: true,
+    },
+    figurePrint: {
+      sourceImageVisible: true,
+      sourceCaptionVisible: true,
+      affordanceHidden: true,
+      dialogHidden: true,
+      legacyChromeHidden: true,
+    },
+    figureNoScript: {
+      sourceImagesVisible: true,
+      captionsVisible: true,
+      interactiveChromeAbsent: true,
+      legacyChromeHidden: true,
+    },
+    figureFailures: [],
+  };
+  assert.deepEqual(validateFigureReceipt(receipt), []);
+  assert.match(validateFigureReceipt({ ...receipt, figureSentinel: "wrong" }).join("\n"), /sentinel/i);
+  assert.match(validateFigureReceipt({ ...receipt, figureObservations: observations.slice(1) }).join("\n"), /20 unique/i);
+  assert.match(validateFigureReceipt({ ...receipt, figureJourneys: journeys.slice(1) }).join("\n"), /journey/i);
+  assert.match(validateFigureReceipt({ ...receipt, figureJourneys: journeys.map((item, index) => index === 0 ? { ...item, focusReturned: false } : item) }).join("\n"), /focus return/i);
+  assert.match(validateFigureReceipt({ ...receipt, figureZoom: { ...receipt.figureZoom, scale: 1 } }).join("\n"), /200 percent zoom/i);
+  assert.match(validateFigureReceipt({ ...receipt, figurePrint: { ...receipt.figurePrint, dialogHidden: false } }).join("\n"), /print rendering/i);
+  assert.match(validateFigureReceipt({ ...receipt, figureNoScript: { ...receipt.figureNoScript, interactiveChromeAbsent: false } }).join("\n"), /no-JavaScript/i);
+  assert.match(validateFigureReceipt({ ...receipt, figureFailures: ["runtime failed"] }).join("\n"), /runtime failed/i);
 });

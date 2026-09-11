@@ -1874,6 +1874,180 @@ export function validateDocumentationScreenshotCss(css) {
   return errors;
 }
 
+function figureBlocks(content, className) {
+  const pattern = new RegExp(`<figure\\b[^>]*\\bclass=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>[\\s\\S]*?<\\/figure>`, "giu");
+  return content.match(pattern) ?? [];
+}
+
+function rawImages(content) {
+  return content.match(/<img\b[^>]*>/giu) ?? [];
+}
+
+function markdownImages(content) {
+  return [...content.matchAll(/!\[([^\]]*)\]\([^\r\n)]+\)/gu)];
+}
+
+export function validateDocumentationFigureInventory(pages) {
+  if (!(pages instanceof Map)) return ["S088 figure inventory requires a source page map"];
+  const errors = [];
+  let allRaw = 0;
+  let allMarkdown = 0;
+  let screenshots = 0;
+  let diagrams = 0;
+  let brandImages = 0;
+  let screenshotCaptions = 0;
+  let brandCaptions = 0;
+  let decorativeWordmarks = 0;
+
+  for (const [page, content] of pages) {
+    allRaw += rawImages(content).length;
+    allMarkdown += markdownImages(content).length;
+
+    for (const block of figureBlocks(content, "docs-screenshot")) {
+      const images = rawImages(block);
+      screenshots += images.length;
+      screenshotCaptions += (block.match(/<figcaption\b/giu) ?? []).length;
+      for (const image of images) {
+        if (!/\balt=["'][^"']+["']/iu.test(image)) errors.push(`S088 ${page} screenshot requires meaningful alternative text`);
+      }
+    }
+
+    for (const block of figureBlocks(content, "docs-flow-diagram")) {
+      const images = markdownImages(block);
+      diagrams += images.length;
+      for (const image of images) {
+        if (!image[1].trim()) errors.push(`S088 ${page} diagram requires meaningful alternative text`);
+      }
+    }
+
+    for (const block of figureBlocks(content, "brand-surface")) {
+      const images = rawImages(block);
+      brandImages += images.length;
+      brandCaptions += (block.match(/<figcaption\b/giu) ?? []).length;
+      for (const image of images) {
+        if (!/\balt=["'][^"']+["']/iu.test(image)) errors.push(`S088 ${page} brand example requires meaningful alternative text`);
+      }
+    }
+
+    decorativeWordmarks += (content.match(/<p\s+class=["']landing-wordmark["']>\s*<img\b(?=[^>]*\balt=["']["'])[^>]*>\s*<\/p>/giu) ?? []).length;
+  }
+
+  const meaningful = screenshots + diagrams + brandImages;
+  if (screenshots !== 11 || diagrams !== 4 || brandImages !== 5 || meaningful !== 20) {
+    errors.push(`S088 figure inventory requires 20 meaningful placements (11 screenshot or illustration, 4 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
+  }
+  if (decorativeWordmarks !== 1) errors.push("S088 figure inventory requires exactly one empty-alt decorative wordmark");
+  if (screenshotCaptions !== 11 || brandCaptions !== 2) {
+    errors.push(`S088 figure inventory requires 13 captions (11 screenshot or illustration, 2 brand); found ${screenshotCaptions + brandCaptions}`);
+  }
+  const classified = meaningful + decorativeWordmarks;
+  if (allRaw + allMarkdown !== classified) {
+    errors.push(`S088 figure inventory found ${allRaw + allMarkdown - classified} unclassified image placement(s)`);
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationFigureJavascript(script) {
+  const errors = [];
+  if (!/document\.createElement\(["']dialog["']\)/u.test(script)
+      || !/data-docs-figure-dialog/u.test(script)
+      || !/document\.body\.append\(dialog\)/u.test(script)) {
+    errors.push("S088 figure system requires one native dialog appended to the document");
+  }
+  if (!/dataset\.docsFigureSystem/u.test(script) || !/data-docs-figure-trigger/u.test(script)) {
+    errors.push("S088 figure system requires idempotent trigger enhancement");
+  }
+  for (const selector of [".docs-screenshot > img", ".docs-flow-diagram .checkbox-img + img", ".brand-surface__assets > img"]) {
+    if (!script.includes(selector)) errors.push(`S088 figure system requires the ${selector} trigger inventory`);
+  }
+  if (!/closest\(["']\.docs-flow-diagram["']\)/u.test(script)
+      || !/closest\(["']\.checkbox-label["']\)/u.test(script)
+      || !/generatedLabel\.replaceWith\(trigger\)/u.test(script)) {
+    errors.push("S088 figure system must replace the generated mdBook checkbox modal with the common trigger");
+  }
+  if (!/dialog\.showModal\(\)/u.test(script) || !/closeButton\.focus\(/u.test(script)) {
+    errors.push("S088 figure system requires native modal opening and initial close-control focus");
+  }
+  if (!/globalThis\.visualViewport/u.test(script)
+      || !/--docs-figure-viewport-width/u.test(script)
+      || !/--docs-figure-viewport-height/u.test(script)) {
+    errors.push("S088 figure dialog requires visual-viewport synchronization for browser zoom");
+  }
+  if (!/closeButton\.addEventListener\(["']click["']/u.test(script)
+      || !/dialog\.addEventListener\(["']click["']/u.test(script)
+      || !/event\.target\s*!==\s*dialog/u.test(script)) {
+    errors.push("S088 figure dialog requires close-button and backdrop pointer closure");
+  }
+  if (!/trigger\.addEventListener\(["']keydown["'][\s\S]*event\.key\s*!==\s*["']Enter["'][\s\S]*event\.key\s*!==\s*["'] ["']/u.test(script)
+      || !/dialog\.addEventListener\(["']keydown["'][\s\S]*event\.key\s*===\s*["']Tab["'][\s\S]*closeButton\.focus\([\s\S]*event\.key\s*!==\s*["']Escape["']/u.test(script)) {
+    errors.push("S088 figure system requires explicit Enter, Space, Tab containment, and Escape keyboard behavior");
+  }
+  if (!/dialog\.addEventListener\(["']close["'][\s\S]*trigger\?\.focus\(/u.test(script)) {
+    errors.push("S088 figure dialog requires exact invoking-trigger focus return");
+  }
+  if (!/aria-label/u.test(script) || !/aria-describedby/u.test(script)
+      || !/sourceCaption\.childNodes/u.test(script)
+      || !/expandedImage\.alt\s*=\s*["']["']/u.test(script)) {
+    errors.push("S088 figure dialog requires one accessible name and optional caption description");
+  }
+  if (!/sourceImage\.currentSrc\s*\|\|\s*sourceImage\.src/u.test(script)) {
+    errors.push("S088 figure dialog must reuse the selected local image source");
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationFigureCss(css) {
+  const errors = [];
+  const trigger = css.match(/\.docs-figure-trigger\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const affordance = css.match(/\.docs-figure-trigger::after\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const dialog = css.match(/\.docs-figure-dialog\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const dialogImage = css.match(/\.docs-figure-dialog__image\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const caption = css.match(/\.docs-screenshot figcaption,\s*\.brand-surface figcaption\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const print = css.match(/@media\s+print\s*\{(?<body>[\s\S]*)\}\s*$/u)?.groups?.body ?? "";
+
+  if (!/appearance:\s*none/iu.test(trigger) || !/cursor:\s*zoom-in/iu.test(trigger)
+      || !/position:\s*relative/iu.test(trigger) || !/display:\s*block/iu.test(trigger)) {
+    errors.push("S088 figure trigger requires a bounded semantic-button presentation");
+  }
+  if (!/content:\s*["']Expand image["']/iu.test(affordance)
+      || !/position:\s*absolute/iu.test(affordance)
+      || !/pointer-events:\s*none/iu.test(affordance)) {
+    errors.push("S088 figure trigger requires a persistent visible expansion affordance");
+  }
+  if (!/\.docs-figure-trigger:hover::after,[\s\S]*\.docs-figure-trigger:focus-visible::after/iu.test(css)) {
+    errors.push("S088 figure affordance requires hover and focus-visible treatment");
+  }
+  if (!/height:\s*var\(--docs-figure-viewport-height,\s*100vh\)/iu.test(dialog)
+      || !/width:\s*var\(--docs-figure-viewport-width,\s*100vw\)/iu.test(dialog)
+      || !/\.docs-figure-dialog::backdrop\s*\{/u.test(css)) {
+    errors.push("S088 native dialog requires a full-viewport modal and backdrop");
+  }
+  if (!/display:\s*block/iu.test(dialogImage) || !/height:\s*auto/iu.test(dialogImage)
+      || !/width:\s*auto/iu.test(dialogImage)
+      || !/max-width:\s*calc\(var\(--docs-figure-viewport-width,\s*100vw\)/iu.test(dialogImage)
+      || !/max-height:\s*calc\(var\(--docs-figure-viewport-height,\s*100vh\)/iu.test(dialogImage)
+      || !/object-fit:\s*contain/iu.test(dialogImage)) {
+    errors.push("S088 expanded figure must preserve intrinsic geometry without upscaling and remain viewport-contained");
+  }
+  const fontSize = Number(caption.match(/font-size:\s*(\d+(?:\.\d+)?)em/iu)?.[1]);
+  const lineHeight = Number(caption.match(/line-height:\s*(\d+(?:\.\d+)?)/iu)?.[1]);
+  if (!(fontSize >= 0.875 && fontSize < 1)) errors.push("S088 caption size must be subordinate and compute to at least 14 CSS pixels");
+  if (!(lineHeight >= 1.5)) errors.push("S088 caption line height must be at least 1.5");
+  if (!/\.brand-surface figcaption strong\s*\{[\s\S]*?font-weight:\s*600/iu.test(css)) {
+    errors.push("S088 brand caption strong lead-ins must retain emphasis");
+  }
+  if (!/\.docs-figure-trigger::after,[\s\S]*\.docs-figure-dialog[\s\S]*display:\s*none\s*!important/iu.test(print)) {
+    errors.push("S088 print CSS must hide figure affordances and dialog chrome");
+  }
+  if (!/\.docs-flow-diagram \.checkbox-img,\s*\.docs-flow-diagram \.img-wrapper,/iu.test(css)) {
+    errors.push("S088 static and no-JavaScript rendering must hide legacy mdBook modal chrome");
+  }
+  if (!/\.docs-flow-diagram \.checkbox-img:checked\s*~\s*\.img-wrapper\s*\{[\s\S]*?display:\s*none/iu.test(css)) {
+    errors.push("S088 no-JavaScript rendering must override mdBook checked-state modal chrome");
+  }
+  return [...new Set(errors)];
+}
+
 const GLOSSARY_LEGACY_ENTRIES = [
   {
     canonical: "Managed Marker",
@@ -3484,6 +3658,9 @@ async function run() {
     ...validateDocumentationScreenshots({ manifest: screenshotManifest, assets: screenshotAssets, pages: screenshotPages }),
     ...validateDocumentationScreenshotsGenerated({ manifest: screenshotManifest, pages: generatedScreenshotPages, outputPaths }),
     ...validateDocumentationScreenshotCss(css),
+    ...validateDocumentationFigureInventory(sourceMarkdownPages),
+    ...validateDocumentationFigureJavascript(themeScript),
+    ...validateDocumentationFigureCss(css),
     ...validateDocumentationCodeBlocksGenerated(sourceMarkdownPages, generatedHtmlPages, outputPaths),
     ...validateHighlightingExtension(themeScript),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),

@@ -26,6 +26,9 @@ import {
   validateDocumentationDiagramCss,
   validateDocumentationDiagrams,
   validateDocumentationDiagramsGenerated,
+  validateDocumentationFigureCss,
+  validateDocumentationFigureInventory,
+  validateDocumentationFigureJavascript,
   validateDocumentationCodeBlocksGenerated,
   validateDocumentationCodeFences,
   validateDocumentationScreenshotCss,
@@ -2487,4 +2490,56 @@ test("S084 requires contained responsive screenshot presentation", () => {
   assert.deepEqual(validateDocumentationScreenshotCss(css), []);
   assert.match(validateDocumentationScreenshotCss(css.replace("height: auto", "height: 100%")).join("\n"), /aspect ratio/i);
   assert.match(validateDocumentationScreenshotCss(css.replace("grid-template-columns: 1fr", "grid-template-columns: repeat(2, 1fr)")).join("\n"), /narrow/i);
+});
+
+test("S088 inventories every meaningful figure and the sole decorative image", async () => {
+  const pages = await markdownPageMap(path.resolve("docs", "src"));
+  assert.deepEqual(validateDocumentationFigureInventory(pages), []);
+
+  const missingScreenshotClass = new Map(pages);
+  missingScreenshotClass.set(
+    "getting-started/installation.md",
+    missingScreenshotClass.get("getting-started/installation.md").replace("docs-screenshot docs-screenshot--portrait", "unclassified-figure"),
+  );
+  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /20 meaningful|unclassified/i);
+
+  const interactiveWordmark = new Map(pages);
+  interactiveWordmark.set("README.md", interactiveWordmark.get("README.md").replace('alt=""', 'alt="ESO Weave"'));
+  assert.match(validateDocumentationFigureInventory(interactiveWordmark).join("\n"), /decorative wordmark/i);
+
+  const unknownImage = new Map(pages);
+  unknownImage.set("README.md", `${unknownImage.get("README.md")}\n<img src="assets/unknown.png" alt="Unknown">\n`);
+  assert.match(validateDocumentationFigureInventory(unknownImage).join("\n"), /unclassified/i);
+});
+
+test("S088 requires one idempotent native figure dialog and complete focus lifecycle", async () => {
+  const script = await readFile(path.resolve("docs", "theme", "eso-weave.js"), "utf8");
+  assert.deepEqual(validateDocumentationFigureJavascript(script), []);
+  for (const [needle, replacement, expected] of [
+    ['document.createElement("dialog")', 'document.createElement("div")', /native dialog/i],
+    ["showModal()", "show()", /modal/i],
+    ["--docs-figure-viewport-width", "--docs-figure-unused-width", /browser zoom/i],
+    ['event.key === "Tab"', 'event.key === "ArrowDown"', /Tab containment/i],
+    ['addEventListener("close"', 'addEventListener("closed"', /focus return/i],
+    ['closest(".docs-flow-diagram")', 'closest(".unused")', /mdBook/i],
+    ["data-docs-figure-trigger", "data-figure-control", /trigger/i],
+  ]) {
+    assert.match(validateDocumentationFigureJavascript(script.replace(needle, replacement)).join("\n"), expected);
+  }
+});
+
+test("S088 requires discoverable controls, intrinsic modal sizing, caption hierarchy, and static print", async () => {
+  const css = await readFile(path.resolve("docs", "theme", "eso-weave.css"), "utf8");
+  assert.deepEqual(validateDocumentationFigureCss(css), []);
+  for (const [needle, replacement, expected] of [
+    ["content: \"Expand image\"", "content: \"\"", /affordance/i],
+    ["font-size: 0.9em", "font-size: 0.8em", /caption.*size/i],
+    ["line-height: 1.55", "line-height: 1.2", /caption.*line/i],
+    [".docs-flow-diagram .checkbox-img,", ".docs-flow-diagram .unused,", /no-JavaScript|legacy mdBook/i],
+    [".docs-flow-diagram .checkbox-img:checked ~ .img-wrapper", ".docs-flow-diagram .unused:checked ~ .img-wrapper", /checked-state/i],
+    ["object-fit: contain;\n  width: auto", "object-fit: contain;\n  width: 100%", /intrinsic|upscal/i],
+    ["@media print", "@media screen", /print/i],
+  ]) {
+    assert.match(validateDocumentationFigureCss(css.replace(needle, replacement)).join("\n"), expected);
+  }
 });

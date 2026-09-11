@@ -29,10 +29,14 @@ Sequence:
    diagrams with explicit intrinsic geometry, source-to-generated identity,
    expanded-state sizing and accessibility, and a dependency-free browser
    rendering matrix.
-9. S087 restores meaningful command and PowerShell highlighting, exact plain
-   block classification, AA token colors, and generated runtime evidence under
-   issue #157.
-10. A later slice audits and fixes responsive documentation tables under issue #127.
+9. S087 completed in PR #159 and closed issue #157. It restores meaningful
+   command and PowerShell highlighting, exact plain-block classification, AA
+   token colors, and generated runtime evidence.
+10. S088 completes one accessible local expansion system and shared caption
+    hierarchy for screenshots, diagrams, illustrations, and brand examples under
+    issues #155 and #156.
+11. A later S089 slice audits and fixes responsive documentation tables under
+    issue #127.
 
 Issues #120 through #123 close independently and change no runtime behavior. The
 only implementation dependency in this plan is #125 on #124. Public and bundled
