@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import {
   contrastRatio,
+  parseDocumentationFences,
   validateBrandCss,
   validateBrandJavascript,
   validateBrandStandard,
@@ -25,9 +26,12 @@ import {
   validateDocumentationDiagramCss,
   validateDocumentationDiagrams,
   validateDocumentationDiagramsGenerated,
+  validateDocumentationCodeBlocksGenerated,
+  validateDocumentationCodeFences,
   validateDocumentationScreenshotCss,
   validateDocumentationScreenshots,
   validateDocumentationScreenshotsGenerated,
+  validateHighlightingExtension,
   validateFormalGlossary,
   validateGeneratedSite,
   validateGlossarySearchIndex,
@@ -38,10 +42,25 @@ import {
   validateSourceTree,
   validateSettingsRuntimeClaims,
   validateTextHygiene,
+  validateSyntaxHighlightingCss,
   validateWorkSliceHtml,
   validateWorkSliceMarkdown,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+async function markdownPageMap(root, relative = "") {
+  const pages = new Map();
+  const directory = path.join(root, relative);
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const child = path.posix.join(relative.split(path.sep).join("/"), entry.name);
+    if (entry.isDirectory()) {
+      for (const [name, contents] of await markdownPageMap(root, child)) pages.set(name, contents);
+    } else if (entry.name.endsWith(".md")) {
+      pages.set(child, await readFile(path.join(root, ...child.split("/")), "utf8"));
+    }
+  }
+  return pages;
+}
 
 async function documentationScreenshotArguments() {
   const repositoryRoot = path.resolve(".");
@@ -777,6 +796,127 @@ async function fixture() {
   return { root, docs, source, output };
 }
 
+test("S087 parses top-level, list-indented, and quoted fenced blocks", () => {
+  const markdown = `# Samples
+
+\`\`\`bash
+cargo test --locked
+\`\`\`
+
+1. Run this:
+
+   \`\`\`powershell
+   ./scripts/example.ps1 \`
+     -Mode Test
+   \`\`\`
+
+> \`\`\`text
+> decision -> stop
+> \`\`\`
+`;
+  const result = parseDocumentationFences(markdown, "guide.md");
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.fences.map(({ language, line }) => [language, line]), [
+    ["bash", 3],
+    ["powershell", 9],
+    ["text", 14],
+  ]);
+  assert.equal(result.fences[1].content, "./scripts/example.ps1 `\n  -Mode Test");
+  assert.equal(result.fences[2].content, "decision -> stop");
+});
+
+test("S087 rejects missing, obsolete, unknown, and unclosed fence identifiers", () => {
+  for (const [source, expected] of [
+    ["```\nvalue\n```\n", /identifier/i],
+    ["```console\ncommand\n```\n", /console/i],
+    ["```sh\ncommand\n```\n", /sh/i],
+    ["```ruby\nputs 1\n```\n", /unknown/i],
+    ["```bash\ncommand\n", /unclosed/i],
+  ]) {
+    assert.match(validateDocumentationCodeFences(new Map([["guide.md", source]]), { complete: false }).join("\n"), expected);
+  }
+});
+
+test("S087 binds deliberate plain blocks to exact content and rationale", () => {
+  const source = "```text\ndecision -> stop\n```\n";
+  const parsed = parseDocumentationFences(source, "guide.md").fences[0];
+  const plainExceptions = [{ page: "guide.md", sha256: parsed.sha256, rationale: "A diagnostic decision flow, not executable syntax." }];
+  assert.deepEqual(validateDocumentationCodeFences(new Map([["guide.md", source]]), { complete: false, plainExceptions }), []);
+  assert.match(validateDocumentationCodeFences(new Map([["guide.md", source.replace("stop", "continue")]]), { complete: false, plainExceptions }).join("\n"), /plain block/i);
+  assert.match(validateDocumentationCodeFences(new Map([["guide.md", source]]), { complete: false, plainExceptions: [{ ...plainExceptions[0], rationale: "flow" }] }).join("\n"), /rationale/i);
+});
+
+test("S087 requires the complete canonical 23-fence repository inventory", async () => {
+  const pages = await markdownPageMap(path.resolve("docs", "src"));
+  assert.deepEqual(validateDocumentationCodeFences(pages), []);
+});
+
+test("S087 validates generated language order and local highlight assets", () => {
+  const sourcePages = new Map([["guide.md", "```bash\ncargo test --locked\n```\n\n```json\n{\"ok\": true}\n```\n"]]);
+  const generatedPages = new Map([["guide.html", '<pre><code class="language-bash">cargo test --locked\n</code></pre><pre><code class="language-json">{&quot;ok&quot;: true}\n</code></pre>']]);
+  const outputPaths = new Set([
+    "highlight-abc123.js",
+    "highlight-abc123.css",
+    "tomorrow-night-abc123.css",
+    "ayu-highlight-abc123.css",
+    "theme/eso-weave-abc123.js",
+    "theme/eso-weave-abc123.css",
+  ]);
+  assert.deepEqual(validateDocumentationCodeBlocksGenerated(sourcePages, generatedPages, outputPaths), []);
+  assert.match(validateDocumentationCodeBlocksGenerated(sourcePages, new Map([["guide.html", generatedPages.get("guide.html").replace("language-bash", "language-console")]]), outputPaths).join("\n"), /language/i);
+  assert.match(validateDocumentationCodeBlocksGenerated(sourcePages, new Map([["guide.html", generatedPages.get("guide.html").replace("cargo test", "cargo check")]]), outputPaths).join("\n"), /text differs/i);
+  assert.match(validateDocumentationCodeBlocksGenerated(sourcePages, generatedPages, new Set([...outputPaths].filter((name) => !name.startsWith("highlight-") || !name.endsWith(".js")))).join("\n"), /highlight.*runtime/i);
+});
+
+test("S087 requires bounded local grammar registration and idempotent re-highlighting", () => {
+  const valid = `globalThis.hljs.registerLanguage("eso-command", commandGrammar);
+globalThis.hljs.registerLanguage("eso-powershell", powershellGrammar);
+for (const code of document.querySelectorAll("code.language-bash, code.language-powershell")) {
+  if (code.dataset.esoHighlighted === "true") continue;
+  code.dataset.esoHighlighted = "true";
+  globalThis.hljs.highlightBlock(code);
+}`;
+  assert.deepEqual(validateHighlightingExtension(valid), []);
+  assert.match(validateHighlightingExtension(valid.replace("eso-powershell", "other")).join("\n"), /PowerShell grammar/i);
+  assert.match(validateHighlightingExtension(valid.replaceAll("dataset.esoHighlighted", "dataset.other")).join("\n"), /idempotent/i);
+  assert.match(validateHighlightingExtension(valid.replace("code.language-bash, code.language-powershell", "code")).join("\n"), /bounded/i);
+});
+
+test("S087 requires AA token palettes on dark and light code surfaces", () => {
+  const css = `.navy, .coal, .ayu {
+  --eso-code-background: #1d1f21;
+  --eso-code-comment: #aab6c5;
+  --eso-code-keyword: #ff9b9b;
+  --eso-code-number: #f2b03c;
+  --eso-code-string: #7fe0cf;
+  --eso-code-title: #8dc7ff;
+  --eso-code-variable: #d7b8ff;
+  --eso-code-punctuation: #e6edf3;
+}
+.light, .rust {
+  --eso-code-background: #f6f7f6;
+  --eso-code-comment: #59636f;
+  --eso-code-keyword: #8c1d40;
+  --eso-code-number: #704800;
+  --eso-code-string: #075e57;
+  --eso-code-title: #135f96;
+  --eso-code-variable: #6b3fa0;
+  --eso-code-punctuation: #3f4650;
+}
+pre > code.hljs { background: var(--eso-code-background); }
+.hljs-comment { color: var(--eso-code-comment); }
+.hljs-keyword { color: var(--eso-code-keyword); }
+.hljs-number { color: var(--eso-code-number); }
+.hljs-string { color: var(--eso-code-string); }
+.hljs-title { color: var(--eso-code-title); }
+.hljs-variable { color: var(--eso-code-variable); }
+.hljs-punctuation { color: var(--eso-code-punctuation); }`;
+  assert.deepEqual(validateSyntaxHighlightingCss(css), []);
+  assert.match(validateSyntaxHighlightingCss(css.replace("#ff9b9b", "#cc6666")).join("\n"), /contrast/i);
+  assert.match(validateSyntaxHighlightingCss(css.replaceAll(/--eso-code-(?:comment|keyword|number|string|title|variable|punctuation): #[0-9a-f]{6};/giu, (declaration) => declaration.replace(/#[0-9a-f]{6}/iu, "#e6edf3"))).join("\n"), /distinct token colors/i);
+  assert.match(validateSyntaxHighlightingCss(css.replace(".hljs-punctuation", ".other")).join("\n"), /punctuation/i);
+});
+
 test("accepts a complete, case-correct source tree", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -1018,7 +1158,7 @@ test("ignores Markdown links inside inline code and fenced examples", async (t) 
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await writeFile(
     path.join(f.source, "README.md"),
-    "# Home\n\n`[inline](missing-inline.md)`\n\n```markdown\n[fenced](missing-fenced.md)\n```\n\n~~~\n[tilde](missing-tilde.md)\n~~~\n\n[Guide](guide/)\n",
+    "# Home\n\n`[inline](missing-inline.md)`\n\n```bash\n[fenced](missing-fenced.md)\n```\n\n~~~json\n[tilde](missing-tilde.md)\n~~~\n\n[Guide](guide/)\n",
   );
   assert.deepEqual(await validateSourceTree(f.docs), []);
 });

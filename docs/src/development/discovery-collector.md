@@ -18,7 +18,7 @@ Use the exact Live or PTS `AddOns` directory and the current numeric ESO API
 version. These lifecycle commands operate only on `EsoWeaveCollector` and never
 share PixelBeacon ownership or files.
 
-```console
+```bash
 cargo run --locked --bin catalog-compiler -- collector-status --addons ADDONS
 cargo run --locked --bin catalog-compiler -- collector-install --addons ADDONS --api-version 101050
 ```
@@ -46,7 +46,7 @@ before importing it.
 The SavedVariables file is `SavedVariables/EsoWeaveCollector.lua` beside the
 selected environment's `AddOns` directory. Stage it to normalized JSON first:
 
-```console
+```bash
 cargo run --locked --bin catalog-compiler -- import-collector --input SAVED.lua --output STAGED.json --channel live --catalog-version VERSION
 ```
 
@@ -73,7 +73,7 @@ redistributable ESO Weave asset.
 
 Remove only a managed collector:
 
-```console
+```bash
 cargo run --locked --bin catalog-compiler -- collector-remove --addons ADDONS
 ```
 

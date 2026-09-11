@@ -93,7 +93,7 @@ shipped application. Its ordinary test invocation validates the exact seven-scen
 catalog, scene models, and isolation rules without initializing a graphics adapter
 or retaining generated files:
 
-```text
+```bash
 cargo test --locked --test documentation_capture
 ```
 
@@ -102,7 +102,7 @@ below writes 28 variants and `capture-manifest.json` below `target/` without ope
 a native window, resolving a personal configuration directory, installing an addon,
 capturing the desktop, or constructing an operating-system input backend:
 
-```text
+```bash
 cargo test --locked --test documentation_capture -- --capture-to target/documentation-captures
 ```
 
@@ -125,7 +125,7 @@ behavior anchors.
 
 Run the documentation gates first, then the full source parity suite:
 
-```text
+```bash
 node --test .github/scripts/docs-policy.test.mjs
 mdbook test docs
 mdbook build docs

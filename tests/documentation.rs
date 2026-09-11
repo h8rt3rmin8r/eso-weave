@@ -34,6 +34,21 @@ fn embedded_manifest_has_required_sorted_assets_and_types() {
             .iter()
             .any(|entry| entry.path.starts_with("searchindex-") && entry.path.ends_with(".js")));
         assert!(asset("concepts/index.html").is_some());
+        for (prefix, suffix) in [
+            ("highlight-", ".js"),
+            ("highlight-", ".css"),
+            ("tomorrow-night-", ".css"),
+            ("ayu-highlight-", ".css"),
+            ("theme/eso-weave-", ".js"),
+            ("theme/eso-weave-", ".css"),
+        ] {
+            assert!(
+                EMBEDDED_ASSETS
+                    .iter()
+                    .any(|entry| entry.path.starts_with(prefix) && entry.path.ends_with(suffix)),
+                "embedded documentation is missing {prefix}*{suffix}"
+            );
+        }
     }
     assert_eq!(content_type("index.html"), "text/html; charset=utf-8");
     assert_eq!(content_type("theme.css"), "text/css; charset=utf-8");

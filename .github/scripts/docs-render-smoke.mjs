@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const PASS_SENTINEL = "ESO_WEAVE_DIAGRAM_SMOKE_PASS_V1";
+export const SYNTAX_PASS_SENTINEL = "ESO_WEAVE_SYNTAX_SMOKE_PASS_V1";
 
 const DIAGRAMS = [
   { id: "S082-D01", page: "development/architecture.html", asset: "architecture-ownership.svg", alt: "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers" },
@@ -15,6 +16,13 @@ const DIAGRAMS = [
 ];
 const THEMES = ["navy", "light"];
 const VIEWPORTS = [320, 1280];
+const SYNTAX_CASES = [
+  { id: "S087-COMMAND", page: "reference/encounter-data-and-metrics.html", language: "bash", selector: "code.language-bash", requiredTokens: ["hljs-title", "hljs-attr", "hljs-punctuation"] },
+  { id: "S087-POWERSHELL", page: "development/screenshot-maintenance.html", language: "powershell", selector: "code.language-powershell", selectorIndex: 1, requiredTokens: ["hljs-title", "hljs-attr", "hljs-string", "hljs-punctuation"] },
+  { id: "S087-JSON", page: "getting-started/troubleshooting.html", language: "json", probe: '{"schema_version": 1, "enabled": true}', requiredTokens: ["hljs-attr", "hljs-number", "hljs-literal"] },
+  { id: "S087-PLAIN", page: "getting-started/troubleshooting.html", language: "text", selector: "code.language-text", requiredTokens: [] },
+];
+const SYNTAX_THEMES = ["navy", "light", "coal", "ayu", "rust"];
 
 function observationKey(observation) {
   return `${observation.diagramId}|${observation.theme}|${observation.viewportWidth}|${observation.state}`;
@@ -67,6 +75,65 @@ export function validateRenderingReceipt(receipt) {
     }
   }
   if (Array.isArray(receipt?.failures) && receipt.failures.length > 0) errors.push(...receipt.failures.map((failure) => `S086 browser: ${failure}`));
+  return [...new Set(errors)];
+}
+
+function syntaxObservationKey(observation) {
+  return `${observation.caseId}|${observation.theme}|${observation.viewportWidth}`;
+}
+
+export function validateSyntaxObservation(observation) {
+  const errors = [];
+  const prefix = `${observation?.caseId ?? "unknown"} ${observation?.theme ?? "unknown"} ${observation?.viewportWidth ?? "unknown"}`;
+  if (observation?.surface !== "generated-loopback") errors.push(`${prefix}: observation surface must be generated-loopback`);
+  if (!observation?.semantic) errors.push(`${prefix}: code block must retain pre and code semantics`);
+  if (typeof observation?.sourceText !== "string" || observation?.renderedText !== observation.sourceText) {
+    errors.push(`${prefix}: rendered text must exactly preserve source text`);
+  }
+  if (observation?.selectedText !== observation?.sourceText || observation?.copyText !== observation?.sourceText) {
+    errors.push(`${prefix}: selected and copied text must exactly preserve source text (source ${observation?.sourceText?.length ?? "missing"}, selected ${observation?.selectedText?.length ?? "missing"}, copied ${observation?.copyText?.length ?? "missing"})`);
+  }
+  if (!observation?.selectable) errors.push(`${prefix}: code text must remain selectable`);
+  if (!observation?.codeOverflow) errors.push(`${prefix}: code block must retain horizontal scrolling`);
+  if (observation?.caseId === "S087-COMMAND" && observation?.viewportWidth === 320 && !observation?.actualOverflow) {
+    errors.push(`${prefix}: the long command must produce code-local overflow at narrow width`);
+  }
+  if (!observation?.pageContained) errors.push(`${prefix}: syntax highlighting created page-level overflow`);
+  const tokenClasses = Array.isArray(observation?.tokenClasses) ? observation.tokenClasses : [];
+  const tokenContrasts = Array.isArray(observation?.tokenContrasts) ? observation.tokenContrasts : [];
+  const tokenColors = Array.isArray(observation?.tokenColors) ? observation.tokenColors : [];
+  if (observation?.caseId === "S087-PLAIN") {
+    if (tokenClasses.length > 0 || tokenContrasts.length > 0 || tokenColors.length > 0) errors.push(`${prefix}: plain block must not contain syntax tokens`);
+  } else {
+    if (tokenClasses.length === 0) errors.push(`${prefix}: meaningful block requires syntax tokens`);
+    const expected = SYNTAX_CASES.find((candidate) => candidate.id === observation?.caseId)?.requiredTokens ?? [];
+    for (const token of expected) if (!tokenClasses.includes(token)) errors.push(`${prefix}: required token class is missing: ${token}`);
+    if (tokenContrasts.length === 0 || tokenContrasts.some((ratio) => !(ratio >= 4.5))) {
+      errors.push(`${prefix}: every syntax token requires at least 4.5:1 contrast`);
+    }
+    if (new Set(tokenColors).size < 3) errors.push(`${prefix}: meaningful syntax requires at least three distinct token colors`);
+  }
+  return errors;
+}
+
+export function validateSyntaxReceipt(receipt) {
+  const errors = [];
+  if (receipt?.syntaxSentinel !== SYNTAX_PASS_SENTINEL) errors.push("S087 syntax receipt pass sentinel is missing");
+  const observations = Array.isArray(receipt?.syntaxObservations) ? receipt.syntaxObservations : [];
+  const expectedKeys = new Set();
+  for (const syntaxCase of SYNTAX_CASES) {
+    for (const theme of SYNTAX_THEMES) {
+      for (const viewportWidth of VIEWPORTS) expectedKeys.add(`${syntaxCase.id}|${theme}|${viewportWidth}`);
+    }
+  }
+  const actualKeys = new Set(observations.map(syntaxObservationKey));
+  if (observations.length !== 40 || actualKeys.size !== 40 || [...expectedKeys].some((key) => !actualKeys.has(key))) {
+    errors.push("S087 syntax rendering matrix requires 40 unique observations");
+  }
+  for (const observation of observations) errors.push(...validateSyntaxObservation(observation));
+  if (Array.isArray(receipt?.syntaxFailures) && receipt.syntaxFailures.length > 0) {
+    errors.push(...receipt.syntaxFailures.map((failure) => `S087 browser: ${failure}`));
+  }
   return [...new Set(errors)];
 }
 
@@ -124,6 +191,7 @@ function isVisiblyPainted(element) {
   return rectangle.width > 0 && rectangle.height > 0 && style.display !== "none" &&
     style.visibility !== "hidden" && style.visibility !== "collapse" && Number.parseFloat(style.opacity) > 0;
 }
+
 function paintStats(image) {
   const width = 160;
   const height = Math.max(1, Math.round(width * image.naturalHeight / image.naturalWidth));
@@ -198,6 +266,99 @@ try {
   failures.push(configuration.diagram.id + ": " + error.message);
 }
 return { schemaVersion: 1, sentinel: failures.length === 0 ? configuration.sentinel : "FAILED", observations, failures };
+})()`;
+}
+
+function syntaxObservationExpression(syntaxCase, theme, viewportWidth) {
+  const configuration = JSON.stringify({ syntaxCase, theme, viewportWidth });
+  return `(async () => {
+const configuration = ${configuration};
+const failures = [];
+function nextFrame() { return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); }
+function channels(value) {
+  const match = value.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/u);
+  return match ? match.slice(1).map(Number) : null;
+}
+function luminance(color) {
+  const values = channels(color);
+  if (!values) return NaN;
+  const linear = values.map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+function contrast(foreground, background) {
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+try {
+  document.documentElement.classList.remove("ayu", "coal", "light", "navy", "rust");
+  document.documentElement.classList.add(configuration.theme);
+  const light = document.getElementById("mdbook-highlight-css");
+  const dark = document.getElementById("mdbook-tomorrow-night-css");
+  const ayu = document.getElementById("mdbook-ayu-highlight-css");
+  if (light) light.disabled = !["light", "rust"].includes(configuration.theme);
+  if (dark) dark.disabled = !["navy", "coal"].includes(configuration.theme);
+  if (ayu) ayu.disabled = configuration.theme !== "ayu";
+  let code;
+  if (configuration.syntaxCase.probe) {
+    const pre = document.createElement("pre");
+    code = document.createElement("code");
+    code.className = "language-json";
+    code.textContent = configuration.syntaxCase.probe;
+    pre.append(code);
+    document.querySelector("main").append(pre);
+    globalThis.hljs.highlightBlock(code);
+  } else {
+    code = document.querySelectorAll(configuration.syntaxCase.selector)[configuration.syntaxCase.selectorIndex ?? 0];
+  }
+  if (!code) throw new Error("required code block is missing");
+  await nextFrame();
+  const withoutFenceTerminator = (value) => value.endsWith("\\n") ? value.slice(0, -1) : value;
+  const sourceText = withoutFenceTerminator(configuration.syntaxCase.probe ?? code.esoSourceText ?? code.textContent);
+  const renderedText = withoutFenceTerminator(code.textContent);
+  const selection = getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(code);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  const selectedText = selection.toString();
+  const copyText = withoutFenceTerminator(code.innerText);
+  const selectable = selection.rangeCount === 1 && selectedText === sourceText && copyText === sourceText && getComputedStyle(code).userSelect !== "none";
+  selection.removeAllRanges();
+  const style = getComputedStyle(code);
+  const spans = [...code.querySelectorAll("span[class*='hljs-']")];
+  const tokenClasses = [...new Set(spans.flatMap((span) => [...span.classList].filter((name) => name.startsWith("hljs-"))))];
+  const tokenColors = spans.map((span) => getComputedStyle(span).color);
+  const tokenContrasts = tokenColors.map((color) => contrast(color, style.backgroundColor));
+  return {
+    observation: {
+      caseId: configuration.syntaxCase.id,
+      surface: "generated-loopback",
+      language: configuration.syntaxCase.language,
+      theme: configuration.theme,
+      viewportWidth: configuration.viewportWidth,
+      semantic: code.tagName === "CODE" && code.parentElement?.tagName === "PRE",
+      sourceText,
+      renderedText,
+      selectedText,
+      copyText,
+      selectable,
+      codeOverflow: ["auto", "scroll"].includes(style.overflowX),
+      actualOverflow: code.scrollWidth > code.clientWidth + 1,
+      pageContained: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      tokenClasses,
+      tokenColors,
+      tokenContrasts,
+    },
+    failures,
+  };
+} catch (error) {
+  failures.push(configuration.syntaxCase.id + ": " + error.message);
+  return { failures };
+}
 })()`;
 }
 
@@ -399,7 +560,17 @@ export async function run(siteRoot) {
   const browser = await findBrowserExecutable();
   const profileRoot = await mkdtemp(path.join(tmpdir(), "eso-weave-docs-browser-"));
   const { server, port, diagramRequests } = await startServer(siteRoot);
-  const receipt = { schemaVersion: 1, sentinel: PASS_SENTINEL, browser: "pending", observations: [], requests: [], failures: [] };
+  const receipt = {
+    schemaVersion: 1,
+    sentinel: PASS_SENTINEL,
+    syntaxSentinel: SYNTAX_PASS_SENTINEL,
+    browser: "pending",
+    observations: [],
+    requests: [],
+    failures: [],
+    syntaxObservations: [],
+    syntaxFailures: [],
+  };
   let browserProcess;
   let client;
   try {
@@ -430,10 +601,31 @@ export async function run(siteRoot) {
       }
     }
     receipt.requests = [...diagramRequests.values()];
-    const errors = validateRenderingReceipt(receipt);
+    for (const theme of SYNTAX_THEMES) {
+      for (const viewportWidth of VIEWPORTS) {
+        await client.send("Emulation.setDeviceMetricsOverride", { width: viewportWidth, height: 920, deviceScaleFactor: 1, mobile: false });
+        for (const syntaxCase of SYNTAX_CASES) {
+          const url = `http://127.0.0.1:${port}/eso-weave/${syntaxCase.page}`;
+          const loaded = client.waitFor("Page.loadEventFired");
+          await client.send("Page.navigate", { url });
+          await loaded;
+          const evaluated = await client.send("Runtime.evaluate", {
+            expression: syntaxObservationExpression(syntaxCase, theme, viewportWidth),
+            awaitPromise: true,
+            returnByValue: true,
+          });
+          if (evaluated.exceptionDetails || !evaluated.result?.value) throw new Error(`browser syntax evaluation failed for ${syntaxCase.id} ${theme} ${viewportWidth}`);
+          const partial = evaluated.result.value;
+          if (partial.observation) receipt.syntaxObservations.push(partial.observation);
+          receipt.syntaxFailures.push(...(partial.failures ?? []).map((failure) => `${theme} ${viewportWidth}: ${failure}`));
+        }
+      }
+    }
+    const errors = [...validateRenderingReceipt(receipt), ...validateSyntaxReceipt(receipt)];
     if (errors.length > 0) throw new Error(errors.join("\n"));
     console.log(JSON.stringify(receipt, null, 2));
     console.log(PASS_SENTINEL);
+    console.log(SYNTAX_PASS_SENTINEL);
   } finally {
     if (client) {
       await client.send("Browser.close").catch(() => {});

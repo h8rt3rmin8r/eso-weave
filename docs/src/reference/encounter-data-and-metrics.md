@@ -145,7 +145,7 @@ damage report an empty share collection.
 
 The explicit maintainer operation is:
 
-```text
+```bash
 catalog-compiler encounter-project \
   --store PATH --catalog PATH --output PATH \
   --session ID --encounter ID
