@@ -138,6 +138,78 @@ h6 {
   overflow-wrap: anywhere;
 }
 
+.brand-asset-gallery {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1.25rem 0 1.75rem;
+}
+
+.brand-surface {
+  border: 1px solid #65758b;
+  border-radius: 0.65rem;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.brand-surface--dark {
+  background: #0e1116;
+  color: #e6edf3;
+}
+
+.brand-surface--light {
+  background: #f7f5f0;
+  color: #14110b;
+}
+
+.brand-surface__assets {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 14rem;
+  padding: 1.25rem;
+}
+
+.brand-surface img {
+  display: block;
+  height: auto;
+  justify-self: center;
+  max-width: 100%;
+}
+
+.brand-asset--banner {
+  grid-column: 1 / -1;
+  width: min(100%, 24rem);
+}
+
+.brand-asset--mark,
+.brand-asset--glyph {
+  width: min(100%, 6rem);
+}
+
+.brand-surface--light .brand-asset--mark {
+  grid-column: 1 / -1;
+}
+
+.brand-surface figcaption {
+  border-top: 1px solid #65758b;
+  padding: 0.85rem 1rem;
+}
+
+.brand-swatch {
+  background: var(--swatch-color);
+  border: 1px solid #65758b;
+  border-radius: 0.2rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  display: inline-block;
+  height: 1.1rem;
+  margin-right: 0.35rem;
+  vertical-align: -0.18rem;
+  width: 1.1rem;
+}
+
 a {
   text-decoration-thickness: 0.1em;
   text-underline-offset: 0.16em;
@@ -181,6 +253,10 @@ a {
 }
 
 @media (max-width: 40rem) {
+  .brand-asset-gallery {
+    grid-template-columns: 1fr;
+  }
+
   .project-metadata {
     grid-template-columns: 1fr;
   }

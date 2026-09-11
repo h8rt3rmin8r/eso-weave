@@ -890,6 +890,126 @@ export function validateLandingCss(css) {
   return errors;
 }
 
+const BRAND_STANDARD_TOKENS = [
+  ["Ink base", "#0E1116"], ["Panel", "#151B23"], ["Elevated", "#1C2530"],
+  ["Stroke", "#2A3340"], ["Gold (action)", "#F2B03C"], ["Gold hover", "#FBCB6B"],
+  ["Gold deep", "#D18F22"], ["Teal (support)", "#2DD4BF"], ["Text", "#E6EDF3"],
+  ["Muted", "#8B97A7"], ["Status ok", "#34D399"], ["Status warn", "#FB9E3C"],
+  ["Status err", "#F87171"], ["Base", "#F7F5F0"], ["Panel", "#FFFFFF"],
+  ["Elevated", "#ECE8DE"], ["Stroke", "#DCD9D0"], ["Gold (action)", "#E7A42C"],
+  ["Gold deep", "#C6871F"], ["Teal (support)", "#0D9488"], ["Text", "#14110B"],
+  ["Muted", "#6B6455"], ["Status ok", "#059669"], ["Status warn", "#B45309"],
+  ["Status err", "#DC2626"],
+];
+
+const BRAND_STANDARD_ASSETS = [
+  ["banner", "eso-weave-banner.png"],
+  ["mark", "eso-weave-mark.svg"],
+  ["glyph", "eso-weave-glyph.svg"],
+];
+
+export function validateBrandStandard({
+  markdown,
+  approvedBanner,
+  publishedBanner,
+  approvedMark,
+  publishedMark,
+  approvedGlyph,
+  publishedGlyph,
+}) {
+  const errors = [];
+  for (const [label, filename] of BRAND_STANDARD_ASSETS) {
+    const source = `../assets/brand/${filename}`;
+    const imagePattern = new RegExp(`<img\\b(?=[^>]*\\bsrc=["']${escapeRegExp(source)}["'])(?=[^>]*\\balt=["'][^"']+["'])[^>]*>`, "iu");
+    if (!imagePattern.test(markdown)) errors.push(`S081 Brand Standard requires the local approved ${label} image`);
+    const linkPattern = new RegExp(`\\[[^\\]]+\\]\\(${escapeRegExp(source)}\\)`, "iu");
+    if (!linkPattern.test(markdown)) errors.push(`S081 Brand Standard requires a local ${label} download link`);
+  }
+
+  if (!/<div\s+class=["']brand-asset-gallery["']>/iu.test(markdown)) errors.push("S081 Brand Standard requires the approved asset gallery");
+  const darkSurface = markdown.match(/<figure\s+class=["']brand-surface brand-surface--dark["']\s+aria-label=["']Dark ink surface["']>[\s\S]*?<\/figure>/iu)?.[0] ?? "";
+  const lightSurface = markdown.match(/<figure\s+class=["']brand-surface brand-surface--light["']\s+aria-label=["']Light surface["']>[\s\S]*?<\/figure>/iu)?.[0] ?? "";
+  if (!darkSurface || !lightSurface) errors.push("S081 Brand Standard requires labeled dark and light surface examples");
+  if (!darkSurface.includes("eso-weave-glyph.svg")) errors.push("S081 glyph requires a dark ink surface example");
+  if (lightSurface.includes("eso-weave-glyph.svg")) errors.push("S081 glyph must not appear on the light surface");
+
+  for (const phrase of ["Full-color banner", "Badged mark", "Badge-less glyph", "generated compatibility outputs, not masters", "Preserve aspect ratio", "clear space", "Minimum sizes", "Do not recolor"]) {
+    if (!markdown.toLowerCase().includes(phrase.toLowerCase())) errors.push(`S081 Brand Standard is missing guidance: ${phrase}`);
+  }
+  for (const filename of ["eso-weave-logo-clear.png", "eso-weave-logo-white.png"]) {
+    if (!markdown.includes(`\`${filename}\``)) errors.push(`S081 compatibility status must name ${filename}`);
+  }
+
+  for (const [role, hex] of BRAND_STANDARD_TOKENS) {
+    const expected = `<span class="brand-swatch" role="img" aria-label="${role}, ${hex} color swatch" style="--swatch-color: ${hex}"></span> \`${hex}\``;
+    if (!markdown.includes(`| ${role} | ${expected} |`)) {
+      errors.push(`S081 palette token ${role} ${hex} requires the exact fill and accessible chip label`);
+    }
+  }
+  const chipCount = [...markdown.matchAll(/class=["']brand-swatch["']/giu)].length;
+  if (chipCount !== BRAND_STANDARD_TOKENS.length) errors.push(`S081 palette requires exactly ${BRAND_STANDARD_TOKENS.length} chips`);
+
+  for (const [label, approved, published] of [
+    ["banner", approvedBanner, publishedBanner],
+    ["mark", approvedMark, publishedMark],
+    ["glyph", approvedGlyph, publishedGlyph],
+  ]) {
+    if (!sameBytes(approved, published)) errors.push(`S081 published ${label} bytes must match the approved source asset`);
+  }
+  return errors;
+}
+
+export function validateBrandStandardGenerated(html, outputPaths) {
+  const errors = [];
+  if (!/class=["']brand-asset-gallery["']/iu.test(html)) errors.push("S081 generated Brand Standard is missing the approved asset gallery");
+  if (!/aria-label=["']Dark ink surface["']/iu.test(html) || !/aria-label=["']Light surface["']/iu.test(html)) {
+    errors.push("S081 generated Brand Standard is missing labeled surface examples");
+  }
+  for (const [role, hex] of BRAND_STANDARD_TOKENS) {
+    const label = `aria-label="${role}, ${hex} color swatch"`;
+    if (!html.includes(label)) errors.push(`S081 generated Brand Standard lost the ${role} ${hex} accessible swatch`);
+  }
+  for (const [, filename] of BRAND_STANDARD_ASSETS) {
+    if (!(outputPaths instanceof Set) || !outputPaths.has(`assets/brand/${filename}`)) {
+      errors.push(`S081 generated asset output is missing: ${filename}`);
+    }
+  }
+  return errors;
+}
+
+export function validateBrandStandardVisualCss(css) {
+  const errors = [];
+  const gallery = css.match(/\.brand-asset-gallery\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/display:\s*grid/iu.test(gallery) || !/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/iu.test(gallery)) {
+    errors.push("S081 asset gallery CSS requires a bounded two-column grid");
+  }
+  const surface = css.match(/\.brand-surface\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/border:\s*1px\s+solid/iu.test(surface)) errors.push("S081 asset surfaces require a visible boundary");
+  if (!/\.brand-surface--dark\s*\{[\s\S]*?background:\s*#0e1116/iu.test(css) ||
+      !/\.brand-surface--light\s*\{[\s\S]*?background:\s*#f7f5f0/iu.test(css)) {
+    errors.push("S081 asset gallery requires explicit dark and light backgrounds");
+  }
+  const image = css.match(/\.brand-surface\s+img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/display:\s*block/iu.test(image) || !/height:\s*auto/iu.test(image) || !/max-width:\s*100%/iu.test(image)) {
+    errors.push("S081 asset image CSS must preserve aspect ratio and card containment");
+  }
+  const swatch = css.match(/\.brand-swatch\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/background:\s*var\(--swatch-color\)/iu.test(swatch) || !/display:\s*inline-block/iu.test(swatch) ||
+      !/height:\s*1\.1rem/iu.test(swatch) || !/width:\s*1\.1rem/iu.test(swatch)) {
+    errors.push("S081 swatch CSS requires a fixed visible chip using the authored token");
+  }
+  if (!/border:\s*1px\s+solid/iu.test(swatch) || !/box-shadow:\s*inset/iu.test(swatch)) {
+    errors.push("S081 swatch boundary must remain visible across fills and themes");
+  }
+  if (!/\.brand-surface--light\s+\.brand-asset--mark\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/iu.test(css)) {
+    errors.push("S081 light-surface mark must span the grid to remain centered");
+  }
+  if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.brand-asset-gallery\s*\{[\s\S]*?grid-template-columns:\s*1fr/iu.test(css)) {
+    errors.push("S081 asset gallery CSS requires a one-column narrow layout");
+  }
+  return errors;
+}
+
 const GLOSSARY_LEGACY_ENTRIES = [
   {
     canonical: "Managed Marker",
@@ -2288,7 +2408,13 @@ export function validateDocumentationAuthorityTriggers(workflow) {
   const errors = [];
   const triggerText = workflow.split(/^permissions:/mu)[0] ?? workflow;
   const triggers = yamlBlocks(triggerText, 2);
-  for (const authority of ["Cargo.toml", "CHANGELOG.md"]) {
+  for (const [slice, authority] of [
+    ["S080", "Cargo.toml"],
+    ["S080", "CHANGELOG.md"],
+    ["S081", "assets/eso-weave-banner.png"],
+    ["S081", "assets/brand/eso-weave-mark.svg"],
+    ["S081", "assets/brand/eso-weave-glyph.svg"],
+  ]) {
     const missing = [];
     for (const event of ["push", "pull_request"]) {
       const block = triggers.get(event) ?? "";
@@ -2296,7 +2422,7 @@ export function validateDocumentationAuthorityTriggers(workflow) {
       if (!path.test(block)) missing.push(event);
     }
     if (missing.length > 0) {
-      errors.push(`S080 documentation workflow must include ${authority} in ${missing.join(" and ")} paths`);
+      errors.push(`${slice} documentation workflow must include ${authority} in ${missing.join(" and ")} paths`);
     }
   }
   return errors;
@@ -2402,11 +2528,17 @@ async function run() {
   const encounterProjection = JSON.parse(await readFile(encounterProjectionPath, "utf8"));
   const glossary = await readFile(path.join(docsRoot, "src", "reference", "glossary.md"), "utf8");
   const landingMarkdown = await readFile(path.join(docsRoot, "src", "README.md"), "utf8");
+  const brandStandardMarkdown = await readFile(path.join(docsRoot, "src", "development", "brand-standard.md"), "utf8");
   const cargoToml = await readFile(path.join(repositoryRoot, "Cargo.toml"), "utf8");
   const changelog = await readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8");
   const approvedBanner = await readFile(path.join(repositoryRoot, "assets", "eso-weave-banner.png"));
   const publishedBanner = await readFile(path.join(docsRoot, "src", "assets", "brand", "eso-weave-banner.png"));
+  const approvedMark = await readFile(path.join(repositoryRoot, "assets", "brand", "eso-weave-mark.svg"));
+  const publishedMark = await readFile(path.join(docsRoot, "src", "assets", "brand", "eso-weave-mark.svg"));
+  const approvedGlyph = await readFile(path.join(repositoryRoot, "assets", "brand", "eso-weave-glyph.svg"));
+  const publishedGlyph = await readFile(path.join(docsRoot, "src", "assets", "brand", "eso-weave-glyph.svg"));
   const landingHtml = await readFile(path.join(outputRoot, "index.html"), "utf8");
+  const brandStandardHtml = await readFile(path.join(outputRoot, "development", "brand-standard.html"), "utf8");
   const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
   const css = await readFile(cssPath, "utf8");
   const workflow = await readFile(workflowPath, "utf8");
@@ -2419,6 +2551,7 @@ async function run() {
     ...(await validateGeneratedSite(outputRoot)),
     ...validateBrandCss(css),
     ...validateLandingCss(css),
+    ...validateBrandStandardVisualCss(css),
     ...validateWorkflowText(workflow),
     ...validateDocumentationAuthorityTriggers(workflow),
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
@@ -2427,6 +2560,16 @@ async function run() {
     ...validateFormalGlossary(glossary, coverage.search_map),
     ...validateLandingIdentity({ landingMarkdown, cargoToml, changelog, approvedBanner, publishedBanner }),
     ...validateLandingGenerated(landingHtml, outputPaths),
+    ...validateBrandStandard({
+      markdown: brandStandardMarkdown,
+      approvedBanner,
+      publishedBanner,
+      approvedMark,
+      publishedMark,
+      approvedGlyph,
+      publishedGlyph,
+    }),
+    ...validateBrandStandardGenerated(brandStandardHtml, outputPaths),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
     ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),

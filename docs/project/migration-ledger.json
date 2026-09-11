@@ -1561,9 +1561,10 @@
       "destination": "docs/project/build-plans/plan-039.md",
       "specs": [
         "specs/079-formal-glossary",
-        "specs/080-docs-landing-identity"
+        "specs/080-docs-landing-identity",
+        "specs/081-brand-standard-visuals"
       ],
-      "evidence": "S079 merged in PR #147 and closed issue #120; S080 is in progress under issue #121."
+      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 is in progress under issue #122."
     }
   ],
   "safetyCrosswalk": [
