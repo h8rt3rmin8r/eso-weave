@@ -30,7 +30,7 @@ Cell text keeps normal word breaking and wrapping. The system does not use `brea
 
 ## Print and script-free behavior
 
-Print hides the interactive instruction, removes screen minimum widths, and exposes the full semantic table without a clipped scrolling surface. When scripts are blocked, the original mdBook wrapper remains locally scrollable and the semantic table remains available. Public Pages and bundled offline builds use the same generated files.
+Print hides the interactive instruction, removes screen minimum widths, applies a fixed page-width layout, and permits emergency cell wrapping so every column fits without a clipped scrolling surface. When scripts are blocked, the original mdBook wrapper remains locally scrollable and the semantic table remains available. Public Pages and bundled offline builds use the same generated files.
 
 ## Automated evidence
 

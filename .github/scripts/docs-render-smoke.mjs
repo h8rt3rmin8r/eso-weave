@@ -288,7 +288,7 @@ export function validateTableReceipt(receipt) {
   if (!receipt?.tableKeyboard?.focused || !receipt?.tableKeyboard?.scrolled || !receipt?.tableKeyboard?.pageStayedPut) errors.push(`S089 table receipt requires trusted keyboard scrolling without page drift: ${JSON.stringify(receipt?.tableKeyboard)}`);
   if (!receipt?.tableResize?.narrowOverflow || receipt?.tableResize?.narrowFocusable !== true || receipt?.tableResize?.wideOverflow !== false || receipt?.tableResize?.wideFocusable !== false) errors.push(`S089 table receipt requires resize-driven overflow and focus-state removal: ${JSON.stringify(receipt?.tableResize)}`);
   if (!(receipt?.tableZoom?.scale >= 1.99) || !receipt?.tableZoom?.locallyContained || !receipt?.tableZoom?.pageContained || !receipt?.tableZoom?.conditionalSemantics) errors.push(`S089 table receipt requires contained 200 percent zoom rendering with conditional guidance: ${JSON.stringify(receipt?.tableZoom)}`);
-  if (!receipt?.tablePrint?.semantic || !receipt?.tablePrint?.hintHidden || !receipt?.tablePrint?.overflowVisible || !receipt?.tablePrint?.screenMinWidthRemoved) errors.push(`S089 table receipt requires readable static print rendering: ${JSON.stringify(receipt?.tablePrint)}`);
+  if (!receipt?.tablePrint?.semantic || !receipt?.tablePrint?.hintHidden || !receipt?.tablePrint?.overflowVisible || !receipt?.tablePrint?.screenMinWidthRemoved || !receipt?.tablePrint?.fixedLayout || !receipt?.tablePrint?.columnsFit) errors.push(`S089 table receipt requires readable static print rendering with every column fitted: ${JSON.stringify(receipt?.tablePrint)}`);
   if (!receipt?.tableNoScript?.semantic || !receipt?.tableNoScript?.localOverflow || !receipt?.tableNoScript?.pageContained || !receipt?.tableNoScript?.enhancementAbsent || !receipt?.tableNoScript?.readableTokens || !(receipt?.tableNoScript?.fontSize >= 14)) errors.push(`S089 table receipt requires semantic, readable, local no-JavaScript fallback: ${JSON.stringify(receipt?.tableNoScript)}`);
   if (Array.isArray(receipt?.tableFailures) && receipt.tableFailures.length > 0) errors.push(...receipt.tableFailures.map((failure) => `S089 browser: ${failure}`));
   return [...new Set(errors)];
@@ -865,6 +865,8 @@ return {
   hintHidden: hint ? getComputedStyle(hint).display === "none" : false,
   overflowVisible: region ? getComputedStyle(region).overflowX === "visible" : false,
   screenMinWidthRemoved: table ? Number.parseFloat(getComputedStyle(table).minWidth) === 0 : false,
+  fixedLayout: table ? getComputedStyle(table).tableLayout === "fixed" : false,
+  columnsFit: table && region ? table.scrollWidth <= region.clientWidth + 1 : false,
 };
 })()`;
 }
@@ -1342,6 +1344,7 @@ export async function run(siteRoot) {
     await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
     await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
 
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 920, deviceScaleFactor: 1, mobile: false });
     await navigateToFigure(TABLE_CASES[4]);
     await client.send("Emulation.setEmulatedMedia", { media: "print" });
     receipt.tablePrint = await evaluateValue(tablePrintExpression());

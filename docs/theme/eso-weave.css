@@ -629,7 +629,14 @@ a {
 
   .docs-table-region table {
     min-width: 0 !important;
+    table-layout: fixed;
     width: 100% !important;
+  }
+
+  .table-wrapper th,
+  .table-wrapper td {
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
   .docs-figure-trigger {

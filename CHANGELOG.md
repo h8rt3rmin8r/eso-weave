@@ -148,7 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   library. Only measured overflow creates a named and described focus region;
   ResizeObserver, font readiness, and resize remove that state when it becomes
   obsolete. Use normal token wrapping, named width profiles for the five
-  correctness-bearing references, and print resets that expose the full table.
+  correctness-bearing references, and print-only fixed layout plus emergency
+  wrapping that fits every column on the page.
 - 2026-09-11: Replace mdBook's generated checkbox image modal at runtime with
   one local native dialog shared by Markdown diagrams and raw HTML figures. The
   checkbox behavior lacks the required obvious close control, dialog semantics,

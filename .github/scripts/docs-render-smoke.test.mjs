@@ -366,7 +366,7 @@ test("S089 requires the 20-cell matrix and keyboard, resize, zoom, print, and fa
     tableKeyboard: { focused: true, scrolled: true, pageStayedPut: true },
     tableResize: { narrowOverflow: true, narrowFocusable: true, wideOverflow: false, wideFocusable: false },
     tableZoom: { scale: 2, locallyContained: true, pageContained: true, hintVisible: true, conditionalSemantics: true },
-    tablePrint: { semantic: true, hintHidden: true, overflowVisible: true, screenMinWidthRemoved: true },
+    tablePrint: { semantic: true, hintHidden: true, overflowVisible: true, screenMinWidthRemoved: true, fixedLayout: true, columnsFit: true },
     tableNoScript: { semantic: true, localOverflow: true, pageContained: true, enhancementAbsent: true, readableTokens: true, fontSize: 16 },
     tableFailures: [],
   };

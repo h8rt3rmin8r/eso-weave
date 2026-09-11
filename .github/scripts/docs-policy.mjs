@@ -1988,7 +1988,7 @@ export function validateDocumentationTableCss(css) {
   if (!/\.docs-table-region__hint\s*\{/u.test(css) || !/data-docs-table-overflow=["']true["']/u.test(css)) errors.push("S089 overflow requires a visible, state-aware scroll instruction");
   if (!/\.docs-table--dense\s*\{[\s\S]*?min-width:/u.test(css) || !/\.docs-table--very-dense\s*\{[\s\S]*?min-width:/u.test(css) || !/\.docs-table--protocol\s*\{[\s\S]*?min-width:/u.test(css)) errors.push("S089 table CSS requires compact, dense, very dense, and named-page width profiles");
   if (!/word-break:\s*normal/u.test(css) || !/overflow-wrap:\s*normal/u.test(css) || /word-break:\s*break-all/u.test(css)) errors.push("S089 table cells must preserve readable tokens without character stacking");
-  if (!/@media\s+print[\s\S]*?\.docs-table-region__hint[\s\S]*?display:\s*none\s*!important[\s\S]*?\.docs-table-region\s*\{[\s\S]*?overflow:\s*visible\s*!important/u.test(css)) errors.push("S089 print rendering must hide interactive guidance and remove screen overflow clipping");
+  if (!/@media\s+print[\s\S]*?\.docs-table-region__hint[\s\S]*?display:\s*none\s*!important[\s\S]*?\.docs-table-region\s*\{[\s\S]*?overflow:\s*visible\s*!important[\s\S]*?\.docs-table-region table\s*\{[\s\S]*?table-layout:\s*fixed[\s\S]*?\.table-wrapper th,[\s\S]*?\.table-wrapper td\s*\{[\s\S]*?overflow-wrap:\s*anywhere/u.test(css)) errors.push("S089 print rendering must hide interactive guidance and fit every column through fixed layout plus emergency wrapping");
   return [...new Set(errors)];
 }
 

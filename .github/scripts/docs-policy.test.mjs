@@ -2600,6 +2600,7 @@ test("S089 requires local containment, readable tokens, visible guidance, and st
     ["word-break: normal", "word-break: break-all", /tokens|stacking/i],
     [".docs-table--protocol", ".docs-table--unused", /width profiles/i],
     ["overflow: visible !important", "overflow: hidden !important", /print/i],
+    ["table-layout: fixed", "table-layout: auto", /print/i],
   ]) {
     assert.match(validateDocumentationTableCss(css.replace(needle, replacement)).join("\n"), expected);
   }
