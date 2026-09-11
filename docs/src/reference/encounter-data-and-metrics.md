@@ -132,6 +132,9 @@ source type 1, the local player, rather than assuming actor 1. Actor allocation 
 observation-order dependent. Pets remain excluded until raw evidence can model
 ownership without guessing. Effective healing saturates `amount - overflow`.
 
+The lowercase algorithm value is a persisted runtime identifier, not a
+work-slice reference.
+
 Effect records retain duration but not the absolute clock origin or effect-slot
 identity. The v1 algorithm anchors each nonnegative `end_ms - begin_ms` duration
 at the event's elapsed monotonic time, clips to encounter bounds, and unions

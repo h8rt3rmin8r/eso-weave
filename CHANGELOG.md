@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S085 establishes `S###` as the only published work-slice provenance form,
+  replaces 31 long slice-prefixed test-symbol mentions with behavioral evidence
+  and compact repository links, preserves exact identifiers in source and stable
+  representative relationships in unpublished project evidence, and enforces the
+  convention in Markdown and generated HTML while retaining the exact
+  encounter-metrics algorithm identifier (issue #126).
 - S084 adds nine task-focused local documentation visuals: seven deterministic
   application captures for first launch, System and State, Weaving, Auto Potion,
   and PixelBeacon; the maintainer-supplied Windows MSI Properties image; and a

@@ -1,6 +1,6 @@
 # ESO Weave Brand Standard v1
 
-This is the authoritative reference for the ESO Weave visual identity. The application theme and every brand asset trace to the tokens and rules below. Build slice S012 established the identity, and S081 published its approved assets as this visual reference.
+This is the authoritative reference for the ESO Weave visual identity. The application theme and every brand asset trace to the tokens and rules below. S012 established the identity, and S081 published its approved assets as this visual reference.
 
 Direction: "Arcane gold on ink." Near-black ink surfaces with a warm gold as the primary action color honor the Elder Scrolls Online heritage while reading as a modern, clean tool rather than antique decoration. Teal is a supporting accent.
 

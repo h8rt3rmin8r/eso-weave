@@ -57,15 +57,15 @@ These seams make negative properties reviewable:
 | Recursion rejection | `Origin::SelfOriginated` | `self_originated_event_is_never_intercepted` |
 | Non-blocking overload | `InputEngine::hand_off` | `full_channel_drops_without_blocking` |
 | Mid-sequence cancellation | `RealSink::emit`, `RealSink::wait` | `real_sink_observes_roll_gate_closure_during_a_wait` |
-| Runtime authorization epoch | `InputEngine::authorization_epoch`, `WeaveGates::admits`, focus, suspension, and menu setters | `s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes`, `s060_transient_suspend_closure_cancels_an_admitted_sequence`, `s060_focus_closure_stops_new_presses_but_releases_held_output` |
+| Runtime authorization epoch | `InputEngine::authorization_epoch`, `WeaveGates::admits`, focus, suspension, and menu setters | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) tests prove epoch invalidation, admitted-sequence cancellation, and held-output release across the [input](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/input_engine.rs) and [weave](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/weave_engine.rs) boundaries |
 | Recovery ordering | `route_reader_safety_gate`, `route_reader_event` | `safety_preroute_defers_recovery_until_worker_state_is_synchronized` |
-| Death episode ordering | `PixelBusReader::observe`, `InputEngine::death_epoch` | `recovered_alive_is_last_after_a_forced_actionable_baseline`, `s067_death_epoch_advances_once_per_open_to_closed_life_transition` |
+| Death episode ordering | `PixelBusReader::observe`, `InputEngine::death_epoch` | Recovered Alive is published after an actionable baseline, and [S067](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/067-death-recovery-safety/spec.md) proves one death-epoch advance per open-to-closed transition in the [input tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/input_engine.rs) |
 | Fishing signal loss | `FishingController::on_event` | `signal_lost_from_every_active_state_disables_without_emitting` |
-| Auto Potion first blocker | `potion::evaluate` | `s043_effective_state_distinguishes_ready_triggered_and_every_runtime_family` |
-| Auto Potion death retry | `AutoPotionController::tick` | `s067_recovery_starts_a_complete_new_retry_episode` |
+| Auto Potion first blocker | `potion::evaluate` | [S043](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/043-auto-potion-restoration/spec.md) proves Ready, Triggered, and every runtime blocker family in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |
+| Auto Potion death retry | `AutoPotionController::tick` | [S067](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/067-death-recovery-safety/spec.md) proves recovery starts a complete new retry episode in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |
 | Managed removal | `beacon::uninstall` | `uninstall_refuses_unmanaged_folder` |
-| Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | `s060_install_refuses_unproven_targets_without_mutation`, `s060_api_refresh_does_not_write_an_unmanaged_manifest`, `s060_lifecycle_operations_do_not_follow_an_unproven_link` |
-| Fishing suspension | `FishingController::set_suspended` | `s060_suspension_refuses_initial_cast_and_preserves_request`, `s060_suspension_cancels_pending_reel_without_replay`, `s060_suspension_cancels_recast_and_timeout_paths` |
+| Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves unproven targets, unmanaged manifests, and unproven links cannot be mutated in the [PixelBeacon tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/beacon.rs) |
+| Fishing suspension | `FishingController::set_suspended` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves initial-cast refusal and cancellation of pending reel and recast work in the [Fishing tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/fishing.rs) |
 | Protocol compatibility | `decode_layout_header` | `recognized_header_corruption_never_falls_back_to_legacy` |
 
 ## Platform coverage

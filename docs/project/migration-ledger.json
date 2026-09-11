@@ -1565,9 +1565,10 @@
         "specs/081-brand-standard-visuals",
         "specs/082-docs-flow-diagrams",
         "specs/083-deterministic-screenshot-sandbox",
-        "specs/084-guided-documentation-screenshots"
+        "specs/084-guided-documentation-screenshots",
+        "specs/085-docs-slice-references"
       ],
-      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 merged in PR #149 and closed issue #122; S082 merged in PR #150 and closed issue #123; S083 merged in PR #151 and closed issue #124; S084 is in progress under issue #125."
+      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 merged in PR #149 and closed issue #122; S082 merged in PR #150 and closed issue #123; S083 merged in PR #151 and closed issue #124; S084 merged in PR #152 and closed issue #125; S085 is in progress under issue #126."
     }
   ],
   "safetyCrosswalk": [
