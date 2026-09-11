@@ -38,6 +38,14 @@
   --table-border-color: var(--eso-stroke);
   --table-header-bg: var(--eso-panel);
   --table-alternate-bg: #111720;
+  --eso-code-background: #1d1f21;
+  --eso-code-comment: #aab6c5;
+  --eso-code-keyword: #ff9b9b;
+  --eso-code-number: #f2b03c;
+  --eso-code-string: #7fe0cf;
+  --eso-code-title: #8dc7ff;
+  --eso-code-variable: #d7b8ff;
+  --eso-code-punctuation: #e6edf3;
 }
 
 .light,
@@ -56,6 +64,49 @@
   --table-header-bg: #ece8de;
   --table-alternate-bg: #f1eee7;
   --eso-focus: #704800;
+  --eso-code-background: #f6f7f6;
+  --eso-code-comment: #59636f;
+  --eso-code-keyword: #8c1d40;
+  --eso-code-number: #704800;
+  --eso-code-string: #075e57;
+  --eso-code-title: #135f96;
+  --eso-code-variable: #6b3fa0;
+  --eso-code-punctuation: #3f4650;
+}
+
+pre > code.hljs {
+  background: var(--eso-code-background);
+}
+
+.hljs-comment {
+  color: var(--eso-code-comment);
+}
+
+.hljs-keyword,
+.hljs-literal {
+  color: var(--eso-code-keyword);
+}
+
+.hljs-number {
+  color: var(--eso-code-number);
+}
+
+.hljs-string {
+  color: var(--eso-code-string);
+}
+
+.hljs-title {
+  color: var(--eso-code-title);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable {
+  color: var(--eso-code-variable);
+}
+
+.hljs-punctuation {
+  color: var(--eso-code-punctuation);
 }
 
 body {

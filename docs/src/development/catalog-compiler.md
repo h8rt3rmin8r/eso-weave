@@ -21,7 +21,7 @@ executed.
 
 Run a live build explicitly:
 
-```console
+```bash
 cargo run --locked --bin catalog-compiler -- build --input INPUT.json --output target/catalog/live/catalog.sqlite --report target/catalog/live/build-report.json --channel live
 ```
 
@@ -53,13 +53,13 @@ Each build report records:
 
 Verify an artifact without changing it:
 
-```console
+```bash
 cargo run --locked --bin catalog-compiler -- verify --catalog catalog/catalog.sqlite
 ```
 
 Compare two verified artifacts:
 
-```console
+```bash
 cargo run --locked --bin catalog-compiler -- diff --old OLD.sqlite --new NEW.sqlite --output diff.json
 ```
 

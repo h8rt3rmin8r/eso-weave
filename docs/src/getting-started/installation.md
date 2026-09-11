@@ -24,7 +24,7 @@ Get-FileHash .\eso-weave-VERSION-x86_64-windows.msi -Algorithm SHA256
 
 On Linux, run this and compare the result with the matching line:
 
-```sh
+```bash
 sha256sum eso-weave-VERSION-x86_64.PACKAGE
 ```
 

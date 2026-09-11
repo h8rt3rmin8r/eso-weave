@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S087 inventories all 23 documentation fences, corrects 12 prompt-free
+  commands to accurate Bash metadata, explicitly binds eight intentional plain
+  blocks, extends mdBook's bundled Highlight.js runtime with local command and
+  PowerShell grammars, and enforces exact text, selection, contained scrolling,
+  offline assets, and AA token contrast across 40 theme and viewport browser
+  observations (issue #157).
 - S085 establishes `S###` as the only published work-slice provenance form,
   replaces 31 long slice-prefixed test-symbol mentions with behavioral evidence
   and compact repository links, preserves exact identifiers in source and stable

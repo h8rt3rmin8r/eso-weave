@@ -83,6 +83,6 @@ The synthetic suite creates its own PNG and DDS bytes and proves deterministic
 output, deduplication, explicit fallback mappings, immutable publication,
 source preservation, manifest privacy, and hostile path and cache rejection:
 
-```console
+```bash
 cargo test --locked --test icon_cache
 ```

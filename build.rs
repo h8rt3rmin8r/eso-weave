@@ -127,6 +127,10 @@ fn validate_release_manifest(files: &[(String, PathBuf)]) {
     for (label, prefix, suffix) in [
         ("search index", "searchindex-", ".js"),
         ("search runtime", "searcher-", ".js"),
+        ("highlight runtime", "highlight-", ".js"),
+        ("highlight stylesheet", "highlight-", ".css"),
+        ("dark highlight stylesheet", "tomorrow-night-", ".css"),
+        ("ayu highlight stylesheet", "ayu-highlight-", ".css"),
         ("brand stylesheet", "theme/eso-weave-", ".css"),
         ("brand behavior", "theme/eso-weave-", ".js"),
     ] {

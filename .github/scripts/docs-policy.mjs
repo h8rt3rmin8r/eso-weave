@@ -310,7 +310,8 @@ function maskHtmlTags(characters) {
 function decodeVisibleEntities(text) {
   const named = new Map([
     ["amp", "&"], ["bsol", "\\"], ["colon", ":"], ["hyphen", "-"],
-    ["lowbar", "_"], ["nbsp", " "], ["num", "#"], ["sol", "/"], ["tab", "\t"],
+    ["apos", "'"], ["gt", ">"], ["lowbar", "_"], ["lt", "<"],
+    ["nbsp", " "], ["num", "#"], ["quot", "\""], ["sol", "/"], ["tab", "\t"],
   ]);
   return text.replace(/&(?:#(?<decimal>\d+)|#x(?<hex>[0-9a-f]+)|(?<name>[A-Za-z]+));/giu, (entity, ...args) => {
     const groups = args.at(-1);
@@ -375,6 +376,215 @@ function markdownContainerContent(line) {
     }
     return content;
   }
+}
+
+const DOCUMENTATION_FENCE_LANGUAGES = new Set(["bash", "json", "powershell", "text"]);
+const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 12], ["powershell", 3], ["text", 8]]);
+const PLAIN_CODE_BLOCKS = [
+  { page: "development/catalog-updates.md", sha256: "394477b8bebb95ddb31e3dbf93c78908468e2f69d91e6992f84b27d916886883", rationale: "A path layout, not an executable command." },
+  { page: "development/discovery-collector.md", sha256: "26982824fe45ffb5c1224ed89d9f04d0585059214f5431d5bd2b2065b25bbad3", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
+  { page: "development/repository-conventions.md", sha256: "ba72b7779b972c573ded96d80a6d6d21e9416720419c1ddc287adbe3bab0e227", rationale: "A repository directory map, not executable syntax." },
+  { page: "features/encounter-capture.md", sha256: "7670ddaeb06a92493c7156e32a8eb3bf286fb146597d34530d28b7486ec1eb94", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
+  { page: "features/weaving.md", sha256: "74576ddc34a330808aa09f8bbc76348f573f3686a2eec2555060dc5651c3bee5", rationale: "A mathematical formula, not executable syntax." },
+  { page: "features/weaving.md", sha256: "4fa825b4a104e43a5c6c4fff848dfd7f8192486b146e1ce02ee9f551694e62b1", rationale: "An authorization process flow, not executable syntax." },
+  { page: "getting-started/troubleshooting.md", sha256: "37c611fcdadd2bf1f87561e8fa4d110d1d1fcab662a40d3771d0cd1a3e0ee04a", rationale: "A diagnostic decision tree, not executable syntax." },
+  { page: "reference/pixel-bus-protocol.md", sha256: "e159118f0007ffa610a1afedeb56051affb6758336b096c99e6456a0b828e3e4", rationale: "Protocol geometry formulas, not executable syntax." },
+];
+
+function fenceDigest(content) {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+export function parseDocumentationFences(markdown, relative) {
+  const fences = [];
+  const errors = [];
+  const lines = markdown.split(/\r?\n/gu);
+  let active = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const content = markdownContainerContent(rawLine);
+    if (active) {
+      const closing = content.match(new RegExp(`^ {0,3}${active.character}{${active.length},}[ \\t]*$`, "u"));
+      if (closing) {
+        const blockContent = active.content.join("\n");
+        fences.push({
+          page: relative,
+          line: active.line,
+          language: active.language,
+          content: blockContent,
+          sha256: fenceDigest(blockContent),
+        });
+        active = null;
+      } else {
+        let codeLine = rawLine;
+        if (active.containerPrefix && codeLine.startsWith(active.containerPrefix)) {
+          codeLine = codeLine.slice(active.containerPrefix.length);
+        }
+        if (active.indent && codeLine.startsWith(active.indent)) codeLine = codeLine.slice(active.indent.length);
+        active.content.push(codeLine);
+      }
+      continue;
+    }
+    const opening = content.match(/^ {0,3}(`{3,}|~{3,})(?<info>.*)$/u);
+    if (!opening) continue;
+    const info = opening.groups.info.trim();
+    const identifier = info.match(/^[A-Za-z0-9_-]+$/u)?.[0] ?? "";
+    if (!identifier) {
+      errors.push(`${relative}:${index + 1}: S087 fenced code block requires one language identifier`);
+    }
+    active = {
+      character: opening[1][0],
+      length: opening[1].length,
+      language: identifier.toLocaleLowerCase("en-US"),
+      line: index + 1,
+      content: [],
+      containerPrefix: rawLine.slice(0, rawLine.length - content.length),
+      indent: content.match(/^ {0,3}/u)?.[0] ?? "",
+    };
+  }
+  if (active) errors.push(`${relative}:${active.line}: S087 fenced code block is unclosed`);
+  return { fences, errors };
+}
+
+export function validateDocumentationCodeFences(pages, options = {}) {
+  const complete = options.complete ?? true;
+  const plainExceptions = options.plainExceptions ?? PLAIN_CODE_BLOCKS;
+  const errors = [];
+  const fences = [];
+  for (const [page, markdown] of pages) {
+    const parsed = parseDocumentationFences(markdown, page);
+    errors.push(...parsed.errors);
+    fences.push(...parsed.fences);
+  }
+  const seenPlain = new Set();
+  for (const fence of fences) {
+    if (["console", "sh"].includes(fence.language)) {
+      errors.push(`${fence.page}:${fence.line}: S087 ${fence.language} is an obsolete documentation fence identifier`);
+      continue;
+    }
+    if (!DOCUMENTATION_FENCE_LANGUAGES.has(fence.language)) {
+      errors.push(`${fence.page}:${fence.line}: S087 unknown documentation fence identifier ${fence.language || "(missing)"}`);
+      continue;
+    }
+    if (fence.language !== "text") continue;
+    const exception = plainExceptions.find((candidate) => candidate.page === fence.page && candidate.sha256 === fence.sha256);
+    if (!exception) {
+      errors.push(`${fence.page}:${fence.line}: S087 plain block is not in the exact content allowlist`);
+      continue;
+    }
+    if (typeof exception.rationale !== "string" || exception.rationale.trim().length < 20) {
+      errors.push(`${fence.page}:${fence.line}: S087 plain block requires a substantive rationale`);
+    }
+    seenPlain.add(`${exception.page}\0${exception.sha256}`);
+  }
+  if (complete) {
+    if (fences.length !== 23) errors.push(`S087 documentation corpus requires exactly 23 fenced blocks, found ${fences.length}`);
+    for (const [language, count] of DOCUMENTATION_FENCE_COUNTS) {
+      const actual = fences.filter((fence) => fence.language === language).length;
+      if (actual !== count) errors.push(`S087 documentation corpus requires ${count} ${language} blocks, found ${actual}`);
+    }
+    for (const exception of plainExceptions) {
+      if (!seenPlain.has(`${exception.page}\0${exception.sha256}`)) {
+        errors.push(`S087 plain block allowlist entry is missing from the corpus: ${exception.page} ${exception.sha256}`);
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
+function generatedPageForMarkdown(relative) {
+  if (relative === "README.md") return "index.html";
+  if (relative.endsWith("/README.md")) return `${relative.slice(0, -"README.md".length)}index.html`;
+  return relative.replace(/\.md$/u, ".html");
+}
+
+function generatedCodeBlocks(html) {
+  const blocks = [];
+  for (const match of html.matchAll(/<pre><code\b(?<attributes>[^>]*)>(?<content>[\s\S]*?)<\/code><\/pre>/giu)) {
+    const classes = match.groups.attributes.match(/\bclass\s*=\s*["']([^"']*)["']/iu)?.[1]?.split(/\s+/gu) ?? [];
+    const language = classes.find((name) => name.startsWith("language-"));
+    const content = decodeVisibleEntities(match.groups.content.replace(/<[^>]*>/gu, "")).replace(/\r?\n$/u, "");
+    blocks.push({ language: language?.slice("language-".length) ?? "", content });
+  }
+  return blocks;
+}
+
+export function validateDocumentationCodeBlocksGenerated(sourcePages, generatedPages, outputPaths) {
+  const errors = [];
+  for (const [sourcePage, markdown] of sourcePages) {
+    const source = parseDocumentationFences(markdown, sourcePage);
+    if (source.fences.length === 0) continue;
+    const outputPage = generatedPageForMarkdown(sourcePage);
+    const html = generatedPages.get(outputPage);
+    if (typeof html !== "string") {
+      errors.push(`S087 generated code page is missing: ${outputPage}`);
+      continue;
+    }
+    const expected = source.fences.map((fence) => ({ language: fence.language, content: fence.content }));
+    const actual = generatedCodeBlocks(html);
+    if (expected.length !== actual.length || expected.some((block, index) => block.language !== actual[index]?.language)) {
+      errors.push(`S087 generated code language order differs for ${outputPage}: expected ${expected.map((block) => block.language).join(",")}, found ${actual.map((block) => block.language).join(",")}`);
+    }
+    if (expected.length === actual.length && expected.some((block, index) => block.content !== actual[index].content)) {
+      errors.push(`S087 generated code text differs from its Markdown source for ${outputPage}`);
+    }
+  }
+  for (const [label, pattern] of [
+    ["Highlight.js runtime", /^highlight-[0-9a-z]+\.js$/u],
+    ["light highlight palette", /^highlight-[0-9a-z]+\.css$/u],
+    ["dark highlight palette", /^tomorrow-night-[0-9a-z]+\.css$/u],
+    ["ayu highlight palette", /^ayu-highlight-[0-9a-z]+\.css$/u],
+    ["ESO Weave highlighting extension", /^theme\/eso-weave-[0-9a-z]+\.js$/u],
+    ["ESO Weave highlighting palette", /^theme\/eso-weave-[0-9a-z]+\.css$/u],
+  ]) {
+    const matches = [...outputPaths].filter((file) => pattern.test(file));
+    if (matches.length !== 1) errors.push(`S087 generated output requires exactly one local ${label}`);
+  }
+  return errors;
+}
+
+export function validateHighlightingExtension(script) {
+  const errors = [];
+  if (!/hljs\.registerLanguage\(["']eso-command["']/u.test(script)) errors.push("S087 local command grammar registration is missing");
+  if (!/hljs\.registerLanguage\(["']eso-powershell["']/u.test(script)) errors.push("S087 local PowerShell grammar registration is missing");
+  if (!/querySelectorAll\(["']code\.language-bash, code\.language-powershell["']\)/u.test(script)) errors.push("S087 re-highlighting selector must remain bounded to Bash and PowerShell blocks");
+  if (!/dataset\.esoHighlighted/u.test(script)) errors.push("S087 re-highlighting requires an idempotent data marker");
+  if (!/hljs\.highlightBlock\(/u.test(script)) errors.push("S087 local grammars must reuse the bundled Highlight.js runtime");
+  if (/\b(?:fetch|XMLHttpRequest|import\s*\(|https?:\/\/)/u.test(script)) errors.push("S087 highlighting extension must remain local and offline");
+  return errors;
+}
+
+function cssVariables(block) {
+  return new Map([...block.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\s*;/giu)].map((match) => [match[1], match[2]]));
+}
+
+export function validateSyntaxHighlightingCss(css) {
+  const errors = [];
+  const darkBlock = css.match(/\.navy\s*,\s*\.coal\s*,\s*\.ayu\s*\{(?<body>[\s\S]*?)\}/u)?.groups.body ?? "";
+  const lightBlock = css.match(/\.light\s*,\s*\.rust\s*\{(?<body>[\s\S]*?)\}/u)?.groups.body ?? "";
+  const roles = ["comment", "keyword", "number", "string", "title", "variable", "punctuation"];
+  for (const [family, block] of [["dark", darkBlock], ["light", lightBlock]]) {
+    const variables = cssVariables(block);
+    const background = variables.get("eso-code-background");
+    if (!background) {
+      errors.push(`S087 ${family} syntax palette requires --eso-code-background`);
+      continue;
+    }
+    for (const role of roles) {
+      const color = variables.get(`eso-code-${role}`);
+      if (!color) errors.push(`S087 ${family} syntax palette requires ${role}`);
+      else if (contrastRatio(color, background) < 4.5) errors.push(`S087 ${family} ${role} token contrast must be at least 4.5:1`);
+    }
+    const distinctColors = new Set(roles.map((role) => variables.get(`eso-code-${role}`)).filter(Boolean));
+    if (distinctColors.size < 5) errors.push(`S087 ${family} syntax palette requires at least five distinct token colors`);
+  }
+  if (!/pre\s*>\s*code\.hljs\s*\{[^}]*background:\s*var\(--eso-code-background\)/iu.test(css)) errors.push("S087 code blocks must use the project-owned syntax background");
+  for (const role of roles) {
+    if (!new RegExp(`\\.hljs-${role}\\b[^{}]*\\{[^}]*color:\\s*var\\(--eso-code-${role}\\)`, "iu").test(css)) {
+      errors.push(`S087 syntax palette must map the ${role} token class`);
+    }
+  }
+  return errors;
 }
 
 function maskMarkdownWorkSliceExceptions(markdown) {
@@ -604,7 +814,7 @@ async function validateMarkdownLinks(sourceRoot, file, contents) {
   return errors;
 }
 
-export async function validateSourceTree(docsRoot) {
+export async function validateSourceTree(docsRoot, options = {}) {
   const sourceRoot = path.join(docsRoot, "src");
   const summaryPath = path.join(sourceRoot, "SUMMARY.md");
   const errors = [];
@@ -644,12 +854,14 @@ export async function validateSourceTree(docsRoot) {
   }
 
   const markdownFiles = await walk(sourceRoot, ".md");
+  const markdownPages = new Map();
   for (const file of markdownFiles) {
     const relative = slash(path.relative(sourceRoot, file));
     if (!["SUMMARY.md", "404.md"].includes(relative) && !counts.has(relative)) {
       errors.push(`${relative} is not listed in SUMMARY.md`);
     }
     const contents = await readFile(file, "utf8");
+    markdownPages.set(relative, contents);
     if (relative !== "SUMMARY.md" && !/^#\s+\S+/mu.test(contents)) {
       errors.push(`${relative} has no non-empty level-one heading`);
     }
@@ -661,6 +873,7 @@ export async function validateSourceTree(docsRoot) {
     );
     errors.push(...validateWorkSliceMarkdown(contents, relative));
   }
+  errors.push(...validateDocumentationCodeFences(markdownPages, { complete: options.completeFenceInventory ?? false }));
   return errors;
 }
 
@@ -3225,6 +3438,14 @@ async function run() {
     return [outputPage, await readFile(path.join(outputRoot, ...outputPage.split("/")), "utf8")];
   })));
   const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
+  const sourceMarkdownPages = new Map(await Promise.all((await walk(path.join(docsRoot, "src"), ".md")).map(async (file) => [
+    slash(path.relative(path.join(docsRoot, "src"), file)),
+    await readFile(file, "utf8"),
+  ])));
+  const generatedHtmlPages = new Map(await Promise.all((await walk(outputRoot, ".html")).map(async (file) => [
+    slash(path.relative(outputRoot, file)),
+    await readFile(file, "utf8"),
+  ])));
   const css = await readFile(cssPath, "utf8");
   const themeScript = await readFile(path.join(docsRoot, "theme", "eso-weave.js"), "utf8");
   const workflow = await readFile(workflowPath, "utf8");
@@ -3233,11 +3454,12 @@ async function run() {
     ? await readFile(path.join(outputRoot, searchIndexFiles[0]), "utf8")
     : "";
   const errors = [
-    ...(await validateSourceTree(docsRoot)),
+    ...(await validateSourceTree(docsRoot, { completeFenceInventory: true })),
     ...(await validateGeneratedSite(outputRoot)),
     ...validateBrandCss(css),
     ...validateLandingCss(css),
     ...validateBrandStandardVisualCss(css),
+    ...validateSyntaxHighlightingCss(css),
     ...validateWorkflowText(workflow),
     ...validateDocumentationAuthorityTriggers(workflow),
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
@@ -3262,6 +3484,8 @@ async function run() {
     ...validateDocumentationScreenshots({ manifest: screenshotManifest, assets: screenshotAssets, pages: screenshotPages }),
     ...validateDocumentationScreenshotsGenerated({ manifest: screenshotManifest, pages: generatedScreenshotPages, outputPaths }),
     ...validateDocumentationScreenshotCss(css),
+    ...validateDocumentationCodeBlocksGenerated(sourceMarkdownPages, generatedHtmlPages, outputPaths),
+    ...validateHighlightingExtension(themeScript),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
     ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),
