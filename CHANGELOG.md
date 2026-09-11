@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S083 adds a development-only deterministic documentation capture sandbox with
+  seven truthful application scenes, dark and light themes, narrow and wide
+  viewports, an ordered receipt manifest, and repository-contained generated
+  output. The headless target opens no native window, uses no live ESO state,
+  constructs no operating-system input or screen backend, calls no addon lifecycle
+  mutation, resolves no personal configuration directory, and asserts that every
+  scene emits no input action (issue #124).
 - S082 adds four purposeful top-down diagrams for architecture ownership, action
   authorization, coherent safety recovery, and Pixel Bus frame validation. Each
   checked-in local SVG has internal accessibility metadata, a meaningful image
@@ -92,6 +99,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-11: Keep deterministic documentation capture structurally outside the
+  shipped application as a no-harness integration-test target. Require an explicit
+  `--capture-to` marker and repository-local destination before initializing WGPU
+  or retaining generated files, and stage every exact output without following
+  symlink collisions. Exercise the real application frame seam with bundled fonts
+  and use only synthetic deterministic scene state. The published egui_kittest
+  WGPU feature currently requests unavailable `pollster ^1.0`, so retain
+  egui_kittest for frame driving and adapt its upstream offscreen design through
+  matching test-only egui-wgpu plus available pollster 0.4. This proportional
+  dependency deviation preserves production isolation without building a parallel
+  painter.
 - 2026-09-11: Use four checked-in static SVG files as both editable source and
   delivered documentation assets for the selected architecture, authorization,
   recovery, and validation flows. Avoid Mermaid, a browser renderer, a build-time

@@ -1563,9 +1563,10 @@
         "specs/079-formal-glossary",
         "specs/080-docs-landing-identity",
         "specs/081-brand-standard-visuals",
-        "specs/082-docs-flow-diagrams"
+        "specs/082-docs-flow-diagrams",
+        "specs/083-deterministic-screenshot-sandbox"
       ],
-      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 merged in PR #149 and closed issue #122; S082 is in progress under issue #123."
+      "evidence": "S079 merged in PR #147 and closed issue #120; S080 merged in PR #148 and closed issue #121; S081 merged in PR #149 and closed issue #122; S082 merged in PR #150 and closed issue #123; S083 is in progress under issue #124."
     }
   ],
   "safetyCrosswalk": [

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui_kittest::{kittest::Queryable, Harness};
@@ -138,15 +138,19 @@ fn harness(service: EncounterHistoryService) -> Harness<'static, EsoWeaveApp> {
 }
 
 fn settle(harness: &mut Harness<'static, EsoWeaveApp>) {
-    for _ in 0..100 {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
         harness.step();
         if !harness.state().encounter_history_busy() {
             harness.step();
             return;
         }
-        std::thread::yield_now();
+        assert!(
+            Instant::now() < deadline,
+            "encounter history worker did not settle"
+        );
+        std::thread::sleep(Duration::from_millis(5));
     }
-    panic!("encounter history worker did not settle");
 }
 
 #[test]

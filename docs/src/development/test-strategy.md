@@ -26,6 +26,7 @@ layer proves and what it does not prove.
 | Local icon cache | `tests/icon_cache.rs` | Synthetic PNG/DDS decode, hostile paths and links, source preservation, deterministic objects, explicit fallback mappings, immutable publication, tamper rejection, and manifest privacy |
 | Catalog candidate pipeline | `tests/catalog_pipeline.rs`, `tests/catalog_pipeline_workflow.rs` | Exact channel and version identity, dual network gates, source-cache integrity, deterministic allowlisted reports, failed-publication preservation, and read-only automation authority |
 | User catalog updates | `tests/catalog_update.rs`, `tests/app_ui_sizing.rs` | Redacted inspection, Live/PTS availability, trusted-origin acknowledgement, immutable install, cancellation, restart resolution, file locking, collector save boundary, receipts, recovery, rollback, and accessible modal controls |
+| Documentation capture sandbox | `tests/documentation_capture.rs` | Exact scene catalog, deterministic model truth, dark and light themes, narrow and wide viewports, production isolation, repository-contained output, and zero emitted input without live ESO or a native window |
 
 ## Deterministic seams
 
@@ -84,6 +85,31 @@ They prove hostile paths cannot become filesystem reads and service lifetime is
 bounded. Windows and Linux CI also run the production Cargo build after installing
 exact mdBook tools, while documentation policy proves generated local references
 resolve before embedding.
+
+## Documentation capture sandbox
+
+The S083 capture target is development-only and cannot be entered through the
+shipped application. Its ordinary test invocation validates the exact seven-scene
+catalog, scene models, and isolation rules without initializing a graphics adapter
+or retaining generated files:
+
+```text
+cargo test --locked --test documentation_capture
+```
+
+An explicit repository-local destination arms headless PNG generation. The command
+below writes 28 variants and `capture-manifest.json` below `target/` without opening
+a native window, resolving a personal configuration directory, installing an addon,
+capturing the desktop, or constructing an operating-system input backend:
+
+```text
+cargo test --locked --test documentation_capture -- --capture-to target/documentation-captures
+```
+
+Generated captures are review evidence for issue #125 and are not source assets in
+S083. The target rejects repository escape, the repository root, non-directory
+collisions, and symlinked destinations. Every rendered scene also proves its input
+action receiver stayed empty.
 
 ## Settings runtime coverage
 
