@@ -43,6 +43,7 @@
 11. Direct PNG writes could follow an expected-name symlink. Every PNG is now staged and published only after rejecting symlink and special-file collisions.
 12. Windows may deny symlink fixture creation without elevation or Developer Mode. The enforcement remains unconditional, while that environment-dependent probe reports a skip only for the specific permission denial.
 13. Validation-only output probes originally required a writable source checkout. They now exercise identical repository-containment logic against an automatically removed writable mock repository, preserving read-only-source builds.
+14. Hosted Ubuntu exposed a pre-existing encounter-history test helper that polled a background worker for 100 tight frames with only thread yields. Two consecutive runs exhausted that loop before the worker was scheduled. The test-only helper now uses a bounded five-second deadline and a 5 ms cooperative wait; runtime behavior is unchanged.
 
 No critical, high, or unresolved ambiguity remains. Implementation may begin.
 
