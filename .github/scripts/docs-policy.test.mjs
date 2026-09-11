@@ -21,6 +21,9 @@ import {
   validateContentCoverageRepository,
   validateCorpusSnapshot,
   validateDocumentationAuthorityTriggers,
+  validateDocumentationDiagramCss,
+  validateDocumentationDiagrams,
+  validateDocumentationDiagramsGenerated,
   validateFormalGlossary,
   validateGeneratedSite,
   validateGlossarySearchIndex,
@@ -119,6 +122,97 @@ test("S081 requires bounded swatches, contained images, and narrow gallery reflo
   assert.match(validateBrandStandardVisualCss(css.replace("max-width: 100%;", "max-width: none;")).join("\n"), /image/i);
   assert.match(validateBrandStandardVisualCss(css.replace("grid-column: 1 / -1;", "grid-column: auto;")).join("\n"), /light.*mark.*center/i);
   assert.match(validateBrandStandardVisualCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(2, 1fr);")).join("\n"), /narrow/i);
+});
+
+const diagramRecords = [
+  ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"]],
+  ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"]],
+  ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"]],
+  ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"]],
+];
+
+function diagramFixture() {
+  const pages = new Map();
+  const svgs = new Map();
+  const labels = new Map([
+    ["architecture-ownership.svg", ["Physical input", "Observed evidence", "Named consumers"]],
+    ["action-authorization.svg", ["Physical event", "Positive gates", "Authorized", "Fails closed"]],
+    ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
+    ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"]],
+  ]);
+  for (const [page, asset, alt, heading, anchors] of diagramRecords) {
+    pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n`);
+    const stem = asset.replace(".svg", "");
+    const visible = labels.get(asset).map((label, index) => `<text x="200" y="${60 + index * 44}" text-anchor="middle" font-size="16" fill="#e6edf3">${label}</text>`).join("");
+    svgs.set(asset, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 640" role="img" focusable="false" aria-labelledby="${stem}-title ${stem}-desc" data-flow-direction="top-down"><title id="${stem}-title">${alt}</title><desc id="${stem}-desc">${anchors.join(". ")}.</desc><rect width="400" height="640" fill="#0e1116" stroke="#65758b"/><defs><marker id="arrow" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#f2b03c"/></marker></defs><path d="M200 80 V180" stroke="#f2b03c" marker-end="url(#arrow)"/>${visible}</svg>`);
+  }
+  return { pages, svgs };
+}
+
+test("S082 accepts exact local diagrams with complete text equivalents", () => {
+  assert.deepEqual(validateDocumentationDiagrams(diagramFixture()), []);
+});
+
+test("S082 rejects missing references, weak alternatives, and incomplete equivalents", () => {
+  const missing = diagramFixture();
+  missing.pages.set("development/architecture.md", "# No diagram\n");
+  assert.match(validateDocumentationDiagrams(missing).join("\n"), /architecture.*reference/i);
+
+  const weak = diagramFixture();
+  weak.pages.set("concepts/action-authorization.md", weak.pages.get("concepts/action-authorization.md").replace(diagramRecords[1][2], "Flow diagram"));
+  assert.match(validateDocumentationDiagrams(weak).join("\n"), /authorization.*alternative/i);
+
+  const incomplete = diagramFixture();
+  incomplete.pages.set("development/state-machines.md", weak.pages.get("development/state-machines.md").replace(diagramRecords[2][4][2], "Recovered"));
+  assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /recovery.*text equivalent/i);
+});
+
+test("S082 rejects horizontal, inaccessible, active, remote, and color-only SVGs", () => {
+  const horizontal = diagramFixture();
+  horizontal.svgs.set("safety-recovery.svg", horizontal.svgs.get("safety-recovery.svg").replace("top-down", "left-right"));
+  assert.match(validateDocumentationDiagrams(horizontal).join("\n"), /top-down/i);
+
+  const inaccessible = diagramFixture();
+  inaccessible.svgs.set("architecture-ownership.svg", inaccessible.svgs.get("architecture-ownership.svg").replace(' role="img"', ""));
+  assert.match(validateDocumentationDiagrams(inaccessible).join("\n"), /accessible root/i);
+
+  const active = diagramFixture();
+  active.svgs.set("action-authorization.svg", active.svgs.get("action-authorization.svg").replace("</svg>", "<script>alert(1)</script></svg>"));
+  assert.match(validateDocumentationDiagrams(active).join("\n"), /active or external content/i);
+
+  const remote = diagramFixture();
+  remote.svgs.set("pixel-bus-validation.svg", remote.svgs.get("pixel-bus-validation.svg").replace("</svg>", '<image href="https://example.com/image.png"/></svg>'));
+  assert.match(validateDocumentationDiagrams(remote).join("\n"), /active or external content/i);
+
+  const remoteCssPaint = diagramFixture();
+  remoteCssPaint.svgs.set("pixel-bus-validation.svg", remoteCssPaint.svgs.get("pixel-bus-validation.svg").replace('fill="#0e1116"', 'style="fill: url(/remote.svg#paint)"'));
+  assert.match(validateDocumentationDiagrams(remoteCssPaint).join("\n"), /active or external content/i);
+
+  const remoteCssImport = diagramFixture();
+  remoteCssImport.svgs.set("pixel-bus-validation.svg", remoteCssImport.svgs.get("pixel-bus-validation.svg").replace("</svg>", '<style>@import "/remote.css";</style></svg>'));
+  assert.match(validateDocumentationDiagrams(remoteCssImport).join("\n"), /active or external content/i);
+
+  const colorOnly = diagramFixture();
+  colorOnly.svgs.set("action-authorization.svg", colorOnly.svgs.get("action-authorization.svg").replace("Fails closed", "Denied"));
+  assert.match(validateDocumentationDiagrams(colorOnly).join("\n"), /fails closed label/i);
+});
+
+test("S082 requires all generated references and local SVG outputs", () => {
+  const pages = new Map(diagramRecords.map(([page, asset, alt, heading]) => [page.replace(".md", ".html"), `<figure class="docs-flow-diagram"><img src="../assets/diagrams/${asset}" alt="${alt}"></figure><h3>${heading}</h3>`]));
+  const outputs = new Set(diagramRecords.map(([, asset]) => `assets/diagrams/${asset}`));
+  assert.deepEqual(validateDocumentationDiagramsGenerated(pages, outputs), []);
+  assert.match(validateDocumentationDiagramsGenerated(pages, new Set()).join("\n"), /generated asset/i);
+  const missing = new Map(pages);
+  missing.set("reference/pixel-bus-protocol.html", "<p>Missing</p>");
+  assert.match(validateDocumentationDiagramsGenerated(missing, outputs).join("\n"), /generated.*Pixel Bus/i);
+});
+
+test("S082 requires bounded responsive diagram presentation", () => {
+  const css = `.docs-flow-diagram { border: 1px solid #65758b; margin: 1.5rem auto; max-width: 40rem; overflow: hidden; width: 100%; }\n.docs-flow-diagram img { display: block; height: auto; max-width: 100%; width: 100%; }\n@media (max-width: 40rem) { .docs-flow-diagram { max-width: 100%; } }`;
+  assert.deepEqual(validateDocumentationDiagramCss(css), []);
+  assert.match(validateDocumentationDiagramCss(css.replace("overflow: hidden;", "overflow: visible;")).join("\n"), /overflow/i);
+  assert.match(validateDocumentationDiagramCss(css.replace("max-width: 100%;", "max-width: none;")).join("\n"), /image/i);
+  assert.match(validateDocumentationDiagramCss(css.replace("max-width: 100%; }", "max-width: 40rem; }")).join("\n"), /narrow/i);
 });
 
 const landingCargo = `[package]\nname = "eso-weave"\nversion = "0.15.1"\nrepository = "https://github.com/h8rt3rmin8r/eso-weave"\n`;

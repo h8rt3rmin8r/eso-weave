@@ -55,6 +55,24 @@ Evidence: addon functions and event registrations in
 `addon_sprint_detector_is_bounded_keyboard_only_and_event_driven` in
 `tests/beacon.rs`.
 
+## Safety recovery order
+
+<figure class="docs-flow-diagram">
+
+![Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline](../assets/diagrams/safety-recovery.svg)
+
+</figure>
+
+### Safety recovery text equivalent
+
+Unsafe or unavailable evidence closes shared gates first. Work that no longer
+has authority is dropped or cancelled, and output already held by a sink may
+only be released. Consumers synchronize while authorization remains closed, so
+an engine or controller cannot observe a partially recovered state. The reader
+then republishes every required observation from one coherent generation. A
+complete positive baseline reopens the gates that are safe, while missing or
+unknown values keep their consumers closed. Cancelled work is never replayed.
+
 ## Weave decision flow
 
 The Weave Engine is request-driven rather than a long-lived visible state

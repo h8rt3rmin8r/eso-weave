@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S082 adds four purposeful top-down diagrams for architecture ownership, action
+  authorization, coherent safety recovery, and Pixel Bus frame validation. Each
+  checked-in local SVG has internal accessibility metadata, a meaningful image
+  alternative, a complete adjacent text equivalent, responsive containment, and
+  policy-enforced static and offline delivery (issue #123).
 - S081 turns the Brand Standard into a visual reference with byte-identical local
   copies of the approved banner, badged mark, and badge-less glyph, valid dark and
   light surface examples, reproduction and compatibility-output guidance, and
@@ -87,6 +92,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-11: Use four checked-in static SVG files as both editable source and
+  delivered documentation assets for the selected architecture, authorization,
+  recovery, and validation flows. Avoid Mermaid, a browser renderer, a build-time
+  generator, external fonts, and remote assets because those add theme, security,
+  and offline failure modes without improving this bounded set. Require internal
+  title and description metadata, exact meaningful image alternatives, complete
+  adjacent text equivalents, labeled non-color outcomes, an opaque ink canvas,
+  top-down progression, and policy checks over source and generated delivery.
 - 2026-09-10: Treat the full-color banner, badged mark SVG, and badge-less glyph
   SVG as the approved Brand Standard set. Publish byte-identical local copies for
   Pages and bundled documentation, label older clear and white raster logos as

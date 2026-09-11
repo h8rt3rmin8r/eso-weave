@@ -1010,6 +1010,161 @@ export function validateBrandStandardVisualCss(css) {
   return errors;
 }
 
+const DOCUMENTATION_DIAGRAMS = [
+  {
+    id: "S082-D01",
+    label: "architecture ownership",
+    page: "development/architecture.md",
+    outputPage: "development/architecture.html",
+    asset: "architecture-ownership.svg",
+    alt: "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers",
+    heading: "Ownership flow text equivalent",
+    anchors: [
+      "Physical input remains on the input path",
+      "Observed game evidence remains on the observation path",
+      "Named engines and controllers consume only their owned inputs",
+    ],
+    svgAnchors: ["Physical input", "Observed evidence", "Named consumers"],
+  },
+  {
+    id: "S082-D02",
+    label: "action authorization",
+    page: "concepts/action-authorization.md",
+    outputPage: "concepts/action-authorization.html",
+    asset: "action-authorization.svg",
+    alt: "Action authorization flow requires every positive gate or fails closed without generated input",
+    heading: "Authorization flow text equivalent",
+    anchors: [
+      "A physical event first reaches the focus-scoped decision",
+      "Every generated action requires positive current evidence",
+      "Unsafe or unavailable evidence fails closed",
+    ],
+    svgAnchors: ["Physical event", "Positive gates", "Authorized", "Fails closed"],
+  },
+  {
+    id: "S082-D03",
+    label: "safety recovery",
+    page: "development/state-machines.md",
+    outputPage: "development/state-machines.html",
+    asset: "safety-recovery.svg",
+    alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline",
+    heading: "Safety recovery text equivalent",
+    anchors: [
+      "Unsafe or unavailable evidence closes shared gates first",
+      "Consumers synchronize while authorization remains closed",
+      "A complete positive baseline reopens the gates",
+    ],
+    svgAnchors: ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"],
+  },
+  {
+    id: "S082-D04",
+    label: "Pixel Bus validation",
+    page: "reference/pixel-bus-protocol.md",
+    outputPage: "reference/pixel-bus-protocol.html",
+    asset: "pixel-bus-validation.svg",
+    alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals",
+    heading: "Pixel Bus validation text equivalent",
+    anchors: [
+      "Capture the header from one displayed frame",
+      "Header or layout corruption suppresses all payload sampling",
+      "Each payload block then validates independently",
+    ],
+    svgAnchors: ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"],
+  },
+];
+
+export function validateDocumentationDiagrams({ pages, svgs }) {
+  const errors = [];
+  if (!(pages instanceof Map) || !(svgs instanceof Map)) return ["S082 diagram validation requires page and SVG maps"];
+  for (const record of DOCUMENTATION_DIAGRAMS) {
+    const markdown = pages.get(record.page) ?? "";
+    const source = `../assets/diagrams/${record.asset}`;
+    const reference = `![${record.alt}](${source})`;
+    if (!markdown.includes(source)) errors.push(`S082 ${record.label} page requires its local diagram reference`);
+    if (!markdown.includes(reference)) errors.push(`S082 ${record.label} diagram requires the exact meaningful alternative`);
+    if (!new RegExp(`<figure\\s+class=["']docs-flow-diagram["']>[\\s\\S]*?${escapeRegExp(reference)}[\\s\\S]*?<\\/figure>`, "iu").test(markdown)) {
+      errors.push(`S082 ${record.label} diagram requires the responsive figure wrapper`);
+    }
+    if (!markdown.includes(`### ${record.heading}`)) errors.push(`S082 ${record.label} page requires its text equivalent heading`);
+    for (const anchor of record.anchors) {
+      if (!hasVisiblePhrase(markdown, anchor)) errors.push(`S082 ${record.label} text equivalent is missing: ${anchor}`);
+    }
+
+    const svg = svgs.get(record.asset) ?? "";
+    if (!svg) {
+      errors.push(`S082 ${record.label} SVG source is missing`);
+      continue;
+    }
+    if (!/<svg\b(?=[^>]*\bxmlns=["']http:\/\/www\.w3\.org\/2000\/svg["'])(?=[^>]*\bviewBox=["']0 0 \d+ \d+["'])(?=[^>]*\brole=["']img["'])(?=[^>]*\bfocusable=["']false["'])(?=[^>]*\baria-labelledby=["'][^"']+-title [^"']+-desc["'])(?=[^>]*\bdata-flow-direction=["']top-down["'])[^>]*>/iu.test(svg)) {
+      errors.push(`S082 ${record.label} SVG requires a top-down accessible root`);
+    }
+    const titleId = svg.match(/<title\s+id=["']([^"']+-title)["']>/iu)?.[1];
+    const descId = svg.match(/<desc\s+id=["']([^"']+-desc)["']>/iu)?.[1];
+    const labelled = svg.match(/aria-labelledby=["']([^"']+)["']/iu)?.[1]?.split(/\s+/u) ?? [];
+    if (!titleId || !descId || !labelled.includes(titleId) || !labelled.includes(descId)) {
+      errors.push(`S082 ${record.label} SVG title and description must match aria-labelledby`);
+    }
+    const hasNonFragmentCssUrl = [...svg.matchAll(/\burl\s*\(\s*([^)]+?)\s*\)/giu)].some((match) => {
+      let target = match[1].trim();
+      if ((target.startsWith('"') && target.endsWith('"')) || (target.startsWith("'") && target.endsWith("'"))) {
+        target = target.slice(1, -1).trim();
+      }
+      return !target.startsWith("#");
+    });
+    const hasCssImport = /@import\b/iu.test(svg);
+    if (hasNonFragmentCssUrl || hasCssImport || /<(?:script|foreignObject|animate|set|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=\s*["'](?!#)|https?:\/\//iu.test(svg.replace('xmlns="http://www.w3.org/2000/svg"', ""))) {
+      errors.push(`S082 ${record.label} SVG contains active or external content`);
+    }
+    if (!/<rect\b(?=[^>]*\bwidth=["']400["'])(?=[^>]*\bfill=["']#0e1116["'])[^>]*>/iu.test(svg)) {
+      errors.push(`S082 ${record.label} SVG requires the opaque ink canvas`);
+    }
+    for (const size of [...svg.matchAll(/font-size=["'](\d+(?:\.\d+)?)["']/giu)].map((match) => Number(match[1]))) {
+      if (size < 14) errors.push(`S082 ${record.label} SVG label size must be at least 14`);
+    }
+    if (![...svg.matchAll(/<text\b/giu)].length) errors.push(`S082 ${record.label} SVG requires visible labels`);
+    for (const anchor of record.svgAnchors) {
+      if (!svg.includes(anchor)) errors.push(`S082 ${record.label} SVG requires the ${anchor} label`);
+    }
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationDiagramsGenerated(pages, outputPaths) {
+  const errors = [];
+  if (!(pages instanceof Map)) return ["S082 generated diagram validation requires a page map"];
+  for (const record of DOCUMENTATION_DIAGRAMS) {
+    const html = pages.get(record.outputPage) ?? "";
+    if (!html.includes('class="docs-flow-diagram"') || !html.includes(`src="../assets/diagrams/${record.asset}"`) || !html.includes(`alt="${record.alt}"`)) {
+      errors.push(`S082 generated ${record.label} page lost its local diagram or meaningful alternative`);
+    }
+    if (!html.includes(record.heading)) errors.push(`S082 generated ${record.label} page lost its text equivalent`);
+    if (!(outputPaths instanceof Set) || !outputPaths.has(`assets/diagrams/${record.asset}`)) {
+      errors.push(`S082 generated asset is missing: ${record.asset}`);
+    }
+    if (/\b(?:mermaid|https?:\/\/)/iu.test(html.match(/<figure\s+class=["']docs-flow-diagram["']>[\s\S]*?<\/figure>/iu)?.[0] ?? "")) {
+      errors.push(`S082 generated ${record.label} diagram must not require a remote renderer`);
+    }
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationDiagramCss(css) {
+  const errors = [];
+  const figure = css.match(/\.docs-flow-diagram\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const image = css.match(/\.docs-flow-diagram\s+img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/border:\s*1px\s+solid/iu.test(figure) || !/max-width:\s*40rem/iu.test(figure) || !/width:\s*100%/iu.test(figure)) {
+    errors.push("S082 diagram wrapper requires a bounded visible frame");
+  }
+  if (!/overflow:\s*hidden/iu.test(figure)) errors.push("S082 diagram wrapper must contain overflow");
+  if (!/display:\s*block/iu.test(image) || !/height:\s*auto/iu.test(image) || !/max-width:\s*100%/iu.test(image) || !/width:\s*100%/iu.test(image)) {
+    errors.push("S082 diagram image must preserve aspect ratio and content containment");
+  }
+  if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.docs-flow-diagram\s*\{[\s\S]*?max-width:\s*100%/iu.test(css)) {
+    errors.push("S082 diagram CSS requires a full-width narrow layout");
+  }
+  return errors;
+}
+
 const GLOSSARY_LEGACY_ENTRIES = [
   {
     canonical: "Managed Marker",
@@ -2529,6 +2684,14 @@ async function run() {
   const glossary = await readFile(path.join(docsRoot, "src", "reference", "glossary.md"), "utf8");
   const landingMarkdown = await readFile(path.join(docsRoot, "src", "README.md"), "utf8");
   const brandStandardMarkdown = await readFile(path.join(docsRoot, "src", "development", "brand-standard.md"), "utf8");
+  const diagramPages = new Map(await Promise.all(DOCUMENTATION_DIAGRAMS.map(async (record) => [
+    record.page,
+    await readFile(path.join(docsRoot, "src", ...record.page.split("/")), "utf8"),
+  ])));
+  const diagramSvgs = new Map(await Promise.all(DOCUMENTATION_DIAGRAMS.map(async (record) => [
+    record.asset,
+    await readFile(path.join(docsRoot, "src", "assets", "diagrams", record.asset), "utf8"),
+  ])));
   const cargoToml = await readFile(path.join(repositoryRoot, "Cargo.toml"), "utf8");
   const changelog = await readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8");
   const approvedBanner = await readFile(path.join(repositoryRoot, "assets", "eso-weave-banner.png"));
@@ -2539,6 +2702,10 @@ async function run() {
   const publishedGlyph = await readFile(path.join(docsRoot, "src", "assets", "brand", "eso-weave-glyph.svg"));
   const landingHtml = await readFile(path.join(outputRoot, "index.html"), "utf8");
   const brandStandardHtml = await readFile(path.join(outputRoot, "development", "brand-standard.html"), "utf8");
+  const generatedDiagramPages = new Map(await Promise.all(DOCUMENTATION_DIAGRAMS.map(async (record) => [
+    record.outputPage,
+    await readFile(path.join(outputRoot, ...record.outputPage.split("/")), "utf8"),
+  ])));
   const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
   const css = await readFile(cssPath, "utf8");
   const workflow = await readFile(workflowPath, "utf8");
@@ -2570,6 +2737,9 @@ async function run() {
       publishedGlyph,
     }),
     ...validateBrandStandardGenerated(brandStandardHtml, outputPaths),
+    ...validateDocumentationDiagrams({ pages: diagramPages, svgs: diagramSvgs }),
+    ...validateDocumentationDiagramsGenerated(generatedDiagramPages, outputPaths),
+    ...validateDocumentationDiagramCss(css),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
     ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),

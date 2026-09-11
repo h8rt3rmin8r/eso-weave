@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 690" role="img" focusable="false" aria-labelledby="safety-recovery-title safety-recovery-desc" data-flow-direction="top-down">
+  <title id="safety-recovery-title">Safety recovery ordering</title>
+  <desc id="safety-recovery-desc">Unsafe evidence closes shared gates first. Consumers synchronize and a complete baseline is republished while authorization remains closed. Only then may gates reopen.</desc>
+  <rect width="400" height="690" rx="12" fill="#0e1116" stroke="#65758b"/>
+  <defs>
+    <marker id="recovery-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/>
+    </marker>
+  </defs>
+  <text x="200" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#e6edf3">Close before recovery</text>
+  <rect x="65" y="62" width="270" height="68" rx="8" fill="#3a1d22" stroke="#f87171" stroke-width="2"/>
+  <text x="200" y="91" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#f7c3c3">Unsafe evidence</text>
+  <text x="200" y="115" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Lost, corrupt, stale, or unknown</text>
+  <path d="M200 130 V174" stroke="#f2b03c" stroke-width="3" marker-end="url(#recovery-arrow)"/>
+  <rect x="65" y="186" width="270" height="72" rx="8" fill="#3a1d22" stroke="#f87171" stroke-width="2"/>
+  <text x="200" y="216" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#f7c3c3">Close gates</text>
+  <text x="200" y="240" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Drop or cancel unsafe work</text>
+  <path d="M200 258 V302" stroke="#f2b03c" stroke-width="3" marker-end="url(#recovery-arrow)"/>
+  <rect x="65" y="314" width="270" height="72" rx="8" fill="#1c2530" stroke="#65758b"/>
+  <text x="200" y="344" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Synchronize</text>
+  <text x="200" y="368" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Engines and controllers stay closed</text>
+  <path d="M200 386 V430" stroke="#f2b03c" stroke-width="3" marker-end="url(#recovery-arrow)"/>
+  <rect x="65" y="442" width="270" height="76" rx="8" fill="#1c2530" stroke="#65758b"/>
+  <text x="200" y="472" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Republish baseline</text>
+  <text x="200" y="496" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">All required values are coherent</text>
+  <path d="M200 518 V562" stroke="#f2b03c" stroke-width="3" marker-end="url(#recovery-arrow)"/>
+  <rect x="65" y="574" width="270" height="76" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+  <text x="200" y="605" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Reopen</text>
+  <text x="200" y="629" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Only positively safe gates</text>
+  <text x="200" y="672" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f2b03c">No stale work resumes</text>
+</svg>
