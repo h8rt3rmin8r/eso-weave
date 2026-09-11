@@ -324,7 +324,7 @@ try {
   range.selectNodeContents(code);
   selection.removeAllRanges();
   selection.addRange(range);
-  const selectedText = selection.toString();
+  const selectedText = withoutFenceTerminator(selection.toString());
   const copyText = withoutFenceTerminator(code.innerText);
   const selectable = selection.rangeCount === 1 && selectedText === sourceText && copyText === sourceText && getComputedStyle(code).userSelect !== "none";
   selection.removeAllRanges();
