@@ -1307,6 +1307,15 @@ export function validateReleaseRollover(releaseToml) {
       errors.push(`S091 release rollover requires exactly one cardinality-checked ${requirement.label} replacement`);
     }
   }
+  const captureBlocks = blocks.filter((block) =>
+    releaseReplacementValue(block, "file") === "specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json");
+  const captureMatches = captureBlocks.filter((block) =>
+    releaseReplacementValue(block, "search") === '"tool_version": "[0-9]+\\.[0-9]+\\.[0-9]+"' &&
+    releaseReplacementValue(block, "replace") === '"tool_version": "{{version}}"' &&
+    /^exactly\s*=\s*1\s*$/mu.test(block));
+  if (captureBlocks.length !== 1 || captureMatches.length !== 1) {
+    errors.push("S092 release rollover requires exactly one cardinality-checked collector-capture tool version replacement");
+  }
   return errors;
 }
 

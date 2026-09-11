@@ -8,7 +8,7 @@
     "catalog_version": "s073-capture",
     "catalog_schema": 1,
     "locales": ["en"],
-    "tool_version": "0.15.1"
+    "tool_version": "0.16.0"
   },
   "input_source": "invented-capture",
   "source_policy": "docs/project/catalog-sources.json",

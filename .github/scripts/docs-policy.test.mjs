@@ -340,6 +340,12 @@ file = "docs/src/README.md"
 search = "<dt>Released</dt>\\\\s*<dd><time datetime=\\\"[0-9]{4}-[0-9]{2}-[0-9]{2}\\\">[0-9]{4}-[0-9]{2}-[0-9]{2}</time></dd>"
 replace = "<dt>Released</dt>\\n    <dd><time datetime=\\\"{{date}}\\\">{{date}}</time></dd>"
 exactly = 1
+
+[[pre-release-replacements]]
+file = "specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json"
+search = "\\\"tool_version\\\": \\\"[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\""
+replace = "\\\"tool_version\\\": \\\"{{version}}\\\""
+exactly = 1
 `;
 
 test("S091 requires atomic documentation snapshot rollover", () => {
@@ -352,6 +358,9 @@ test("S091 requires atomic documentation snapshot rollover", () => {
   assert.match(validateReleaseRollover(broadExtra).join("\n"), /only the two approved/i);
   const duplicate = `${releaseRolloverFixture}\n${releaseRolloverFixture.split("\n\n")[0]}\n`;
   assert.match(validateReleaseRollover(duplicate).join("\n"), /only the two approved|documentation version/i);
+  const missingCapture = releaseRolloverFixture.replace(/\n\[\[pre-release-replacements\]\]\nfile = "specs\/073-reviewed-catalog-pipeline\/fixtures\/capture-request\.json"[\s\S]*$/u, "\n");
+  assert.match(validateReleaseRollover(missingCapture).join("\n"), /collector-capture tool version/i);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace('replace = "\\\"tool_version\\\": \\\"{{version}}\\\""', 'replace = "\\\"tool_version\\\": \\\"fixed\\\""')).join("\n"), /collector-capture tool version/i);
 });
 
 test("S091 landing policy accepts a complete future release rollover", () => {
