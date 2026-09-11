@@ -1,6 +1,6 @@
 # Plan 040: Evidence-Scoped Encounter Recommendations
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -19,4 +19,4 @@ Issue #131 may supply later live calibration evidence but never blocks this plan
 Installed v0.15.1 verification in issue #110 and catalog-field verification in
 issue #129 are also independent Release verification work.
 
-Plan 040 completes when issue #136 closes with merged S090 repository evidence.
+Plan 040 completed when PR #162 merged and closed issue #136.

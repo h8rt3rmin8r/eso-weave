@@ -46,6 +46,7 @@ import {
   validateLandingCss,
   validateLandingGenerated,
   validateLandingIdentity,
+  validateReleaseRollover,
   validateMigrationLedger,
   validateSourceTree,
   validateSettingsRuntimeClaims,
@@ -328,6 +329,46 @@ test("S080 accepts the authoritative landing identity and metadata snapshot", ()
   }), []);
 });
 
+const releaseRolloverFixture = `[[pre-release-replacements]]
+file = "docs/src/README.md"
+search = "<dt>Applies to</dt>\\\\s*<dd>v[0-9]+\\\\.[0-9]+\\\\.[0-9]+</dd>"
+replace = "<dt>Applies to</dt>\\n    <dd>v{{version}}</dd>"
+exactly = 1
+
+[[pre-release-replacements]]
+file = "docs/src/README.md"
+search = "<dt>Released</dt>\\\\s*<dd><time datetime=\\\"[0-9]{4}-[0-9]{2}-[0-9]{2}\\\">[0-9]{4}-[0-9]{2}-[0-9]{2}</time></dd>"
+replace = "<dt>Released</dt>\\n    <dd><time datetime=\\\"{{date}}\\\">{{date}}</time></dd>"
+exactly = 1
+`;
+
+test("S091 requires atomic documentation snapshot rollover", () => {
+  assert.deepEqual(validateReleaseRollover(releaseRolloverFixture), []);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace("exactly = 1", "exactly = 2")).join("\n"), /cardinality.*version/i);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace('file = "docs/src/README.md"', 'file = "README.md"')).join("\n"), /documentation version/i);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace("<dt>Applies to</dt>", "<dt>Any field</dt>")).join("\n"), /documentation version/i);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace("{{date}}", "fixed-date")).join("\n"), /release date.*replacement/i);
+  const broadExtra = `${releaseRolloverFixture}\n[[pre-release-replacements]]\nfile = "docs/src/README.md"\nsearch = "v[0-9.]+"\nreplace = "v{{version}}"\nexactly = 1\n`;
+  assert.match(validateReleaseRollover(broadExtra).join("\n"), /only the two approved/i);
+  const duplicate = `${releaseRolloverFixture}\n${releaseRolloverFixture.split("\n\n")[0]}\n`;
+  assert.match(validateReleaseRollover(duplicate).join("\n"), /only the two approved|documentation version/i);
+});
+
+test("S091 landing policy accepts a complete future release rollover", () => {
+  const futureLanding = landingMarkdown
+    .replace("v0.15.1", "v0.16.0")
+    .replaceAll("2026-09-09", "2026-09-11");
+  const futureCargo = landingCargo.replace('version = "0.15.1"', 'version = "0.16.0"');
+  const futureChangelog = landingChangelog.replace("## [0.15.1] - 2026-09-09", "## [0.16.0] - 2026-09-11");
+  assert.deepEqual(validateLandingIdentity({
+    landingMarkdown: futureLanding,
+    cargoToml: futureCargo,
+    changelog: futureChangelog,
+    approvedBanner: bannerBytes,
+    publishedBanner: bannerBytes,
+  }), []);
+});
+
 test("S080 rejects wrong identity structure, duplicate naming, and banner bytes", () => {
   const wrongImage = landingMarkdown.replace("eso-weave-banner.png\" alt=\"\"", "eso-weave-mark.svg\" alt=\"ESO Weave\"");
   assert.match(validateLandingIdentity({ landingMarkdown: wrongImage, cargoToml: landingCargo, changelog: landingChangelog, approvedBanner: bannerBytes, publishedBanner: bannerBytes }).join("\n"), /banner|identity/i);
@@ -376,10 +417,11 @@ test("S080 requires bounded wordmark, accessible hidden text, and narrow metadat
 });
 
 test("S080 and S081 documentation checks follow metadata and brand authorities", () => {
-  const triggers = `on:\n  push:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  pull_request:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  workflow_dispatch:\n`;
+  const triggers = `on:\n  push:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "release.toml"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  pull_request:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "release.toml"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  workflow_dispatch:\n`;
   assert.deepEqual(validateDocumentationAuthorityTriggers(triggers), []);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll('      - "Cargo.toml"\n', "")).join("\n"), /Cargo\.toml.*push.*pull_request/i);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replace('      - "CHANGELOG.md"\n', "")).join("\n"), /CHANGELOG\.md.*push/i);
+  assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll('      - "release.toml"\n', "")).join("\n"), /release\.toml.*push.*pull_request/i);
   for (const authority of ["assets/eso-weave-banner.png", "assets/brand/eso-weave-mark.svg", "assets/brand/eso-weave-glyph.svg"]) {
     assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll(`      - "${authority}"\n`, "")).join("\n"), new RegExp(`${authority.replace(/[./-]/gu, "\\$&")}.*push.*pull_request`, "i"));
   }

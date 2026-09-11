@@ -1,8 +1,8 @@
 # cargo-release configuration for ESO Weave.
 #
 # Cutting a release is `cargo release X.Y.Z --execute` (see docs/project/releasing.md).
-# That bumps the crate version in Cargo.toml (the single source of the app, MSI,
-# and embedded addon version), rolls CHANGELOG.md (renaming the Unreleased section
+# That bumps the crate version in Cargo.toml (the single source of the app and
+# package version), rolls CHANGELOG.md (renaming the Unreleased section
 # to the versioned one and opening a fresh Unreleased), commits as
 # `release: vX.Y.Z`, and tags and pushes vX.Y.Z. Pushing the tag triggers
 # .github/workflows/release.yml.
@@ -34,4 +34,19 @@ exactly = 1
 file = "README.md"
 search = "version-[0-9]+\\.[0-9]+\\.[0-9]+-2ea44f"
 replace = "version-{{version}}-2ea44f"
+exactly = 1
+
+# Advance the bundled documentation snapshot with the same version and date as
+# the crate and changelog. The documentation policy rejects either value when it
+# drifts from those authorities.
+[[pre-release-replacements]]
+file = "docs/src/README.md"
+search = "<dt>Applies to</dt>\\s*<dd>v[0-9]+\\.[0-9]+\\.[0-9]+</dd>"
+replace = "<dt>Applies to</dt>\n    <dd>v{{version}}</dd>"
+exactly = 1
+
+[[pre-release-replacements]]
+file = "docs/src/README.md"
+search = "<dt>Released</dt>\\s*<dd><time datetime=\"[0-9]{4}-[0-9]{2}-[0-9]{2}\">[0-9]{4}-[0-9]{2}-[0-9]{2}</time></dd>"
+replace = "<dt>Released</dt>\n    <dd><time datetime=\"{{date}}\">{{date}}</time></dd>"
 exactly = 1
