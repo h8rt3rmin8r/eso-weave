@@ -2039,8 +2039,11 @@ export function validateDocumentationFigureCss(css) {
   if (!/\.docs-figure-trigger::after,[\s\S]*\.docs-figure-dialog[\s\S]*display:\s*none\s*!important/iu.test(print)) {
     errors.push("S088 print CSS must hide figure affordances and dialog chrome");
   }
-  if (!/\.docs-flow-diagram \.checkbox-img,\s*\.docs-flow-diagram \.img-wrapper\s*\{[\s\S]*?display:\s*none/iu.test(css)) {
+  if (!/\.docs-flow-diagram \.checkbox-img,\s*\.docs-flow-diagram \.img-wrapper,/iu.test(css)) {
     errors.push("S088 static and no-JavaScript rendering must hide legacy mdBook modal chrome");
+  }
+  if (!/\.docs-flow-diagram \.checkbox-img:checked\s*~\s*\.img-wrapper\s*\{[\s\S]*?display:\s*none/iu.test(css)) {
+    errors.push("S088 no-JavaScript rendering must override mdBook checked-state modal chrome");
   }
   return [...new Set(errors)];
 }

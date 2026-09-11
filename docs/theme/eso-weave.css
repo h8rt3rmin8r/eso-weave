@@ -291,7 +291,8 @@ h6 {
 }
 
 .docs-flow-diagram .checkbox-img,
-.docs-flow-diagram .img-wrapper {
+.docs-flow-diagram .img-wrapper,
+.docs-flow-diagram .checkbox-img:checked ~ .img-wrapper {
   display: none;
 }
 

@@ -2536,6 +2536,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
     ["font-size: 0.9em", "font-size: 0.8em", /caption.*size/i],
     ["line-height: 1.55", "line-height: 1.2", /caption.*line/i],
     [".docs-flow-diagram .checkbox-img,", ".docs-flow-diagram .unused,", /no-JavaScript|legacy mdBook/i],
+    [".docs-flow-diagram .checkbox-img:checked ~ .img-wrapper", ".docs-flow-diagram .unused:checked ~ .img-wrapper", /checked-state/i],
     ["object-fit: contain;\n  width: auto", "object-fit: contain;\n  width: 100%", /intrinsic|upscal/i],
     ["@media print", "@media screen", /print/i],
   ]) {

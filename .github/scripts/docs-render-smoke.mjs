@@ -700,6 +700,7 @@ function figureNoScriptExpression() {
 const meaningful = [...document.querySelectorAll("figure.docs-screenshot > img, figure.docs-flow-diagram .checkbox-img + img, .brand-surface__assets > img")]
   .filter((image) => image.getAttribute("alt")?.trim());
 const captions = [...document.querySelectorAll("figure.docs-screenshot > figcaption, figure.brand-surface > figcaption")];
+for (const checkbox of document.querySelectorAll(".docs-flow-diagram .checkbox-img")) checkbox.checked = true;
 await Promise.race([
   Promise.all(meaningful.map((image) => image.decode().catch(() => undefined))),
   new Promise((resolve) => setTimeout(resolve, 2000)),
