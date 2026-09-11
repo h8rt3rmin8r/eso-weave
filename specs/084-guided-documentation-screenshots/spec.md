@@ -79,7 +79,7 @@ A reader can recognize addon lifecycle controls and understand the overlay's fix
 - **FR-005**: Auto Potion MUST illustrate resource watches, thresholds, Quickslot readiness, and a blocked missing-signal recovery path.
 - **FR-006**: PixelBeacon MUST show lifecycle controls through deterministic application images and MUST use a clearly labeled synthetic overlay illustration rather than live gameplay capture.
 - **FR-007**: Application captures MUST be generated through the S083 test-only sandbox from deterministic fixture state and MUST use the dark, wide variant.
-- **FR-008**: Curated application PNGs MUST be derived from a successful capture set through documented lossless crop rectangles and tracked with scene, theme, viewport, source receipt, crop, published dimensions, SHA-256 digest, destination, and update trigger.
+- **FR-008**: Curated application PNG files MUST be derived from a successful capture set through documented lossless crop rectangles and tracked with scene, theme, viewport, source receipt, crop, published dimensions, SHA-256 digest, destination, and update trigger.
 - **FR-009**: Every image MUST have meaningful alternative text, an adjacent caption, and complete adjacent instructions that do not depend on color or image availability.
 - **FR-010**: Published assets MUST use stable descriptive filenames beneath `docs/src/assets/`, remain local to the manual, and be available identically in public and bundled builds.
 - **FR-011**: The manual MUST include a maintainer update checklist covering capture regeneration, curation, provenance refresh, review, optimization, and documentation validation.
@@ -100,9 +100,9 @@ A reader can recognize addon lifecycle controls and understand the overlay's fix
 
 ### Measurable Outcomes
 
-- **SC-001**: Nine planned visual assets are published: seven deterministic application PNGs, one supplied Windows PNG, and one synthetic SVG.
+- **SC-001**: Nine planned visual assets are published: seven deterministic application PNG files, one supplied Windows PNG, and one synthetic SVG.
 - **SC-002**: Installation, First Launch, Weaving, Auto Potion, and PixelBeacon each contain at least one task-focused visual with meaningful alternative text and adjacent instructions.
-- **SC-003**: All seven application PNGs trace to matching S083 capture receipts and match the curated provenance manifest by crop rectangle, published dimensions, and SHA-256 digest.
+- **SC-003**: All seven application PNG files trace to matching S083 capture receipts and match the curated provenance manifest by crop rectangle, published dimensions, and SHA-256 digest.
 - **SC-004**: The published MSI Properties PNG is byte-identical to the supplied source at implementation time.
 - **SC-005**: Automated documentation policy rejects missing, malformed, untracked, or provenance-divergent screenshot assets.
 - **SC-006**: The built manual has no page-level horizontal overflow caused by these assets at representative narrow and wide widths.

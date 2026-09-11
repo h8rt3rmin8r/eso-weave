@@ -1177,12 +1177,63 @@ const DOCUMENTATION_SCREENSHOT_IDS = new Set([
   "pixelbeacon-overlay-example",
 ]);
 
+const DETERMINISTIC_SCREENSHOT_SOURCES = new Map([
+  ["first-launch", ["first-launch", "first-launch--dark--wide.png"]],
+  ["healthy-system-state", ["healthy-system-state", "healthy-system-state--dark--wide.png"]],
+  ["pixelbeacon-lost", ["pixelbeacon-lost", "pixelbeacon-lost--dark--wide.png"]],
+  ["pixelbeacon-unmanaged", ["pixelbeacon-unmanaged", "pixelbeacon-unmanaged--dark--wide.png"]],
+  ["weaving-configuration", ["weaving-configuration", "weaving-configuration--dark--wide.png"]],
+  ["auto-potion-ready", ["auto-potion-ready", "auto-potion-ready--dark--wide.png"]],
+  ["auto-potion-blocked", ["auto-potion-blocked", "auto-potion-blocked--dark--wide.png"]],
+]);
+
+function pngCrc32(bytes, start, end) {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index += 1) {
+    crc ^= bytes[index];
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function pngDimensions(bytes) {
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  if (bytes.length < 24 || signature.some((value, index) => bytes[index] !== value)) return null;
-  if (String.fromCharCode(...bytes.slice(12, 16)) !== "IHDR") return null;
+  if (bytes.length < 45 || signature.some((value, index) => bytes[index] !== value)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return [view.getUint32(16), view.getUint32(20)];
+  let offset = signature.length;
+  let dimensions = null;
+  let sawImageData = false;
+  let sawEnd = false;
+  let chunkIndex = 0;
+  while (offset < bytes.length) {
+    if (bytes.length - offset < 12) return null;
+    const length = view.getUint32(offset);
+    const typeOffset = offset + 4;
+    const dataOffset = typeOffset + 4;
+    const crcOffset = dataOffset + length;
+    const nextOffset = crcOffset + 4;
+    if (nextOffset > bytes.length) return null;
+    const type = String.fromCharCode(...bytes.slice(typeOffset, dataOffset));
+    if (!/^[A-Za-z]{4}$/u.test(type)
+        || view.getUint32(crcOffset) !== pngCrc32(bytes, typeOffset, crcOffset)) return null;
+    if (chunkIndex === 0 && (type !== "IHDR" || length !== 13)) return null;
+    if (type === "IHDR") {
+      if (dimensions || length !== 13) return null;
+      dimensions = [view.getUint32(dataOffset), view.getUint32(dataOffset + 4)];
+      if (dimensions[0] === 0 || dimensions[1] === 0) return null;
+    } else if (type === "IDAT") {
+      sawImageData = true;
+    } else if (type === "IEND") {
+      if (length !== 0 || nextOffset !== bytes.length) return null;
+      sawEnd = true;
+    }
+    offset = nextOffset;
+    chunkIndex += 1;
+    if (sawEnd) break;
+  }
+  return dimensions && sawImageData && sawEnd ? dimensions : null;
 }
 
 function screenshotFigureBlocks(content) {
@@ -1232,7 +1283,7 @@ export function validateDocumentationScreenshots({ manifest, assets, pages }) {
 
     if (record.destination.endsWith(".png")) {
       const dimensions = pngDimensions(bytes);
-      if (!dimensions) errors.push(`S084 ${record.id} is not a valid PNG with an IHDR`);
+      if (!dimensions) errors.push(`S084 ${record.id} is not a complete valid PNG`);
       else if (dimensions[0] !== record.width || dimensions[1] !== record.height) {
         errors.push(`S084 ${record.id} dimensions do not match its PNG`);
       }
@@ -1252,7 +1303,9 @@ export function validateDocumentationScreenshots({ manifest, assets, pages }) {
     if (record.kind === "deterministic-app") {
       const source = record.source ?? {};
       const crop = source.crop;
-      if (source.generator !== "S083 deterministic screenshot sandbox"
+      const expectedSource = DETERMINISTIC_SCREENSHOT_SOURCES.get(record.id);
+      if (!expectedSource || source.scene !== expectedSource[0] || source.file !== expectedSource[1]
+          || source.generator !== "S083 deterministic screenshot sandbox"
           || source.theme !== "dark" || source.viewport !== "wide"
           || source.width !== 1280 || source.height !== 900
           || !/^[a-f0-9]{64}$/u.test(source.sha256 ?? "")

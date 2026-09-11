@@ -91,7 +91,7 @@ Outputs: [data-model.md](data-model.md), [screenshot-plan.md](screenshot-plan.md
 ## Phase 2: Implementation
 
 1. Generate S083 output and verify the capture manifest.
-2. Copy the seven selected deterministic PNGs and the supplied PNG; author the synthetic SVG.
+2. Copy the seven selected deterministic PNG files and the supplied PNG; author the synthetic SVG.
 3. Create the canonical provenance manifest from actual checked-in bytes.
 4. Embed images, captions, and complete adjacent instructions on five pages.
 5. Add responsive screenshot styling and the maintainer update guide.

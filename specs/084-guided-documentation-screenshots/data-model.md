@@ -35,5 +35,5 @@ Adds an authorship label and a mandatory `synthetic: true` flag. The SVG must co
 - Every destination is local, versioned, and beneath `docs/src/assets/`.
 - Every referenced page exists and contains the exact destination and alternative text.
 - Every digest, size, and dimension matches the checked-in bytes.
-- Exactly seven records are deterministic application PNGs, one is maintainer supplied, and one is synthetic.
+- Exactly seven records are deterministic application PNG files, one is maintainer supplied, and one is synthetic.
 - No record includes a user-profile path, live character data, current machine identifier, or external URL.

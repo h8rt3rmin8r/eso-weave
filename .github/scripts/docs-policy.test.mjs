@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -2054,6 +2055,37 @@ test("S084 rejects screenshot digest drift and missing accessible guidance", asy
     unwrappedPages.get(record.pages[0]), record, record.pages[0],
   ));
   assert.match(validateDocumentationScreenshots({ ...args, pages: unwrappedPages }).join("\n"), /own screenshot figure/i);
+
+  const pngRecord = args.manifest.assets.find((asset) => asset.kind === "deterministic-app");
+  const truncated = args.assets.get(pngRecord.destination).subarray(0, 24);
+  const truncatedManifest = structuredClone(args.manifest);
+  const truncatedRecord = truncatedManifest.assets.find((asset) => asset.id === pngRecord.id);
+  truncatedRecord.bytes = truncated.length;
+  truncatedRecord.sha256 = createHash("sha256").update(truncated).digest("hex");
+  const truncatedAssets = new Map(args.assets);
+  truncatedAssets.set(pngRecord.destination, truncated);
+  assert.match(validateDocumentationScreenshots({
+    ...args, manifest: truncatedManifest, assets: truncatedAssets,
+  }).join("\n"), /complete valid PNG/i);
+
+  const badCrc = Uint8Array.from(args.assets.get(pngRecord.destination));
+  badCrc[badCrc.length - 1] ^= 0xff;
+  const badCrcManifest = structuredClone(args.manifest);
+  const badCrcRecord = badCrcManifest.assets.find((asset) => asset.id === pngRecord.id);
+  badCrcRecord.sha256 = createHash("sha256").update(badCrc).digest("hex");
+  const badCrcAssets = new Map(args.assets);
+  badCrcAssets.set(pngRecord.destination, badCrc);
+  assert.match(validateDocumentationScreenshots({
+    ...args, manifest: badCrcManifest, assets: badCrcAssets,
+  }).join("\n"), /complete valid PNG/i);
+
+  const incompleteProvenance = structuredClone(args.manifest);
+  const deterministicRecord = incompleteProvenance.assets.find((asset) => asset.kind === "deterministic-app");
+  delete deterministicRecord.source.scene;
+  delete deterministicRecord.source.file;
+  assert.match(validateDocumentationScreenshots({
+    ...args, manifest: incompleteProvenance,
+  }).join("\n"), /complete deterministic source/i);
 });
 
 test("S084 requires generated local assets and figure semantics", async () => {

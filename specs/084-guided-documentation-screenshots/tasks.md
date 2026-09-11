@@ -10,7 +10,7 @@
 ## Phase 2: Asset production
 
 - [x] T005 Generate and validate the complete S083 capture matrix.
-- [x] T006 Publish the seven selected dark-wide application PNGs.
+- [x] T006 Publish the seven selected dark-wide application PNG files.
 - [x] T007 Publish the supplied MSI Properties PNG unchanged.
 - [x] T008 Author and validate the labeled synthetic PixelBeacon overlay SVG.
 - [x] T009 Record canonical dimensions, sizes, digests, sources, placements, and update triggers.
