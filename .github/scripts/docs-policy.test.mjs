@@ -38,6 +38,8 @@ import {
   validateSourceTree,
   validateSettingsRuntimeClaims,
   validateTextHygiene,
+  validateWorkSliceHtml,
+  validateWorkSliceMarkdown,
   validateWorkflowText,
 } from "./docs-policy.mjs";
 
@@ -736,6 +738,181 @@ test("accepts a complete, case-correct source tree", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
   assert.deepEqual(await validateSourceTree(f.docs), []);
+});
+
+test("S085 accepts compact references and narrow literal exceptions", () => {
+  const markdown = `# References
+
+[S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md)
+
+[S060][slice]
+
+[slice]: https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md
+
+\`s069-v1\`
+
+<!-- s060_hidden_comment -->
+
+\`\`\`rust
+fn s060_literal_code_sample() {}
+\`\`\`
+`;
+  assert.deepEqual(validateWorkSliceMarkdown(
+    markdown,
+    "development/architecture.md",
+  ), []);
+  assert.deepEqual(validateWorkSliceHtml(
+    '<p><a href="/specs/060-safety-boundaries/spec.md">S060</a> <code>s069-v1</code></p><pre><code>s060_literal_code_sample</code></pre>',
+    "development/architecture.html",
+  ), []);
+  assert.deepEqual(validateWorkSliceHtml(
+    "<p><code>s069-v1</code></p>",
+    "print.html",
+  ), []);
+});
+
+test("S085 masks multiline reference destinations", () => {
+  const markdown = `# References
+
+[S060][slice]
+
+[slice]:
+  https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md
+`;
+  assert.deepEqual(validateWorkSliceMarkdown(
+    markdown,
+    "development/test-strategy.md",
+  ), []);
+});
+
+test("S085 masks fenced samples nested in Markdown containers", () => {
+  const markdown = `# Samples
+
+> \`\`\`text
+> s060_block_quote_literal
+> \`\`\`
+
+- \`\`\`text
+  s060_list_literal
+  \`\`\`
+`;
+  assert.deepEqual(validateWorkSliceMarkdown(
+    markdown,
+    "development/test-strategy.md",
+  ), []);
+});
+
+test("S085 masks destinations after balanced nested link labels", () => {
+  assert.deepEqual(validateWorkSliceMarkdown(
+    "# References\n\n[see [S060]](https://example.com/specs/060-safety-boundaries/spec.md)\n",
+    "development/test-strategy.md",
+  ), []);
+});
+
+test("S085 does not treat unmatched inline-link punctuation as hidden content", () => {
+  assert.match(validateWorkSliceMarkdown(
+    "# Page\n\n](s060_long_test_name)\n",
+    "development/test-strategy.md",
+  ).join("\n"), /S085 work-slice reference/i);
+});
+
+test("S085 rejects malformed and expanded work-slice references", () => {
+  for (const invalid of [
+    "S60",
+    "S0060",
+    "S-060",
+    "S60-alpha",
+    "S0060-alpha",
+    "S 060",
+    "S#060",
+    "S:060",
+    "s060",
+    "slice 060",
+    "slice #060",
+    "build slice 060",
+    "Build slice S060",
+    "work slice 060",
+    "work slice: 060",
+    "work slice S#060",
+    "work-slice 060",
+    "specs/060-safety-boundaries/",
+    "specs/60-safety-boundaries/",
+    "specs\\060-safety-boundaries",
+    "S060alpha",
+    "s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes",
+  ]) {
+    assert.notDeepEqual(
+      validateWorkSliceMarkdown(`# Page\n\n${invalid}\n`, "development/test-strategy.md"),
+      [],
+      invalid,
+    );
+  }
+});
+
+test("S085 scans tables, link labels, captions, alternative text, and inline code", () => {
+  const cases = [
+    "| Evidence | `s060_long_test_name` |",
+    "[s060](https://example.com/hidden)",
+    '<figcaption>s060_long_test_name</figcaption>',
+    "![s060_long_test_name](assets/example.png)",
+    "`s060_long_test_name`",
+  ];
+  for (const value of cases) {
+    assert.match(
+      validateWorkSliceMarkdown(`# Page\n\n${value}\n`, "development/test-strategy.md").join("\n"),
+      /S085 work-slice reference/i,
+    );
+  }
+});
+
+test("S085 limits the algorithm exception to its exact identifier and pages", () => {
+  assert.deepEqual(validateWorkSliceMarkdown(
+    "# Metrics\n\nAlgorithm `s069-v1`.\n",
+    "reference/encounter-data-and-metrics.md",
+  ), []);
+  assert.notDeepEqual(validateWorkSliceMarkdown(
+    "# Other\n\nAlgorithm `s069-v1`.\n",
+    "development/test-strategy.md",
+  ), []);
+  assert.notDeepEqual(validateWorkSliceMarkdown(
+    "# Metrics\n\nAlgorithm `s069-v2`.\n",
+    "reference/encounter-data-and-metrics.md",
+  ), []);
+  assert.notDeepEqual(validateWorkSliceMarkdown(
+    "# Metrics\n\nAlgorithm `s069-v1-extra`.\n",
+    "reference/encounter-data-and-metrics.md",
+  ), []);
+});
+
+test("S085 generated validation checks visible inline code but not preformatted samples or attributes", () => {
+  assert.deepEqual(validateWorkSliceHtml(
+    '<a href="/specs/060-safety-boundaries/spec.md" data-test="s060_hidden" title="ok > s060_hidden">S060</a><pre><code>s060_literal_code_sample</code></pre>',
+    "development/test-strategy.html",
+  ), []);
+  assert.match(validateWorkSliceHtml(
+    "<p><code>s060_long_test_name</code></p>",
+    "development/test-strategy.html",
+  ).join("\n"), /S085 work-slice reference/i);
+  assert.match(validateWorkSliceHtml(
+    "<p><code>s&#48;60_long_test_name</code></p>",
+    "development/test-strategy.html",
+  ).join("\n"), /S085 work-slice reference/i);
+  assert.match(validateWorkSliceMarkdown(
+    "# Page\n\n<code>s&#x30;60_long_test_name</code>\n",
+    "development/test-strategy.md",
+  ).join("\n"), /S085 work-slice reference/i);
+});
+
+test("S085 integrates reference enforcement with source and generated site validation", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(path.join(f.source, "README.md"), "# Home\n\nwork slice 060\n");
+  assert.match((await validateSourceTree(f.docs)).join("\n"), /S085 work-slice reference/i);
+  await writeFile(
+    path.join(f.output, "guide", "index.html"),
+    '<!doctype html><html lang="en"><body><main><h1>Guide</h1><code>s060_long_test_name</code></main><script src="/eso-weave/searcher-test.js"></script><script src="/eso-weave/theme/eso-weave-test.js"></script></body></html>',
+  );
+  assert.match((await validateGeneratedSite(f.output, "/eso-weave/")).join("\n"), /S085 work-slice reference/i);
 });
 
 test("rejects a published page omitted from SUMMARY", async (t) => {

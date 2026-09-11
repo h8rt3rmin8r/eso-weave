@@ -135,6 +135,9 @@ Derived encounter calculation continues through an explicit local path:
 
 `immutable raw record + verified compatible catalog -> s069-v1 metrics and loss quality -> canonical projection JSON`
 
+The lowercase algorithm value in this sequence is a persisted runtime
+identifier, not a work-slice reference.
+
 The projection command identifies local-player contributions by recorded combat
 source type rather than opaque actor allocation order. It requires an exact
 channel and API match, keeps unknown positive IDs visible, and can rebuild a new

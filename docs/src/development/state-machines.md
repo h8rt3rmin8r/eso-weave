@@ -103,14 +103,12 @@ action-driving observation before it routes Life Alive. This makes reopening a
 fresh authorization boundary rather than reuse of pre-death controller state.
 
 Evidence: `WeaveEngine::handle`, `RealSink::emit`, `RealSink::wait`, and
-`sequence_for_adapted` in `src/weave`; tests
-`queued_weave_requires_safe_world_and_inactive_travel_without_replay`,
-`s060_queued_weave_epoch_is_invalid_after_each_runtime_gate_closes`,
-`s060_transient_suspend_closure_cancels_an_admitted_sequence`,
-`s060_focus_closure_stops_new_presses_but_releases_held_output`, and
-`real_sink_observes_roll_gate_closure_during_a_wait`, and
-`a_gate_cancelled_sequence_does_not_consume_global_cooldown` in
-`tests/weave_engine.rs`.
+`sequence_for_adapted` in `src/weave`. The [weave tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/weave_engine.rs)
+cover safe-world admission, cancellation during a wait, and cooldown behavior.
+The [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md)
+[input](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/input_engine.rs)
+and weave evidence additionally proves authorization-epoch invalidation,
+admitted-sequence cancellation, and held-output release after focus closes.
 
 ## Fishing Controller
 
@@ -139,14 +137,11 @@ focus loss also disables without input and preserves the request, with recovery
 handled by `set_game_environment`.
 
 Evidence: `FishingController::set_enabled`, `on_event`, `tick`,
-`set_game_environment`, and `block_for_safety` in `src/fishing/mod.rs`; tests
-`cast_reel_recast_cycle`, `non_alive_cancels_pending_fishing_without_replay_and_keeps_request`,
-`focus_loss_pauses_and_refocus_rearms_requested_fishing`, and
-`s060_suspension_refuses_initial_cast_and_preserves_request`,
-`s060_suspension_cancels_pending_reel_without_replay`,
-`s060_suspension_cancels_recast_and_timeout_paths`, and
-`signal_loss_while_focus_paused_applies_the_existing_reset_policy` in
-`tests/fishing.rs`.
+`set_game_environment`, and `block_for_safety` in `src/fishing/mod.rs`. The
+[Fishing tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/fishing.rs)
+cover the normal cycle, life and focus cancellation, signal-loss policy, and
+[S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md)
+suspension behavior for initial casts, pending reels, recasts, and timeouts.
 
 ## Auto Potion Controller
 
@@ -181,12 +176,11 @@ clearing the request. A fresh heartbeat alone does not invent safe values. Every
 required positive observation must return before Ready or Triggered is possible.
 
 Evidence: `evaluate`, `low_resource`, `AutoPotionController::tick`,
-`on_signal_lost`, and `on_heartbeat` in `src/potion/mod.rs`; tests
-`s043_effective_state_distinguishes_ready_triggered_and_every_runtime_family`,
-`s043_quickslot_states_expose_their_specific_blocker`,
-`s043_signal_loss_preserves_the_request_and_heartbeat_recovers`, and
-`the_retry_interval_bounds_the_rate_independently_of_the_cooldown` in
-`tests/potion.rs`.
+`on_signal_lost`, and `on_heartbeat` in `src/potion/mod.rs`. The
+[S043](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/043-auto-potion-restoration/spec.md)
+[Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs)
+distinguish Ready, Triggered, every runtime blocker family, specific Quickslot
+blockers, signal-loss recovery, and retry timing.
 
 ## Pixel Bus lifecycle
 

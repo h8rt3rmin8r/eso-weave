@@ -19,11 +19,12 @@ Sequence:
    Bus flows.
 5. S083 completed in PR #151 and closed issue #124. It provides the isolated
    deterministic screenshot sandbox used by later documentation work.
-6. S084 implements guided setup and feature screenshots under issue #125 using
-   deterministic application fixtures, one maintainer-supplied Windows image,
-   and a clearly labeled synthetic overlay without requiring live game capture.
-7. A later slice enforces compact `S###` work-slice references in published prose
-   and moves exact implementation symbols to layout-safe evidence under issue #126.
+6. S084 completed in PR #152 and closed issue #125. It adds guided setup and
+   feature screenshots using deterministic application fixtures, one
+   maintainer-supplied Windows image, and a clearly labeled synthetic overlay.
+7. S085 enforces compact `S###` work-slice references in published prose and
+   replaces long slice-prefixed test names with behavioral evidence and compact
+   repository links under issue #126.
 8. A later slice audits and fixes responsive documentation tables under issue #127.
 
 Issues #120 through #123 close independently and change no runtime behavior. The

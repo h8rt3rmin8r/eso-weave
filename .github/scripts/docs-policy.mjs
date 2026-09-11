@@ -278,6 +278,223 @@ function maskMarkdownCode(markdown) {
   return characters.join("");
 }
 
+function maskCharacters(characters, start, end) {
+  for (let index = start; index < end; index += 1) {
+    if (characters[index] !== "\r" && characters[index] !== "\n") characters[index] = " ";
+  }
+}
+
+function maskHtmlTags(characters) {
+  for (let cursor = 0; cursor < characters.length - 1; cursor += 1) {
+    if (characters[cursor] !== "<" || !/[A-Za-z/!?]/u.test(characters[cursor + 1])) continue;
+    let quote = "";
+    let tagEnd = cursor + 1;
+    for (; tagEnd < characters.length; tagEnd += 1) {
+      const character = characters[tagEnd];
+      if (quote) {
+        if (character === quote) quote = "";
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        quote = character;
+      } else if (character === ">") {
+        break;
+      }
+    }
+    if (characters[tagEnd] !== ">") continue;
+    maskCharacters(characters, cursor, tagEnd + 1);
+    cursor = tagEnd;
+  }
+}
+
+function decodeVisibleEntities(text) {
+  const named = new Map([
+    ["amp", "&"], ["bsol", "\\"], ["colon", ":"], ["hyphen", "-"],
+    ["lowbar", "_"], ["nbsp", " "], ["num", "#"], ["sol", "/"], ["tab", "\t"],
+  ]);
+  return text.replace(/&(?:#(?<decimal>\d+)|#x(?<hex>[0-9a-f]+)|(?<name>[A-Za-z]+));/giu, (entity, ...args) => {
+    const groups = args.at(-1);
+    if (groups.decimal) {
+      const value = Number.parseInt(groups.decimal, 10);
+      return value <= 0x10ffff ? String.fromCodePoint(value) : entity;
+    }
+    if (groups.hex) {
+      const value = Number.parseInt(groups.hex, 16);
+      return value <= 0x10ffff ? String.fromCodePoint(value) : entity;
+    }
+    return named.get(groups.name) ?? named.get(groups.name.toLowerCase()) ?? entity;
+  });
+}
+
+function maskMarkdownReferenceDefinitions(characters) {
+  const text = characters.join("");
+  const lines = [];
+  let offset = 0;
+  for (const value of text.match(/.*(?:\r?\n|$)/gu) ?? []) {
+    const content = value.replace(/\r?\n$/u, "");
+    lines.push({ content, offset, length: value.length });
+    offset += value.length;
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const definition = line.content.match(/^ {0,3}\[[^\]\r\n]+\]:[ \t]*(?<destination>.*)$/u);
+    if (!definition) continue;
+    maskCharacters(characters, line.offset, line.offset + line.length);
+
+    let destinationLine = index;
+    if (!definition.groups.destination.trim()) {
+      const continuation = lines[index + 1];
+      if (!continuation || !/^ {0,3}(?:<[^>\r\n]+>|\S+)/u.test(continuation.content)) continue;
+      maskCharacters(characters, continuation.offset, continuation.offset + continuation.length);
+      destinationLine = index + 1;
+    }
+
+    const title = lines[destinationLine + 1];
+    if (title && /^ {0,3}(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\)\r\n]*\))[ \t]*$/u.test(title.content)) {
+      maskCharacters(characters, title.offset, title.offset + title.length);
+      index = destinationLine + 1;
+    } else {
+      index = destinationLine;
+    }
+  }
+}
+
+function markdownContainerContent(line) {
+  let content = line;
+  while (true) {
+    const blockQuote = content.match(/^ {0,3}>[ \t]?/u);
+    if (blockQuote) {
+      content = content.slice(blockQuote[0].length);
+      continue;
+    }
+    const listItem = content.match(/^ {0,3}(?:[-+*]|\d{1,9}[\.\)])[ \t]+/u);
+    if (listItem) {
+      content = content.slice(listItem[0].length);
+      continue;
+    }
+    return content;
+  }
+}
+
+function maskMarkdownWorkSliceExceptions(markdown) {
+  const characters = markdown.split("");
+  const lines = markdown.match(/.*(?:\r?\n|$)/gu) ?? [];
+  let offset = 0;
+  let fence = null;
+
+  for (const line of lines) {
+    const containerContent = markdownContainerContent(line);
+    const opening = containerContent.match(/^ {0,3}(`{3,}|~{3,})/u);
+    const closing = fence
+      ? containerContent.match(new RegExp(`^ {0,3}${fence.character}{${fence.length},}\\s*$`, "u"))
+      : null;
+    if (fence || opening) {
+      maskCharacters(characters, offset, offset + line.length);
+      if (closing) fence = null;
+      else if (!fence) fence = { character: opening[1][0], length: opening[1].length };
+    }
+    offset += line.length;
+  }
+
+  const masked = characters.join("");
+  for (const match of masked.matchAll(/<!--[\s\S]*?-->/gu)) {
+    maskCharacters(characters, match.index, match.index + match[0].length);
+  }
+  maskHtmlTags(characters);
+
+  maskMarkdownReferenceDefinitions(characters);
+
+  const linkSyntax = maskMarkdownCode(characters.join(""));
+  for (let cursor = 0; cursor < linkSyntax.length; cursor += 1) {
+    const image = linkSyntax[cursor] === "!" && linkSyntax[cursor + 1] === "[";
+    const labelStart = image ? cursor + 1 : cursor;
+    if (linkSyntax[labelStart] !== "[") continue;
+    let labelDepth = 0;
+    let labelEnd = labelStart + 1;
+    for (; labelEnd < linkSyntax.length; labelEnd += 1) {
+      if (linkSyntax[labelEnd] === "\\") labelEnd += 1;
+      else if (linkSyntax[labelEnd] === "[") labelDepth += 1;
+      else if (linkSyntax[labelEnd] === "]" && labelDepth > 0) labelDepth -= 1;
+      else if (linkSyntax[labelEnd] === "]") break;
+    }
+    if (linkSyntax[labelEnd] !== "]" || linkSyntax[labelEnd + 1] !== "(") continue;
+    let depth = 0;
+    let quote = "";
+    let destinationEnd = labelEnd + 2;
+    for (; destinationEnd < linkSyntax.length; destinationEnd += 1) {
+      const character = linkSyntax[destinationEnd];
+      if (character === "\\") {
+        destinationEnd += 1;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) quote = "";
+        continue;
+      }
+      if ((character === '"' || character === "'") && /\s/u.test(linkSyntax[destinationEnd - 1] ?? "")) {
+        quote = character;
+        continue;
+      }
+      if (character === "(") depth += 1;
+      else if (character === ")" && depth > 0) depth -= 1;
+      else if (character === ")") break;
+    }
+    if (linkSyntax[destinationEnd] !== ")") continue;
+    maskCharacters(characters, labelEnd + 2, destinationEnd);
+    cursor = destinationEnd;
+  }
+  return characters.join("");
+}
+
+const WORK_SLICE_ALGORITHM_PAGES = new Set([
+  "development/architecture.md",
+  "development/architecture.html",
+  "print.html",
+  "reference/encounter-data-and-metrics.md",
+  "reference/encounter-data-and-metrics.html",
+]);
+
+function validateVisibleWorkSliceText(text, relative) {
+  const errors = [];
+  text = decodeVisibleEntities(text);
+  const visible = WORK_SLICE_ALGORITHM_PAGES.has(relative)
+    ? text.replace(/(?<![A-Za-z0-9_-])s069-v1(?![A-Za-z0-9_-])/gu, "       ")
+    : text;
+  const findings = [
+    /\bslice(?:[ \t_-]+|[ \t]*[:#][ \t]*)(?:[Ss][ \t_:#-]*\d+|\d+)\b/giu,
+    /\bspecs[\\/]\d+-[a-z0-9][a-z0-9-]*(?:[\\/][^\s<]*)?/giu,
+    /\bs\d+(?:[_-][a-z0-9][a-z0-9_-]*)+\b/giu,
+    /\b[sS]\d+[A-Za-z][A-Za-z0-9_-]*\b/gu,
+    /\b[sS][ \t_:#-]+\d+\b/gu,
+  ];
+  for (const pattern of findings) {
+    for (const match of visible.matchAll(pattern)) {
+      const line = visible.slice(0, match.index).split("\n").length;
+      errors.push(`${relative}:${line}: S085 work-slice reference must use S###; found ${match[0]}`);
+    }
+  }
+  for (const match of visible.matchAll(/(?<![A-Za-z0-9_])[sS]\d+(?![A-Za-z0-9_-])/gu)) {
+    if (/^S\d{3}$/u.test(match[0])) continue;
+    const line = visible.slice(0, match.index).split("\n").length;
+    errors.push(`${relative}:${line}: S085 work-slice reference must use S###; found ${match[0]}`);
+  }
+  return [...new Set(errors)];
+}
+
+export function validateWorkSliceMarkdown(markdown, relative) {
+  return validateVisibleWorkSliceText(maskMarkdownWorkSliceExceptions(markdown), relative);
+}
+
+export function validateWorkSliceHtml(html, relative) {
+  const withoutBlocks = html
+    .replace(/<!--[\s\S]*?-->/gu, " ")
+    .replace(/<(pre|script|style)\b[^>]*>[\s\S]*?<\/\1>/giu, " ");
+  const characters = withoutBlocks.split("");
+  maskHtmlTags(characters);
+  return validateVisibleWorkSliceText(characters.join(""), relative);
+}
+
 function markdownDestination(inside) {
   if (inside.startsWith("<")) {
     const end = inside.indexOf(">");
@@ -442,6 +659,7 @@ export async function validateSourceTree(docsRoot) {
         (error) => `${relative}: ${error}`,
       ),
     );
+    errors.push(...validateWorkSliceMarkdown(contents, relative));
   }
   return errors;
 }
@@ -539,6 +757,7 @@ export async function validateGeneratedSite(outputRoot, siteUrl = "/eso-weave/")
   for (const file of htmlFiles) {
     const contents = htmlContents.get(file);
     const relative = slash(path.relative(outputRoot, file));
+    errors.push(...validateWorkSliceHtml(contents, relative));
     if (!/<html\b[^>]*\blang=["']en["']/iu.test(contents)) errors.push(`${relative}: missing lang=en`);
     if (relative !== "toc.html" && !/<h1\b[^>]*>\s*(?:<[^>]+>)*\s*\S/iu.test(contents)) errors.push(`${relative}: missing non-empty h1`);
     if (/rel=["']edit["']/iu.test(contents) && contents.includes("/docs/src/src/")) {
