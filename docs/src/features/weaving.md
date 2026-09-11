@@ -30,6 +30,14 @@ discarded and any held mouse button is released.
    read-only while the override is off.
 6. Focus ESO, enter normal gameplay, and press the bound key once.
 
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/weaving-configuration.png" alt="ESO Weave Weaving settings with enabled slots, selected weave types, and effective delays" width="1280" height="640">
+<figcaption>Deterministic configuration example: each Skills row shows whether it is enabled, its weave type, override state, effective delay, and observed cooldown.</figcaption>
+</figure>
+
+This image is a configuration fixture, not a live automation session. The text
+above remains the authority for safely focusing ESO and testing one key.
+
 The **Cooldown** column is observation-only. **Ready** means zero reported
 cooldown, a duration is the remaining rounded telemetry, and a dash means no
 usable signal. Synergy always shows a dash because ESO exposes no cooldown for

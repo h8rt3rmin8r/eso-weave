@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::TexturesDelta;
-use egui_kittest::{Harness, TestRenderer};
+use egui_kittest::{kittest::Queryable, Harness, TestRenderer};
 use egui_wgpu::{wgpu, RenderState, RendererOptions, ScreenDescriptor, WgpuSetup};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use serde::Serialize;
@@ -801,6 +801,14 @@ fn render_variant(
             fixture.app,
         );
     harness.run_steps(SETTLE_FRAMES);
+    if scene == Scene::AutoPotionReady {
+        harness.state_mut().set_settings_open(true);
+        harness.run_steps(SETTLE_FRAMES);
+        harness
+            .get_by_label(eso_weave::app::strings::SET_POTION_HEALTH.label)
+            .scroll_to_me();
+        harness.run_steps(SETTLE_FRAMES);
+    }
     let mut textures = texture_handle.take()?;
     renderer.update_textures(&mut textures);
     let image = renderer.render(&harness.ctx, harness.output())?;

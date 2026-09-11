@@ -33,6 +33,15 @@ configurable.
 6. Close Settings, verify PixelBeacon and Quickslot status, then use `F3` or the
    **Auto Potion** toggle.
 
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/auto-potion-ready.png" alt="ESO Weave Auto Potion settings showing resource watches, thresholds, Quickslot key, and retry interval" width="1280" height="820">
+<figcaption>Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the Quickslot key is Q.</figcaption>
+</figure>
+
+The enabled checks form an OR rule. In this fixture, either Health at or below
+35 percent or Magicka at or below 25 percent can qualify; disabled Stamina does
+not participate. A current usable potion and ready cooldown are still required.
+
 ## Trigger contract
 
 Every condition must hold in this order:
@@ -106,6 +115,15 @@ The interface displays the first current blocker in evaluation order.
 | **Blocked: retry interval** | Wait for the configured retry floor after the last attempt |
 | **Ready** | Every prerequisite holds and no watched resource is currently at or below threshold |
 | **Triggered: RESOURCE at N% (threshold T%)** | One press and release was submitted for the named current reading |
+
+<figure class="docs-screenshot">
+<img src="../assets/screenshots/auto-potion-blocked.png" alt="ESO Weave showing Auto Potion blocked because PixelBeacon signal is unavailable" width="1280" height="640">
+<figcaption>Deterministic recovery example: the request is retained, but Auto Potion is blocked and sends no input while PixelBeacon Signal is lost.</figcaption>
+</figure>
+
+For this state, restore visibility of the installed PixelBeacon overlay and wait
+for **Signal detected**. Do not toggle repeatedly: no request is replayed, and
+current positive evidence must return before Auto Potion can become Ready.
 
 Roll Dodge is not an Auto Potion prerequisite. It gates weaving and physical
 skill interception, while explicit Sprinting defers Auto Potion.

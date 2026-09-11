@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S084 adds nine task-focused local documentation visuals: seven deterministic
+  application captures for first launch, System and State, Weaving, Auto Potion,
+  and PixelBeacon; the maintainer-supplied Windows MSI Properties image; and a
+  clearly labeled synthetic PixelBeacon overlay. Exact provenance, lossless crop
+  rectangles, alternative text, captions, responsive layout, offline delivery,
+  and the refresh workflow are enforced by documentation policy (issue #125).
 - S083 adds a development-only deterministic documentation capture sandbox with
   seven truthful application scenes, dark and light themes, narrow and wide
   viewports, an ordered receipt manifest, and repository-contained generated

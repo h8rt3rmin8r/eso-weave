@@ -24,6 +24,9 @@ import {
   validateDocumentationDiagramCss,
   validateDocumentationDiagrams,
   validateDocumentationDiagramsGenerated,
+  validateDocumentationScreenshotCss,
+  validateDocumentationScreenshots,
+  validateDocumentationScreenshotsGenerated,
   validateFormalGlossary,
   validateGeneratedSite,
   validateGlossarySearchIndex,
@@ -36,6 +39,20 @@ import {
   validateTextHygiene,
   validateWorkflowText,
 } from "./docs-policy.mjs";
+
+async function documentationScreenshotArguments() {
+  const repositoryRoot = path.resolve(".");
+  const manifest = JSON.parse(await readFile(path.join(repositoryRoot, "docs", "project", "documentation-screenshots.json"), "utf8"));
+  const pages = new Map();
+  const assets = new Map();
+  for (const record of manifest.assets) {
+    assets.set(record.destination, await readFile(path.join(repositoryRoot, ...record.destination.split("/"))));
+    for (const page of record.pages) {
+      if (!pages.has(page)) pages.set(page, await readFile(path.join(repositoryRoot, ...page.split("/")), "utf8"));
+    }
+  }
+  return { manifest, pages, assets };
+}
 
 const brandTokens = [
   ["Ink base", "#0E1116"], ["Panel", "#151B23"], ["Elevated", "#1C2530"],
@@ -2006,4 +2023,52 @@ test("preserves the earliest active time across repeated effect gains", () => {
     payload: { target_actor_id: "a1", ability_id: 200, change: "gained" },
   });
   assert.equal(projectEncounterMetrics(fixture).metrics["effect-uptime"].values["200"], 0.6);
+});
+
+test("S084 accepts the complete digest-backed screenshot inventory", async () => {
+  const args = await documentationScreenshotArguments();
+  assert.deepEqual(validateDocumentationScreenshots(args), []);
+});
+
+test("S084 rejects screenshot digest drift and missing accessible guidance", async () => {
+  const args = await documentationScreenshotArguments();
+  const drifted = structuredClone(args.manifest);
+  drifted.assets[0].sha256 = "0".repeat(64);
+  assert.match(validateDocumentationScreenshots({ ...args, manifest: drifted }).join("\n"), /digest/i);
+
+  const record = args.manifest.assets[1];
+  const pages = new Map(args.pages);
+  pages.set(record.pages[0], pages.get(record.pages[0]).replace(record.alt, "generic image"));
+  assert.match(validateDocumentationScreenshots({ ...args, pages }).join("\n"), /alternative text/i);
+});
+
+test("S084 requires generated local assets and figure semantics", async () => {
+  const args = await documentationScreenshotArguments();
+  const outputPaths = new Set(args.manifest.assets.map((record) => record.destination.replace("docs/src/", "")));
+  const generatedPages = new Map([...args.pages].map(([page, markdown]) => [
+    page.replace("docs/src/", "").replace(/\.md$/u, ".html"),
+    markdown,
+  ]));
+  assert.deepEqual(validateDocumentationScreenshotsGenerated({
+    manifest: args.manifest,
+    pages: generatedPages,
+    outputPaths,
+  }), []);
+  outputPaths.delete(args.manifest.assets[0].destination.replace("docs/src/", ""));
+  assert.match(validateDocumentationScreenshotsGenerated({
+    manifest: args.manifest,
+    pages: generatedPages,
+    outputPaths,
+  }).join("\n"), /generated asset/i);
+});
+
+test("S084 requires contained responsive screenshot presentation", () => {
+  const css = `.docs-screenshot { max-width: 64rem; overflow: hidden; width: 100%; }
+.docs-screenshot img { display: block; height: auto; max-width: 100%; width: 100%; }
+.docs-screenshot figcaption { border-top: 1px solid #65758b; }
+.docs-screenshot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 40rem) { .docs-screenshot-grid { grid-template-columns: 1fr; } }`;
+  assert.deepEqual(validateDocumentationScreenshotCss(css), []);
+  assert.match(validateDocumentationScreenshotCss(css.replace("height: auto", "height: 100%")).join("\n"), /aspect ratio/i);
+  assert.match(validateDocumentationScreenshotCss(css.replace("grid-template-columns: 1fr", "grid-template-columns: repeat(2, 1fr)")).join("\n"), /narrow/i);
 });

@@ -1165,6 +1165,177 @@ export function validateDocumentationDiagramCss(css) {
   return errors;
 }
 
+const DOCUMENTATION_SCREENSHOT_IDS = new Set([
+  "windows-msi-properties-unblock",
+  "first-launch",
+  "healthy-system-state",
+  "pixelbeacon-lost",
+  "pixelbeacon-unmanaged",
+  "weaving-configuration",
+  "auto-potion-ready",
+  "auto-potion-blocked",
+  "pixelbeacon-overlay-example",
+]);
+
+function pngDimensions(bytes) {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 24 || signature.some((value, index) => bytes[index] !== value)) return null;
+  if (String.fromCharCode(...bytes.slice(12, 16)) !== "IHDR") return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return [view.getUint32(16), view.getUint32(20)];
+}
+
+export function validateDocumentationScreenshots({ manifest, assets, pages }) {
+  const errors = [];
+  if (!manifest || !Array.isArray(manifest.assets) || !(assets instanceof Map) || !(pages instanceof Map)) {
+    return ["S084 screenshot validation requires a manifest, asset map, and page map"];
+  }
+  if (manifest.schema_version !== 1 || manifest.generator !== "S084 guided documentation screenshots") {
+    errors.push("S084 screenshot manifest requires the supported schema and generator");
+  }
+  if (manifest.assets.length !== DOCUMENTATION_SCREENSHOT_IDS.size) {
+    errors.push(`S084 screenshot manifest requires exactly ${DOCUMENTATION_SCREENSHOT_IDS.size} assets`);
+  }
+
+  const ids = new Set();
+  const destinations = new Set();
+  const kinds = new Map();
+  for (const record of manifest.assets) {
+    if (!DOCUMENTATION_SCREENSHOT_IDS.has(record.id) || ids.has(record.id)) {
+      errors.push(`S084 screenshot has an unknown or duplicate id: ${record.id ?? "missing"}`);
+    }
+    ids.add(record.id);
+    if (!/^docs\/src\/assets\/(?:screenshots\/[a-z0-9-]+\.png|illustrations\/[a-z0-9-]+\.svg)$/u.test(record.destination ?? "") || destinations.has(record.destination)) {
+      errors.push(`S084 screenshot has an invalid or duplicate destination: ${record.destination ?? "missing"}`);
+    }
+    destinations.add(record.destination);
+    kinds.set(record.kind, (kinds.get(record.kind) ?? 0) + 1);
+    for (const field of ["reader_question", "alt", "caption", "update_trigger"]) {
+      if (typeof record[field] !== "string" || !record[field].trim()) errors.push(`S084 ${record.id} requires ${field}`);
+    }
+    if (!Array.isArray(record.pages) || record.pages.length === 0) {
+      errors.push(`S084 ${record.id} requires at least one published page`);
+    }
+
+    const bytes = assets.get(record.destination);
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+      errors.push(`S084 screenshot asset is missing: ${record.destination}`);
+      continue;
+    }
+    if (record.bytes !== bytes.length) errors.push(`S084 ${record.id} byte size does not match its asset`);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (record.sha256 !== digest) errors.push(`S084 ${record.id} digest does not match its asset`);
+
+    if (record.destination.endsWith(".png")) {
+      const dimensions = pngDimensions(bytes);
+      if (!dimensions) errors.push(`S084 ${record.id} is not a valid PNG with an IHDR`);
+      else if (dimensions[0] !== record.width || dimensions[1] !== record.height) {
+        errors.push(`S084 ${record.id} dimensions do not match its PNG`);
+      }
+    } else {
+      const svg = new TextDecoder("utf8", { fatal: true }).decode(bytes);
+      if (!/<svg\b(?=[^>]*\brole=["']img["'])(?=[^>]*\baria-labelledby=["'][^"']+["'])[^>]*>/iu.test(svg)
+          || !/<title\s+id=["'][^"']+["']>/iu.test(svg)
+          || !/<desc\s+id=["'][^"']+["']>/iu.test(svg)
+          || !svg.includes("SYNTHETIC EXAMPLE")) {
+        errors.push(`S084 ${record.id} requires an accessible visible synthetic label`);
+      }
+      if (/<(?:script|foreignObject|image|iframe)\b|\bon[a-z]+\s*=|\b(?:href|xlink:href)\s*=/iu.test(svg)) {
+        errors.push(`S084 ${record.id} synthetic SVG contains active or external content`);
+      }
+    }
+
+    if (record.kind === "deterministic-app") {
+      const source = record.source ?? {};
+      const crop = source.crop;
+      if (source.generator !== "S083 deterministic screenshot sandbox"
+          || source.theme !== "dark" || source.viewport !== "wide"
+          || source.width !== 1280 || source.height !== 900
+          || !/^[a-f0-9]{64}$/u.test(source.sha256 ?? "")
+          || !Array.isArray(crop) || crop.length !== 4
+          || crop[0] !== 0 || crop[1] !== 0 || crop[2] !== record.width || crop[3] !== record.height) {
+        errors.push(`S084 ${record.id} requires complete deterministic source and crop provenance`);
+      }
+    } else if (record.kind === "maintainer-supplied") {
+      if (record.source?.original_sha256 !== record.sha256) {
+        errors.push(`S084 ${record.id} must remain byte-identical to the supplied source`);
+      }
+    } else if (record.kind === "synthetic-illustration") {
+      if (record.source?.synthetic !== true) errors.push(`S084 ${record.id} must declare its synthetic source`);
+    } else {
+      errors.push(`S084 ${record.id} has an unsupported source kind`);
+    }
+
+    for (const page of record.pages ?? []) {
+      const markdown = pages.get(page) ?? "";
+      const relative = path.posix.relative(path.posix.dirname(page), record.destination);
+      if (!markdown.includes(`src="${relative}"`) || !markdown.includes(`alt="${record.alt}"`)) {
+        errors.push(`S084 ${record.id} page ${page} lost its local image or exact alternative text`);
+      }
+      if (!markdown.includes(`<figcaption>${record.caption}</figcaption>`)) {
+        errors.push(`S084 ${record.id} page ${page} lost its exact adjacent caption`);
+      }
+      if (!/<figure\s+class=["'][^"']*docs-screenshot[^"']*["']>/iu.test(markdown)) {
+        errors.push(`S084 ${record.id} page ${page} requires a screenshot figure`);
+      }
+    }
+  }
+
+  for (const id of DOCUMENTATION_SCREENSHOT_IDS) {
+    if (!ids.has(id)) errors.push(`S084 screenshot manifest is missing ${id}`);
+  }
+  if (kinds.get("deterministic-app") !== 7 || kinds.get("maintainer-supplied") !== 1 || kinds.get("synthetic-illustration") !== 1) {
+    errors.push("S084 screenshot manifest requires seven deterministic, one supplied, and one synthetic asset");
+  }
+  for (const destination of assets.keys()) {
+    if (!destinations.has(destination)) errors.push(`S084 screenshot asset is not inventoried: ${destination}`);
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationScreenshotsGenerated({ manifest, pages, outputPaths }) {
+  const errors = [];
+  if (!manifest || !Array.isArray(manifest.assets) || !(pages instanceof Map) || !(outputPaths instanceof Set)) {
+    return ["S084 generated screenshot validation requires a manifest, page map, and output paths"];
+  }
+  for (const record of manifest.assets) {
+    const asset = record.destination.replace("docs/src/", "");
+    if (!outputPaths.has(asset)) errors.push(`S084 generated asset is missing: ${asset}`);
+    for (const page of record.pages) {
+      const outputPage = page.replace("docs/src/", "").replace(/\.md$/u, ".html");
+      const html = pages.get(outputPage) ?? "";
+      const relative = path.posix.relative(path.posix.dirname(page), record.destination);
+      if (!html.includes('class="docs-screenshot') || !html.includes(`src="${relative}"`)
+          || !html.includes(`alt="${record.alt}"`) || !html.includes(record.caption)) {
+        errors.push(`S084 generated page lost ${record.id} figure semantics: ${outputPage}`);
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
+export function validateDocumentationScreenshotCss(css) {
+  const errors = [];
+  const figure = css.match(/\.docs-screenshot\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const image = css.match(/\.docs-screenshot\s+img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const caption = css.match(/\.docs-screenshot\s+figcaption\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const grid = css.match(/\.docs-screenshot-grid\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  if (!/max-width:\s*64rem/iu.test(figure) || !/overflow:\s*hidden/iu.test(figure) || !/width:\s*100%/iu.test(figure)) {
+    errors.push("S084 screenshot wrapper requires bounded contained width");
+  }
+  if (!/display:\s*block/iu.test(image) || !/height:\s*auto/iu.test(image) || !/max-width:\s*100%/iu.test(image) || !/width:\s*100%/iu.test(image)) {
+    errors.push("S084 screenshot image must preserve aspect ratio and content containment");
+  }
+  if (!/border-top:\s*1px\s+solid/iu.test(caption)) errors.push("S084 screenshot requires a visibly adjacent caption");
+  if (!/display:\s*grid/iu.test(grid) || !/repeat\(2,\s*minmax\(0,\s*1fr\)\)/iu.test(grid)) {
+    errors.push("S084 screenshot comparison requires a bounded two-column grid");
+  }
+  if (!/@media\s*\(max-width:\s*40rem\)[\s\S]*?\.docs-screenshot-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr/iu.test(css)) {
+    errors.push("S084 screenshot grid requires one-column narrow reflow");
+  }
+  return errors;
+}
+
 const GLOSSARY_LEGACY_ENTRIES = [
   {
     canonical: "Managed Marker",
@@ -2672,10 +2843,12 @@ async function run() {
   const coveragePath = path.join(docsRoot, "project", "content-coverage.json");
   const catalogPath = path.join(docsRoot, "project", "catalog-sources.json");
   const encounterModelPath = path.join(docsRoot, "project", "encounter-model.json");
+  const screenshotManifestPath = path.join(docsRoot, "project", "documentation-screenshots.json");
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   const coverage = JSON.parse(await readFile(coveragePath, "utf8"));
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const encounterModel = JSON.parse(await readFile(encounterModelPath, "utf8"));
+  const screenshotManifest = JSON.parse(await readFile(screenshotManifestPath, "utf8"));
   const encounterFixturePath = path.join(repositoryRoot, encounterModel.synthetic_fixture.encounter);
   const encounterProjectionPath = path.join(repositoryRoot, encounterModel.synthetic_fixture.projection);
   const encounterFixtureBytes = await readFile(encounterFixturePath);
@@ -2692,6 +2865,18 @@ async function run() {
     record.asset,
     await readFile(path.join(docsRoot, "src", "assets", "diagrams", record.asset), "utf8"),
   ])));
+  const screenshotPages = new Map(await Promise.all([...new Set(screenshotManifest.assets.flatMap((record) => record.pages))].map(async (page) => [
+    page,
+    await readFile(path.join(repositoryRoot, ...page.split("/")), "utf8"),
+  ])));
+  const screenshotFiles = await walk(path.join(docsRoot, "src", "assets", "screenshots"));
+  const screenshotAssets = new Map(await Promise.all([
+    ...screenshotFiles.map(async (file) => [slash(path.relative(repositoryRoot, file)), await readFile(file)]),
+    ...screenshotManifest.assets.filter((record) => record.kind === "synthetic-illustration").map(async (record) => [
+      record.destination,
+      await readFile(path.join(repositoryRoot, ...record.destination.split("/"))),
+    ]),
+  ]));
   const cargoToml = await readFile(path.join(repositoryRoot, "Cargo.toml"), "utf8");
   const changelog = await readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8");
   const approvedBanner = await readFile(path.join(repositoryRoot, "assets", "eso-weave-banner.png"));
@@ -2706,6 +2891,10 @@ async function run() {
     record.outputPage,
     await readFile(path.join(outputRoot, ...record.outputPage.split("/")), "utf8"),
   ])));
+  const generatedScreenshotPages = new Map(await Promise.all([...new Set(screenshotManifest.assets.flatMap((record) => record.pages))].map(async (page) => {
+    const outputPage = page.replace("docs/src/", "").replace(/\.md$/u, ".html");
+    return [outputPage, await readFile(path.join(outputRoot, ...outputPage.split("/")), "utf8")];
+  })));
   const outputPaths = new Set((await walk(outputRoot)).map((file) => slash(path.relative(outputRoot, file))));
   const css = await readFile(cssPath, "utf8");
   const workflow = await readFile(workflowPath, "utf8");
@@ -2740,6 +2929,9 @@ async function run() {
     ...validateDocumentationDiagrams({ pages: diagramPages, svgs: diagramSvgs }),
     ...validateDocumentationDiagramsGenerated(generatedDiagramPages, outputPaths),
     ...validateDocumentationDiagramCss(css),
+    ...validateDocumentationScreenshots({ manifest: screenshotManifest, assets: screenshotAssets, pages: screenshotPages }),
+    ...validateDocumentationScreenshotsGenerated({ manifest: screenshotManifest, pages: generatedScreenshotPages, outputPaths }),
+    ...validateDocumentationScreenshotCss(css),
     ...(searchIndexFiles.length === 1 ? [] : ["S079 generated site requires exactly one hashed search index"]),
     ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),
