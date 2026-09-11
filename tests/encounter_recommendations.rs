@@ -273,6 +273,44 @@ fn reversed_loss_ranges_and_inconsistent_metric_evidence_fail_closed() {
 }
 
 #[test]
+fn invalid_effective_hps_evidence_fails_closed() {
+    let mut input = projection();
+    input.effective_hps.quality = MetricQuality::Degraded;
+    input.effective_hps.loss_ranges = vec![LossRange {
+        missing_sequence_from: 8,
+        missing_sequence_to: 7,
+        reason: "reversed-hps-evidence".into(),
+    }];
+    let reversed = generate_recommendations(&input);
+    assert_eq!(
+        reversed.availability,
+        RecommendationAvailability::Suppressed
+    );
+    assert!(reversed.advice.is_empty());
+    assert!(!reversed.evidence.loss_ranges_valid);
+    assert!(reason_kinds(&reversed).contains(&RecommendationReasonKind::InvalidLossRange));
+
+    input.effective_hps.loss_ranges.clear();
+    let inconsistent_quality = generate_recommendations(&input);
+    assert_eq!(
+        inconsistent_quality.availability,
+        RecommendationAvailability::Suppressed
+    );
+    assert!(!inconsistent_quality.evidence.metric_evidence_valid);
+    assert!(reason_kinds(&inconsistent_quality)
+        .contains(&RecommendationReasonKind::InvalidMetricEvidence));
+
+    input.effective_hps.quality = MetricQuality::Complete;
+    input.effective_hps.algorithm_version = "unexpected-hps-version".into();
+    let inconsistent_algorithm = generate_recommendations(&input);
+    assert_eq!(
+        inconsistent_algorithm.availability,
+        RecommendationAvailability::Suppressed
+    );
+    assert!(!inconsistent_algorithm.evidence.metric_evidence_valid);
+}
+
+#[test]
 fn valid_degraded_candidate_evidence_qualifies_instead_of_blocking() {
     let mut input = projection();
     input.effect_uptime[0].result.quality = MetricQuality::Degraded;

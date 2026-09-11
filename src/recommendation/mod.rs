@@ -369,6 +369,7 @@ fn declared_loss_ranges(projection: &EncounterProjection) -> Vec<LossRange> {
         .observed_dps
         .loss_ranges
         .iter()
+        .chain(projection.effective_hps.loss_ranges.iter())
         .chain(
             projection
                 .ability_damage_share
@@ -395,6 +396,7 @@ fn declared_loss_ranges(projection: &EncounterProjection) -> Vec<LossRange> {
 
 fn recommendation_metric_evidence_valid(projection: &EncounterProjection) -> bool {
     metric_evidence_valid(&projection.observed_dps, projection)
+        && metric_evidence_valid(&projection.effective_hps, projection)
         && projection
             .ability_damage_share
             .iter()
