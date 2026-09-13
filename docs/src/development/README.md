@@ -15,9 +15,10 @@ Published developer references include:
 - [Coverage Matrix](coverage-matrix.md)
 - [Brand Standard](brand-standard.md)
 - [Repository Conventions](repository-conventions.md)
+- [GitHub Project Management](github-project-management.md)
 
-The stable release model is published here. Maintainer-only command rituals,
-governance, autopilot records, and historical planning records remain outside
-the published site.
+The stable release and GitHub delivery models are published here.
+Maintainer-only command rituals, detailed audits, autopilot records, and
+historical planning records remain outside the published site.
 
 Return to the [documentation home](../).

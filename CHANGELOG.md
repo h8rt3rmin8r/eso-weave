@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Publish the repository's GitHub-native project-management operating guide in
+  the bundled development documentation, reconciled with ESO Weave's actual
+  labels, milestones, Project fields, non-blocking verification policy, and
+  pull-request lifecycle (issue #167).
+
 ### Fixed
 
 - S092 repairs the v0.16.0 main-branch CI regression by making collector-capture
@@ -15,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-13: Consume the untracked generic project-management guide into the
+  published development tree, adapting it to the existing ESO Weave Delivery
+  Project instead of maintaining a second generic governance contract. Expand
+  the exact documentation table inventory from 55 tables across 26 pages to 59
+  tables across 27 pages.
 - 2026-09-11: Amend the pinned release rollover and documentation-policy checks
   so every future package version bump also updates the committed collector-capture
   fixture with exact cardinality. This prevents a successful release from leaving

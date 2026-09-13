@@ -132,7 +132,8 @@
     { "path": "docs/src/reference/settings.md", "title": "Settings Reference", "page_type": "Reference", "audiences": ["User"], "required_anchors": ["Default and accepted value","Application timing"], "related_pages": ["docs/src/reference/configuration.md"] },
     { "path": "docs/src/reference/configuration.md", "title": "Configuration", "page_type": "Reference", "audiences": ["User", "Contributor"], "required_anchors": ["configuration contains user settings","Session state holds"], "related_pages": ["docs/src/reference/settings.md"] },
     { "path": "docs/src/development/test-strategy.md", "title": "Test Strategy", "page_type": "Development", "audiences": ["Contributor"], "required_anchors": ["Deterministic seams","Platform coverage"], "related_pages": ["docs/src/development/architecture.md"] },
-    { "path": "docs/src/development/release-and-packaging.md", "title": "Release and Packaging", "page_type": "Development", "audiences": ["Contributor", "Maintainer"], "required_anchors": ["Release state flow","Maintainer authority"], "related_pages": ["docs/src/development/test-strategy.md"] }
+    { "path": "docs/src/development/release-and-packaging.md", "title": "Release and Packaging", "page_type": "Development", "audiences": ["Contributor", "Maintainer"], "required_anchors": ["Release state flow","Maintainer authority"], "related_pages": ["docs/src/development/test-strategy.md"] },
+    { "path": "docs/src/development/github-project-management.md", "title": "GitHub Project Management", "page_type": "Development", "audiences": ["Contributor", "Maintainer"], "required_anchors": ["Governing principles","Delivery lifecycle","AI agent transaction protocol"], "related_pages": ["docs/src/development/repository-conventions.md", "docs/src/development/release-and-packaging.md"] }
   ],
   "search_map": [
     { "canonical": "ESO Weave", "aliases": ["desktop companion"], "target": "docs/src/README.md" },
