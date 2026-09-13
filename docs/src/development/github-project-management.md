@@ -137,7 +137,8 @@ duplicate the delivery lifecycle.
 
 | Family | ESO Weave values | Cardinality | Meaning |
 | --- | --- | ---: | --- |
-| Type | `bug`, `enhancement`, `task`, `epic` | Exactly one | Nature of the outcome |
+| Type | `bug`, `enhancement`, or `task` | Exactly one | Nature of the outcome |
+| Coordinator | `epic` | Zero or one | Multi-issue coordination in addition to the `enhancement` type |
 | Priority | `priority: P0` through `priority: P3` | Exactly one | Relative urgency |
 | Effort | `effort: XS`, `S`, `M`, `L`, or `XL` | Exactly one | Coarse delivery size |
 | Area | `area: app-ui`, `data`, `docs`, and other owned subsystems | One or more | Affected subsystem |
@@ -255,9 +256,11 @@ Run idempotent reconciliation in this order:
 
 1. Fetch repository issues plus active and archived Project items.
 2. Add missing issues and resolve duplicates.
-3. Set closed issues to `Done`.
-4. Set open `needs: verification` issues to `Release verification`.
-5. Set issues with linked open pull requests to `PR review`.
+3. Set closed issues to `Done` and exclude them from later open-item rules.
+4. Set open issues with linked pull requests and no `needs: verification` label
+   to `PR review`.
+5. Set open `needs: verification` issues to `Release verification`, including
+   those with a linked open pull request.
 6. Preserve evidence-backed `In progress`, `Specced`, and `Ready` states.
 7. Set unsupported open states to `Backlog`.
 8. Validate label cardinality, relationships, and milestone assignments.
