@@ -2655,7 +2655,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
   }
 });
 
-test("S089 inventories all 55 Markdown tables across 26 published pages", async () => {
+test("documentation policy inventories all 59 Markdown tables across 27 published pages", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationTableInventory(pages), []);
   assert.deepEqual(extractDocumentationTables("| Name | Value |\n| --- | --- |\n| one | two |\n"), [
@@ -2668,7 +2668,7 @@ test("S089 inventories all 55 Markdown tables across 26 published pages", async 
 
   const unexpected = new Map(pages);
   unexpected.set("README.md", `${unexpected.get("README.md")}\n| New | Table |\n| --- | --- |\n| one | two |\n`);
-  assert.match(validateDocumentationTableInventory(unexpected).join("\n"), /README.*0 table|55 tables/i);
+  assert.match(validateDocumentationTableInventory(unexpected).join("\n"), /README.*0 table|59 tables/i);
 });
 
 test("S089 requires generated mdBook wrappers with semantic table structure", async () => {

@@ -121,7 +121,7 @@ const CONTENT_OBLIGATION_IDS = new Set([
 const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
-const CONTENT_CONTRACT_SHA256 = "8493d71d66dd81874967f91e34c41a82692136c022762476bd44d6e7244a9db0";
+const CONTENT_CONTRACT_SHA256 = "1c5b7cb15c1bd6ec5c5e09f68b71043e233769b96dd2a9c02274275d8416e0eb";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -137,6 +137,7 @@ const CONTENT_PAGE_PATHS = new Set([
   "docs/src/reference/configuration.md",
   "docs/src/development/test-strategy.md",
   "docs/src/development/release-and-packaging.md",
+  "docs/src/development/github-project-management.md",
 ]);
 const SEARCH_TARGETS = new Map([
   ["ESO Weave", "docs/src/README.md"], ["Weaving", "docs/src/features/weaving.md"],
@@ -1956,6 +1957,7 @@ const DOCUMENTATION_TABLE_COUNTS = new Map([
   ["development/architecture.md", 2],
   ["development/brand-standard.md", 2],
   ["development/coverage-matrix.md", 2],
+  ["development/github-project-management.md", 4],
   ["development/release-and-packaging.md", 2],
   ["development/screenshot-maintenance.md", 1],
   ["development/state-machines.md", 4],
@@ -2009,8 +2011,8 @@ export function validateDocumentationTableInventory(pages) {
   for (const [page, expected] of DOCUMENTATION_TABLE_COUNTS) {
     if (!pages.has(page)) errors.push(`S089 table inventory is missing ${page} with ${expected} expected table(s)`);
   }
-  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 55) {
-    errors.push(`S089 table inventory requires 55 tables across 26 pages; found ${total} across ${pages.size} pages`);
+  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 59) {
+    errors.push(`documentation table inventory requires 59 tables across 27 pages; found ${total} across ${pages.size} pages`);
   }
   return [...new Set(errors)];
 }

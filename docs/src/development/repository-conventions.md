@@ -7,7 +7,13 @@ traits for deterministic testing.
 Feature work uses GitHub issues and numbered `specs/NNN-name/` spec-kit packets
 containing at least `spec.md`, `plan.md`, and `tasks.md`. Current maintainer
 workflow and planning records live outside the published documentation tree so
-they are not included in Pages or the future bundled manual.
+they are not included in Pages or the bundled manual.
+
+The [GitHub Project Management](github-project-management.md) guide defines the
+published issue, label, milestone, Project, pull-request, and reconciliation
+contract. Small maintenance and documentation changes may proceed directly from
+an unambiguous issue when a separate specification packet adds no useful design
+evidence.
 
 ## Work-slice references
 
