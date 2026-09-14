@@ -72,3 +72,10 @@ All three reviewers reported no remaining findings after the fixes.
 - spelling and text hygiene: PASS
 - documentation policy unit and rendered-site suites: PASS, 140 tests
 - `mdbook test docs`, `mdbook build docs`, and linkcheck2: PASS
+
+## Publication
+
+The official pull request is
+[#192](https://github.com/h8rt3rmin8r/eso-weave/pull/192). Issue #185 and the
+pull request are both assigned to Slice S093 and the PR review stage. External
+CI and review resolution remain in progress.

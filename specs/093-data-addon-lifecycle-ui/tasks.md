@@ -46,8 +46,8 @@
 - [x] T028 Run documentation policy, mdBook, link, and text gates
 - [x] T029 Complete parallel local code, security, and UI-domain review
 - [x] T030 Resolve every actionable local finding and repeat affected gates
-- [ ] T031 Mark implemented, commit, push, and open the PR closing #185
-- [ ] T032 Move issue #185 and PR to Slice S093 and PR review stage
+- [x] T031 Mark implemented, commit, push, and open the PR closing #185 ([#192](https://github.com/h8rt3rmin8r/eso-weave/pull/192))
+- [x] T032 Move issue #185 and PR to Slice S093 and PR review stage
 - [ ] T033 Address every first-round external review and CI finding
 - [ ] T034 Trigger exactly one authorized second `@Codex review` round
 - [ ] T035 Address every second-round finding without a third trigger
