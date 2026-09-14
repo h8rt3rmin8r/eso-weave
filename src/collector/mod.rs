@@ -505,3 +505,23 @@ pub fn adler32_hex(bytes: &[u8]) -> String {
 fn invalid<T>(message: impl Into<String>) -> Result<T, CollectorError> {
     Err(CollectorError::Validation(message.into()))
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn committed_catalog_fixture_matches_the_canonical_shared_projection() {
+        let shared = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/specs/092-data-addon-foundation/fixtures/catalog-live.lua"
+        ));
+        let committed = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/specs/092-data-addon-foundation/fixtures/catalog-live-canonical.lua"
+        ));
+
+        assert_eq!(
+            super::canonical_catalog_capture(shared).unwrap().unwrap(),
+            committed
+        );
+    }
+}

@@ -20,10 +20,10 @@
     "api_version": 101050,
     "locale": "en",
     "revision": "63292440be3b3020065d26189ff4cf0daa17ea5ad0ca183562e06fe1e1ee3f1b",
-    "sha256": "cbcb22a3e56d490893f91f57f3805a08761e34b88951dc084608ab0e16253a63",
+    "sha256": "7a8043233f2f88e363952607741aa8f9d5dda7c6c26b8749a19e32c4b8f00348",
     "max_bytes": 134217728,
     "uri": "user-local-savedvariables",
-    "local_path": "specs/092-data-addon-foundation/fixtures/catalog-live.lua",
+    "local_path": "specs/092-data-addon-foundation/fixtures/catalog-live-canonical.lua",
     "license_scope": "user-generated-local-only",
     "redistribution": "user-generated-only"
   }],

@@ -22,6 +22,7 @@ No CRITICAL or HIGH findings remain.
 | R8 | Module isolation | HIGH | `src/catalog_update/mod.rs`, `src/collector/import.rs` | Catalog freshness and provenance fingerprinted the entire shared file, so encounter-only writes could impersonate a later catalog flush | Freshness, source staging, catalog version identity, and import provenance now use one canonical catalog-only SavedVariables projection; regression coverage proves encounter-only rewrites are inert |
 | R9 | Version ownership | MEDIUM | `src/data_addon.rs` | Package lifecycle status compared the manifest version with the catalog module version | The data addon now owns an explicit package-version constant independent of either module envelope |
 | R10 | Documentation accuracy | MEDIUM | `docs/src/development/catalog-updates.md` | The canonical guide retained the removed desktop deletion behavior and separate collector ownership | The guide now documents module-local in-game clearing, shared-file preservation, and the combined package uninstall boundary |
+| R11 | Cross-platform fixture integrity | HIGH | `specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json`, `tests/catalog_pipeline.rs` | Windows source-cache state masked a committed request that still pinned the pre-isolation shared-file hash; clean Linux CI correctly rejected the mismatch | Added a checked-in canonical catalog projection, pinned committed-mode provenance to its exact hash, and added a test that regenerates the projection from the shared fixture to prevent drift |
 
 ## Coverage Summary
 

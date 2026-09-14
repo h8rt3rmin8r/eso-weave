@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 const LIVE_BUNDLE: &str = "specs/070-catalog-compiler/fixtures/minimal-live.json";
-const LIVE_CAPTURE: &str = "specs/092-data-addon-foundation/fixtures/catalog-live.lua";
+const LIVE_CAPTURE: &str = "specs/092-data-addon-foundation/fixtures/catalog-live-canonical.lua";
 const CANDIDATE_FILES: &[&str] = &[
     "build-report.json",
     "catalog.sqlite",
