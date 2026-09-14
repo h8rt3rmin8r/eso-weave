@@ -46,12 +46,15 @@ marker guard and unmistakable uninstall confirmation.
 At most two lifecycle actions share a primary-then-secondary horizontal row.
 Every uninstall retains the managed-marker uninstall guard and confirmation.
 
-The **Data Addon Evidence** row labels ownership, compatibility, configured
-enablement, loading, reload requirement, ESO runtime, catalog collection, and
-encounter collection independently. Installed files never imply enabled or
-loaded. A running ESO process never implies loaded or collecting. Because the
-application has no live data-addon channel, those current-session facts remain
-**Unconfirmed** and explain the evidence gap instead of guessing.
+Choose **Data Details** beside **Data Addon Next Step** to open the complete
+evidence view. Its dedicated rows label ownership, compatibility, configured
+enablement, loading, reload requirement, ESO runtime, catalog collection,
+encounter collection, and the next safe step independently. Installed files
+never imply enabled or loaded. A running ESO process never implies loaded or
+collecting. Because the application has no live data-addon channel, those
+current-session facts remain **Unconfirmed** and explain the evidence gap
+instead of guessing. Each row remains directly keyboard accessible and carries
+its own explanation. Closing the modal returns focus to the lifecycle surface.
 
 System and State defaults expanded. Its full header is accessible by pointer,
 keyboard, and assistive technology. Activating the header hides or restores the

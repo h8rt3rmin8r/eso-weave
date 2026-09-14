@@ -61,10 +61,12 @@ only after its data-specific confirmation. An unmanaged `EsoWeaveData` target
 offers no mutation.
 
 After a lifecycle change, obey **Data Addon Reload: Required** by running
-`/reloadui` or relogging. **Data Addon Evidence** keeps enabled, loaded, runtime,
-catalog, and encounter facts separate. **Unconfirmed** is expected when no
-supported current-session source exists. Verify enablement in ESO's Add-Ons
-menu; do not treat installed files or a running ESO process as load proof.
+`/reloadui` or relogging. Choose **Data Details** to inspect dedicated evidence
+rows for enabled, loaded, runtime, catalog, and encounter facts. **Unconfirmed** is
+expected when no supported current-session source exists. Verify enablement in
+ESO's Add-Ons menu; do not treat installed files or a running ESO process as
+load proof. **Data Addon Next Step** names the safe remediation for the current
+lifecycle state.
 
 ## 5. Verify fresh telemetry
 
@@ -77,7 +79,7 @@ healthy baseline has:
 | World State | **Active** |
 | PixelBeacon Status | **Installed (current)** |
 | ESO Weave Data | **Installed** when its data workflows are needed |
-| Data Addon Evidence | **Ownership: Managed** and **Compatible: Current**; current-session facts may remain **Unconfirmed** |
+| Data Addon Ownership and Compatibility | **Managed** and **Current**; the following current-session fact rows may remain **Unconfirmed** |
 | PixelBeacon Signal | **Signal detected** |
 | Game Context | **Gameplay** when no native menu or chat field is open |
 | Life State | **Alive** |

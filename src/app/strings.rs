@@ -24,7 +24,7 @@ pub const DATA_ADDON_RELOAD_TITLE: &str = "Data Addon Reload";
 pub const DATA_ADDON_RUNTIME_TITLE: &str = "Data Runtime";
 pub const DATA_ADDON_CATALOG_TITLE: &str = "Catalog Collection";
 pub const DATA_ADDON_ENCOUNTER_TITLE: &str = "Encounter Collection";
-pub const DATA_ADDON_EVIDENCE_TITLE: &str = "Data Addon Evidence";
+pub const DATA_ADDON_REMEDIATION_TITLE: &str = "Data Addon Next Step";
 pub const CATALOG_TITLE: &str = "Catalog";
 pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game Installation";
@@ -61,8 +61,10 @@ pub const DATA_ADDON_CATALOG_TOOLTIP: &str =
     "Catalog activity has no live desktop channel. SavedVariables evidence is flush-bound and must be treated as historical.";
 pub const DATA_ADDON_ENCOUNTER_TOOLTIP: &str =
     "Encounter activity has no live desktop channel. SavedVariables evidence is flush-bound and must be treated as historical.";
-pub const DATA_ADDON_EVIDENCE_TOOLTIP: &str =
-    "Independent enabled, loaded, reload, runtime, catalog, and encounter facts. Unconfirmed facts are never inferred from installation or process state.";
+pub const DATA_ADDON_REMEDIATION_TOOLTIP: &str =
+    "The next safe lifecycle step based on the currently available evidence.";
+pub const DATA_ADDON_DETAILS_TOOLTIP: &str =
+    "Open every ESO Weave Data evidence fact with its dedicated explanation.";
 pub const BEACON_SIGNAL_TOOLTIP: &str =
     "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
 pub const CATALOG_TOOLTIP: &str =
@@ -424,7 +426,7 @@ pub fn field_labels() -> Vec<&'static str> {
         DATA_ADDON_RUNTIME_TITLE,
         DATA_ADDON_CATALOG_TITLE,
         DATA_ADDON_ENCOUNTER_TITLE,
-        DATA_ADDON_EVIDENCE_TITLE,
+        DATA_ADDON_REMEDIATION_TITLE,
         GAME_TITLE,
         GAME_INSTALLATION_TITLE,
         GAME_RUNTIME_TITLE,
@@ -482,7 +484,7 @@ pub fn all_labels() -> Vec<&'static str> {
         DATA_ADDON_RUNTIME_TITLE,
         DATA_ADDON_CATALOG_TITLE,
         DATA_ADDON_ENCOUNTER_TITLE,
-        DATA_ADDON_EVIDENCE_TITLE,
+        DATA_ADDON_REMEDIATION_TITLE,
         GAME_INSTALLATION_TITLE,
         GAME_RUNTIME_TITLE,
         FISHING_CASTING,
@@ -567,7 +569,8 @@ pub fn all_tooltips() -> Vec<&'static str> {
         DATA_ADDON_RUNTIME_TOOLTIP,
         DATA_ADDON_CATALOG_TOOLTIP,
         DATA_ADDON_ENCOUNTER_TOOLTIP,
-        DATA_ADDON_EVIDENCE_TOOLTIP,
+        DATA_ADDON_REMEDIATION_TOOLTIP,
+        DATA_ADDON_DETAILS_TOOLTIP,
         GAME_INSTALLATION_TOOLTIP,
         GAME_RUNTIME_TOOLTIP,
         SUSPEND_TOOLTIP,

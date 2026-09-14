@@ -557,6 +557,32 @@ fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
             .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
             .join(eso_weave::data_addon::MANIFEST_FILE)
             .is_file());
+        harness.get_by_label("Data Addon Next Step");
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Data Details")
+            .click_accesskit();
+        for _ in 0..2 {
+            harness.step();
+        }
+        harness.get_by_label("ESO Weave Data Details");
+        for label in [
+            "Data Addon Ownership",
+            "Data Addon Compatibility",
+            "Data Addon Enabled",
+            "Data Addon Loaded",
+            "Data Addon Reload",
+            "Data Runtime",
+            "Catalog Collection",
+            "Encounter Collection",
+        ] {
+            harness.get_by_label(label);
+        }
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Close Data Details")
+            .click_accesskit();
+        for _ in 0..2 {
+            harness.step();
+        }
         harness.get_by_role_and_label(egui::accesskit::Role::Button, "Repair Data");
         harness
             .get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall Data")

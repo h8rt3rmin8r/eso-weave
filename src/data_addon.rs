@@ -80,52 +80,69 @@ pub fn catalog_checksum_from_source(source: &str) -> Result<String, CollectorErr
 }
 
 pub fn status(addons_root: &Path) -> DataAddonStatus {
-    let Ok(root_metadata) = fs::symlink_metadata(addons_root) else {
-        return DataAddonStatus::NotInstalled;
+    inspect(addons_root).unwrap_or(DataAddonStatus::Unmanaged)
+}
+
+/// Inspects lifecycle state while preserving genuine filesystem failures for
+/// callers that retain a last-known observation.
+pub fn inspect(addons_root: &Path) -> std::io::Result<DataAddonStatus> {
+    let root_metadata = match fs::symlink_metadata(addons_root) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(DataAddonStatus::NotInstalled);
+        }
+        Err(error) => return Err(error),
     };
     if metadata_is_link(&root_metadata) || !root_metadata.is_dir() {
-        return DataAddonStatus::Unmanaged;
+        return Ok(DataAddonStatus::Unmanaged);
     }
-    status_directory(&addons_root.join(DATA_ADDON_SUBFOLDER))
+    inspect_directory(&addons_root.join(DATA_ADDON_SUBFOLDER))
 }
 
 fn status_directory(directory: &Path) -> DataAddonStatus {
+    inspect_directory(directory).unwrap_or(DataAddonStatus::Unmanaged)
+}
+
+fn inspect_directory(directory: &Path) -> std::io::Result<DataAddonStatus> {
     let metadata = match fs::symlink_metadata(directory) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return DataAddonStatus::NotInstalled;
+            return Ok(DataAddonStatus::NotInstalled);
         }
-        Err(_) => return DataAddonStatus::Unmanaged,
+        Err(error) => return Err(error),
     };
     if metadata_is_link(&metadata) || !metadata.is_dir() {
-        return DataAddonStatus::Unmanaged;
+        return Ok(DataAddonStatus::Unmanaged);
     }
     let manifest_path = directory.join(MANIFEST_FILE);
-    let Ok(manifest_metadata) = fs::symlink_metadata(&manifest_path) else {
-        return DataAddonStatus::Unmanaged;
+    let manifest_metadata = match fs::symlink_metadata(&manifest_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(DataAddonStatus::Unmanaged);
+        }
+        Err(error) => return Err(error),
     };
     if metadata_is_link(&manifest_metadata) || !manifest_metadata.is_file() {
-        return DataAddonStatus::Unmanaged;
+        return Ok(DataAddonStatus::Unmanaged);
     }
-    let Ok(entries) = fs::read_dir(directory) else {
-        return DataAddonStatus::Unmanaged;
-    };
+    let entries = fs::read_dir(directory)?;
     let expected = [MANIFEST_FILE, BOOTSTRAP_FILE, CATALOG_FILE, ENCOUNTER_FILE];
     let mut found = Vec::new();
     for entry in entries {
-        let Ok(name) = entry.map(|entry| entry.file_name()) else {
-            return DataAddonStatus::Unmanaged;
-        };
+        let name = entry?.file_name();
         if !expected.iter().any(|expected| name == *expected) {
-            return DataAddonStatus::Unmanaged;
+            return Ok(DataAddonStatus::Unmanaged);
         }
         found.push(name);
     }
-    let Some(manifest) = read_utf8_bounded(&manifest_path, MAX_MANIFEST_BYTES) else {
-        return DataAddonStatus::Unmanaged;
+    let Some(manifest_bytes) = read_bounded_result(&manifest_path, MAX_MANIFEST_BYTES)? else {
+        return Ok(DataAddonStatus::Unmanaged);
+    };
+    let Ok(manifest) = String::from_utf8(manifest_bytes) else {
+        return Ok(DataAddonStatus::Unmanaged);
     };
     if !manifest.lines().any(|line| line.trim() == MANAGED_MARKER) {
-        return DataAddonStatus::Unmanaged;
+        return Ok(DataAddonStatus::Unmanaged);
     }
     let version_matches = parse_addon_version(&manifest) == Some(DATA_ADDON_PACKAGE_VERSION);
     let manifest_matches = parse_primary_api_version(&manifest)
@@ -139,38 +156,37 @@ fn status_directory(directory: &Path) -> DataAddonStatus {
         let path = directory.join(name);
         match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata_is_link(&metadata) || !metadata.is_file() => {
-                return DataAddonStatus::Unmanaged;
+                return Ok(DataAddonStatus::Unmanaged);
             }
             Ok(metadata) => {
                 files_match &= metadata.len() == expected.len() as u64
-                    && read_bounded(&path, expected.len() as u64).as_deref() == Some(expected);
+                    && read_bounded_result(&path, expected.len() as u64)?.as_deref()
+                        == Some(expected);
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => files_match = false,
-            Err(_) => return DataAddonStatus::Unmanaged,
+            Err(error) => return Err(error),
         }
     }
     if found.len() != expected.len() {
         files_match = false;
     }
     if version_matches && manifest_matches && files_match {
-        DataAddonStatus::ManagedUpToDate
+        Ok(DataAddonStatus::ManagedUpToDate)
     } else {
-        DataAddonStatus::ManagedVersionMismatch
+        Ok(DataAddonStatus::ManagedVersionMismatch)
     }
 }
 
-fn read_bounded(path: &Path, max_bytes: u64) -> Option<Vec<u8>> {
+fn read_bounded_result(path: &Path, max_bytes: u64) -> std::io::Result<Option<Vec<u8>>> {
     let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024) as usize);
-    fs::File::open(path)
-        .ok()?
+    fs::File::open(path)?
         .take(max_bytes.saturating_add(1))
-        .read_to_end(&mut bytes)
-        .ok()?;
-    (bytes.len() as u64 <= max_bytes).then_some(bytes)
+        .read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= max_bytes).then_some(bytes))
 }
 
-fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Option<String> {
-    String::from_utf8(read_bounded(path, max_bytes)?).ok()
+fn read_bounded(path: &Path, max_bytes: u64) -> Option<Vec<u8>> {
+    read_bounded_result(path, max_bytes).ok().flatten()
 }
 
 pub fn install(

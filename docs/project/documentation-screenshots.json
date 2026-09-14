@@ -30,8 +30,8 @@
       "caption": "Deterministic first-launch state: ESO is inactive, ESO Weave is active, and each absent managed addon has its own Install action.",
       "width": 1280,
       "height": 640,
-      "bytes": 103915,
-      "sha256": "0e21975ebdc5dbb1c620866df7141ae8a8bfa72f6eb6c0bd7279becb161c2c32",
+      "bytes": 104403,
+      "sha256": "dfadc5a0530875a9f8ec9182340e9af21f7a247d2fd616f5d021f5e73f1b60ed",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "first-launch",
@@ -40,7 +40,7 @@
         "file": "first-launch--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "0ab857e56aa66b51777d686fcc0bf1746992163dc6bf7c40e4ffa3ca7948d062",
+        "sha256": "037e03fcdc4b2fae9acfadcdeee6804ced3661fd694073b40549238db506c97e",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Main layout, first-launch status, or lifecycle controls change"
@@ -55,8 +55,8 @@
       "caption": "Deterministic healthy baseline: the game and world are active, both managed addons are current, and PixelBeacon Signal is detected while data-addon session facts remain separate.",
       "width": 1280,
       "height": 640,
-      "bytes": 101350,
-      "sha256": "69c5c7bbe6c0f4c03486487d48715eda57c895982697a74c22e0d54d0382347b",
+      "bytes": 100820,
+      "sha256": "df261eaa159eb8bcc74d9b9a54306333c705a4ebc2a906844108e6c747046664",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "healthy-system-state",
@@ -65,7 +65,7 @@
         "file": "healthy-system-state--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "f63747cadc135e6a085e432ea19568f3ef4356e556b2553c24a8fed23e2535a7",
+        "sha256": "453a129963b2108f8fe2a7fd96d6f010895cbf546b09b934eaf3d5fa538945b3",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "System and State labels or healthy signal contract changes"
@@ -80,8 +80,8 @@
       "caption": "Deterministic lost-signal state: the addon remains installed, but current telemetry is unavailable until visibility returns.",
       "width": 1280,
       "height": 640,
-      "bytes": 102148,
-      "sha256": "7a3d310890dc51d59d8c311d684ec4c05413a4f6be6bcaf460baf79af311d521",
+      "bytes": 101633,
+      "sha256": "9105b0db37e5d74c82893291946b90efc7fad01d3996715262bb73fe8440d121",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "pixelbeacon-lost",
@@ -90,7 +90,7 @@
         "file": "pixelbeacon-lost--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "f8b24ffad03e6930fc98599677522d5b255e8db2f940d4b386ba418c51904f73",
+        "sha256": "ae1e901a991bd160ae8a8802506b40ebccbf8e67ac96e7087fd9a1f2b279aeda",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Signal-loss label or recovery guidance changes"
@@ -105,8 +105,8 @@
       "caption": "Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.",
       "width": 1280,
       "height": 640,
-      "bytes": 106556,
-      "sha256": "9dcf51205173598dd415f5a492f5cca628d76206d95df9cd43f832becbdbdd3e",
+      "bytes": 106056,
+      "sha256": "0325d830d564c414d1f8e54f42f9c1b1dd48f8be5cecdacba6e902538bfae5a9",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "pixelbeacon-unmanaged",
@@ -115,7 +115,7 @@
         "file": "pixelbeacon-unmanaged--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "2aa724a1d75b11552763beabece7199d22ed089e1fd5e0f685acf385a2c4436d",
+        "sha256": "7d26ea31ab71d3dd264af2bb0f435a5236382c51da2c8eb209df9fc4829358a5",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Ownership classification or available actions change"
@@ -130,8 +130,8 @@
       "caption": "Deterministic configuration example: each Skills row shows whether it is enabled, its weave type, override state, effective delay, and observed cooldown.",
       "width": 1280,
       "height": 640,
-      "bytes": 100984,
-      "sha256": "c3361ac92f9049ee7a4b89a1903d81d9f0bcd63b5f6c3023f1fc4fb565175b16",
+      "bytes": 100454,
+      "sha256": "1e1782c08ea2bcf516922fc3a746497b0c21a53c6144ba5d5dbd3addeb9a7e55",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "weaving-configuration",
@@ -140,7 +140,7 @@
         "file": "weaving-configuration--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "7530a6692e3876944ce53a867c2af54e83727445c19d0c1283f6d8dfe116496d",
+        "sha256": "e45967b0273a05202f95b8e624ae9712f94433ce89a677406e4a5b0758a4a584",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Weaving settings layout or delay presentation changes"
@@ -155,8 +155,8 @@
       "caption": "Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the Quickslot key is Q.",
       "width": 1280,
       "height": 820,
-      "bytes": 120202,
-      "sha256": "641497b6b40ce8f14b38bd1e1efeb8d426570f2887339928797a5285e03bdd41",
+      "bytes": 119687,
+      "sha256": "1887295b5ad383d9cdd74d2057a075a262b4633b245b37a7430e0a8a6af7a6de",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-ready",
@@ -165,7 +165,7 @@
         "file": "auto-potion-ready--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "c5518ef7408624946bb05d98d3d3902fc1558c327ce823abf39e1f98038bf002",
+        "sha256": "c7d76f175bf164f6436fcba20814c52051e2029633edcb95e7a4d63986c2384b",
         "crop": [0, 0, 1280, 820]
       },
       "update_trigger": "Resource-watch, threshold, or ready-state UI changes"
@@ -180,8 +180,8 @@
       "caption": "Deterministic recovery example: the request is retained, but Auto Potion is blocked and sends no input while PixelBeacon Signal is lost.",
       "width": 1280,
       "height": 640,
-      "bytes": 103573,
-      "sha256": "370c31a0f5123ad431dfc0749ab926ea0459fe0dca0078e2d1e0cbf9b18ae289",
+      "bytes": 103053,
+      "sha256": "6da5d962553666047ea87ca4ab05f8b7b5e91ee3814dc7bad4af6e3d9bb22080",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-blocked",
@@ -190,7 +190,7 @@
         "file": "auto-potion-blocked--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "b36af380411f301bd434537741500c121396a64cf4ef329e441c0a02bb684037",
+        "sha256": "c95b9cecb44ac7f4682d65517a3f0ad1af63bd7407d44054ab926d569b4b4a45",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Block-reason vocabulary or recovery UI changes"

@@ -296,6 +296,16 @@ fn lifecycle_status_bounds_hostile_managed_file_reads() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn fallible_inspection_distinguishes_io_failure_from_unmanaged_state() {
+    let sandbox = Sandbox::new();
+    let blocking_file = sandbox.addons().join("not-a-directory");
+    fs::write(&blocking_file, b"block child lookup").unwrap();
+    let error = eso_weave::data_addon::inspect(&blocking_file.join("child")).unwrap_err();
+    assert_ne!(error.kind(), std::io::ErrorKind::NotFound);
+}
+
 #[test]
 fn non_directory_roots_and_non_directory_targets_are_refused() {
     let sandbox = Sandbox::new();

@@ -293,6 +293,7 @@ pub struct EsoWeaveApp {
     documentation: DocumentationService,
     documentation_opener: Box<dyn BrowserOpener>,
     documentation_error: Option<String>,
+    data_addon_details_open: bool,
     catalog_worker: Option<CatalogUpdateWorker>,
     catalog_update_open: bool,
     catalog_candidates: Vec<CandidateSummary>,
@@ -374,6 +375,7 @@ impl EsoWeaveApp {
             documentation: DocumentationService::new(),
             documentation_opener: Box::new(NativeBrowser),
             documentation_error: None,
+            data_addon_details_open: false,
             catalog_worker: None,
             catalog_update_open: false,
             catalog_candidates: Vec::new(),
@@ -663,6 +665,11 @@ impl EsoWeaveApp {
     /// Shows or hides the data-addon-specific uninstall confirmation row.
     pub fn set_confirm_data_uninstall(&mut self, confirm: bool) {
         self.confirm_data_uninstall = confirm;
+    }
+
+    /// Opens or closes the dedicated data-addon evidence modal.
+    pub fn set_data_addon_details_open(&mut self, open: bool) {
+        self.data_addon_details_open = open;
     }
 
     /// Opens or closes the settings modal directly, bypassing the menu. Exposed so
@@ -1448,6 +1455,10 @@ impl EsoWeaveApp {
             self.catalog_update_modal(&ctx);
         }
 
+        if self.data_addon_details_open {
+            self.data_addon_details_modal(&ctx);
+        }
+
         if self.encounter_history_open {
             self.encounter_history_window(&ctx);
         }
@@ -2051,14 +2062,8 @@ impl EsoWeaveApp {
                             dashboard_status_row(
                                 ui,
                                 palette,
-                                &view.data_addon.evidence_line,
-                                if view.data_addon.primary_action
-                                    == Some(DataAddonPrimaryAction::Update)
-                                {
-                                    DATA_LIFECYCLE_BUTTON_WIDTH
-                                } else {
-                                    0.0
-                                },
+                                &view.data_addon.remediation_line,
+                                DATA_DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     if view.data_addon.primary_action
                                         == Some(DataAddonPrimaryAction::Update)
@@ -2067,6 +2072,12 @@ impl EsoWeaveApp {
                                             .clicked()
                                     {
                                         intents.push(UiIntent::RepairDataAddon);
+                                    }
+                                    if data_lifecycle_button(ui, palette, "Data Details", false)
+                                        .on_hover_text(strings::DATA_ADDON_DETAILS_TOOLTIP)
+                                        .clicked()
+                                    {
+                                        self.data_addon_details_open = true;
                                     }
                                 },
                             );
@@ -2183,6 +2194,47 @@ impl EsoWeaveApp {
                     ui.label(egui::RichText::new(row.text).monospace().color(color));
                 }
             });
+    }
+
+    fn data_addon_details_modal(&mut self, ctx: &egui::Context) {
+        let view = self.model.view().data_addon;
+        let palette = crate::app::theme::palette(self.ui_prefs.theme);
+        let modal = egui::Modal::new(egui::Id::new("eso_weave_data_addon_details")).show(
+            ctx,
+            |ui| {
+                let width = 680.0_f32
+                    .min(ctx.content_rect().width() * 0.92)
+                    .max(300.0);
+                ui.set_min_width(width);
+                ui.set_max_width(width);
+                ui.heading("ESO Weave Data Details");
+                ui.label(
+                    "Each line has its own evidence boundary. Installation and ESO process state never prove enablement, loading, or collection.",
+                );
+                ui.separator();
+                for line in [
+                    &view.lifecycle_line,
+                    &view.ownership_line,
+                    &view.compatibility_line,
+                    &view.enabled_line,
+                    &view.loaded_line,
+                    &view.reload_line,
+                    &view.runtime_line,
+                    &view.catalog_line,
+                    &view.encounter_line,
+                    &view.remediation_line,
+                ] {
+                    dashboard_status_row(ui, &palette, line, 0.0, |_| {});
+                }
+                ui.separator();
+                if ui.button("Close Data Details").clickable().clicked() {
+                    self.data_addon_details_open = false;
+                }
+            },
+        );
+        if modal.should_close() {
+            self.data_addon_details_open = false;
+        }
     }
 
     fn catalog_update_modal(&mut self, ctx: &egui::Context) {

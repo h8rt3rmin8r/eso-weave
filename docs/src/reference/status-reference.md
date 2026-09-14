@@ -41,10 +41,11 @@ Observed numeric zero is different from all four states.
 | ESO Weave Data: **Installed** with Compatibility **Update available** | Ownership is proven but package content differs | Choose **Update Data** or **Repair Data**, then follow reload guidance |
 | ESO Weave Data: Ownership **Unmanaged** | A target exists but ownership or safe shape cannot be proven | No mutation is offered; move or remove only `EsoWeaveData` manually |
 | ESO Weave Data: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
-| Data Addon Evidence: Enabled or Loaded **Unconfirmed** | No supported current-session account or addon-load source exists | Verify enablement in ESO; reload after lifecycle changes; do not infer from process state |
-| Data Addon Evidence: Reload **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
-| Data Addon Evidence: Runtime **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
-| Data Addon Evidence: Catalog or Encounter **Unconfirmed (no live channel)** | Desktop has no current-session module channel | Use the matching in-game status command; disk SavedVariables remains flush-bound historical evidence |
+| Data Addon Enabled or Data Addon Loaded: **Unconfirmed** | No supported current-session account or addon-load source exists | Verify enablement in ESO; reload after lifecycle changes; do not infer from process state |
+| Data Addon Reload: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
+| Data Runtime: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
+| Catalog Collection or Encounter Collection: **Unconfirmed (no live channel)** | Desktop has no current-session module channel | Use the matching in-game status command; disk SavedVariables remains flush-bound historical evidence |
+| Data Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
 | PixelBeacon Signal: **Not detected** | Active game, no heartbeat seen | Enable/reload addon and expose overlay |
