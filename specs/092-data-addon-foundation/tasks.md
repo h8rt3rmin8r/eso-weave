@@ -123,7 +123,7 @@ user-driven addon controls remain the selected operational path.
 - [x] T044 Run `cargo test --all --locked` in the foreground
 - [x] T045 Complete a local code, security, and domain review and record corrected high-confidence findings in `specs/092-data-addon-foundation/analysis.md`
 - [x] T046 Mark every completed task and set `spec.md` status to implemented in `specs/092-data-addon-foundation/`
-- [ ] T047 Commit S092 with changelog evidence, push `codex/s092-data-addon-foundation`, and open the official pull request
+- [x] T047 Commit S092 with changelog evidence, push `codex/s092-data-addon-foundation`, and open the official pull request ([#191](https://github.com/h8rt3rmin8r/eso-weave/pull/191))
 - [ ] T048 Wait for CI and external reviews, address every finding, resolve every thread, and run at most the authorized second `@Codex` review round
 - [ ] T049 When CI and reviews are satisfied, record completion in `specs/092-data-addon-foundation/tasks.md` and request the operator's final review and merge ritual
 
