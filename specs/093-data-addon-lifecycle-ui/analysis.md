@@ -62,6 +62,24 @@ security, and UI-domain documentation. Their actionable findings are resolved:
 
 All three reviewers reported no remaining findings after the fixes.
 
+## First External Review Resolution
+
+The first external Codex review raised two P2 findings. Commit `5de6587`
+resolved both findings, each thread received a specific evidence reply, and
+both threads are resolved:
+
+- Every data-addon fact now has a dedicated status row in the accessible Data
+  Details modal. Narrow and wide rendered UI tests open the modal and assert
+  each fact label.
+- Lifecycle inspection now distinguishes genuine filesystem failures from
+  unmanaged package shapes. Refresh and post-mutation inspection preserve the
+  last known observation, disable unsafe actions, and present an unavailable
+  state when inspection fails.
+
+The complete Rust, Clippy, release, documentation, link, spelling, and text
+hygiene gates passed after these corrections. No first-round CI finding
+required another change.
+
 ## Local Validation
 
 - `cargo fmt --all -- --check`: PASS
