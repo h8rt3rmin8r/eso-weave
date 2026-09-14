@@ -150,6 +150,12 @@ fn file_menu_opens_the_accessible_catalog_update_modal() {
         egui::accesskit::Role::CheckBox,
         "I obtained this candidate from a review or release source I trust.",
     );
+    assert!(harness
+        .query_by_role_and_label(egui::accesskit::Role::Button, "Install/update data addon",)
+        .is_none());
+    assert!(harness
+        .query_by_role_and_label(egui::accesskit::Role::Button, "Uninstall data addon")
+        .is_none());
     harness.key_press(egui::Key::Escape);
     harness.step();
     assert!(!harness.state().catalog_update_open());
@@ -515,6 +521,84 @@ fn lifecycle_action_matrix_keeps_one_column_and_dispatches_install() {
     assert!(current
         .query_by_role_and_label(egui::accesskit::Role::Button, "Update")
         .is_none());
+}
+
+#[test]
+fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
+    for width in [760.0, 1200.0] {
+        let root = tempfile::tempdir().unwrap();
+        let settings = Settings {
+            beacon: beacon::prefs_to_value(&BeaconPrefs {
+                path_override: Some(root.path().to_path_buf()),
+                environment: Environment::Live,
+            }),
+            ..Settings::default()
+        };
+        let mut harness =
+            harness_for_app(test_app_with_settings(settings), egui::vec2(width, 1200.0));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+
+        let beacon = harness.get_by_label("PixelBeacon Status").rect();
+        let data = harness.get_by_label("ESO Weave Data").rect();
+        let signal = harness.get_by_label("PixelBeacon Signal").rect();
+        assert!(beacon.top() < data.top());
+        assert!(data.top() < signal.top());
+
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Install Data")
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert!(root
+            .path()
+            .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
+            .join(eso_weave::data_addon::MANIFEST_FILE)
+            .is_file());
+        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Repair Data");
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall Data")
+            .click_accesskit();
+        for _ in 0..2 {
+            harness.step();
+        }
+        harness.get_by_label("Remove the ESO Weave Data addon?");
+        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Data Uninstall");
+    }
+}
+
+#[test]
+fn s093_outdated_data_addon_offers_update_repair_and_uninstall() {
+    let root = tempfile::tempdir().unwrap();
+    eso_weave::data_addon::install(
+        root.path(),
+        eso_weave::data_addon::RunningState::NotRunning,
+        beacon::DEFAULT_API_VERSION,
+    )
+    .unwrap();
+    std::fs::write(
+        root.path()
+            .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
+            .join(eso_weave::data_addon::CATALOG_FILE),
+        "-- managed drift\n",
+    )
+    .unwrap();
+    let settings = Settings {
+        beacon: beacon::prefs_to_value(&BeaconPrefs {
+            path_override: Some(root.path().to_path_buf()),
+            environment: Environment::Live,
+        }),
+        ..Settings::default()
+    };
+    let mut harness = harness_for_app(test_app_with_settings(settings), egui::vec2(1200.0, 1200.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    for label in ["Update Data", "Repair Data", "Uninstall Data"] {
+        harness.get_by_role_and_label(egui::accesskit::Role::Button, label);
+    }
 }
 
 #[test]

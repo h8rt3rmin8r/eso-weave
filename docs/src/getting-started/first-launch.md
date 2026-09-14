@@ -10,8 +10,8 @@ Live HUD, System and State, Skills, and an optional Live Log. **ESO Weave** shou
 show **Active** unless you intentionally suspended it.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/first-launch.png" alt="ESO Weave at first launch with ESO inactive and initial System and State information" width="1280" height="640">
-<figcaption>Deterministic first-launch state: ESO is inactive, ESO Weave is active, and Install is the available PixelBeacon action.</figcaption>
+<img src="../assets/screenshots/first-launch.png" alt="ESO Weave at first launch with ESO inactive and separate Install actions for both managed addons" width="1280" height="640">
+<figcaption>Deterministic first-launch state: ESO is inactive, ESO Weave is active, and each absent managed addon has its own Install action.</figcaption>
 </figure>
 
 Open **Settings** from the File menu and confirm the theme and platform-specific
@@ -52,7 +52,21 @@ ESO Weave does not overwrite an unproven target.
 <figcaption>Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.</figcaption>
 </figure>
 
-## 4. Verify fresh telemetry
+## 4. Install ESO Weave Data when needed
+
+**ESO Weave Data** is the separate managed package for catalog and encounter
+data. Choose **Install Data** beside **ESO Weave Data**. Use **Update Data** for
+managed drift, **Repair Data** for an atomic reinstall, or **Uninstall Data**
+only after its data-specific confirmation. An unmanaged `EsoWeaveData` target
+offers no mutation.
+
+After a lifecycle change, obey **Data Addon Reload: Required** by running
+`/reloadui` or relogging. **Data Addon Evidence** keeps enabled, loaded, runtime,
+catalog, and encounter facts separate. **Unconfirmed** is expected when no
+supported current-session source exists. Verify enablement in ESO's Add-Ons
+menu; do not treat installed files or a running ESO process as load proof.
+
+## 5. Verify fresh telemetry
 
 Focus the ESO game window and enter the world. Wait for loading to finish. A
 healthy baseline has:
@@ -62,6 +76,8 @@ healthy baseline has:
 | Game | **Active** with the detected provider |
 | World State | **Active** |
 | PixelBeacon Status | **Installed (current)** |
+| ESO Weave Data | **Installed** when its data workflows are needed |
+| Data Addon Evidence | **Ownership: Managed** and **Compatible: Current**; current-session facts may remain **Unconfirmed** |
 | PixelBeacon Signal | **Signal detected** |
 | Game Context | **Gameplay** when no native menu or chat field is open |
 | Life State | **Alive** |
@@ -73,8 +89,8 @@ protocol fields are available. A zero resource is a valid numeric reading;
 
 <div class="docs-screenshot-grid">
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing a healthy running game and detected PixelBeacon signal" width="1280" height="640">
-<figcaption>Deterministic healthy baseline: the game and world are active, the managed addon is current, and PixelBeacon Signal is detected.</figcaption>
+<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing a healthy running game, managed data addon, and detected PixelBeacon signal" width="1280" height="640">
+<figcaption>Deterministic healthy baseline: the game and world are active, both managed addons are current, and PixelBeacon Signal is detected while data-addon session facts remain separate.</figcaption>
 </figure>
 <figure class="docs-screenshot">
 <img src="../assets/screenshots/pixelbeacon-signal-lost.png" alt="ESO Weave showing PixelBeacon installed but its signal lost" width="1280" height="640">
@@ -90,7 +106,7 @@ the text even when the images are unavailable.
 Open and close an ESO menu to confirm **Game Context** changes away from and back
 to **Gameplay**. This is an observation test, not an invitation to automate.
 
-## 5. Configure one feature
+## 6. Configure one feature
 
 Start with only one feature:
 

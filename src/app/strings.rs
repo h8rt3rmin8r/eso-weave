@@ -15,6 +15,16 @@ pub const STATUS_TITLE: &str = "ESO Weave";
 pub const FISHING_TITLE: &str = "Fishing";
 pub const BEACON_TITLE: &str = "PixelBeacon Status";
 pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon Signal";
+pub const DATA_ADDON_TITLE: &str = "ESO Weave Data";
+pub const DATA_ADDON_OWNERSHIP_TITLE: &str = "Data Addon Ownership";
+pub const DATA_ADDON_COMPATIBILITY_TITLE: &str = "Data Addon Compatibility";
+pub const DATA_ADDON_ENABLED_TITLE: &str = "Data Addon Enabled";
+pub const DATA_ADDON_LOADED_TITLE: &str = "Data Addon Loaded";
+pub const DATA_ADDON_RELOAD_TITLE: &str = "Data Addon Reload";
+pub const DATA_ADDON_RUNTIME_TITLE: &str = "Data Runtime";
+pub const DATA_ADDON_CATALOG_TITLE: &str = "Catalog Collection";
+pub const DATA_ADDON_ENCOUNTER_TITLE: &str = "Encounter Collection";
+pub const DATA_ADDON_EVIDENCE_TITLE: &str = "Data Addon Evidence";
 pub const CATALOG_TITLE: &str = "Catalog";
 pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game Installation";
@@ -33,6 +43,26 @@ pub const BEACON_TOOLTIP: &str =
     "Install state of the bundled PixelBeacon companion addon that renders the pixel signal.";
 pub const BEACON_UNMANAGED_TOOLTIP: &str =
     "ESO Weave did not modify this unmanaged PixelBeacon target. Move or remove it manually before using Install.";
+pub const DATA_ADDON_TOOLTIP: &str =
+    "Filesystem installation of the managed ESO Weave Data package. This does not prove that ESO enabled or loaded it.";
+pub const DATA_ADDON_OWNERSHIP_TOOLTIP: &str =
+    "Managed means the exact package inventory and ESO Weave ownership marker were verified. Unmanaged targets are never modified.";
+pub const DATA_ADDON_COMPATIBILITY_TOOLTIP: &str =
+    "Whether the installed data-addon package matches this ESO Weave build.";
+pub const DATA_ADDON_ENABLED_TOOLTIP: &str =
+    "ESO Weave has no supported current-account source for this fact. Verify ESO Weave Data in ESO's Add-Ons menu.";
+pub const DATA_ADDON_LOADED_TOOLTIP: &str =
+    "A running ESO process does not prove the addon loaded. Reload ESO after lifecycle changes.";
+pub const DATA_ADDON_RELOAD_TOOLTIP: &str =
+    "Required means run /reloadui or relog before expecting ESO to use the lifecycle change.";
+pub const DATA_ADDON_RUNTIME_TOOLTIP: &str =
+    "ESO process availability only. It does not prove the data addon is enabled, loaded, or collecting.";
+pub const DATA_ADDON_CATALOG_TOOLTIP: &str =
+    "Catalog activity has no live desktop channel. SavedVariables evidence is flush-bound and must be treated as historical.";
+pub const DATA_ADDON_ENCOUNTER_TOOLTIP: &str =
+    "Encounter activity has no live desktop channel. SavedVariables evidence is flush-bound and must be treated as historical.";
+pub const DATA_ADDON_EVIDENCE_TOOLTIP: &str =
+    "Independent enabled, loaded, reload, runtime, catalog, and encounter facts. Unconfirmed facts are never inferred from installation or process state.";
 pub const BEACON_SIGNAL_TOOLTIP: &str =
     "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
 pub const CATALOG_TOOLTIP: &str =
@@ -76,6 +106,14 @@ pub const BEACON_UPDATE_TOOLTIP: &str =
     "Reinstall the PixelBeacon addon: remove the managed copy and install the current one. Enabled only when the addon is installed.";
 pub const BEACON_UNINSTALL_TOOLTIP: &str =
     "Remove the PixelBeacon addon. Only a folder marked as managed by ESO Weave is deleted.";
+pub const DATA_ADDON_INSTALL_TOOLTIP: &str =
+    "Install the managed ESO Weave Data package in the configured AddOns folder.";
+pub const DATA_ADDON_UPDATE_TOOLTIP: &str =
+    "Atomically replace an outdated managed data addon with the current package.";
+pub const DATA_ADDON_REPAIR_TOOLTIP: &str =
+    "Atomically reinstall the managed data addon without deleting the working copy first.";
+pub const DATA_ADDON_UNINSTALL_TOOLTIP: &str =
+    "Remove only an ESO Weave-managed data addon after confirmation.";
 
 // Weapon-bar section.
 pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
@@ -377,6 +415,16 @@ pub fn field_labels() -> Vec<&'static str> {
         FISHING_TITLE,
         BEACON_TITLE,
         BEACON_SIGNAL_TITLE,
+        DATA_ADDON_TITLE,
+        DATA_ADDON_OWNERSHIP_TITLE,
+        DATA_ADDON_COMPATIBILITY_TITLE,
+        DATA_ADDON_ENABLED_TITLE,
+        DATA_ADDON_LOADED_TITLE,
+        DATA_ADDON_RELOAD_TITLE,
+        DATA_ADDON_RUNTIME_TITLE,
+        DATA_ADDON_CATALOG_TITLE,
+        DATA_ADDON_ENCOUNTER_TITLE,
+        DATA_ADDON_EVIDENCE_TITLE,
         GAME_TITLE,
         GAME_INSTALLATION_TITLE,
         GAME_RUNTIME_TITLE,
@@ -425,6 +473,16 @@ pub fn all_labels() -> Vec<&'static str> {
         STATUS_TITLE,
         FISHING_TITLE,
         BEACON_TITLE,
+        DATA_ADDON_TITLE,
+        DATA_ADDON_OWNERSHIP_TITLE,
+        DATA_ADDON_COMPATIBILITY_TITLE,
+        DATA_ADDON_ENABLED_TITLE,
+        DATA_ADDON_LOADED_TITLE,
+        DATA_ADDON_RELOAD_TITLE,
+        DATA_ADDON_RUNTIME_TITLE,
+        DATA_ADDON_CATALOG_TITLE,
+        DATA_ADDON_ENCOUNTER_TITLE,
+        DATA_ADDON_EVIDENCE_TITLE,
         GAME_INSTALLATION_TITLE,
         GAME_RUNTIME_TITLE,
         FISHING_CASTING,
@@ -500,6 +558,16 @@ pub fn all_tooltips() -> Vec<&'static str> {
         FISHING_TOOLTIP,
         BEACON_TOOLTIP,
         BEACON_UNMANAGED_TOOLTIP,
+        DATA_ADDON_TOOLTIP,
+        DATA_ADDON_OWNERSHIP_TOOLTIP,
+        DATA_ADDON_COMPATIBILITY_TOOLTIP,
+        DATA_ADDON_ENABLED_TOOLTIP,
+        DATA_ADDON_LOADED_TOOLTIP,
+        DATA_ADDON_RELOAD_TOOLTIP,
+        DATA_ADDON_RUNTIME_TOOLTIP,
+        DATA_ADDON_CATALOG_TOOLTIP,
+        DATA_ADDON_ENCOUNTER_TOOLTIP,
+        DATA_ADDON_EVIDENCE_TOOLTIP,
         GAME_INSTALLATION_TOOLTIP,
         GAME_RUNTIME_TOOLTIP,
         SUSPEND_TOOLTIP,
@@ -507,6 +575,10 @@ pub fn all_tooltips() -> Vec<&'static str> {
         BEACON_INSTALL_TOOLTIP,
         BEACON_UPDATE_TOOLTIP,
         BEACON_UNINSTALL_TOOLTIP,
+        DATA_ADDON_INSTALL_TOOLTIP,
+        DATA_ADDON_UPDATE_TOOLTIP,
+        DATA_ADDON_REPAIR_TOOLTIP,
+        DATA_ADDON_UNINSTALL_TOOLTIP,
         WEAPON_BAR_TOOLTIP,
         COMBAT_TOOLTIP,
         MOVEMENT_TOOLTIP,

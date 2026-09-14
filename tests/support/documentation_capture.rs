@@ -822,6 +822,7 @@ fn build_scene(
     fixture_root: &Path,
 ) -> Result<SceneFixture, String> {
     prepare_beacon_fixture(scene, fixture_root)?;
+    prepare_data_addon_fixture(scene, fixture_root)?;
     let mut settings = Settings {
         beacon: beacon::prefs_to_value(&BeaconPrefs {
             path_override: Some(fixture_root.to_path_buf()),
@@ -929,6 +930,38 @@ fn prepare_beacon_fixture(scene: Scene, root: &Path) -> Result<(), String> {
             b"## Title: Community PixelBeacon\n## Version: 1\n",
         )
         .map_err(|error| format!("could not write unmanaged status fixture: {error}"))?;
+    }
+    Ok(())
+}
+
+fn prepare_data_addon_fixture(scene: Scene, root: &Path) -> Result<(), String> {
+    if scene == Scene::FirstLaunch {
+        return Ok(());
+    }
+    let addon = root.join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER);
+    fs::create_dir_all(&addon)
+        .map_err(|error| format!("could not create managed data-addon fixture: {error}"))?;
+    let manifest = eso_weave::data_addon::MANIFEST.replace(
+        "## APIVersion: 101051 101050",
+        "## APIVersion: 101050 101051",
+    );
+    for (name, bytes) in [
+        (eso_weave::data_addon::MANIFEST_FILE, manifest.as_bytes()),
+        (
+            eso_weave::data_addon::BOOTSTRAP_FILE,
+            eso_weave::data_addon::BOOTSTRAP.as_bytes(),
+        ),
+        (
+            eso_weave::data_addon::CATALOG_FILE,
+            eso_weave::data_addon::CATALOG.as_bytes(),
+        ),
+        (
+            eso_weave::data_addon::ENCOUNTER_FILE,
+            eso_weave::data_addon::ENCOUNTER.as_bytes(),
+        ),
+    ] {
+        fs::write(addon.join(name), bytes)
+            .map_err(|error| format!("could not write managed data-addon fixture: {error}"))?;
     }
     Ok(())
 }
@@ -1050,6 +1083,10 @@ fn validate_scene_view(scene: Scene, view: &AppView) -> Result<(), String> {
                 view.beacon_condition == BeaconCondition::NotInstalled,
                 "first-launch beacon condition",
             )?;
+            ensure(
+                view.data_addon.lifecycle_line.state_text == "Not installed",
+                "first-launch data-addon condition",
+            )?;
         }
         Scene::HealthySystemState => {
             validate_healthy_view(view)?;
@@ -1133,6 +1170,10 @@ fn validate_healthy_view(view: &AppView) -> Result<(), String> {
     ensure(
         view.beacon_condition == BeaconCondition::InstalledCurrent,
         "healthy addon status",
+    )?;
+    ensure(
+        view.data_addon.compatibility_line.state_text == "Current",
+        "healthy data-addon compatibility",
     )?;
     ensure(
         view.beacon_signal_line.state_text == "Signal detected",

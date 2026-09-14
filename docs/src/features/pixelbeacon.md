@@ -67,8 +67,8 @@ The on-disk manifest is classified as:
 | Installed (outdated) | The marker exists but versions differ |
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing a healthy running game and detected PixelBeacon signal" width="1280" height="640">
-<figcaption>Deterministic healthy baseline: the game and world are active, the managed addon is current, and PixelBeacon Signal is detected.</figcaption>
+<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing a healthy running game, managed data addon, and detected PixelBeacon signal" width="1280" height="640">
+<figcaption>Deterministic healthy baseline: the game and world are active, both managed addons are current, and PixelBeacon Signal is detected while data-addon session facts remain separate.</figcaption>
 </figure>
 
 The interface shows **Unmanaged (not modified)** when the target exists but

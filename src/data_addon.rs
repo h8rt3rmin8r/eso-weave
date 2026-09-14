@@ -1,7 +1,7 @@
 //! Managed lifecycle for the shared ESO Weave Data addon.
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -22,6 +22,7 @@ pub const SAVED_VARIABLES_SCHEMA_VERSION: u64 = 1;
 pub const DATA_ADDON_VERSION: u64 = 1;
 pub const DATA_ADDON_PACKAGE_VERSION: u32 = 1;
 pub const MANAGED_MARKER: &str = "## X-ESO-Weave-Data-Managed: true";
+const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const CHECKSUM_PREFIX: &str = "local COLLECTOR_CHECKSUM = \"";
 
 pub const MANIFEST: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.txt");
@@ -120,7 +121,7 @@ fn status_directory(directory: &Path) -> DataAddonStatus {
         }
         found.push(name);
     }
-    let Ok(manifest) = fs::read_to_string(manifest_path) else {
+    let Some(manifest) = read_utf8_bounded(&manifest_path, MAX_MANIFEST_BYTES) else {
         return DataAddonStatus::Unmanaged;
     };
     if !manifest.lines().any(|line| line.trim() == MANAGED_MARKER) {
@@ -140,7 +141,10 @@ fn status_directory(directory: &Path) -> DataAddonStatus {
             Ok(metadata) if metadata_is_link(&metadata) || !metadata.is_file() => {
                 return DataAddonStatus::Unmanaged;
             }
-            Ok(_) => files_match &= fs::read(path).ok().as_deref() == Some(expected),
+            Ok(metadata) => {
+                files_match &= metadata.len() == expected.len() as u64
+                    && read_bounded(&path, expected.len() as u64).as_deref() == Some(expected);
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => files_match = false,
             Err(_) => return DataAddonStatus::Unmanaged,
         }
@@ -153,6 +157,20 @@ fn status_directory(directory: &Path) -> DataAddonStatus {
     } else {
         DataAddonStatus::ManagedVersionMismatch
     }
+}
+
+fn read_bounded(path: &Path, max_bytes: u64) -> Option<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024) as usize);
+    fs::File::open(path)
+        .ok()?
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .ok()?;
+    (bytes.len() as u64 <= max_bytes).then_some(bytes)
+}
+
+fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Option<String> {
+    String::from_utf8(read_bounded(path, max_bytes)?).ok()
 }
 
 pub fn install(
@@ -451,9 +469,28 @@ fn snapshot_managed_package(directory: &Path) -> Result<ManagedPackageSnapshot, 
         return rejected("data addon package is not safely managed");
     }
     let mut files = Vec::new();
-    for name in [MANIFEST_FILE, BOOTSTRAP_FILE, CATALOG_FILE, ENCOUNTER_FILE] {
-        let bytes = match fs::read(directory.join(name)) {
-            Ok(bytes) => Some(bytes),
+    for (name, max_bytes) in [
+        (MANIFEST_FILE, MAX_MANIFEST_BYTES),
+        (BOOTSTRAP_FILE, BOOTSTRAP.len() as u64),
+        (CATALOG_FILE, CATALOG.len() as u64),
+        (ENCOUNTER_FILE, ENCOUNTER.len() as u64),
+    ] {
+        let path = directory.join(name);
+        let bytes = match fs::symlink_metadata(&path) {
+            Ok(metadata)
+                if metadata_is_link(&metadata)
+                    || !metadata.is_file()
+                    || metadata.len() > max_bytes =>
+            {
+                return rejected(format!(
+                    "managed data addon file {name} exceeds its safe snapshot shape"
+                ));
+            }
+            Ok(_) => Some(read_bounded(&path, max_bytes).ok_or_else(|| {
+                CollectorError::Validation(format!(
+                    "managed data addon file {name} changed during bounded inspection"
+                ))
+            })?),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(error.into()),
         };

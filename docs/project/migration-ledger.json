@@ -1586,13 +1586,24 @@
     },
     {
       "id": "041",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-041.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-041.md",
       "specs": [
         "specs/091-v016-release-prep"
       ],
-      "evidence": "Issue #163 tracks S091 v0.16.0 release preparation and publication; issues #110, #129, and #131 remain independent non-blocking verification."
+      "evidence": "The v0.16.0 release published with the Windows MSI, Linux tarball, Debian package, AppImage, and combined checksums; independent verification does not reactivate the plan."
+    },
+    {
+      "id": "042",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-042.md",
+      "specs": [
+        "specs/092-data-addon-foundation",
+        "specs/093-data-addon-lifecycle-ui"
+      ],
+      "evidence": "Issue #182 coordinates the persistent data-addon subsystem and issue #185 tracks active S093 lifecycle interface delivery."
     }
   ],
   "safetyCrosswalk": [

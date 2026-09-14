@@ -52,6 +52,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [038](plan-038.md) | Complete, Archived | [S068](../../../specs/068-eso-catalog-contract/spec.md) through [S078](../../../specs/078-encounter-history-ui/spec.md), completed when [PR #146](https://github.com/h8rt3rmin8r/eso-weave/pull/146) merged and closed issue #135; verification remains separate in issues #129 and #131 |
 | [039](plan-039.md) | Complete, Archived | [S079](../../../specs/079-formal-glossary/spec.md) through [S089](../../../specs/089-responsive-doc-tables/spec.md), completed when [PR #161](https://github.com/h8rt3rmin8r/eso-weave/pull/161) merged, closed issue #127, and enabled epic #119 and its milestone to close |
 | [040](plan-040.md) | Complete, Archived | [S090 evidence-scoped recommendations](../../../specs/090-evidence-scoped-recommendations/spec.md), completed when [PR #162](https://github.com/h8rt3rmin8r/eso-weave/pull/162) merged and closed issue #136 |
+| [041](plan-041.md) | Complete, Archived | [S091 v0.16.0 release preparation](../../../specs/091-v016-release-prep/spec.md), completed when [v0.16.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.16.0) published with all five required assets |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

@@ -18,6 +18,7 @@ pub mod theme;
 pub mod ui;
 pub mod widgets;
 
+use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -280,6 +281,240 @@ pub enum BeaconPrimaryAction {
     Install,
     /// Replace an outdated managed addon.
     Update,
+}
+
+/// The safe primary lifecycle action for ESO Weave Data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataAddonPrimaryAction {
+    /// Install an absent managed package.
+    Install,
+    /// Replace a managed package that differs from this build.
+    Update,
+    /// Atomically reinstall a managed package.
+    Repair,
+}
+
+/// Evidence-scoped lifecycle and runtime presentation for ESO Weave Data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataAddonView {
+    pub lifecycle_line: StatusLine,
+    pub ownership_line: StatusLine,
+    pub compatibility_line: StatusLine,
+    pub enabled_line: StatusLine,
+    pub loaded_line: StatusLine,
+    pub reload_line: StatusLine,
+    pub runtime_line: StatusLine,
+    pub catalog_line: StatusLine,
+    pub encounter_line: StatusLine,
+    pub evidence_line: StatusLine,
+    pub primary_action: Option<DataAddonPrimaryAction>,
+    pub uninstall_enabled: bool,
+    pub remediation: String,
+    pub operation_error: Option<String>,
+}
+
+fn data_status_line(
+    title: &'static str,
+    state_text: impl Into<String>,
+    role: StatusRole,
+    tooltip: &'static str,
+) -> StatusLine {
+    StatusLine {
+        title,
+        state_text: state_text.into(),
+        role,
+        tooltip,
+    }
+}
+
+/// Projects a cached data-addon inspection without performing I/O in paint.
+pub fn data_addon_view(
+    status: Option<crate::data_addon::DataAddonStatus>,
+    inspection_available: bool,
+    runtime: GameRuntime,
+    reload_required: bool,
+    operation_error: Option<&str>,
+) -> DataAddonView {
+    use crate::data_addon::DataAddonStatus;
+
+    let (mut lifecycle, ownership, compatibility, mut primary_action, mut uninstall_enabled, mut remediation) =
+        match status {
+            None => (
+                ("AddOns folder not found", StatusRole::Error),
+                ("Unknown", StatusRole::Warning),
+                ("Unknown", StatusRole::Warning),
+                None,
+                false,
+                "Configure a supported ESO AddOns folder in Settings.".to_string(),
+            ),
+            Some(DataAddonStatus::NotInstalled) => (
+                ("Not installed", StatusRole::Muted),
+                ("Not applicable", StatusRole::Muted),
+                ("Not applicable", StatusRole::Muted),
+                Some(DataAddonPrimaryAction::Install),
+                false,
+                "Install ESO Weave Data, then follow any reload guidance.".to_string(),
+            ),
+            Some(DataAddonStatus::ManagedUpToDate) => (
+                ("Installed", StatusRole::Healthy),
+                ("Managed", StatusRole::Healthy),
+                ("Current", StatusRole::Healthy),
+                Some(DataAddonPrimaryAction::Repair),
+                true,
+                "No lifecycle action is required.".to_string(),
+            ),
+            Some(DataAddonStatus::ManagedVersionMismatch) => (
+                ("Installed", StatusRole::Warning),
+                ("Managed", StatusRole::Healthy),
+                ("Update available", StatusRole::Warning),
+                Some(DataAddonPrimaryAction::Update),
+                true,
+                "Update or repair the managed package, then reload ESO if instructed."
+                    .to_string(),
+            ),
+            Some(DataAddonStatus::Unmanaged) => (
+                ("Installed", StatusRole::Warning),
+                ("Unmanaged", StatusRole::Warning),
+                ("Unknown", StatusRole::Warning),
+                None,
+                false,
+                "Move or remove the unmanaged EsoWeaveData folder manually; ESO Weave will not modify it."
+                    .to_string(),
+            ),
+        };
+    if !inspection_available {
+        lifecycle = match status {
+            Some(DataAddonStatus::NotInstalled) => {
+                ("Unavailable (last known: not installed)", StatusRole::Error)
+            }
+            Some(DataAddonStatus::ManagedUpToDate | DataAddonStatus::ManagedVersionMismatch) => {
+                ("Unavailable (last known: installed)", StatusRole::Error)
+            }
+            Some(DataAddonStatus::Unmanaged) => {
+                ("Unavailable (last known: unmanaged)", StatusRole::Error)
+            }
+            None => ("AddOns folder not found", StatusRole::Error),
+        };
+        primary_action = None;
+        uninstall_enabled = false;
+        remediation =
+            "Configure a supported ESO AddOns folder before attempting lifecycle work.".to_string();
+    }
+    let available = matches!(
+        status,
+        Some(
+            DataAddonStatus::ManagedUpToDate
+                | DataAddonStatus::ManagedVersionMismatch
+                | DataAddonStatus::Unmanaged
+        )
+    );
+    let (evidence_text, evidence_role) = if available {
+        ("Unconfirmed", StatusRole::Warning)
+    } else {
+        ("Not applicable", StatusRole::Muted)
+    };
+    let (collection_text, collection_role) = if available {
+        ("Unconfirmed (no live channel)", StatusRole::Warning)
+    } else {
+        ("Not applicable", StatusRole::Muted)
+    };
+    let (runtime_text, runtime_role) = match runtime {
+        GameRuntime::Active => ("Available", StatusRole::Healthy),
+        GameRuntime::Inactive | GameRuntime::LauncherOpen => ("Unavailable", StatusRole::Muted),
+        GameRuntime::Unknown => ("Unknown", StatusRole::Warning),
+    };
+    let ownership_text = ownership.0;
+    let compatibility_text = compatibility.0;
+    let reload_text = if reload_required {
+        "Required"
+    } else {
+        "Not required"
+    };
+    let evidence_summary = format!(
+        "Ownership: {ownership_text} | Compatible: {compatibility_text} | Enabled: {evidence_text} | Loaded: {evidence_text} | Reload: {reload_text} | Runtime: {runtime_text} | Catalog: {collection_text} | Encounter: {collection_text} | Next: {remediation}"
+    );
+    DataAddonView {
+        lifecycle_line: data_status_line(
+            strings::DATA_ADDON_TITLE,
+            lifecycle.0,
+            if operation_error.is_some() {
+                StatusRole::Error
+            } else {
+                lifecycle.1
+            },
+            strings::DATA_ADDON_TOOLTIP,
+        ),
+        ownership_line: data_status_line(
+            strings::DATA_ADDON_OWNERSHIP_TITLE,
+            ownership.0,
+            ownership.1,
+            strings::DATA_ADDON_OWNERSHIP_TOOLTIP,
+        ),
+        compatibility_line: data_status_line(
+            strings::DATA_ADDON_COMPATIBILITY_TITLE,
+            compatibility.0,
+            compatibility.1,
+            strings::DATA_ADDON_COMPATIBILITY_TOOLTIP,
+        ),
+        enabled_line: data_status_line(
+            strings::DATA_ADDON_ENABLED_TITLE,
+            evidence_text,
+            evidence_role,
+            strings::DATA_ADDON_ENABLED_TOOLTIP,
+        ),
+        loaded_line: data_status_line(
+            strings::DATA_ADDON_LOADED_TITLE,
+            evidence_text,
+            evidence_role,
+            strings::DATA_ADDON_LOADED_TOOLTIP,
+        ),
+        reload_line: data_status_line(
+            strings::DATA_ADDON_RELOAD_TITLE,
+            if reload_required {
+                "Required"
+            } else {
+                "Not required"
+            },
+            if reload_required {
+                StatusRole::Warning
+            } else {
+                StatusRole::Muted
+            },
+            strings::DATA_ADDON_RELOAD_TOOLTIP,
+        ),
+        runtime_line: data_status_line(
+            strings::DATA_ADDON_RUNTIME_TITLE,
+            runtime_text,
+            runtime_role,
+            strings::DATA_ADDON_RUNTIME_TOOLTIP,
+        ),
+        catalog_line: data_status_line(
+            strings::DATA_ADDON_CATALOG_TITLE,
+            collection_text,
+            collection_role,
+            strings::DATA_ADDON_CATALOG_TOOLTIP,
+        ),
+        encounter_line: data_status_line(
+            strings::DATA_ADDON_ENCOUNTER_TITLE,
+            collection_text,
+            collection_role,
+            strings::DATA_ADDON_ENCOUNTER_TOOLTIP,
+        ),
+        evidence_line: data_status_line(
+            strings::DATA_ADDON_EVIDENCE_TITLE,
+            evidence_summary,
+            if available {
+                StatusRole::Warning
+            } else {
+                StatusRole::Muted
+            },
+            strings::DATA_ADDON_EVIDENCE_TOOLTIP,
+        ),
+        primary_action,
+        uninstall_enabled,
+        remediation,
+        operation_error: operation_error.map(str::to_string),
+    }
 }
 
 /// Chooses the next useful addon action without promoting destructive removal.
@@ -1253,6 +1488,14 @@ pub enum UiIntent {
     UninstallBeacon,
     /// Update the beacon addon in place after rechecking managed ownership.
     UpdateBeacon,
+    /// Install an absent ESO Weave Data package.
+    InstallDataAddon,
+    /// Update an outdated managed ESO Weave Data package.
+    UpdateDataAddon,
+    /// Atomically repair a managed ESO Weave Data package.
+    RepairDataAddon,
+    /// Uninstall the managed ESO Weave Data package after confirmation.
+    UninstallDataAddon,
     /// Edit a skill slot.
     EditSkill(u8, SkillEdit),
     /// Apply and persist the settings form.
@@ -1458,6 +1701,8 @@ pub struct AppView {
     pub fishing_line: StatusLine,
     /// The normalized Pixel Beacon line.
     pub beacon_line: StatusLine,
+    /// ESO Weave Data lifecycle and independently sourced runtime facts.
+    pub data_addon: DataAddonView,
     /// The immutable catalog version or graceful-degradation diagnostic.
     pub catalog_line: StatusLine,
     /// Live PixelBeacon freshness, independent from addon installation.
@@ -1639,6 +1884,11 @@ pub struct AppModel {
     settings: Settings,
     config_dir: Option<PathBuf>,
     beacon_prefs: BeaconPrefs,
+    data_addon_status: Option<crate::data_addon::DataAddonStatus>,
+    data_addon_failure_status: Option<crate::data_addon::DataAddonStatus>,
+    data_addon_inspection_available: bool,
+    data_addon_reload_required: Cell<bool>,
+    data_addon_error: Option<String>,
     runtime_reader_config: ReaderConfig,
     reader_update_tx: Sender<LiveReaderConfig>,
     log_panel_open: bool,
@@ -1695,6 +1945,11 @@ impl AppModel {
         clock: Instant,
     ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
+        let (data_addon_status, data_addon_inspection_available) =
+            match beacon::resolve_addons_dir(&beacon_prefs) {
+                Ok(root) => (Some(crate::data_addon::status(&root)), true),
+                Err(_) => (None, false),
+            };
         let log_filter = settings.logging.level;
         let mut reader_notices = Vec::new();
         let runtime_reader_config =
@@ -1711,6 +1966,11 @@ impl AppModel {
             settings,
             config_dir,
             beacon_prefs,
+            data_addon_status,
+            data_addon_failure_status: None,
+            data_addon_inspection_available,
+            data_addon_reload_required: Cell::new(false),
+            data_addon_error: None,
             runtime_reader_config,
             reader_update_tx,
             log_panel_open: false,
@@ -1878,6 +2138,24 @@ impl AppModel {
             status_line: status_line_app(suspended),
             fishing_line: status_line_fishing(fishing_state, fishing_reason),
             beacon_line: status_line_beacon(condition),
+            data_addon: data_addon_view(
+                self.data_addon_failure_status.or(self.data_addon_status),
+                self.data_addon_inspection_available,
+                game.runtime,
+                {
+                    if matches!(
+                        game.runtime,
+                        GameRuntime::Inactive | GameRuntime::LauncherOpen
+                    ) {
+                        // A stopped ESO process is a defensible lifecycle boundary.
+                        // Clear the retained reminder so it cannot reappear after
+                        // the next launch.
+                        self.data_addon_reload_required.set(false);
+                    }
+                    self.data_addon_reload_required.get()
+                },
+                self.data_addon_error.as_deref(),
+            ),
             catalog_line: status_line_catalog(&self.catalog),
             beacon_signal_line: beacon_signal_line(game.runtime, game.freshness),
             installation_line: installation_line(&game.installation),
@@ -1974,6 +2252,22 @@ impl AppModel {
                 self.install_beacon();
                 Vec::new()
             }
+            UiIntent::InstallDataAddon => {
+                self.install_data_addon("install");
+                Vec::new()
+            }
+            UiIntent::UpdateDataAddon => {
+                self.install_data_addon("update");
+                Vec::new()
+            }
+            UiIntent::RepairDataAddon => {
+                self.install_data_addon("repair");
+                Vec::new()
+            }
+            UiIntent::UninstallDataAddon => {
+                self.uninstall_data_addon();
+                Vec::new()
+            }
             UiIntent::EditSkill(index, edit) => {
                 self.edit_skill(index, edit);
                 self.scheduler.mark_config(Instant::now());
@@ -2056,6 +2350,135 @@ impl AppModel {
     fn configured_block_px(&self) -> u32 {
         let mut discard = Vec::new();
         crate::pixelbus::load_reader_config(&self.settings.pixelbus, &mut discard).block_px
+    }
+
+    fn data_addon_running_state(&self) -> crate::data_addon::RunningState {
+        match self.game.snapshot().runtime {
+            GameRuntime::Active => crate::data_addon::RunningState::Running,
+            GameRuntime::Inactive | GameRuntime::LauncherOpen => {
+                crate::data_addon::RunningState::NotRunning
+            }
+            GameRuntime::Unknown => crate::data_addon::RunningState::Unknown,
+        }
+    }
+
+    /// Refreshes the cached lightweight lifecycle inspection outside paint.
+    pub fn refresh_data_addon_status(&mut self) {
+        match beacon::resolve_addons_dir(&self.beacon_prefs) {
+            Ok(root) => {
+                self.data_addon_status = Some(crate::data_addon::status(&root));
+                self.data_addon_failure_status = None;
+                self.data_addon_inspection_available = true;
+                self.data_addon_error = None;
+            }
+            Err(_) => {
+                self.data_addon_inspection_available = false;
+                self.data_addon_error = Some(
+                    "The AddOns folder is unavailable. The last known lifecycle state is retained; configure a supported ESO AddOns location before retrying."
+                        .to_string(),
+                );
+            }
+        }
+        if matches!(
+            self.game.snapshot().runtime,
+            GameRuntime::Inactive | GameRuntime::LauncherOpen
+        ) {
+            self.data_addon_reload_required.set(false);
+        }
+    }
+
+    fn install_data_addon(&mut self, operation: &'static str) {
+        let Some(root) = beacon::resolve_addons_dir(&self.beacon_prefs).ok() else {
+            self.data_addon_inspection_available = false;
+            self.data_addon_error = Some(
+                "The AddOns folder is unavailable. The last known lifecycle state is retained; configure a supported ESO AddOns location before retrying."
+                    .to_string(),
+            );
+            return;
+        };
+        let running = self.data_addon_running_state();
+        match crate::data_addon::install(&root, running, self.effective_api_version()) {
+            Ok(outcome) => {
+                self.data_addon_status = Some(outcome.status);
+                self.data_addon_failure_status = None;
+                self.data_addon_inspection_available = true;
+                self.data_addon_reload_required.set(outcome.reload_required);
+                self.data_addon_error = None;
+                tracing::info!(target: "eso_weave::app", "ESO Weave Data {operation} completed");
+            }
+            Err(_) => {
+                let status = crate::data_addon::status(&root);
+                self.data_addon_failure_status = Some(status);
+                self.data_addon_inspection_available = true;
+                if running != crate::data_addon::RunningState::NotRunning
+                    && !matches!(status, crate::data_addon::DataAddonStatus::Unmanaged)
+                {
+                    // Cleanup can fail after replacement has committed. Conservatively
+                    // retain a reload reminder whenever ESO may still hold old code.
+                    self.data_addon_reload_required.set(true);
+                }
+                self.data_addon_error = Some(
+                    if status == crate::data_addon::DataAddonStatus::Unmanaged {
+                        "ESO Weave Data is unmanaged. Move or remove the EsoWeaveData folder manually; no files were modified."
+                        .to_string()
+                    } else {
+                        format!(
+                        "ESO Weave Data {operation} failed. Verify the AddOns folder and permissions, inspect the current package before taking manual action, then retry."
+                    )
+                    },
+                );
+                tracing::warn!(target: "eso_weave::app", "ESO Weave Data {operation} failed; lower-level path details were suppressed");
+            }
+        }
+    }
+
+    fn uninstall_data_addon(&mut self) {
+        let Some(root) = beacon::resolve_addons_dir(&self.beacon_prefs).ok() else {
+            self.data_addon_inspection_available = false;
+            self.data_addon_error = Some(
+                "The AddOns folder is unavailable. The last known lifecycle state is retained; configure a supported ESO AddOns location before retrying."
+                    .to_string(),
+            );
+            return;
+        };
+        let running = self.data_addon_running_state();
+        match crate::data_addon::uninstall(&root, running) {
+            Ok(outcome) => {
+                self.data_addon_status = Some(outcome.status);
+                self.data_addon_failure_status = None;
+                self.data_addon_inspection_available = true;
+                self.data_addon_reload_required.set(outcome.reload_required);
+                self.data_addon_error = None;
+                tracing::info!(target: "eso_weave::app", "ESO Weave Data uninstall completed");
+            }
+            Err(_) => {
+                let status = crate::data_addon::status(&root);
+                self.data_addon_failure_status = Some(status);
+                self.data_addon_inspection_available = true;
+                if running != crate::data_addon::RunningState::NotRunning
+                    && !matches!(status, crate::data_addon::DataAddonStatus::Unmanaged)
+                {
+                    self.data_addon_reload_required.set(true);
+                }
+                self.data_addon_error = Some(
+                    match status {
+                        crate::data_addon::DataAddonStatus::NotInstalled => {
+                            "ESO Weave Data is already absent. No further removal action is required."
+                                .to_string()
+                        }
+                        crate::data_addon::DataAddonStatus::Unmanaged => {
+                            "ESO Weave Data uninstall was refused because the target is unmanaged. Move or remove only the EsoWeaveData folder manually."
+                                .to_string()
+                        }
+                        _ => {
+                            "ESO Weave Data uninstall failed. Verify the AddOns folder and permissions, inspect the current package before taking manual action, then retry."
+                                .to_string()
+                        }
+                    },
+                );
+                tracing::warn!(target: "eso_weave::app", "ESO Weave Data uninstall failed or was refused; lower-level path details were suppressed");
+            }
+        }
     }
 
     fn install_beacon(&mut self) {
@@ -2398,6 +2821,7 @@ impl AppModel {
         let potion_config = AutoPotionConfig::load(&self.settings.potion, &mut notices);
         self.potion.lock().unwrap().set_config(potion_config);
         self.beacon_prefs = beacon::prefs_from_value(&self.settings.beacon);
+        self.refresh_data_addon_status();
         self.log.set_level(self.settings.logging.level);
         self.log
             .set_file_enabled(self.settings.logging.file_enabled);

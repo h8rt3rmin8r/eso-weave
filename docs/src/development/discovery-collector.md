@@ -13,11 +13,12 @@ Coverage is truthful only for the recorded character, account unlocks, locale,
 channel, and API version. Iterator positions are retained only as
 version-scoped ordering facts. Stable API IDs remain catalog identity.
 
-## Install and collect
+## Manage and collect
 
-Use the exact Live or PTS `AddOns` directory and the current numeric ESO API
-version. These lifecycle commands operate on the exact four-file `EsoWeaveData`
-package and never share PixelBeacon ownership or files.
+Normal users manage the exact four-file `EsoWeaveData` package from the
+first-class **ESO Weave Data** row in System and State. It never shares
+PixelBeacon ownership or files. Maintainers can inspect or install against an
+exact Live or PTS `AddOns` directory with the CLI:
 
 ```bash
 cargo run --locked --bin catalog-compiler -- collector-status --addons ADDONS
@@ -73,7 +74,8 @@ redistributable ESO Weave asset.
 
 ## Remove
 
-Remove only a managed collector:
+Normal users choose **Uninstall Data** in System and State and accept the
+data-specific confirmation. Maintainers can remove only a managed package with:
 
 ```bash
 cargo run --locked --bin catalog-compiler -- collector-remove --addons ADDONS
