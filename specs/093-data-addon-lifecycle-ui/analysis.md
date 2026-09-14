@@ -80,6 +80,19 @@ The complete Rust, Clippy, release, documentation, link, spelling, and text
 hygiene gates passed after these corrections. No first-round CI finding
 required another change.
 
+## Second External Review
+
+Exactly one authorized `@Codex review` request was posted after the first-round
+corrections. Codex completed its review of `8f6b825` with no findings. No third
+review was requested.
+
+The documentation workflow then exposed one stale S088 browser-smoke fixture:
+the canonical first-launch alternative changed with the S093 screenshot, while
+the runtime expectation still contained the prior text. The expectation now
+matches the checked-in alternative exactly, preserving the strict accessible
+name assertion. The PNG itself and the shared figure implementation were not
+changed for this CI correction.
+
 ## Local Validation
 
 - `cargo fmt --all -- --check`: PASS

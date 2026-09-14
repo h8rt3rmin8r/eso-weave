@@ -49,8 +49,8 @@
 - [x] T031 Mark implemented, commit, push, and open the PR closing #185 ([#192](https://github.com/h8rt3rmin8r/eso-weave/pull/192))
 - [x] T032 Move issue #185 and PR to Slice S093 and PR review stage
 - [x] T033 Address every first-round external review and CI finding
-- [ ] T034 Trigger exactly one authorized second `@Codex review` round
-- [ ] T035 Address every second-round finding without a third trigger
+- [x] T034 Trigger exactly one authorized second `@Codex review` round
+- [x] T035 Address every second-round finding without a third trigger
 - [ ] T036 Confirm CI green and request final review and merge ritual
 
 ## Execution Order
