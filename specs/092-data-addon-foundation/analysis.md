@@ -19,6 +19,9 @@ No CRITICAL or HIGH findings remain.
 | R5 | Parser contract | MEDIUM | shared-root fixtures | Hostile parser fixtures still targeted obsolete top-level assignments and outer version fields were not enforced | Fixtures now exercise `EsoWeaveDataSaved`; both projections reject unsupported outer schema and addon versions before selecting their module |
 | R6 | Module isolation | MEDIUM | `tests/data_addon.rs` | Static substring checks did not prove the two Lua modules coexist safely | A Lua 5.1 harness loads the manifest order, proves distinct namespaces and dormancy, and exercises both clear orders without cross-module mutation |
 | R7 | Governance sync | HIGH | `CLAUDE.md`, `docs/project/build-autopilot.md` | Pinned-artifact lists did not fully match constitution 3.0.0 | Both lists now include the complete constitutional set, including release guidance and repository policy files |
+| R8 | Module isolation | HIGH | `src/catalog_update/mod.rs`, `src/collector/import.rs` | Catalog freshness and provenance fingerprinted the entire shared file, so encounter-only writes could impersonate a later catalog flush | Freshness, source staging, catalog version identity, and import provenance now use one canonical catalog-only SavedVariables projection; regression coverage proves encounter-only rewrites are inert |
+| R9 | Version ownership | MEDIUM | `src/data_addon.rs` | Package lifecycle status compared the manifest version with the catalog module version | The data addon now owns an explicit package-version constant independent of either module envelope |
+| R10 | Documentation accuracy | MEDIUM | `docs/src/development/catalog-updates.md` | The canonical guide retained the removed desktop deletion behavior and separate collector ownership | The guide now documents module-local in-game clearing, shared-file preservation, and the combined package uninstall boundary |
 
 ## Coverage Summary
 

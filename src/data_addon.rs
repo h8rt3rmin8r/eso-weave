@@ -20,6 +20,7 @@ pub const MAX_SAVED_VARIABLES_TOKENS: usize = 4_000_000;
 pub const MAX_SAVED_VARIABLES_ENTRIES: usize = 2_600_000;
 pub const SAVED_VARIABLES_SCHEMA_VERSION: u64 = 1;
 pub const DATA_ADDON_VERSION: u64 = 1;
+pub const DATA_ADDON_PACKAGE_VERSION: u32 = 1;
 pub const MANAGED_MARKER: &str = "## X-ESO-Weave-Data-Managed: true";
 const CHECKSUM_PREFIX: &str = "local COLLECTOR_CHECKSUM = \"";
 
@@ -125,8 +126,7 @@ fn status_directory(directory: &Path) -> DataAddonStatus {
     if !manifest.lines().any(|line| line.trim() == MANAGED_MARKER) {
         return DataAddonStatus::Unmanaged;
     }
-    let version_matches =
-        parse_addon_version(&manifest) == Some(crate::collector::COLLECTOR_VERSION);
+    let version_matches = parse_addon_version(&manifest) == Some(DATA_ADDON_PACKAGE_VERSION);
     let manifest_matches = parse_primary_api_version(&manifest)
         .is_some_and(|api_version| manifest == render_manifest(api_version));
     let mut files_match = true;
@@ -251,6 +251,14 @@ pub(crate) fn take_module(
     root: &mut serde_json::Value,
     module: &str,
 ) -> Result<serde_json::Value, String> {
+    take_optional_module(root, module)?
+        .ok_or_else(|| format!("shared SavedVariables root has no {module} module"))
+}
+
+pub(crate) fn take_optional_module(
+    root: &mut serde_json::Value,
+    module: &str,
+) -> Result<Option<serde_json::Value>, String> {
     let object = root
         .as_object_mut()
         .ok_or_else(|| "shared SavedVariables root must be a table".to_string())?;
@@ -265,9 +273,7 @@ pub(crate) fn take_module(
     {
         return Err("shared SavedVariables root has an unsupported version".into());
     }
-    object
-        .remove(module)
-        .ok_or_else(|| format!("shared SavedVariables root has no {module} module"))
+    Ok(object.remove(module))
 }
 
 pub fn uninstall(

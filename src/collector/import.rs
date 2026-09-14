@@ -15,7 +15,9 @@ use crate::catalog::model::{
 };
 use crate::catalog::Channel;
 
-use super::{parse_capture, CollectorEnvelope, CollectorError, ImportRequest};
+use super::{
+    canonical_catalog_capture, parse_capture, CollectorEnvelope, CollectorError, ImportRequest,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ImportReceipt {
@@ -55,7 +57,9 @@ pub fn import_capture(request: &ImportRequest) -> Result<ImportReceipt, Collecto
         StableReadError::Io(error) => CollectorError::Io(error),
         StableReadError::Invalid(message) => CollectorError::Validation(message.into()),
     })?;
-    let capture_sha256 = sha256_bytes(&bytes);
+    let capture_sha256 = sha256_bytes(&canonical_catalog_capture(&bytes)?.ok_or_else(|| {
+        CollectorError::Validation("shared SavedVariables root has no catalog module".into())
+    })?);
     let envelope = parse_capture(&bytes)?;
     if envelope.channel != request.expected_channel {
         return rejected(format!(

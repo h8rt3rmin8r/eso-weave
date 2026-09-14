@@ -585,6 +585,54 @@ fn collector_build_requires_a_later_flush_and_stays_in_review_flow() {
 }
 
 #[test]
+fn encounter_only_rewrites_do_not_advance_catalog_freshness_or_provenance() {
+    let root = tempfile::tempdir().unwrap();
+    let capture = root.path().join("SavedVariables/EsoWeaveData.lua");
+    fs::create_dir_all(capture.parent().unwrap()).unwrap();
+    let fixture =
+        fs::read_to_string("specs/092-data-addon-foundation/fixtures/catalog-live.lua").unwrap();
+    fs::write(&capture, with_encounter_marker(&fixture, 1)).unwrap();
+
+    let baseline_bundle = root.path().join("baseline.json");
+    let baseline_receipt = import_capture(&ImportRequest::new(
+        &capture,
+        &baseline_bundle,
+        Channel::Live,
+        "same-catalog",
+    ))
+    .unwrap();
+    let bundled = root.path().join("bundled/catalog.sqlite");
+    fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+    build_catalog(&BuildRequest::new(
+        &baseline_bundle,
+        &bundled,
+        Channel::Live,
+    ))
+    .unwrap();
+    let service = CatalogUpdateService::new(root.path().join("config"), &bundled);
+    service.prepare().unwrap();
+    let boundary = service.capture_wait_boundary(&capture).unwrap();
+
+    fs::write(&capture, with_encounter_marker(&fixture, 2)).unwrap();
+    assert_eq!(service.capture_fingerprint(&capture).unwrap(), boundary);
+    let later_receipt = import_capture(&ImportRequest::new(
+        &capture,
+        root.path().join("later.json"),
+        Channel::Live,
+        "same-catalog",
+    ))
+    .unwrap();
+    assert_eq!(
+        later_receipt.capture_sha256,
+        baseline_receipt.capture_sha256
+    );
+    let error = service
+        .build_collector_candidate(&capture, &boundary, &CancellationToken::new(), |_| {})
+        .unwrap_err();
+    assert!(error.to_string().contains("collector capture is unchanged"));
+}
+
+#[test]
 fn invalid_selection_degrades_visibly_and_is_not_rewritten() {
     let sandbox = Sandbox::new();
     let selection = sandbox.service.roots().root().join("selection.json");
@@ -619,6 +667,14 @@ fn cross_process_lock_refuses_a_concurrent_install() {
         sandbox.service.load_selection().unwrap().active,
         CatalogTarget::Bundled
     );
+}
+
+fn with_encounter_marker(catalog_capture: &str, marker: u32) -> String {
+    let outer_close = catalog_capture
+        .rfind("\n}")
+        .expect("shared root has an outer closing brace");
+    let (catalog, close) = catalog_capture.split_at(outer_close);
+    format!("{catalog},\n  [\"encounter\"] = {{ [\"test_marker\"] = {marker} }}{close}")
 }
 
 #[test]

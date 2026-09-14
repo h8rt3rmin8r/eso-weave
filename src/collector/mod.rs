@@ -170,6 +170,64 @@ pub fn parse_capture(bytes: &[u8]) -> Result<CollectorEnvelope, CollectorError> 
     Ok(envelope)
 }
 
+pub(crate) fn canonical_catalog_capture(bytes: &[u8]) -> Result<Option<Vec<u8>>, CollectorError> {
+    if bytes.len() as u64 > MAX_CAPTURE_BYTES {
+        return invalid(format!(
+            "capture exceeds the {MAX_CAPTURE_BYTES} byte limit"
+        ));
+    }
+    let source = std::str::from_utf8(bytes)
+        .map_err(|_| CollectorError::Validation("capture is not valid UTF-8".to_string()))?;
+    let Some(catalog) = parser::parse_optional_saved_variables(source)? else {
+        return Ok(None);
+    };
+    let mut canonical = format!(
+        "EsoWeaveDataSaved = {{[\"schema_version\"] = {SAVED_SCHEMA}, [\"addon_version\"] = {ADDON_VERSION}, [\"catalog\"] = ",
+        SAVED_SCHEMA = crate::data_addon::SAVED_VARIABLES_SCHEMA_VERSION,
+        ADDON_VERSION = crate::data_addon::DATA_ADDON_VERSION,
+    );
+    write_lua_value(&mut canonical, &catalog)?;
+    canonical.push_str("}\n");
+    Ok(Some(canonical.into_bytes()))
+}
+
+fn write_lua_value(output: &mut String, value: &serde_json::Value) -> Result<(), CollectorError> {
+    use std::fmt::Write as _;
+
+    match value {
+        serde_json::Value::Null => output.push_str("nil"),
+        serde_json::Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
+        serde_json::Value::Number(value) => {
+            let integer = value.as_i64().ok_or_else(|| {
+                CollectorError::Validation("catalog capture contains a non-integer number".into())
+            })?;
+            write!(output, "{integer}").expect("write to String");
+        }
+        serde_json::Value::String(value) => output.push_str(&serde_json::to_string(value)?),
+        serde_json::Value::Array(values) => {
+            output.push('{');
+            for (index, value) in values.iter().enumerate() {
+                write!(output, "[{}] = ", index + 1).expect("write to String");
+                write_lua_value(output, value)?;
+                output.push_str(", ");
+            }
+            output.push('}');
+        }
+        serde_json::Value::Object(values) => {
+            output.push('{');
+            for (key, value) in values {
+                output.push('[');
+                output.push_str(&serde_json::to_string(key)?);
+                output.push_str("] = ");
+                write_lua_value(output, value)?;
+                output.push_str(", ");
+            }
+            output.push('}');
+        }
+    }
+    Ok(())
+}
+
 fn validate_envelope(envelope: &mut CollectorEnvelope) -> Result<(), CollectorError> {
     if envelope.schema_version != CAPTURE_SCHEMA_VERSION {
         return invalid(format!(
