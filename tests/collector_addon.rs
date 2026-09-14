@@ -3,7 +3,7 @@ use eso_weave::data_addon::{
 };
 
 #[test]
-fn addon_has_dedicated_identity_and_saved_variables_contract() {
+fn data_addon_has_shared_identity_and_saved_variables_contract() {
     assert!(MANIFEST.contains("## Title: ESO Weave Data"));
     assert!(MANIFEST.contains("## AddOnVersion: 1"));
     assert!(MANIFEST.contains("## APIVersion: 101051 101050"));

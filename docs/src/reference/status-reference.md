@@ -53,11 +53,11 @@ available, Update ready to import, Collector capture required, Offline or stale
 check, Unsupported schema, and catalog unavailable. PTS previews are labeled
 separately and never participate in Live selection.
 
-The command-line discovery collector has separate lifecycle values:
+The shared ESO Weave Data addon has separate package lifecycle values:
 
 | Collector value | Meaning | Recovery or effect |
 | --- | --- | --- |
-| `not-installed` | The dedicated collector target is absent | Install it explicitly when a local capture is needed |
+| `not-installed` | The shared data-addon package is absent | Install it explicitly when local catalog or encounter capture is needed |
 | `managed-up-to-date` | Marker, version, and embedded checksum match | Capture may be started in ESO after any required reload |
 | `managed-version-mismatch` | Ownership is proven but content differs | Run the explicit install command to update the managed copy |
 | `unmanaged` | Ownership, file type, or link safety could not be proven | No change is made; inspect only that exact target manually |
