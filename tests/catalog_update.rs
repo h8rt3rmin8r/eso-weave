@@ -17,6 +17,14 @@ use sha2::{Digest, Sha256};
 const LIVE_BUNDLE: &str = "specs/070-catalog-compiler/fixtures/minimal-live.json";
 const CHANGED_LIVE_BUNDLE: &str = "specs/070-catalog-compiler/fixtures/minimal-live-changed.json";
 
+#[test]
+fn desktop_has_no_shared_saved_variables_deletion_command() {
+    let worker = include_str!("../src/catalog_update/worker.rs");
+    assert!(!worker.contains("DeleteCapture"));
+    assert!(!worker.contains("delete_capture"));
+    assert!(!worker.contains("remove_file(path)"));
+}
+
 struct Sandbox {
     root: tempfile::TempDir,
     config: PathBuf,
@@ -531,7 +539,7 @@ fn collector_build_requires_a_later_flush_and_stays_in_review_flow() {
     let root = tempfile::tempdir().unwrap();
     let baseline_capture = root.path().join("baseline-capture.lua");
     fs::copy(
-        "specs/071-bounded-discovery-exporter/fixtures/live.lua",
+        "specs/092-data-addon-foundation/fixtures/catalog-live.lua",
         &baseline_capture,
     )
     .unwrap();
@@ -553,11 +561,11 @@ fn collector_build_requires_a_later_flush_and_stays_in_review_flow() {
     .unwrap();
     let service = CatalogUpdateService::new(root.path().join("config"), &bundled);
     service.prepare().unwrap();
-    let capture = root.path().join("SavedVariables/EsoWeaveCollector.lua");
+    let capture = root.path().join("SavedVariables/EsoWeaveData.lua");
     fs::create_dir_all(capture.parent().unwrap()).unwrap();
     let boundary = service.capture_wait_boundary(&capture).unwrap();
     fs::copy(
-        "specs/071-bounded-discovery-exporter/fixtures/live.lua",
+        "specs/092-data-addon-foundation/fixtures/catalog-live.lua",
         &capture,
     )
     .unwrap();

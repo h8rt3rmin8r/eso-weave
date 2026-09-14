@@ -36,6 +36,8 @@
   - [Reviewed Catalog Candidate Pipeline](development/catalog-candidate-pipeline.md)
   - [User-Initiated Catalog Updates](development/catalog-updates.md)
   - [Bounded Discovery Collector](development/discovery-collector.md)
+  - [Encounter Ingestion](development/encounter-ingestion.md)
+  - [Companion-to-Addon Commands](development/companion-addon-commands.md)
   - [Local Icon Cache](development/local-icon-cache.md)
   - [State Machines](development/state-machines.md)
   - [Test Strategy](development/test-strategy.md)

@@ -3,8 +3,9 @@ use std::collections::BTreeSet;
 use mlua::Lua;
 use serde_json::Value;
 
-const MANIFEST: &str = include_str!("../addon/EsoWeaveEncounter/EsoWeaveEncounter.txt");
-const ADDON: &str = include_str!("../addon/EsoWeaveEncounter/EsoWeaveEncounter.lua");
+const MANIFEST: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.txt");
+const BOOTSTRAP: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.lua");
+const ADDON: &str = include_str!("../addon/EsoWeaveData/Encounter.lua");
 const FIXTURE: &str =
     include_str!("../specs/075-encounter-capture/fixtures/representative-capture.json");
 
@@ -110,16 +111,22 @@ function __contains_saved_string(needle)
         end
         return false
     end
-    return visit(EsoWeaveEncounterSaved)
+    return visit(EsoWeaveDataSaved.encounter)
 end
 "#;
 
 fn harness(prelude: &str) -> Lua {
     let lua = Lua::new();
     lua.load(HARNESS).exec().expect("install ESO API harness");
+    lua.load(BOOTSTRAP)
+        .exec()
+        .expect("load data addon bootstrap");
+    lua.load("__fire(EVENT_ADD_ON_LOADED, 'EsoWeaveData')")
+        .exec()
+        .expect("activate data addon bootstrap");
     lua.load(prelude).exec().expect("install test overrides");
     lua.load(ADDON).exec().expect("load encounter addon");
-    lua.load("__fire(EVENT_ADD_ON_LOADED, 'EsoWeaveEncounter')")
+    lua.load("__fire(EVENT_ADD_ON_LOADED, 'EsoWeaveData')")
         .exec()
         .expect("activate encounter addon");
     lua
@@ -135,42 +142,42 @@ fn addon_is_dormant_until_one_explicit_channel_arm() {
     run(
         &lua,
         r#"
-        assert(EsoWeaveEncounterSaved.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.status == "idle")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveEncounterSaved.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.status == "idle")
 
         SLASH_COMMANDS["/ewencounter"]("arm live")
-        assert(EsoWeaveEncounterSaved.status == "armed")
-        assert(EsoWeaveEncounterSaved.channel == "live")
+        assert(EsoWeaveDataSaved.encounter.status == "armed")
+        assert(EsoWeaveDataSaved.encounter.channel == "live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveEncounterSaved.status == "capturing")
+        assert(EsoWeaveDataSaved.encounter.status == "capturing")
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveEncounterSaved.status == "complete")
-        assert(EsoWeaveEncounterSaved.events[1].kind == "encounter-start")
-        assert(EsoWeaveEncounterSaved.events[#EsoWeaveEncounterSaved.events].kind == "encounter-end")
+        assert(EsoWeaveDataSaved.encounter.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.events[1].kind == "encounter-start")
+        assert(EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events].kind == "encounter-end")
 
         SLASH_COMMANDS["/ewencounter"]("arm pts")
-        assert(EsoWeaveEncounterSaved.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.status == "complete")
         SLASH_COMMANDS["/ewencounter"]("clear")
-        assert(EsoWeaveEncounterSaved.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.status == "complete")
         SLASH_COMMANDS["/ewencounter"]("clear confirm")
-        assert(EsoWeaveEncounterSaved.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.status == "idle")
         SLASH_COMMANDS["/ewencounter"]("arm pts")
-        assert(EsoWeaveEncounterSaved.channel == "pts")
+        assert(EsoWeaveDataSaved.encounter.channel == "pts")
         SLASH_COMMANDS["/ewencounter"]("disarm")
-        assert(EsoWeaveEncounterSaved.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.status == "idle")
 
         __in_combat = true
         SLASH_COMMANDS["/ewencounter"]("arm live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveEncounterSaved.status == "armed")
+        assert(EsoWeaveDataSaved.encounter.status == "armed")
         __in_combat = false
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
         __in_combat = true
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveEncounterSaved.status == "capturing")
+        assert(EsoWeaveDataSaved.encounter.status == "capturing")
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveEncounterSaved.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.status == "complete")
         "#,
     );
 }
@@ -216,8 +223,8 @@ fn representative_capture_has_every_family_and_no_private_callback_text() {
         __run_updates()
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
 
-        assert(EsoWeaveEncounterSaved.status == "partial")
-        assert(EsoWeaveEncounterSaved.partial_reason == "clock-reset")
+        assert(EsoWeaveDataSaved.encounter.status == "partial")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "clock-reset")
         local required = {
             ["encounter-start"] = false, ["encounter-end"] = false,
             damage = false, healing = false, effect = false, resource = false,
@@ -230,13 +237,13 @@ fn representative_capture_has_every_family_and_no_private_callback_text() {
         local bossSamples = 0
         local performanceSamples = 0
         local usedQuickslotAbility = 0
-        for _, event in ipairs(EsoWeaveEncounterSaved.events) do
+        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
             assert(required[event.kind] ~= nil, event.kind)
             required[event.kind] = true
             assert(event.sequence > previousSequence)
             assert(event.monotonic_ms >= previousTime)
-            assert(event.session_id == EsoWeaveEncounterSaved.session_id)
-            assert(event.encounter_id == EsoWeaveEncounterSaved.encounter_id)
+            assert(event.session_id == EsoWeaveDataSaved.encounter.session_id)
+            assert(event.encounter_id == EsoWeaveDataSaved.encounter.encounter_id)
             if event.kind == "boss-health" then bossSamples = bossSamples + 1 end
             if event.kind == "performance" then
                 performanceSamples = performanceSamples + 1
@@ -253,7 +260,7 @@ fn representative_capture_has_every_family_and_no_private_callback_text() {
             "performance samples: " .. tostring(performanceSamples))
         assert(usedQuickslotAbility == 9004,
             "used quickslot ability: " .. tostring(usedQuickslotAbility))
-        assert(EsoWeaveEncounterSaved.stored_event_count == #EsoWeaveEncounterSaved.events)
+        assert(EsoWeaveDataSaved.encounter.stored_event_count == #EsoWeaveDataSaved.encounter.events)
         assert(not __contains_saved_string("AccountSecret"))
         assert(not __contains_saved_string("CharacterSecret"))
         assert(not __contains_saved_string("AbilitySecret"))
@@ -280,34 +287,34 @@ fn overflow_and_actor_limits_preserve_terminal_capacity_and_exact_loss() {
                 0, 0, "source", 1, "target", 2, index, 3, 4, true,
                 10000 + index, 20000 + index, 7001, 0)
         end
-        assert(EsoWeaveEncounterSaved.pending_partial_reason == "capture-overflow")
-        assert(EsoWeaveEncounterSaved.pending_loss_from ~= nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_to
-            - EsoWeaveEncounterSaved.pending_loss_from + 1
-            == EsoWeaveEncounterSaved.omitted_event_count)
-        assert(EsoWeaveEncounterSaved.pending_loss_reason == "capture-overflow")
+        assert(EsoWeaveDataSaved.encounter.pending_partial_reason == "capture-overflow")
+        assert(EsoWeaveDataSaved.encounter.pending_loss_from ~= nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_to
+            - EsoWeaveDataSaved.encounter.pending_loss_from + 1
+            == EsoWeaveDataSaved.encounter.omitted_event_count)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_reason == "capture-overflow")
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
 
-        assert(EsoWeaveEncounterSaved.status == "partial")
-        assert(EsoWeaveEncounterSaved.partial_reason == "capture-overflow")
-        assert(#EsoWeaveEncounterSaved.events <= 6)
-        assert(EsoWeaveEncounterSaved.estimated_bytes <= 8192)
-        assert(EsoWeaveEncounterSaved.omitted_event_count > 0)
-        assert(EsoWeaveEncounterSaved.warnings.actor_limit > 0)
-        local marker = EsoWeaveEncounterSaved.events[#EsoWeaveEncounterSaved.events - 1]
-        local terminal = EsoWeaveEncounterSaved.events[#EsoWeaveEncounterSaved.events]
+        assert(EsoWeaveDataSaved.encounter.status == "partial")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "capture-overflow")
+        assert(#EsoWeaveDataSaved.encounter.events <= 6)
+        assert(EsoWeaveDataSaved.encounter.estimated_bytes <= 8192)
+        assert(EsoWeaveDataSaved.encounter.omitted_event_count > 0)
+        assert(EsoWeaveDataSaved.encounter.warnings.actor_limit > 0)
+        local marker = EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events - 1]
+        local terminal = EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events]
         assert(marker.kind == "discontinuity")
         assert(marker.payload.reason == "capture-overflow")
         assert(marker.payload.missing_sequence_to - marker.payload.missing_sequence_from + 1
-            == EsoWeaveEncounterSaved.omitted_event_count)
+            == EsoWeaveDataSaved.encounter.omitted_event_count)
         assert(marker.sequence == marker.payload.missing_sequence_to + 1)
         assert(terminal.kind == "encounter-end")
         assert(terminal.sequence == marker.sequence + 1)
         assert(terminal.payload.complete == false)
-        assert(EsoWeaveEncounterSaved.pending_partial_reason == nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_from == nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_to == nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_reason == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_partial_reason == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_from == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_to == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_reason == nil)
         "#,
     );
 }
@@ -321,8 +328,8 @@ fn stop_deactivation_and_callback_failure_are_partial_and_torn_down() {
         SLASH_COMMANDS["/ewencounter"]("arm live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         SLASH_COMMANDS["/ewencounter"]("stop")
-        assert(EsoWeaveEncounterSaved.status == "partial")
-        assert(EsoWeaveEncounterSaved.partial_reason == "user-stopped")
+        assert(EsoWeaveDataSaved.encounter.status == "partial")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "user-stopped")
         assert(EVENT_MANAGER.events[EVENT_COMBAT_EVENT] == nil)
         assert(next(EVENT_MANAGER.updates) == nil)
 
@@ -330,7 +337,7 @@ fn stop_deactivation_and_callback_failure_are_partial_and_torn_down() {
         SLASH_COMMANDS["/ewencounter"]("arm live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         __fire(EVENT_PLAYER_DEACTIVATED)
-        assert(EsoWeaveEncounterSaved.partial_reason == "player-deactivated")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "player-deactivated")
         assert(EVENT_MANAGER.events[EVENT_EFFECT_CHANGED] == nil)
 
         SLASH_COMMANDS["/ewencounter"]("clear confirm")
@@ -338,7 +345,7 @@ fn stop_deactivation_and_callback_failure_are_partial_and_torn_down() {
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         GetSlotBoundId = function() error("injected callback failure") end
         __fire(EVENT_ACTION_SLOT_ABILITY_USED, 3)
-        assert(EsoWeaveEncounterSaved.partial_reason == "callback-failed")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "callback-failed")
         assert(EVENT_MANAGER.events[EVENT_ACTION_SLOT_ABILITY_USED] == nil)
         assert(next(EVENT_MANAGER.updates) == nil)
         assert(not __contains_saved_string("injected callback failure"))
@@ -362,16 +369,16 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
                 10000, 20000, 7001, 0)
         end
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveEncounterSaved.status == "partial")
-        assert(EsoWeaveEncounterSaved.estimated_bytes <= 4096)
-        assert(EsoWeaveEncounterSaved.events[#EsoWeaveEncounterSaved.events - 1].kind
+        assert(EsoWeaveDataSaved.encounter.status == "partial")
+        assert(EsoWeaveDataSaved.encounter.estimated_bytes <= 4096)
+        assert(EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events - 1].kind
             == "discontinuity")
 
         "#,
     );
 
     let recovery = harness(
-        r#"EsoWeaveEncounterSaved = {
+        r#"EsoWeaveDataSaved.encounter = {
             schema_version = 1,
             addon_version = 1,
             status = "capturing",
@@ -404,16 +411,16 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
     run(
         &recovery,
         r#"
-        assert(EsoWeaveEncounterSaved.status == "partial")
-        assert(EsoWeaveEncounterSaved.partial_reason == "player-deactivated")
-        assert(EsoWeaveEncounterSaved.events[#EsoWeaveEncounterSaved.events].kind
+        assert(EsoWeaveDataSaved.encounter.status == "partial")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "player-deactivated")
+        assert(EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events].kind
             == "encounter-end")
-        assert(EsoWeaveEncounterSaved.warnings.recovered_interruption == 1)
+        assert(EsoWeaveDataSaved.encounter.warnings.recovered_interruption == 1)
         "#,
     );
 
     let overflow_recovery = harness(
-        r#"EsoWeaveEncounterSaved = {
+        r#"EsoWeaveDataSaved.encounter = {
             schema_version = 1,
             addon_version = 1,
             status = "capturing",
@@ -450,11 +457,11 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
     run(
         &overflow_recovery,
         r#"
-        assert(EsoWeaveEncounterSaved.status == "partial")
-        assert(EsoWeaveEncounterSaved.partial_reason == "capture-overflow")
-        assert(EsoWeaveEncounterSaved.omitted_event_count == 2)
-        local marker = EsoWeaveEncounterSaved.events[2]
-        local terminal = EsoWeaveEncounterSaved.events[3]
+        assert(EsoWeaveDataSaved.encounter.status == "partial")
+        assert(EsoWeaveDataSaved.encounter.partial_reason == "capture-overflow")
+        assert(EsoWeaveDataSaved.encounter.omitted_event_count == 2)
+        local marker = EsoWeaveDataSaved.encounter.events[2]
+        local terminal = EsoWeaveDataSaved.encounter.events[3]
         assert(marker.kind == "discontinuity")
         assert(marker.sequence == 4)
         assert(marker.payload.missing_sequence_from == 2)
@@ -462,22 +469,22 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
         assert(marker.payload.reason == "capture-overflow")
         assert(terminal.kind == "encounter-end")
         assert(terminal.sequence == 5)
-        assert(EsoWeaveEncounterSaved.pending_partial_reason == nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_from == nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_to == nil)
-        assert(EsoWeaveEncounterSaved.pending_loss_reason == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_partial_reason == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_from == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_to == nil)
+        assert(EsoWeaveDataSaved.encounter.pending_loss_reason == nil)
         "#,
     );
 }
 
 #[test]
 fn addon_identity_and_source_are_strictly_confined() {
-    assert!(MANIFEST.contains("## Title: ESO Weave Encounter"));
+    assert!(MANIFEST.contains("## Title: ESO Weave Data"));
     assert!(MANIFEST.contains("## AddOnVersion: 1"));
     assert!(MANIFEST.contains("## APIVersion: 101051 101050"));
-    assert!(MANIFEST.contains("## SavedVariables: EsoWeaveEncounterSaved"));
-    assert!(MANIFEST.contains("## X-ESO-Weave-Encounter-Managed: true"));
-    assert!(MANIFEST.ends_with("EsoWeaveEncounter.lua\n"));
+    assert!(MANIFEST.contains("## SavedVariables: EsoWeaveDataSaved"));
+    assert!(MANIFEST.contains("## X-ESO-Weave-Data-Managed: true"));
+    assert!(MANIFEST.ends_with("Encounter.lua\n"));
 
     for required in [
         "MAX_EVENTS = 100000",

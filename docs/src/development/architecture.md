@@ -22,8 +22,9 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
 | Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active selection, authenticated origin, releases, or source redistribution |
 | Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
-| Discovery Collector | Explicit bounded public-API enumeration, deterministic local SavedVariables records, restricted staging, and an independent managed addon lifecycle | PixelBeacon, combat capture, input generation, network transfer, direct SQLite publication, or distributable game art |
-| Encounter Capture Addon | One explicitly armed Live or PTS encounter, numeric public-API observations, encounter-local actors, ordered elapsed time, bounded SavedVariables, and declared loss | Pixel Bus transport, personal names, desktop import, metric calculation, upload, input generation, or gameplay mutation |
+| Data Addon Manager | Exact marker-owned deployment of the `EsoWeaveData` manifest, bootstrap, catalog module, and encounter module | PixelBeacon files, user SavedVariables deletion, parsing, or capture policy |
+| Discovery Collector | Explicit bounded public-API enumeration, deterministic `EsoWeaveDataSaved.catalog` records, and restricted staging | Package lifecycle, encounter state, PixelBeacon, input generation, network transfer, direct SQLite publication, or distributable game art |
+| Encounter Capture Module | One explicitly armed Live or PTS encounter in `EsoWeaveDataSaved.encounter`, numeric public-API observations, bounded state, and declared loss | Package lifecycle, catalog state, Pixel Bus transport, personal names, upload, input generation, or gameplay mutation |
 | Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing restricted parsing, terminal validation, canonical content identity, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
 | Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
 | Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog reads and mutation, persistence, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
@@ -120,7 +121,7 @@ User-local API discovery precedes that path when explicitly requested:
 
 `explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
 
-Encounter observation and import follow a third addon path:
+Encounter observation and import follow the isolated encounter-module path:
 
 `explicit one-shot arm -> clean combat boundary -> bounded anonymous events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> canonical hash -> immutable encounters.sqlite record`
 
@@ -165,23 +166,18 @@ manifest is the explicit virtual-path-to-object authority, and every unavailable
 source maps to the project placeholder. No icon path performs discovery,
 download, archive extraction, upload, or application activation.
 
-The collector is a separate addon and lifecycle boundary from PixelBeacon. It
-does limited work per update tick, pauses in combat, and emits only a fixed
-versioned table whose chunk payloads are deterministic JSON lines. The desktop
-parser accepts that data grammar without a Lua runtime and stages through the
-same strict catalog model used by reviewed source bundles.
+ESO Weave Data is one lifecycle boundary separate from PixelBeacon. Its catalog
+module does limited work per update tick, pauses in combat, and emits bounded
+deterministic JSON-line chunks under `EsoWeaveDataSaved.catalog`. Its encounter
+module remains dormant until one explicit Live or PTS arm, captures only the
+next clean encounter under `EsoWeaveDataSaved.encounter`, stores no personal
+names, and disarms on every terminal path. Neither module uses Pixel Bus for
+bulk data or authorizes gameplay actions.
 
-ESO Weave Encounter is separate from both existing addons. It is dormant until
-one explicit Live or PTS arm, captures only the next clean encounter, stores no
-personal names, and disarms on every terminal path. Event and estimated-byte
-budgets reserve room for loss and terminal records, so overflow cannot appear
-complete. It never sends observations through Pixel Bus and cannot authorize or
-generate gameplay actions.
-
-The collector and encounter paths share one crate-private restricted table
-parser with caller-specific roots, work limits, and empty-table interpretation.
-This centralizes the no-execution grammar while each importer retains its own
-typed schema and validation authority.
+Both importers parse the shared outer root through one crate-private restricted
+table grammar, validate its schema and addon version, and then select only their
+owned subtree. The catalog and encounter domains retain independent typed
+schemas, bounds, and validation authority.
 
 The compiler is a second binary in the existing Cargo package, not a `build.rs`
 side effect or workspace. It builds a sibling candidate in one transaction,

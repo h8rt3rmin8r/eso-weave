@@ -160,7 +160,7 @@
     "atomic_import": true,
     "upload_default": false,
     "user_data_separate": true,
-    "provisional_max_snapshot_bytes": 67108864,
+    "provisional_max_snapshot_bytes": 134217728,
     "provisional_max_records": 500000,
     "provisional_max_string_bytes": 65536,
     "limits_require_field_verification": "issue #129",

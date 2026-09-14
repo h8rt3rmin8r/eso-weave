@@ -24,8 +24,8 @@ planes distinct:
 
 Raw and derived rows do not belong in the bundled `catalog.sqlite`. The current
 Pixel Bus remains a small safety and action-observation channel and is not a bulk
-encounter transport. [ESO Weave Encounter](../features/encounter-capture.md) is a
-separate addon that writes one explicitly armed, bounded SavedVariables capture.
+encounter transport. The [ESO Weave Data encounter module](../features/encounter-capture.md)
+writes one explicitly armed, bounded SavedVariables capture under its isolated subtree.
 The S076 importer reads one explicitly selected file through a stable no-follow
 handle, accepts only the fixed data-only table grammar, validates the complete
 terminal contract, and never executes Lua.
@@ -46,7 +46,7 @@ history-UI decision rather than an extension of the raw store.
 
 S078 gives the desktop one private Encounter History window. UI imports go to
 `encounters/encounters.sqlite` beneath the per-user application root. The Import
-Current Capture action derives the fixed `SavedVariables/EsoWeaveEncounter.lua`
+Current Capture action derives the fixed `SavedVariables/EsoWeaveData.lua`
 source and expected channel from the explicitly selected Live or PTS AddOns
 environment. It performs no arbitrary scan and uses the same bounded,
 non-executing S076 import contract.

@@ -46,7 +46,10 @@ fn json_to_lua(value: &serde_json::Value) -> String {
 
 fn capture_lua() -> String {
     let value: serde_json::Value = serde_json::from_str(CAPTURE).unwrap();
-    format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value))
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(&value)
+    )
 }
 
 fn imported_store(root: &std::path::Path) -> std::path::PathBuf {

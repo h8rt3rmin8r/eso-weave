@@ -5,10 +5,10 @@ Windows 10/11 x64 and Linux x64. The desktop runs outside the game: an input
 engine intercepts and synthesizes keys while the game window is focused, a weave
 engine executes combat action sequences, and an optional fishing module reads a
 pixel-bus signal rendered by the embedded PixelBeacon companion addon. A
-separately managed, user-initiated collector may export bounded public addon API
-values through local SavedVariables without coupling to automation. A distinct
-encounter addon may record one explicitly armed, bounded, privacy-minimized local
-combat capture without names, upload, Pixel Bus transport, or action authority.
+separately managed ESO Weave Data addon contains isolated catalog and encounter
+modules. Catalog export is user-initiated and bounded. Encounter capture requires
+one explicit arm and remains privacy-minimized, name-free, local, loss-aware, and
+unable to use Pixel Bus or authorize actions.
 Canonical shipped behavior and architecture live under `docs/src`; every feature traces
 to an actionable issue and that corpus. Current build plans under
 `docs/project/build-plans/` define ordered work slices, while completed plans
@@ -67,17 +67,18 @@ artifact before the verification issue closes.
 - Safety-critical test surfaces are never weakened or skipped: injected-input
   recursion breaking, input suppression scoped to the focused game window only,
   no blocking work on the hook thread, and PixelBeacon uninstall deleting a
-  folder only after verifying the managed-marker line in its manifest. Collector
-  lifecycle mutation is separately confined and marker-gated and never changes
-  PixelBeacon. Encounter capture is separately identified, dormant until one
-  explicit arm, name-free, bounded, loss-aware, and unable to drive automation;
-  any future lifecycle mutation requires its own containment and marker gates.
+  folder only after verifying the managed-marker line in its manifest. The data
+  addon lifecycle is separately confined to its exact four-file inventory and
+  never changes PixelBeacon. Catalog and encounter state occupy isolated subtrees;
+  neither module may clear the other, and the desktop never deletes their shared
+  SavedVariables file while ESO owns in-memory state.
 - CI parity before any commit: `cargo fmt --all -- --check`,
   `cargo clippy --all-targets --all-features -- -D warnings`,
   `cargo test --all --locked`, all run in the foreground and watched to
   completion, never backgrounded.
 - Pinned artifacts (`.github/workflows/**`, `rust-toolchain.toml`,
-  `release.toml`, `scripts/**`, `packaging/**`, `docs/project/releasing.md`) change only
+  `release.toml`, `scripts/**`, `packaging/**`, `docs/project/releasing.md`,
+  `.gitattributes`, `.gitignore`, `LICENSE`) change only
   with a dated decision recorded in `CHANGELOG.md`.
 - Releases follow `docs/project/releasing.md` exactly; cutting a `vX.Y.Z` tag always
   requires explicit authorization.
@@ -88,5 +89,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/090-evidence-scoped-recommendations/plan.md
+at specs/092-data-addon-foundation/plan.md
 <!-- SPECKIT END -->

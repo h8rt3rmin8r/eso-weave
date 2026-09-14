@@ -658,9 +658,14 @@ fn validate_request(request: &PipelineRequest, workspace: &Path) -> Result<(), P
         {
             return validation("source identity contains an empty value");
         }
+        let max_source_bytes = if source.role == SourceRole::CollectorCapture {
+            crate::data_addon::MAX_SAVED_VARIABLES_BYTES
+        } else {
+            MAX_INPUT_BYTES
+        };
         if !valid_sha256(&source.sha256)
             || source.max_bytes == 0
-            || source.max_bytes > MAX_INPUT_BYTES
+            || source.max_bytes > max_source_bytes
         {
             return validation("source hash or byte limit is invalid");
         }

@@ -6,7 +6,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
 use crate::catalog_pipeline::CandidateSummary;
-use crate::collector::lifecycle::{CollectorStatus, RunningState};
+use crate::data_addon::{DataAddonStatus, RunningState};
 
 use super::{
     CancellationToken, CaptureFingerprint, CatalogResolution, CatalogUpdateService, InstallOutcome,
@@ -30,9 +30,6 @@ enum WorkerCommand {
     UninstallCollector {
         addons_root: PathBuf,
         running: RunningState,
-    },
-    DeleteCapture {
-        path: PathBuf,
     },
     BuildCollector {
         path: PathBuf,
@@ -61,7 +58,7 @@ pub enum WorkerEvent {
     CaptureBoundaryRecorded(CaptureFingerprint),
     CollectorCandidateBuilt(CandidateSummary),
     CollectorState {
-        status: Option<CollectorStatus>,
+        status: Option<DataAddonStatus>,
         message: String,
     },
     Progress(UpdateProgress),
@@ -205,7 +202,7 @@ impl CatalogUpdateWorker {
                         worker_busy.store(false, Ordering::Release);
                     }
                     WorkerCommand::InspectCollector { addons_root } => {
-                        let status = crate::collector::lifecycle::status(&addons_root);
+                        let status = crate::data_addon::status(&addons_root);
                         let _ = event_tx.send(WorkerEvent::CollectorState {
                             status: Some(status),
                             message: "Collector status refreshed.".into(),
@@ -217,16 +214,12 @@ impl CatalogUpdateWorker {
                         running,
                         api_version,
                     } => {
-                        match crate::collector::lifecycle::install(
-                            &addons_root,
-                            running,
-                            api_version,
-                        ) {
+                        match crate::data_addon::install(&addons_root, running, api_version) {
                             Ok(outcome) => {
                                 let message = if outcome.reload_required {
-                                    "Collector installed. Run /reloadui, log out, or exit ESO before importing its capture."
+                                    "ESO Weave Data installed. Run /reloadui, log out, or exit ESO before importing catalog data."
                                 } else {
-                                    "Collector installed. Start ESO, then use /reloadui, logout, or exit to flush its capture."
+                                    "ESO Weave Data installed. Start ESO, then use /reloadui, logout, or exit to flush catalog data."
                                 };
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: Some(outcome.status),
@@ -236,7 +229,7 @@ impl CatalogUpdateWorker {
                             Err(_) => {
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: None,
-                                    message: "Collector installation was refused by its ownership or path safety gate."
+                                    message: "ESO Weave Data installation was refused by its ownership or path safety gate."
                                         .into(),
                                 });
                             }
@@ -247,31 +240,23 @@ impl CatalogUpdateWorker {
                         addons_root,
                         running,
                     } => {
-                        match crate::collector::lifecycle::uninstall(&addons_root, running) {
+                        match crate::data_addon::uninstall(&addons_root, running) {
                             Ok(outcome) => {
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: Some(outcome.status),
                                     message:
-                                        "Managed collector removed. PixelBeacon was not modified."
+                                        "Managed ESO Weave Data removed. PixelBeacon and SavedVariables were not modified."
                                             .into(),
                                 });
                             }
                             Err(_) => {
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: None,
-                                    message: "Collector removal was refused because it is absent or not marker-owned."
+                                    message: "ESO Weave Data removal was refused because it is absent or not marker-owned."
                                         .into(),
                                 });
                             }
                         }
-                        worker_busy.store(false, Ordering::Release);
-                    }
-                    WorkerCommand::DeleteCapture { path } => {
-                        let message = delete_capture(&path).unwrap_or_else(|message| message);
-                        let _ = event_tx.send(WorkerEvent::CollectorState {
-                            status: None,
-                            message: message.into(),
-                        });
                         worker_busy.store(false, Ordering::Release);
                     }
                     WorkerCommand::BuildCollector {
@@ -472,10 +457,6 @@ impl CatalogUpdateWorker {
         )
     }
 
-    pub fn delete_capture(&self, path: PathBuf) -> bool {
-        self.start(WorkerCommand::DeleteCapture { path }, None)
-    }
-
     pub fn build_collector(&self, path: PathBuf, waiting_fingerprint: CaptureFingerprint) -> bool {
         let cancel = CancellationToken::new();
         self.start(
@@ -567,21 +548,4 @@ fn record_terminal(
     {
         let _ = events.send(WorkerEvent::ReceiptWriteFailed);
     }
-}
-
-fn delete_capture(path: &std::path::Path) -> Result<&'static str, &'static str> {
-    let metadata = std::fs::symlink_metadata(path)
-        .map_err(|_| "No collector capture is available to delete.")?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
-        return Err("Capture deletion refused a linked or non-regular target.");
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        if metadata.file_attributes() & 0x0400 != 0 {
-            return Err("Capture deletion refused a linked or non-regular target.");
-        }
-    }
-    std::fs::remove_file(path).map_err(|_| "The collector capture could not be deleted.")?;
-    Ok("Local collector capture deleted.")
 }

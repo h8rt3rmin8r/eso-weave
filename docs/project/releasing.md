@@ -87,13 +87,12 @@ the machine's job, and steps 1 through 3 catch the common omissions before any a
 
 ## Asset shape
 
-Current decision (2026-07-10): Windows x64 MSI; Linux x86_64 `.deb`, AppImage, and tarball; a
+Current decision (2026-09-13): Windows x64 MSI; Linux x86_64 `.deb`, AppImage, and tarball; a
 combined `SHA256SUMS` file. No container images (this is a desktop application). macOS is out of
 scope per the specification. Linux aarch64 is deferred until an end user needs it. PixelBeacon
-and the catalog collector are not separate release assets: both ship embedded inside the
-application binary and are installed from the application UI. The encounter-capture addon remains
-a repository-source developer tool for manual installation. Change this shape only with a dated
-decision recorded in `CHANGELOG.md`.
+and the exact four-file ESO Weave Data addon are not separate release assets: both ship embedded
+inside the application binary and are installed from the application UI. Change this shape only
+with a dated decision recorded in `CHANGELOG.md`.
 
 ## Supporting scripts
 

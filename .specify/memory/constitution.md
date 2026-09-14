@@ -1,12 +1,15 @@
 <!--
 Sync Impact Report
-- Version change: 2.1.0 -> 2.2.0
-- Amendment: permit one separately identified, explicitly armed, read-only
-  encounter capture addon with a bounded local SavedVariables handoff
-- Modified principles: II adds encounter capture confinement and future
-  lifecycle gates; V expands the explicit addon boundary from two to three
-  narrow bridges while retaining all memory, packet, automation, upload,
-  personal-identity, and multi-account prohibitions
+- Version change: 2.2.0 -> 3.0.0
+- Amendment: replace the superseded three-addon topology with exactly two
+  managed packages, PixelBeacon and ESO Weave Data. The data package keeps
+  catalog discovery and encounter capture as independently activated modules
+  behind one marker-gated lifecycle and one namespaced SavedVariables root.
+- Modified principles: II replaces separate Collector and Encounter package
+  gates with one data-addon package gate plus module-local mutation and
+  isolation rules; V redefines three addon packages as two packages with three
+  narrow internal surfaces while retaining all memory, packet, automation,
+  upload, personal-identity, and multi-account prohibitions.
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -17,13 +20,12 @@ Sync Impact Report
     references; no edit needed)
   .specify/templates/tasks-template.md ........ aligned (no constitution
     references; no edit needed)
-  CLAUDE.md ................................... aligned with the third narrow
-  addon bridge and required safety gates
-  docs/src/getting-started/responsible-use.md . aligned with the three local-only
-  addon bridges
-  docs/project/build-autopilot.md ............. aligned (no procedural change)
+  CLAUDE.md ................................... aligned
+  docs/src/getting-started/responsible-use.md . aligned
+  docs/project/build-autopilot.md ............. aligned
 - Follow-up TODOs: issue #131 verifies live Combat Metrics parity and exact
-  representative encounter storage; issue #133 owns hostile-data import
+  representative encounter storage; issue #186 owns any lossless-capture
+  change; S092 creates separate native-log platform verification.
 -->
 
 # ESO Weave Constitution
@@ -61,14 +63,16 @@ skipped, or made conditional:
 - PixelBeacon uninstall deletes a folder only after verifying the managed-marker
   line in its manifest; an unmanaged folder is never deleted.
 - AddOns discovery never writes outside the resolved AddOns directory.
-- ESO Weave Collector install, update, and removal stay inside its separately
-  named subtree; removal and replacement require its own verified managed marker,
-  and no collector lifecycle action mutates PixelBeacon.
-- ESO Weave Encounter is separately named and dormant until the user explicitly
+- ESO Weave Data install, update, and removal stay inside its separately named
+  subtree; removal and replacement require its own verified managed marker, and
+  no data-addon lifecycle action mutates PixelBeacon or a neighboring addon.
+- ESO Weave Data catalog and encounter state use separate namespaced subtrees.
+  Clearing one module preserves the other and never deletes or rewrites the
+  shared SavedVariables file from the desktop while ESO may own its in-memory
+  contents.
+- The ESO Weave Data encounter module remains dormant until the user explicitly
   arms one capture. It persists no personal names, uses no Pixel Bus transport,
-  and cannot drive automation. Any future install, update, or removal stays in
-  its own subtree behind its own verified managed marker and cannot mutate the
-  other addons.
+  and cannot drive automation.
 - Fishing degrades to disabled on SignalLost rather than firing inputs blind.
 
 Rationale: each surface, if wrong, silently breaks input handling or destroys
@@ -102,7 +106,7 @@ no cargo gate to run, but still obey the text hygiene rules below.
 Rationale: local parity with CI keeps `main` continuously releasable and
 prevents the misdiagnosed hangs that backgrounded test runs have caused.
 
-### V. Bounded Scope: Desktop With Three Narrow Addon Bridges
+### V. Bounded Scope: Desktop With Two Managed Addon Packages
 
 The ESO Weave desktop application runs outside the game. It MUST NOT read or
 write game process memory, intercept network or packet traffic, orchestrate
@@ -111,29 +115,32 @@ addon surfaces are:
 
 - PixelBeacon, which publishes a minimal local screen-signal contract used only
   by fishing.
-- ESO Weave Collector, which a user explicitly starts to read documented public
-  addon API values and write bounded, local SavedVariables for later hostile-data
-  parsing by the desktop.
-- ESO Weave Encounter, which a user explicitly arms for one encounter to record
-  bounded, privacy-minimized public combat API observations in local
-  SavedVariables for later hostile-data parsing by the desktop.
+- ESO Weave Data, which contains independently activated catalog-discovery and
+  encounter-capture modules behind one managed package boundary. The catalog
+  module reads documented public addon API values into bounded local
+  SavedVariables for later hostile-data parsing. The encounter module records
+  one explicitly armed, bounded, privacy-minimized set of public combat API
+  observations for the same restricted local parsing boundary.
 
-The collector MUST remain separately managed from PixelBeacon, read-only with
-respect to gameplay, prohibited during combat, independent of action automation,
-and free of uploads, synthesized input, equipment changes, item consumption, or
+The data addon MUST remain separately managed from PixelBeacon and MUST preserve
+independent module activation, state, event ownership, limits, and clearing. It
+is read-only with respect to gameplay, independent of action automation, and
+free of uploads, synthesized input, equipment changes, item consumption, or
 automatic navigation. Partial or corrupt captures never become active data.
 
-The encounter addon MUST remain separately identified from both existing addons,
-read-only with respect to gameplay, dormant without explicit one-shot user
-authority, bounded in events and estimated bytes, independent of action
-automation, and free of uploads, names, chat, guild, location, synthesized input,
-equipment changes, item consumption, or automatic navigation. It MUST declare
-capture loss and MUST NOT present partial observations as complete.
+The catalog module MUST remain prohibited during combat and dormant without an
+explicit user request.
 
-Rationale: these three explicit bridges preserve the project's technical and
-ethical boundary while permitting local, consented, versioned data collection.
-Any additional in-game feature or transport changes what the software is and
-requires a future constitution amendment.
+The encounter module MUST remain dormant without explicit one-shot user
+authority, bounded in events and estimated bytes, independent of action
+automation, and free of uploads, names, chat, guild, location, synthesized
+input, equipment changes, item consumption, or automatic navigation. It MUST
+declare capture loss and MUST NOT present partial observations as complete.
+
+Rationale: these two managed packages preserve three narrow local surfaces,
+PixelBeacon output, catalog discovery, and encounter capture, while making the
+product topology maintainable. Any additional in-game feature or transport
+changes what the software is and requires a future constitution amendment.
 
 ## Platform, Configuration, and Text Hygiene Constraints
 
@@ -199,4 +206,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 2.2.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-09
+**Version**: 3.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-13

@@ -68,7 +68,10 @@ fn seeded_service_with_capture(
     let input = root.join("capture.lua");
     fs::write(
         &input,
-        format!("EsoWeaveEncounterSaved = {}", json_to_lua(value)),
+        format!(
+            "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+            json_to_lua(value)
+        ),
     )
     .unwrap();
     let catalog = root.join("catalog.sqlite");
@@ -401,8 +404,11 @@ fn rendered_import_uses_the_explicitly_selected_environment() {
     fs::create_dir_all(&saved_variables).unwrap();
     let value: serde_json::Value = serde_json::from_str(CAPTURE).unwrap();
     fs::write(
-        saved_variables.join("EsoWeaveEncounter.lua"),
-        format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value)),
+        saved_variables.join("EsoWeaveData.lua"),
+        format!(
+            "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+            json_to_lua(&value)
+        ),
     )
     .unwrap();
     let catalog = root.path().join("catalog.sqlite");

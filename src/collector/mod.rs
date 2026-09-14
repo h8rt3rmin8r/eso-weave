@@ -1,7 +1,6 @@
 //! Bounded ESO catalog collection, hostile SavedVariables parsing, and staging.
 
 pub mod import;
-pub mod lifecycle;
 mod parser;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,19 +10,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::{Channel, EntityKind};
 
+pub use crate::data_addon::embedded_checksum;
 pub use import::{import_capture, ImportReceipt};
-pub use lifecycle::embedded_checksum;
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 1;
 pub const COLLECTOR_VERSION: u32 = 1;
-pub const MAX_CAPTURE_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_CAPTURE_RECORDS: usize = 500_000;
 pub const MAX_CAPTURE_STRING_BYTES: usize = 64 * 1024;
 pub const MAX_CHUNK_BYTES: usize = 64 * 1024;
 pub const MAX_CHUNKS: usize = 1024;
 pub const MAX_PARSE_DEPTH: usize = 16;
-pub const MAX_PARSE_TOKENS: usize = 1_000_000;
-pub const MAX_TABLE_ENTRIES: usize = 600_000;
+pub const MAX_PARSE_TOKENS: usize = crate::data_addon::MAX_SAVED_VARIABLES_TOKENS;
+pub const MAX_TABLE_ENTRIES: usize = crate::data_addon::MAX_SAVED_VARIABLES_ENTRIES;
 
 pub const CATEGORIES: [&str; 5] = [
     "player-skills",

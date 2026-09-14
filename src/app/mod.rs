@@ -2219,7 +2219,7 @@ impl AppModel {
 
     pub fn catalog_collector_capture_path(&self) -> Option<PathBuf> {
         let root = self.catalog_collector_addons_root()?;
-        crate::collector::lifecycle::saved_variables_path(&root)
+        crate::data_addon::saved_variables_path(&root)
     }
 
     /// Resolves the fixed terminal encounter capture for the explicitly selected
@@ -2235,18 +2235,16 @@ impl AppModel {
         Some((
             environment_root
                 .join("SavedVariables")
-                .join("EsoWeaveEncounter.lua"),
+                .join(crate::data_addon::SAVED_VARIABLES_FILE),
             channel,
         ))
     }
 
-    pub fn catalog_collector_running_state(&self) -> crate::collector::lifecycle::RunningState {
+    pub fn catalog_collector_running_state(&self) -> crate::data_addon::RunningState {
         match beacon::probe_game_running() {
-            beacon::RunningState::Running => crate::collector::lifecycle::RunningState::Running,
-            beacon::RunningState::NotRunning => {
-                crate::collector::lifecycle::RunningState::NotRunning
-            }
-            beacon::RunningState::Unknown => crate::collector::lifecycle::RunningState::Unknown,
+            beacon::RunningState::Running => crate::data_addon::RunningState::Running,
+            beacon::RunningState::NotRunning => crate::data_addon::RunningState::NotRunning,
+            beacon::RunningState::Unknown => crate::data_addon::RunningState::Unknown,
         }
     }
 

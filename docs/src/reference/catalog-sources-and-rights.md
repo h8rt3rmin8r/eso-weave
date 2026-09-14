@@ -142,12 +142,13 @@ commit atomically. Interrupted, partial, malformed, oversized, or unsupported
 snapshots leave the last known-good data unchanged. User character and encounter
 data stays separate and is never uploaded by default.
 
-The initial defensive limits are 64 MiB per snapshot, 500,000 records, and 64
-KiB per string. They are provisional until issue
+The shared SavedVariables envelope is limited to 128 MiB. Catalog capture inside
+it remains limited to a 64 MiB snapshot, 500,000 records, and 64 KiB per string.
+These limits are provisional until issue
 [#129](https://github.com/h8rt3rmin8r/eso-weave/issues/129) records real size,
 serialization, stall, corruption, and logout or `/reloadui` flush evidence.
 
-S071 implements this boundary through the separate `EsoWeaveCollector` addon,
+S092 implements this boundary through the shared `EsoWeaveData` addon,
 its marker-gated lifecycle commands, and an importer that stages normalized JSON
 without directly publishing SQLite. See the
 [bounded discovery collector](../development/discovery-collector.md) for the
