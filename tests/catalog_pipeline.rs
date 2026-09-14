@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 const LIVE_BUNDLE: &str = "specs/070-catalog-compiler/fixtures/minimal-live.json";
-const LIVE_CAPTURE: &str = "specs/071-bounded-discovery-exporter/fixtures/live.lua";
+const LIVE_CAPTURE: &str = "specs/092-data-addon-foundation/fixtures/catalog-live-canonical.lua";
 const CANDIDATE_FILES: &[&str] = &[
     "build-report.json",
     "catalog.sqlite",
@@ -255,7 +255,7 @@ fn collector_capture_mode_builds_a_catalog_but_never_copies_the_capture() {
         json!(["en"]),
     );
     request["sources"][0]["revision"] =
-        json!("7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae");
+        json!("63292440be3b3020065d26189ff4cf0daa17ea5ad0ca183562e06fe1e1ee3f1b");
     request["sources"][0]["uri"] = json!("user-local-savedvariables");
     request["sources"][0]["locale"] = json!("en");
     request["sources"][0]["license_scope"] = json!("user-generated-local-only");

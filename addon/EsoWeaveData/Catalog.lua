@@ -1,7 +1,8 @@
-local ADDON_NAME = "EsoWeaveCollector"
+local ADDON_NAME = "EsoWeaveData"
+local MODULE_NAMESPACE = ADDON_NAME .. "Catalog"
 local COLLECTOR_VERSION = 1
 local SCHEMA_VERSION = 1
-local COLLECTOR_CHECKSUM = "7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae"
+local COLLECTOR_CHECKSUM = "63292440be3b3020065d26189ff4cf0daa17ea5ad0ca183562e06fe1e1ee3f1b"
 
 local MAX_RECORDS_PER_TICK = 64
 local MAX_MILLISECONDS_PER_TICK = 4
@@ -11,7 +12,7 @@ local MAX_STRING_BYTES = 65536
 local MAX_CHUNK_BYTES = 65536
 local MAX_CHUNKS = 1024
 
-local UPDATE_NAME = ADDON_NAME .. "Update"
+local UPDATE_NAME = MODULE_NAMESPACE .. "Update"
 local records = {}
 local runtime = nil
 
@@ -28,10 +29,10 @@ local function message(text)
 end
 
 local function addWarning(text)
-    for _, existing in ipairs(EsoWeaveCollectorSaved.warnings) do
+    for _, existing in ipairs(EsoWeaveDataSaved.catalog.warnings) do
         if existing == text then return end
     end
-    table.insert(EsoWeaveCollectorSaved.warnings, text)
+    table.insert(EsoWeaveDataSaved.catalog.warnings, text)
 end
 
 local function jsonEscape(value)
@@ -115,9 +116,9 @@ end
 
 local function setFailure(reason)
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
-    EsoWeaveCollectorSaved.status = "failed"
-    EsoWeaveCollectorSaved.cancellation_reason = reason
-    EsoWeaveCollectorSaved.finished_at = tostring(GetTimeStamp())
+    EsoWeaveDataSaved.catalog.status = "failed"
+    EsoWeaveDataSaved.catalog.cancellation_reason = reason
+    EsoWeaveDataSaved.catalog.finished_at = tostring(GetTimeStamp())
     runtime = nil
     message("Capture failed: " .. reason)
 end
@@ -404,20 +405,20 @@ local function finalizeCapture()
             limitations = LIMITATIONS[category],
         })
     end
-    EsoWeaveCollectorSaved.status = "complete"
-    EsoWeaveCollectorSaved.finished_at = tostring(GetTimeStamp())
-    EsoWeaveCollectorSaved.coverage = coverage
-    EsoWeaveCollectorSaved.chunks = chunks
-    EsoWeaveCollectorSaved.checkpoint = { adapter = #runtime.selected_categories, cursor = 0 }
+    EsoWeaveDataSaved.catalog.status = "complete"
+    EsoWeaveDataSaved.catalog.finished_at = tostring(GetTimeStamp())
+    EsoWeaveDataSaved.catalog.coverage = coverage
+    EsoWeaveDataSaved.catalog.chunks = chunks
+    EsoWeaveDataSaved.catalog.checkpoint = { adapter = #runtime.selected_categories, cursor = 0 }
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
     runtime = nil
     message("Capture complete. Use /reloadui, logout, or exit before desktop import.")
 end
 
 local function updateCapture()
-    if not runtime or EsoWeaveCollectorSaved.status ~= "running" then return end
+    if not runtime or EsoWeaveDataSaved.catalog.status ~= "running" then return end
     if IsUnitInCombat("player") then
-        EsoWeaveCollectorSaved.status = "paused"
+        EsoWeaveDataSaved.catalog.status = "paused"
         EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
         message("Capture paused for combat. Use /ewcollect resume after combat.")
         return
@@ -442,7 +443,7 @@ local function updateCapture()
         else
             processed = processed + 1
         end
-        EsoWeaveCollectorSaved.checkpoint = { adapter = runtime.adapter, cursor = #records }
+        EsoWeaveDataSaved.catalog.checkpoint = { adapter = runtime.adapter, cursor = #records }
     end
 end
 
@@ -493,7 +494,7 @@ local function startCapture(arguments)
         seen = {},
     }
     local characterId = type(GetCurrentCharacterId) == "function" and GetCurrentCharacterId() or 0
-    EsoWeaveCollectorSaved = {
+    EsoWeaveDataSaved.catalog = {
         schema_version = SCHEMA_VERSION,
         collector_version = COLLECTOR_VERSION,
         collector_checksum = COLLECTOR_CHECKSUM,
@@ -519,7 +520,7 @@ local function startCapture(arguments)
 end
 
 local function resumeCapture()
-    if not runtime or EsoWeaveCollectorSaved.status ~= "paused" then
+    if not runtime or EsoWeaveDataSaved.catalog.status ~= "paused" then
         message("No paused in-session capture can be resumed.")
         return
     end
@@ -527,7 +528,7 @@ local function resumeCapture()
         message("Capture cannot resume in combat.")
         return
     end
-    EsoWeaveCollectorSaved.status = "running"
+    EsoWeaveDataSaved.catalog.status = "running"
     EVENT_MANAGER:RegisterForUpdate(UPDATE_NAME, 10, updateCapture)
     message("Capture resumed.")
 end
@@ -538,21 +539,35 @@ local function cancelCapture()
         return
     end
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
-    EsoWeaveCollectorSaved.status = "cancelled"
-    EsoWeaveCollectorSaved.cancellation_reason = "user-cancelled"
-    EsoWeaveCollectorSaved.finished_at = tostring(GetTimeStamp())
+    EsoWeaveDataSaved.catalog.status = "cancelled"
+    EsoWeaveDataSaved.catalog.cancellation_reason = "user-cancelled"
+    EsoWeaveDataSaved.catalog.finished_at = tostring(GetTimeStamp())
     runtime = nil
     message("Capture cancelled. The incomplete envelope cannot be imported.")
 end
 
 local function showStatus()
-    local state = EsoWeaveCollectorSaved and EsoWeaveCollectorSaved.status or "idle"
+    local state = EsoWeaveDataSaved.catalog and EsoWeaveDataSaved.catalog.status or "idle"
     if runtime then
         message("Status: " .. tostring(state) .. ", adapter " .. tostring(runtime.adapter)
             .. "/" .. tostring(#runtime.selected_categories) .. ", records " .. tostring(#records))
     else
         message("Status: " .. tostring(state))
     end
+end
+
+local function clearCapture(arguments)
+    if arguments ~= "confirm" then
+        message("Clear requires /ewcollect clear confirm.")
+        return
+    end
+    if runtime then
+        message("Cancel the active capture before clearing catalog data.")
+        return
+    end
+    EsoWeaveDataSaved.catalog = nil
+    records = {}
+    message("Catalog capture cleared. Encounter data was preserved.")
 end
 
 local function command(arguments)
@@ -565,33 +580,36 @@ local function command(arguments)
         cancelCapture()
     elseif verb == "status" then
         showStatus()
+    elseif verb == "clear" then
+        clearCapture(rest)
     else
-        message("Use /ewcollect start live|pts [categories], /ewcollect status, /ewcollect resume, /ewcollect cancel, or /ewcollect help.")
+        message("Use /ewcollect start live|pts [categories], /ewcollect status, /ewcollect resume, /ewcollect cancel, /ewcollect clear confirm, or /ewcollect help.")
     end
 end
 
 local function onCombatState(_, inCombat)
-    if inCombat and runtime and EsoWeaveCollectorSaved.status == "running" then
-        EsoWeaveCollectorSaved.status = "paused"
+    if inCombat and runtime and EsoWeaveDataSaved.catalog.status == "running" then
+        EsoWeaveDataSaved.catalog.status = "paused"
         EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
         message("Capture paused for combat.")
     end
 end
 
 local function onPlayerDeactivated()
-    if runtime and EsoWeaveCollectorSaved.status == "running" then
-        EsoWeaveCollectorSaved.status = "paused"
+    if runtime and EsoWeaveDataSaved.catalog.status == "running" then
+        EsoWeaveDataSaved.catalog.status = "paused"
         EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
     end
 end
 
 local function onLoaded(_, addonName)
     if addonName ~= ADDON_NAME then return end
-    EVENT_MANAGER:UnregisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED)
+    EVENT_MANAGER:UnregisterForEvent(MODULE_NAMESPACE, EVENT_ADD_ON_LOADED)
+    if type(EsoWeaveDataSaved) ~= "table" then EsoWeaveDataSaved = {} end
     SLASH_COMMANDS["/ewcollect"] = command
-    EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "Combat", EVENT_PLAYER_COMBAT_STATE, onCombatState)
-    EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "Deactivate", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
+    EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE .. "Combat", EVENT_PLAYER_COMBAT_STATE, onCombatState)
+    EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE .. "Deactivate", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
     message("Loaded. Collection is manual and local. Use /ewcollect help.")
 end
 
-EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED, onLoaded)
+EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE, EVENT_ADD_ON_LOADED, onLoaded)

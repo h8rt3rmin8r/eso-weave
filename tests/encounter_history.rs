@@ -43,7 +43,10 @@ fn json_to_lua(value: &serde_json::Value) -> String {
 
 fn capture_lua() -> String {
     let value: serde_json::Value = serde_json::from_str(CAPTURE).unwrap();
-    format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value))
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(&value)
+    )
 }
 
 fn catalog(root: &std::path::Path, fixture: &str, channel: Channel) -> std::path::PathBuf {
@@ -95,7 +98,7 @@ fn dangling_store_symlink_is_not_reported_as_empty_history() {
 #[test]
 fn explicit_import_lists_and_projects_truthful_quality_and_catalog_coverage() {
     let root = tempfile::tempdir().unwrap();
-    let input = root.path().join("EsoWeaveEncounter.lua");
+    let input = root.path().join("EsoWeaveData.lua");
     fs::write(&input, capture_lua()).unwrap();
     let catalog = catalog(root.path(), LIVE_CATALOG, Channel::Live);
     let service = EncounterHistoryService::new(root.path(), &catalog);

@@ -281,7 +281,7 @@ pub struct EsoWeaveApp {
     catalog_live_state: LiveUpdateState,
     catalog_status_ready: bool,
     collector_waiting_fingerprint: Option<CaptureFingerprint>,
-    collector_status: Option<crate::collector::lifecycle::CollectorStatus>,
+    collector_status: Option<crate::data_addon::DataAddonStatus>,
     collector_status_requested: bool,
     encounter_history_worker: Option<EncounterHistoryWorker>,
     encounter_history_open: bool,
@@ -2213,20 +2213,20 @@ impl EsoWeaveApp {
                 "Collected categories: player skills, crafted abilities, item sets, champion skills, companions, races, and classes. Account and character names are excluded or represented only by a one-way scope key.",
             );
             let collector_status = match self.collector_status {
-                Some(crate::collector::lifecycle::CollectorStatus::NotInstalled) => "not installed",
-                Some(crate::collector::lifecycle::CollectorStatus::ManagedUpToDate) => "managed and current",
-                Some(crate::collector::lifecycle::CollectorStatus::ManagedVersionMismatch) => {
+                Some(crate::data_addon::DataAddonStatus::NotInstalled) => "not installed",
+                Some(crate::data_addon::DataAddonStatus::ManagedUpToDate) => "managed and current",
+                Some(crate::data_addon::DataAddonStatus::ManagedVersionMismatch) => {
                     "managed update available"
                 }
-                Some(crate::collector::lifecycle::CollectorStatus::Unmanaged) => {
+                Some(crate::data_addon::DataAddonStatus::Unmanaged) => {
                     "unmanaged (will not be modified)"
                 }
                 None => "AddOns directory unavailable",
             };
-            ui.label(format!("Local collector: {collector_status}"));
+            ui.label(format!("ESO Weave Data: {collector_status}"));
             ui.horizontal_wrapped(|ui| {
                 if ui
-                    .add_enabled(!busy, egui::Button::new("Install/update collector"))
+                    .add_enabled(!busy, egui::Button::new("Install/update data addon"))
                     .clickable()
                     .clicked()
                 {
@@ -2281,23 +2281,18 @@ impl EsoWeaveApp {
                     }
                 }
                 if ui
-                    .add_enabled(!busy, egui::Button::new("Delete capture"))
+                    .add_enabled(!busy, egui::Button::new("How to clear catalog data"))
                     .clickable()
                     .clicked()
                 {
-                    if let (Some(worker), Some(path)) = (
-                        self.catalog_worker.as_ref(),
-                        self.model.catalog_collector_capture_path(),
-                    ) {
-                        let _ = worker.delete_capture(path);
-                    } else {
-                        self.catalog_update_message =
-                            Some("The collector capture location could not be resolved.".into());
-                    }
+                    self.catalog_update_message = Some(
+                        "ESO owns the shared data file. In ESO, use /ewcollect clear confirm to clear only catalog data."
+                            .into(),
+                    );
                     self.collector_waiting_fingerprint = None;
                 }
                 if ui
-                    .add_enabled(!busy, egui::Button::new("Uninstall collector"))
+                    .add_enabled(!busy, egui::Button::new("Uninstall data addon"))
                     .clickable()
                     .clicked()
                 {

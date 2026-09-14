@@ -1,6 +1,7 @@
 # Bounded Discovery Collector
 
-ESO Weave includes a separate, optional `EsoWeaveCollector` addon for collecting
+ESO Weave includes an optional catalog module in the marker-managed
+`EsoWeaveData` addon for collecting
 public ESO API results on the user's own system. It is a deliberate maintainer
 workflow, not part of normal application startup. It does not capture combat,
 send network requests, generate input, modify gameplay, upload data, or package
@@ -15,8 +16,8 @@ version-scoped ordering facts. Stable API IDs remain catalog identity.
 ## Install and collect
 
 Use the exact Live or PTS `AddOns` directory and the current numeric ESO API
-version. These lifecycle commands operate only on `EsoWeaveCollector` and never
-share PixelBeacon ownership or files.
+version. These lifecycle commands operate on the exact four-file `EsoWeaveData`
+package and never share PixelBeacon ownership or files.
 
 ```bash
 cargo run --locked --bin catalog-compiler -- collector-status --addons ADDONS
@@ -43,7 +44,7 @@ before importing it.
 
 ## Stage and compile
 
-The SavedVariables file is `SavedVariables/EsoWeaveCollector.lua` beside the
+The SavedVariables file is `SavedVariables/EsoWeaveData.lua` beside the
 selected environment's `AddOns` directory. Stage it to normalized JSON first:
 
 ```bash
@@ -60,7 +61,8 @@ instead of printing it. It accepts one fixed SavedVariables table
 grammar, requires a complete envelope, verifies the embedded collector SHA-256,
 contiguous JSON-line chunks, Adler-32 metadata, category identities, and parent
 relationships, then validates the result through the S070 catalog model. Limits
-are checked before or during parsing: 64 MiB input, 500,000 records, 64 KiB
+are checked before or during parsing: a 128 MiB shared-file envelope, 500,000
+catalog records, 64 KiB
 strings and chunks, 1,024 chunks, bounded nesting, tokens, and table entries.
 Malformed, partial, oversized, aliased, or unsupported input leaves existing
 staged output unchanged.
@@ -78,5 +80,5 @@ cargo run --locked --bin catalog-compiler -- collector-remove --addons ADDONS
 ```
 
 Removal never deletes SavedVariables, staged JSON, catalogs, or an unmanaged
-addon directory. Preserve or delete those user-local files separately according
-to the user's own retention choice.
+addon directory. Use `/ewcollect clear confirm` in ESO to clear only the catalog
+subtree while preserving encounter data.

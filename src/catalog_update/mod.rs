@@ -32,7 +32,7 @@ use crate::catalog_pipeline::{build_candidate_with_cancel, PipelineRun};
 use crate::catalog_pipeline::{
     inspect_candidate, CandidateSummary, PipelineError, CANDIDATE_FILES,
 };
-use crate::collector::{parse_capture, MAX_CAPTURE_BYTES};
+use crate::collector::{canonical_catalog_capture, parse_capture, MAX_CAPTURE_BYTES};
 
 const SELECTION_LIMIT: u64 = 16 * 1024;
 
@@ -276,11 +276,7 @@ impl CatalogUpdateService {
         capture_path: impl AsRef<Path>,
     ) -> Result<CaptureFingerprint, UpdateError> {
         if !capture_path.as_ref().exists() {
-            return Ok(CaptureFingerprint {
-                size: 0,
-                modified_unix_nanos: None,
-                sha256: "0".repeat(64),
-            });
+            return Ok(empty_capture_fingerprint());
         }
         fingerprint_capture(capture_path.as_ref())
     }
@@ -324,10 +320,15 @@ impl CatalogUpdateService {
                 .parent()
                 .ok_or_else(|| UpdateError::Validation("capture has no parent".into()))?,
         )?;
-        let capture_bytes =
+        let shared_bytes =
             read_bounded_stable(&canonical_parent, capture_path.as_ref(), MAX_CAPTURE_BYTES)
                 .map_err(stable_capture_error)?;
-        let envelope = parse_capture(&capture_bytes).map_err(PipelineError::Collector)?;
+        let envelope = parse_capture(&shared_bytes).map_err(PipelineError::Collector)?;
+        let capture_bytes = canonical_catalog_capture(&shared_bytes)
+            .map_err(PipelineError::Collector)?
+            .ok_or_else(|| {
+                UpdateError::Validation("shared SavedVariables has no catalog capture".into())
+            })?;
         if envelope.channel != Channel::Live {
             return Err(UpdateError::Validation(
                 "only a complete Live collector capture can build an active candidate".into(),
@@ -958,17 +959,23 @@ fn fingerprint_capture(path: &Path) -> Result<CaptureFingerprint, UpdateError> {
     )?;
     let bytes =
         read_bounded_stable(&parent, path, MAX_CAPTURE_BYTES).map_err(stable_capture_error)?;
-    let metadata = fs::symlink_metadata(path)?;
-    let modified_unix_nanos = metadata
-        .modified()
-        .ok()
-        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|value| value.as_nanos());
+    let Some(identity) = canonical_catalog_capture(&bytes).map_err(PipelineError::Collector)?
+    else {
+        return Ok(empty_capture_fingerprint());
+    };
     Ok(CaptureFingerprint {
-        size: bytes.len() as u64,
-        modified_unix_nanos,
-        sha256: sha256_bytes(&bytes),
+        size: identity.len() as u64,
+        modified_unix_nanos: None,
+        sha256: sha256_bytes(&identity),
     })
+}
+
+fn empty_capture_fingerprint() -> CaptureFingerprint {
+    CaptureFingerprint {
+        size: 0,
+        modified_unix_nanos: None,
+        sha256: "0".repeat(64),
+    }
 }
 
 fn sha256_bytes(bytes: &[u8]) -> String {

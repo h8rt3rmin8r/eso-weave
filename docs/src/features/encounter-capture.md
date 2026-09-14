@@ -1,6 +1,6 @@
 # Encounter Capture
 
-S075 adds the ESO Weave Encounter addon as an explicit local observation tool.
+The `EsoWeaveData` encounter module is an explicit local observation tool.
 It records one privacy-minimized encounter into ESO SavedVariables so later work
 can import and analyze the same ordered facts outside the game.
 
@@ -9,9 +9,9 @@ recording. It remains dormant until you arm one Live or PTS encounter.
 
 ## Install and arm
 
-S075 supplies the addon source under `addon/EsoWeaveEncounter`. Desktop install
-controls are not available yet. For development use, copy that directory into
-the selected ESO environment's `AddOns` directory and reload the game interface.
+The desktop lifecycle controls install the exact package under
+`addon/EsoWeaveData`. Catalog and encounter state share one versioned outer
+SavedVariables root, but each command mutates only its own module subtree.
 
 Outside combat, enter one of:
 
@@ -68,7 +68,7 @@ partial result instead of a false complete result.
 ## Save and ownership boundary
 
 After capture, use `/reloadui`, log out, or exit ESO so the client writes
-`SavedVariables/EsoWeaveEncounter.lua`. The file stays on your system. Open File,
+`SavedVariables/EsoWeaveData.lua`. The file stays on your system. Open File,
 Encounter History in the desktop and choose Import Current Capture to import it
 through the bounded non-executing path. The action uses the Live or PTS
 environment selected in Settings and stores accepted raw history only in the

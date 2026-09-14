@@ -44,13 +44,19 @@ fn json_to_lua(value: &serde_json::Value) -> String {
 
 fn partial_lua() -> String {
     let value: serde_json::Value = serde_json::from_str(PARTIAL_JSON).unwrap();
-    format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value))
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(&value)
+    )
 }
 
 fn recovered_partial_lua() -> String {
     let mut value: serde_json::Value = serde_json::from_str(PARTIAL_JSON).unwrap();
     value["warnings"]["recovered_interruption"] = serde_json::json!(1);
-    format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value))
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(&value)
+    )
 }
 
 #[test]
@@ -76,11 +82,17 @@ fn complete_and_truthful_partial_captures_canonicalize() {
 #[test]
 fn parser_and_validator_reject_hostile_or_inconsistent_inputs() {
     for invalid in [
-        "EsoWeaveEncounterSaved = function() return {} end".to_string(),
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = function() return {} end }".to_string(),
         "Other = {}".to_string(),
         format!("{COMPLETE}; os.execute(\"x\")"),
         COMPLETE.replace("[\"channel\"] = \"live\"", "[\"channel\"] = \"pts\""),
         COMPLETE.replace("[\"last_sequence\"] = 2", "[\"last_sequence\"] = 3"),
+        COMPLETE.replacen("[\"schema_version\"] = 1", "[\"schema_version\"] = 2", 1),
+        COMPLETE.replacen("[\"addon_version\"] = 1", "[\"addon_version\"] = 2", 1),
+        COMPLETE.replace(
+            "\n    [\"schema_version\"] = 1",
+            "\n    [\"schema_version\"] = 2",
+        ),
         COMPLETE.replace("[\"monotonic_ms\"] = 1000", "[\"monotonic_ms\"] = 999"),
         COMPLETE.replace(
             "[\"reason\"] = \"combat-ended\"",
@@ -138,7 +150,11 @@ fn import_is_atomic_immutable_idempotent_and_collision_safe() {
     assert!(import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
     assert_eq!(list_encounters(&store).unwrap().len(), 1);
 
-    fs::write(&input, "EsoWeaveEncounterSaved = broken").unwrap();
+    fs::write(
+        &input,
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = broken }",
+    )
+    .unwrap();
     assert!(import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
     assert_eq!(list_encounters(&store).unwrap().len(), 1);
 }

@@ -1,7 +1,6 @@
 //! Bounded ESO catalog collection, hostile SavedVariables parsing, and staging.
 
 pub mod import;
-pub mod lifecycle;
 mod parser;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,19 +10,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::{Channel, EntityKind};
 
+pub use crate::data_addon::embedded_checksum;
 pub use import::{import_capture, ImportReceipt};
-pub use lifecycle::embedded_checksum;
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 1;
 pub const COLLECTOR_VERSION: u32 = 1;
-pub const MAX_CAPTURE_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_CAPTURE_RECORDS: usize = 500_000;
 pub const MAX_CAPTURE_STRING_BYTES: usize = 64 * 1024;
 pub const MAX_CHUNK_BYTES: usize = 64 * 1024;
 pub const MAX_CHUNKS: usize = 1024;
 pub const MAX_PARSE_DEPTH: usize = 16;
-pub const MAX_PARSE_TOKENS: usize = 1_000_000;
-pub const MAX_TABLE_ENTRIES: usize = 600_000;
+pub const MAX_PARSE_TOKENS: usize = crate::data_addon::MAX_SAVED_VARIABLES_TOKENS;
+pub const MAX_TABLE_ENTRIES: usize = crate::data_addon::MAX_SAVED_VARIABLES_ENTRIES;
 
 pub const CATEGORIES: [&str; 5] = [
     "player-skills",
@@ -169,6 +168,64 @@ pub fn parse_capture(bytes: &[u8]) -> Result<CollectorEnvelope, CollectorError> 
     let mut envelope: CollectorEnvelope = serde_json::from_value(value)?;
     validate_envelope(&mut envelope)?;
     Ok(envelope)
+}
+
+pub(crate) fn canonical_catalog_capture(bytes: &[u8]) -> Result<Option<Vec<u8>>, CollectorError> {
+    if bytes.len() as u64 > MAX_CAPTURE_BYTES {
+        return invalid(format!(
+            "capture exceeds the {MAX_CAPTURE_BYTES} byte limit"
+        ));
+    }
+    let source = std::str::from_utf8(bytes)
+        .map_err(|_| CollectorError::Validation("capture is not valid UTF-8".to_string()))?;
+    let Some(catalog) = parser::parse_optional_saved_variables(source)? else {
+        return Ok(None);
+    };
+    let mut canonical = format!(
+        "EsoWeaveDataSaved = {{[\"schema_version\"] = {SAVED_SCHEMA}, [\"addon_version\"] = {ADDON_VERSION}, [\"catalog\"] = ",
+        SAVED_SCHEMA = crate::data_addon::SAVED_VARIABLES_SCHEMA_VERSION,
+        ADDON_VERSION = crate::data_addon::DATA_ADDON_VERSION,
+    );
+    write_lua_value(&mut canonical, &catalog)?;
+    canonical.push_str("}\n");
+    Ok(Some(canonical.into_bytes()))
+}
+
+fn write_lua_value(output: &mut String, value: &serde_json::Value) -> Result<(), CollectorError> {
+    use std::fmt::Write as _;
+
+    match value {
+        serde_json::Value::Null => output.push_str("nil"),
+        serde_json::Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
+        serde_json::Value::Number(value) => {
+            let integer = value.as_i64().ok_or_else(|| {
+                CollectorError::Validation("catalog capture contains a non-integer number".into())
+            })?;
+            write!(output, "{integer}").expect("write to String");
+        }
+        serde_json::Value::String(value) => output.push_str(&serde_json::to_string(value)?),
+        serde_json::Value::Array(values) => {
+            output.push('{');
+            for (index, value) in values.iter().enumerate() {
+                write!(output, "[{}] = ", index + 1).expect("write to String");
+                write_lua_value(output, value)?;
+                output.push_str(", ");
+            }
+            output.push('}');
+        }
+        serde_json::Value::Object(values) => {
+            output.push('{');
+            for (key, value) in values {
+                output.push('[');
+                output.push_str(&serde_json::to_string(key)?);
+                output.push_str("] = ");
+                write_lua_value(output, value)?;
+                output.push_str(", ");
+            }
+            output.push('}');
+        }
+    }
+    Ok(())
 }
 
 fn validate_envelope(envelope: &mut CollectorEnvelope) -> Result<(), CollectorError> {
@@ -447,4 +504,24 @@ pub fn adler32_hex(bytes: &[u8]) -> String {
 
 fn invalid<T>(message: impl Into<String>) -> Result<T, CollectorError> {
     Err(CollectorError::Validation(message.into()))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn committed_catalog_fixture_matches_the_canonical_shared_projection() {
+        let shared = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/specs/092-data-addon-foundation/fixtures/catalog-live.lua"
+        ));
+        let committed = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/specs/092-data-addon-foundation/fixtures/catalog-live-canonical.lua"
+        ));
+
+        assert_eq!(
+            super::canonical_catalog_capture(shared).unwrap().unwrap(),
+            committed
+        );
+    }
 }

@@ -2711,3 +2711,17 @@ test("S089 requires local containment, readable tokens, visible guidance, and st
     assert.match(validateDocumentationTableCss(css.replace(needle, replacement)).join("\n"), expected);
   }
 });
+
+test("S092 keeps desktop command ingress empty and user controls explicit", async () => {
+  const root = path.resolve(".");
+  const decision = await readFile(path.join(root, "docs", "src", "development", "companion-addon-commands.md"), "utf8");
+  const catalog = await readFile(path.join(root, "addon", "EsoWeaveData", "Catalog.lua"), "utf8");
+  const encounter = await readFile(path.join(root, "addon", "EsoWeaveData", "Encounter.lua"), "utf8");
+  const runtime = `${catalog}\n${encounter}`;
+  assert.match(decision, /approved desktop command vocabulary is empty/i);
+  assert.match(decision, /\/ewcollect/);
+  assert.match(decision, /\/ewencounter/);
+  for (const forbidden of ["CreateDefaultActionBind", "BindKeyToAction", "SendHTTPRequest", "RequestOpenUnsafeURL", "CopyToClipboard"]) {
+    assert.equal(runtime.includes(forbidden), false, `runtime command ingress surface: ${forbidden}`);
+  }
+});

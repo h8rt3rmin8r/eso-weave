@@ -31,16 +31,16 @@ pub use store::{backup_store, delete_all, delete_encounter, list_encounters, loa
 pub const CAPTURE_SCHEMA_VERSION: u32 = 1;
 pub const STORE_SCHEMA_VERSION: u32 = 1;
 pub const CANONICAL_FORMAT_VERSION: u32 = 1;
-pub const MAX_CAPTURE_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;
 pub const MAX_ESTIMATED_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_STRING_BYTES: usize = 64 * 1024;
 pub const MAX_PARSE_DEPTH: usize = 16;
-pub const MAX_PARSE_TOKENS: usize = 3_000_000;
-pub const MAX_TABLE_ENTRIES: usize = 2_000_000;
+pub const MAX_PARSE_TOKENS: usize = crate::data_addon::MAX_SAVED_VARIABLES_TOKENS;
+pub const MAX_TABLE_ENTRIES: usize = crate::data_addon::MAX_SAVED_VARIABLES_ENTRIES;
 pub const MAX_ACTORS: u64 = 4_096;
 
-const ROOT: &str = "EsoWeaveEncounterSaved";
+const ROOT: &str = "EsoWeaveDataSaved";
 
 #[derive(thiserror::Error, Debug)]
 pub enum EncounterError {
@@ -106,7 +106,7 @@ pub fn parse_capture(
     }
     let source = std::str::from_utf8(bytes)
         .map_err(|_| EncounterError::Validation("capture is not valid UTF-8".into()))?;
-    let value = saved_variables::parse_assignment(
+    let mut root = saved_variables::parse_assignment(
         source,
         ROOT,
         ParseLimits {
@@ -118,6 +118,8 @@ pub fn parse_capture(
         EmptyTable::Object,
     )
     .map_err(|error| EncounterError::Validation(error.to_string()))?;
+    let value = crate::data_addon::take_module(&mut root, "encounter")
+        .map_err(EncounterError::Validation)?;
     let capture: EncounterCapture = serde_json::from_value(value).map_err(|error| {
         EncounterError::Validation(format!("invalid encounter schema: {error}"))
     })?;

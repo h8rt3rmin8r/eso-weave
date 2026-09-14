@@ -15,6 +15,7 @@ pub mod catalog_pipeline;
 pub mod catalog_update;
 pub mod collector;
 pub mod config;
+pub mod data_addon;
 pub mod documentation;
 pub mod encounter;
 pub mod fishing;

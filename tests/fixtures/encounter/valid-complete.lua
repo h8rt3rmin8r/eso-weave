@@ -1,4 +1,4 @@
-EsoWeaveEncounterSaved = {
+EsoWeaveDataSaved = { ["schema_version"] = 1, ["addon_version"] = 1, ["encounter"] = {
     ["schema_version"] = 1,
     ["addon_version"] = 1,
     ["status"] = "complete",
@@ -40,4 +40,5 @@ EsoWeaveEncounterSaved = {
             ["payload"] = { ["reason"] = "combat-ended", ["complete"] = true },
         },
     },
+}
 }

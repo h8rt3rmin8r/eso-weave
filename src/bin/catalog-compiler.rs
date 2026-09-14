@@ -6,12 +6,12 @@ use std::path::PathBuf;
 use eso_weave::catalog::compiler::{build_catalog, diff_catalogs, verify_catalog, BuildRequest};
 use eso_weave::catalog::{CatalogError, Channel};
 use eso_weave::catalog_pipeline::{build_candidate, verify_candidate, PipelineError, PipelineRun};
-use eso_weave::collector::lifecycle::{
-    install as install_collector, status as collector_status, uninstall as remove_collector,
-    RunningState as CollectorRunningState,
-};
 use eso_weave::collector::{
     import_capture, CollectorError, ImportRequest as CollectorImportRequest,
+};
+use eso_weave::data_addon::{
+    install as install_collector, status as collector_status, uninstall as remove_collector,
+    RunningState as CollectorRunningState,
 };
 use eso_weave::encounter::{
     backup_store, delete_all, delete_encounter, import_encounter, list_encounters,

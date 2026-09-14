@@ -39,10 +39,11 @@ unchanged. The selection commit itself is short and non-interruptible.
 
 ## Collector-assisted candidate
 
-The optional collector is separately marker-owned and never modifies
-PixelBeacon. Before installation, the modal lists the collected categories and
-the exclusion or one-way pseudonymization of account and character identity.
-The collector uses only public addon API results and writes SavedVariables.
+The optional catalog module lives inside the separately marker-owned ESO Weave
+Data addon and never modifies PixelBeacon. Before installation, the modal lists
+the collected categories and the exclusion or one-way pseudonymization of
+account and character identity. The module uses only public addon API results
+and writes its own subtree beneath the shared SavedVariables root.
 
 After choosing **Begin capture wait**, complete a save boundary in ESO with
 `/reloadui`, logout, or exit. ESO Weave does not claim to read unflushed or
@@ -53,9 +54,12 @@ catalog is the zero-removal baseline, so a partial capture cannot silently reduc
 accepted coverage. The resulting candidate still requires a separate install
 action.
 
-The modal can delete only the regular collector SavedVariables file and can
-uninstall only a marker-owned collector directory. Neither action changes
-PixelBeacon.
+The modal never deletes the shared SavedVariables file. **How to clear catalog
+data** directs the user to `/ewcollect clear confirm` in ESO, which clears only
+the catalog subtree and preserves encounter state. Uninstall removes only the
+marker-owned ESO Weave Data package directory, so both data modules become
+unavailable until reinstall; it does not change PixelBeacon or delete the
+shared SavedVariables file.
 
 ## Recovery, rollback, and receipts
 
@@ -74,4 +78,3 @@ selection remains valid and the modal reports the receipt failure.
 **Roll back** re-verifies and reopens the previous Live target before changing
 selection. A missing, malformed, linked, corrupt, PTS, or incompatible user
 selection is never repaired silently; the app visibly uses the bundled fallback.
-

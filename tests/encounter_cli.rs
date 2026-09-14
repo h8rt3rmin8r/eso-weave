@@ -141,7 +141,10 @@ fn encounter_projection_command_publishes_and_prints_the_same_identity() {
     let output = sandbox.path().join("projection.json");
     std::fs::write(
         &input,
-        format!("EsoWeaveEncounterSaved = {}", json_to_lua(&value)),
+        format!(
+            "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+            json_to_lua(&value)
+        ),
     )
     .unwrap();
     build_catalog(&BuildRequest::new(

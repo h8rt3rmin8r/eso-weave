@@ -103,12 +103,14 @@ Runtime observations and session-only state do not belong in this settings data.
 
 ### ESO Weave
 
-**Aliases:** desktop companion
+**Aliases:** desktop companion, ESO Weave Data
 
 The local desktop companion that coordinates configured weaving, fishing, and
 resource-watch features while enforcing focus and observed game-state safety.
+Its single ESO Weave Data package keeps catalog and encounter modules isolated
+under one managed addon identity and one shared SavedVariables root.
 
-**Related:** [ESO Weave documentation home](../)
+**Related:** [ESO Weave documentation home](../), [companion addon commands](../development/companion-addon-commands.md)
 
 ## F
 

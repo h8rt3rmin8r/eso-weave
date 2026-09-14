@@ -158,9 +158,17 @@ These hold regardless of the decision policy:
   - Beacon-manager safety: uninstall deletes a `PixelBeacon` folder only when
     the managed-marker line is verified present in its manifest, and discovery
     never writes outside the resolved AddOns directory.
+  - Data-addon safety: install, update, and uninstall require the exact managed
+    marker and four-file inventory, reject links and foreign entries, preserve
+    PixelBeacon and neighboring addons, and rollback the prior managed bytes on
+    failed update.
+  - Shared-data safety: catalog and encounter commands mutate only their owned
+    `EsoWeaveDataSaved` subtrees, and the desktop never deletes the shared
+    SavedVariables file while ESO owns its in-memory state.
 
 Pinned process artifacts (`.github/workflows/**`, `rust-toolchain.toml`,
-`packaging/**`, `scripts/**`, `.gitattributes`, `.gitignore`, `LICENSE`) may be
+`release.toml`, `packaging/**`, `scripts/**`, `docs/project/releasing.md`,
+`.gitattributes`, `.gitignore`, `LICENSE`) may be
 modified when a feature's scope requires it, provided the change is recorded as
 a dated decision in the changelog. Autopilot does not halt separately for this.
 The changes surface at the once-per-feature pre-push halt and must pass the CI

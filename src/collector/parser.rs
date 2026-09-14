@@ -6,10 +6,16 @@ use super::{
 };
 use crate::saved_variables::{self, EmptyTable, ParseLimits};
 
-const ROOT: &str = "EsoWeaveCollectorSaved";
+const ROOT: &str = "EsoWeaveDataSaved";
 
 pub fn parse_saved_variables(source: &str) -> Result<Value, CollectorError> {
-    saved_variables::parse_assignment(
+    parse_optional_saved_variables(source)?.ok_or_else(|| {
+        CollectorError::Validation("shared SavedVariables root has no catalog module".into())
+    })
+}
+
+pub fn parse_optional_saved_variables(source: &str) -> Result<Option<Value>, CollectorError> {
+    let mut root = saved_variables::parse_assignment(
         source,
         ROOT,
         ParseLimits {
@@ -20,5 +26,7 @@ pub fn parse_saved_variables(source: &str) -> Result<Value, CollectorError> {
         },
         EmptyTable::Array,
     )
-    .map_err(|error| CollectorError::Validation(error.to_string()))
+    .map_err(|error| CollectorError::Validation(error.to_string()))?;
+    crate::data_addon::take_optional_module(&mut root, "catalog")
+        .map_err(CollectorError::Validation)
 }

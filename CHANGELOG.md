@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S092 replaces the temporary collector and encounter packages with one
+  marker-managed `EsoWeaveData` package. Its bootstrap, catalog module, and
+  encounter module use isolated namespaces and SavedVariables subtrees, a
+  128 MiB hostile-input envelope, module-local clear commands, and an exact
+  rollback-safe lifecycle that never changes PixelBeacon or deletes shared
+  user data (issues #182, #184).
+- Publish a source-pinned provisional `Encounter.log` ingestion hierarchy and
+  reproducible Windows and Linux/Proton verification matrix, while retaining
+  terminal SavedVariables import as the supported fallback (issue #187).
+- Publish the no-go decision for real-time desktop-to-addon commands. The
+  approved desktop command vocabulary remains empty and user slash controls
+  remain authoritative (issue #189).
 - Publish the repository's GitHub-native project-management operating guide in
   the bundled development documentation, reconciled with ESO Weave's actual
   labels, milestones, Project fields, non-blocking verification policy, and
@@ -22,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-13: Amend the constitution to 3.0.0 and replace the three-package
+  development topology with exactly PixelBeacon and ESO Weave Data. Catalog
+  and encounter modules retain separate activation, bounds, namespaces, and
+  state ownership inside the shared data package.
+- 2026-09-13: Bound the shared `EsoWeaveData.lua` hostile-input envelope at
+  128 MiB while retaining all module-specific record, chunk, string, event,
+  actor, and estimated-byte limits. The desktop no longer deletes that file.
+- 2026-09-13: Select incremental native encounter-log tailing only as a
+  provisional preferred candidate pending platform receipts. Terminal native
+  logging and terminal SavedVariables import remain ordered fallbacks.
+- 2026-09-13: Reject real-time companion-to-addon command ingress under the
+  documented ESO APIs. Reconsider only for a documented inbound API or a
+  separately authorized live-account binding experiment.
+- 2026-09-13: Update the pinned release inventory so the embedded ESO Weave
+  Data package is one exact four-file asset rather than two development addons.
 - 2026-09-13: Consume the untracked generic project-management guide into the
   published development tree, adapting it to the existing ESO Weave Delivery
   Project instead of maintaining a second generic governance contract. Expand

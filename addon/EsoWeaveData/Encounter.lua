@@ -1,4 +1,5 @@
-local ADDON_NAME = "EsoWeaveEncounter"
+local ADDON_NAME = "EsoWeaveData"
+local MODULE_NAMESPACE = ADDON_NAME .. "Encounter"
 local ADDON_VERSION = 1
 local SCHEMA_VERSION = 1
 local PRIVACY_PROFILE = "anonymous-local-v1"
@@ -20,7 +21,7 @@ if type(EsoWeaveEncounterTestLimits) == "table" then
     MAX_ACTORS = EsoWeaveEncounterTestLimits.max_actors or MAX_ACTORS
 end
 
-local UPDATE_NAMESPACE = ADDON_NAME .. "Samples"
+local UPDATE_NAMESPACE = MODULE_NAMESPACE .. "Samples"
 local runtime = nil
 
 local CAPTURE_EVENTS = {
@@ -80,7 +81,7 @@ local function emptySaved()
 end
 
 local function addWarning(name)
-    local warnings = EsoWeaveEncounterSaved.warnings
+    local warnings = EsoWeaveDataSaved.encounter.warnings
     warnings[name] = (warnings[name] or 0) + 1
 end
 
@@ -105,13 +106,13 @@ end
 local function setPartialReason(reason)
     if not runtime.partial_reason then
         runtime.partial_reason = reason
-        EsoWeaveEncounterSaved.pending_partial_reason = reason
+        EsoWeaveDataSaved.encounter.pending_partial_reason = reason
     end
 end
 
 local function nextSequence()
     runtime.source_sequence = runtime.source_sequence + 1
-    EsoWeaveEncounterSaved.last_sequence = runtime.source_sequence
+    EsoWeaveDataSaved.encounter.last_sequence = runtime.source_sequence
     return runtime.source_sequence
 end
 
@@ -130,18 +131,18 @@ local function appendTerminal(kind, payload)
     local sequence = nextSequence()
     local event = makeEvent(sequence, kind, payload)
     local bytes = estimateEvent(kind, payload)
-    if #EsoWeaveEncounterSaved.events >= MAX_EVENTS
-        or EsoWeaveEncounterSaved.estimated_bytes + bytes > MAX_ESTIMATED_BYTES then
+    if #EsoWeaveDataSaved.encounter.events >= MAX_EVENTS
+        or EsoWeaveDataSaved.encounter.estimated_bytes + bytes > MAX_ESTIMATED_BYTES then
         addWarning("terminal_reserve_exhausted")
         return false
     end
-    table.insert(EsoWeaveEncounterSaved.events, event)
-    EsoWeaveEncounterSaved.estimated_bytes = EsoWeaveEncounterSaved.estimated_bytes + bytes
-    EsoWeaveEncounterSaved.stored_event_count = #EsoWeaveEncounterSaved.events
-    if EsoWeaveEncounterSaved.first_sequence == 0 then
-        EsoWeaveEncounterSaved.first_sequence = sequence
+    table.insert(EsoWeaveDataSaved.encounter.events, event)
+    EsoWeaveDataSaved.encounter.estimated_bytes = EsoWeaveDataSaved.encounter.estimated_bytes + bytes
+    EsoWeaveDataSaved.encounter.stored_event_count = #EsoWeaveDataSaved.encounter.events
+    if EsoWeaveDataSaved.encounter.first_sequence == 0 then
+        EsoWeaveDataSaved.encounter.first_sequence = sequence
     end
-    EsoWeaveEncounterSaved.ended_monotonic_ms = runtime.elapsed_ms
+    EsoWeaveDataSaved.encounter.ended_monotonic_ms = runtime.elapsed_ms
     return true
 end
 
@@ -151,11 +152,11 @@ local function noteOmitted(sequence, reason)
         runtime.loss_reason = reason
     end
     runtime.loss_to = sequence
-    EsoWeaveEncounterSaved.pending_loss_from = runtime.loss_from
-    EsoWeaveEncounterSaved.pending_loss_to = runtime.loss_to
-    EsoWeaveEncounterSaved.pending_loss_reason = runtime.loss_reason
-    EsoWeaveEncounterSaved.omitted_event_count =
-        EsoWeaveEncounterSaved.omitted_event_count + 1
+    EsoWeaveDataSaved.encounter.pending_loss_from = runtime.loss_from
+    EsoWeaveDataSaved.encounter.pending_loss_to = runtime.loss_to
+    EsoWeaveDataSaved.encounter.pending_loss_reason = runtime.loss_reason
+    EsoWeaveDataSaved.encounter.omitted_event_count =
+        EsoWeaveDataSaved.encounter.omitted_event_count + 1
     setPartialReason(reason)
 end
 
@@ -168,18 +169,18 @@ local function appendRegular(sequence, kind, payload)
     local bytes = estimateEvent(kind, payload)
     local regularLimit = MAX_EVENTS - TERMINAL_EVENT_RESERVE
     local byteLimit = MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE
-    if #EsoWeaveEncounterSaved.events >= regularLimit
-        or EsoWeaveEncounterSaved.estimated_bytes + bytes > byteLimit then
+    if #EsoWeaveDataSaved.encounter.events >= regularLimit
+        or EsoWeaveDataSaved.encounter.estimated_bytes + bytes > byteLimit then
         noteOmitted(sequence, "capture-overflow")
         return false
     end
-    table.insert(EsoWeaveEncounterSaved.events, event)
-    EsoWeaveEncounterSaved.estimated_bytes = EsoWeaveEncounterSaved.estimated_bytes + bytes
-    EsoWeaveEncounterSaved.stored_event_count = #EsoWeaveEncounterSaved.events
-    if EsoWeaveEncounterSaved.first_sequence == 0 then
-        EsoWeaveEncounterSaved.first_sequence = sequence
+    table.insert(EsoWeaveDataSaved.encounter.events, event)
+    EsoWeaveDataSaved.encounter.estimated_bytes = EsoWeaveDataSaved.encounter.estimated_bytes + bytes
+    EsoWeaveDataSaved.encounter.stored_event_count = #EsoWeaveDataSaved.encounter.events
+    if EsoWeaveDataSaved.encounter.first_sequence == 0 then
+        EsoWeaveDataSaved.encounter.first_sequence = sequence
     end
-    EsoWeaveEncounterSaved.ended_monotonic_ms = runtime.elapsed_ms
+    EsoWeaveDataSaved.encounter.ended_monotonic_ms = runtime.elapsed_ms
     return true
 end
 
@@ -195,16 +196,16 @@ local function declareClockReset()
     }
     local regularLimit = MAX_EVENTS - TERMINAL_EVENT_RESERVE
     local byteLimit = MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE
-    if #EsoWeaveEncounterSaved.events >= regularLimit
-        or EsoWeaveEncounterSaved.estimated_bytes
+    if #EsoWeaveDataSaved.encounter.events >= regularLimit
+        or EsoWeaveDataSaved.encounter.estimated_bytes
             + estimateEvent("discontinuity", markerPayload) > byteLimit then
         setPartialReason("clock-reset")
         noteOmitted(nextSequence(), "capture-overflow")
         return
     end
     local missing = nextSequence()
-    EsoWeaveEncounterSaved.omitted_event_count =
-        EsoWeaveEncounterSaved.omitted_event_count + 1
+    EsoWeaveDataSaved.encounter.omitted_event_count =
+        EsoWeaveDataSaved.encounter.omitted_event_count + 1
     setPartialReason("clock-reset")
     local markerSequence = nextSequence()
     markerPayload.missing_sequence_from = missing
@@ -267,7 +268,7 @@ end
 local function unregisterCaptureHandlers()
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAMESPACE)
     for _, event in ipairs(CAPTURE_EVENTS) do
-        EVENT_MANAGER:UnregisterForEvent(ADDON_NAME, event)
+        EVENT_MANAGER:UnregisterForEvent(MODULE_NAMESPACE, event)
     end
 end
 
@@ -291,18 +292,18 @@ local function finishCapture(reason, requestedComplete)
         complete = complete,
     })
 
-    EsoWeaveEncounterSaved.pending_partial_reason = nil
-    EsoWeaveEncounterSaved.pending_loss_from = nil
-    EsoWeaveEncounterSaved.pending_loss_to = nil
-    EsoWeaveEncounterSaved.pending_loss_reason = nil
-    EsoWeaveEncounterSaved.status = complete and "complete" or "partial"
-    EsoWeaveEncounterSaved.partial_reason = complete and nil or terminalReason
-    EsoWeaveEncounterSaved.finished_at = tostring(GetTimeStamp())
-    EsoWeaveEncounterSaved.ended_monotonic_ms = runtime.elapsed_ms
-    EsoWeaveEncounterSaved.first_sequence =
-        EsoWeaveEncounterSaved.events[1] and EsoWeaveEncounterSaved.events[1].sequence or 0
-    EsoWeaveEncounterSaved.last_sequence = runtime.source_sequence
-    EsoWeaveEncounterSaved.stored_event_count = #EsoWeaveEncounterSaved.events
+    EsoWeaveDataSaved.encounter.pending_partial_reason = nil
+    EsoWeaveDataSaved.encounter.pending_loss_from = nil
+    EsoWeaveDataSaved.encounter.pending_loss_to = nil
+    EsoWeaveDataSaved.encounter.pending_loss_reason = nil
+    EsoWeaveDataSaved.encounter.status = complete and "complete" or "partial"
+    EsoWeaveDataSaved.encounter.partial_reason = complete and nil or terminalReason
+    EsoWeaveDataSaved.encounter.finished_at = tostring(GetTimeStamp())
+    EsoWeaveDataSaved.encounter.ended_monotonic_ms = runtime.elapsed_ms
+    EsoWeaveDataSaved.encounter.first_sequence =
+        EsoWeaveDataSaved.encounter.events[1] and EsoWeaveDataSaved.encounter.events[1].sequence or 0
+    EsoWeaveDataSaved.encounter.last_sequence = runtime.source_sequence
+    EsoWeaveDataSaved.encounter.stored_event_count = #EsoWeaveDataSaved.encounter.events
     runtime = nil
     if complete then
         message("Capture complete. Use /reloadui, logout, or exit before desktop import.")
@@ -481,7 +482,7 @@ local function registerCaptureHandlers()
         [EVENT_ACTIVE_QUICKSLOT_CHANGED] = handleQuickslotChanged,
     }
     for event, handler in pairs(handlers) do
-        EVENT_MANAGER:RegisterForEvent(ADDON_NAME, event, function(...)
+        EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE, event, function(...)
             safely(handler, ...)
         end)
     end
@@ -501,7 +502,7 @@ local function beginCapture()
     local stamp = tostring(GetTimeStamp())
     local sessionId = "session-" .. stamp .. "-" .. tostring(raw)
     local encounterId = "encounter-" .. stamp .. "-" .. tostring(raw)
-    local channel = EsoWeaveEncounterSaved.channel
+    local channel = EsoWeaveDataSaved.encounter.channel
     runtime = {
         session_id = sessionId,
         encounter_id = encounterId,
@@ -518,7 +519,7 @@ local function beginCapture()
         loss_to = nil,
         loss_reason = nil,
     }
-    EsoWeaveEncounterSaved = {
+    EsoWeaveDataSaved.encounter = {
         schema_version = SCHEMA_VERSION,
         addon_version = ADDON_VERSION,
         status = "capturing",
@@ -561,9 +562,9 @@ local function handleCombatState(_, inCombat)
         finishCapture("combat-ended", true)
         return
     end
-    if EsoWeaveEncounterSaved.status ~= "armed" then return end
-    if EsoWeaveEncounterSaved.wait_for_clean_boundary then
-        if not inCombat then EsoWeaveEncounterSaved.wait_for_clean_boundary = false end
+    if EsoWeaveDataSaved.encounter.status ~= "armed" then return end
+    if EsoWeaveDataSaved.encounter.wait_for_clean_boundary then
+        if not inCombat then EsoWeaveDataSaved.encounter.wait_for_clean_boundary = false end
         return
     end
     if inCombat then beginCapture() end
@@ -574,7 +575,7 @@ local function handlePlayerDeactivated()
 end
 
 local function arm(arguments)
-    if EsoWeaveEncounterSaved.status ~= "idle" then
+    if EsoWeaveDataSaved.encounter.status ~= "idle" then
         message("Clear or disarm the current state before arming another capture.")
         return
     end
@@ -583,18 +584,18 @@ local function arm(arguments)
         message("Choose a channel: /ewencounter arm live|pts.")
         return
     end
-    EsoWeaveEncounterSaved.status = "armed"
-    EsoWeaveEncounterSaved.channel = channel
-    EsoWeaveEncounterSaved.wait_for_clean_boundary = IsUnitInCombat("player") == true
+    EsoWeaveDataSaved.encounter.status = "armed"
+    EsoWeaveDataSaved.encounter.channel = channel
+    EsoWeaveDataSaved.encounter.wait_for_clean_boundary = IsUnitInCombat("player") == true
     message("Armed for one " .. channel .. " encounter.")
 end
 
 local function disarm()
-    if EsoWeaveEncounterSaved.status ~= "armed" then
+    if EsoWeaveDataSaved.encounter.status ~= "armed" then
         message("No armed capture is waiting.")
         return
     end
-    EsoWeaveEncounterSaved = emptySaved()
+    EsoWeaveDataSaved.encounter = emptySaved()
     message("Encounter capture disarmed.")
 end
 
@@ -607,7 +608,7 @@ local function stop()
 end
 
 local function clear(arguments)
-    if runtime or EsoWeaveEncounterSaved.status == "armed" then
+    if runtime or EsoWeaveDataSaved.encounter.status == "armed" then
         message("Stop or disarm before clearing capture data.")
         return
     end
@@ -615,12 +616,12 @@ local function clear(arguments)
         message("Use /ewencounter clear confirm to delete the saved encounter envelope.")
         return
     end
-    EsoWeaveEncounterSaved = emptySaved()
+    EsoWeaveDataSaved.encounter = emptySaved()
     message("Saved encounter envelope cleared locally.")
 end
 
 local function showStatus()
-    local saved = EsoWeaveEncounterSaved
+    local saved = EsoWeaveDataSaved.encounter
     message("Status: " .. tostring(saved.status)
         .. ", stored " .. tostring(saved.stored_event_count or 0)
         .. ", omitted " .. tostring(saved.omitted_event_count or 0) .. ".")
@@ -644,7 +645,7 @@ local function command(arguments)
 end
 
 local function recoverInterruptedSavedCapture()
-    local saved = EsoWeaveEncounterSaved
+    local saved = EsoWeaveDataSaved.encounter
     if saved.status ~= "capturing" then return end
     saved.events = type(saved.events) == "table" and saved.events or {}
     saved.warnings = type(saved.warnings) == "table" and saved.warnings or {}
@@ -688,22 +689,23 @@ end
 
 local function onLoaded(_, addonName)
     if addonName ~= ADDON_NAME then return end
-    EVENT_MANAGER:UnregisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED)
-    if type(EsoWeaveEncounterSaved) ~= "table"
-        or EsoWeaveEncounterSaved.schema_version ~= SCHEMA_VERSION
-        or EsoWeaveEncounterSaved.addon_version ~= ADDON_VERSION then
-        EsoWeaveEncounterSaved = emptySaved()
+    EVENT_MANAGER:UnregisterForEvent(MODULE_NAMESPACE, EVENT_ADD_ON_LOADED)
+    if type(EsoWeaveDataSaved) ~= "table" then EsoWeaveDataSaved = {} end
+    if type(EsoWeaveDataSaved.encounter) ~= "table"
+        or EsoWeaveDataSaved.encounter.schema_version ~= SCHEMA_VERSION
+        or EsoWeaveDataSaved.encounter.addon_version ~= ADDON_VERSION then
+        EsoWeaveDataSaved.encounter = emptySaved()
     else
         recoverInterruptedSavedCapture()
     end
     SLASH_COMMANDS["/ewencounter"] = command
-    EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "CombatState", EVENT_PLAYER_COMBAT_STATE, function(...)
+    EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE .. "CombatState", EVENT_PLAYER_COMBAT_STATE, function(...)
         guarded(handleCombatState, ...)
     end)
-    EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "Deactivate", EVENT_PLAYER_DEACTIVATED, function(...)
+    EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE .. "Deactivate", EVENT_PLAYER_DEACTIVATED, function(...)
         guarded(handlePlayerDeactivated, ...)
     end)
     message("Loaded dormant. Use /ewencounter arm live|pts for one local anonymous capture.")
 end
 
-EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED, onLoaded)
+EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE, EVENT_ADD_ON_LOADED, onLoaded)

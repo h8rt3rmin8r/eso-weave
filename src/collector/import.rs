@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::bounded_file::{read_bounded_stable, StableReadError};
 use crate::catalog::model::{
     AliasInput, AttributeInput, CatalogBundle, Completeness, CoverageInput, EntityInput, EntityRef,
     IconAssetInput, IconReferenceInput, LocalizedTextInput, Redistribution, RelationInput,
@@ -14,7 +15,9 @@ use crate::catalog::model::{
 };
 use crate::catalog::Channel;
 
-use super::{parse_capture, CollectorEnvelope, CollectorError, ImportRequest};
+use super::{
+    canonical_catalog_capture, parse_capture, CollectorEnvelope, CollectorError, ImportRequest,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ImportReceipt {
@@ -40,18 +43,23 @@ pub struct ImportReceipt {
 
 pub fn import_capture(request: &ImportRequest) -> Result<ImportReceipt, CollectorError> {
     validate_distinct_paths(&request.input_path, &request.output_path)?;
-    let metadata = fs::metadata(&request.input_path)?;
-    if !metadata.is_file() {
-        return rejected("capture input is not a regular file");
-    }
-    if metadata.len() > super::MAX_CAPTURE_BYTES {
-        return rejected(format!(
-            "capture exceeds the {} byte limit",
-            super::MAX_CAPTURE_BYTES
-        ));
-    }
-    let bytes = fs::read(&request.input_path)?;
-    let capture_sha256 = sha256_bytes(&bytes);
+    let absolute_input = if request.input_path.is_absolute() {
+        request.input_path.clone()
+    } else {
+        std::env::current_dir()?.join(&request.input_path)
+    };
+    let parent = absolute_input
+        .parent()
+        .ok_or_else(|| CollectorError::Validation("capture input has no parent".into()))?;
+    let canonical_parent = fs::canonicalize(parent)?;
+    let bytes = read_bounded_stable(&canonical_parent, &absolute_input, super::MAX_CAPTURE_BYTES)
+        .map_err(|error| match error {
+        StableReadError::Io(error) => CollectorError::Io(error),
+        StableReadError::Invalid(message) => CollectorError::Validation(message.into()),
+    })?;
+    let capture_sha256 = sha256_bytes(&canonical_catalog_capture(&bytes)?.ok_or_else(|| {
+        CollectorError::Validation("shared SavedVariables root has no catalog module".into())
+    })?);
     let envelope = parse_capture(&bytes)?;
     if envelope.channel != request.expected_channel {
         return rejected(format!(

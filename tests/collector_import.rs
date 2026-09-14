@@ -14,7 +14,20 @@ const LIVE: &str = include_str!("../specs/071-bounded-discovery-exporter/fixture
 const PTS: &str = include_str!("../specs/071-bounded-discovery-exporter/fixtures/pts.lua");
 
 fn fixture(template: &str) -> String {
-    template.replace("@collector_checksum@", &embedded_checksum())
+    format!(
+        "{}\n}}\n",
+        template
+            .replacen(
+                "EsoWeaveCollectorSaved =",
+                "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] =",
+                1,
+            )
+            .replace("@collector_checksum@", &embedded_checksum())
+            .replace(
+                "7571d13a1040ccea25a4c8ea714061e5dbce650373684dabba8f7bc7ba7969ae",
+                &embedded_checksum(),
+            )
+    )
 }
 
 #[test]
@@ -89,14 +102,14 @@ fn repeated_imports_are_byte_stable() {
 fn parser_rejects_executable_referential_and_ambiguous_lua() {
     let valid = fixture(LIVE);
     let bad = [
-        "EsoWeaveCollectorSaved = function() return {} end",
-        "EsoWeaveCollectorSaved = other_table",
-        "EsoWeaveCollectorSaved = setmetatable({}, {})",
-        "EsoWeaveCollectorSaved = { [\"schema_version\"] = 1 + 0 }",
-        "-- comment\nEsoWeaveCollectorSaved = {}",
-        "EsoWeaveCollectorSaved = [[long string]]",
-        "EsoWeaveCollectorSaved = {}; os.execute(\"x\")",
-        "DifferentRoot = {}",
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = function() return {} end }",
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = other_table }",
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = setmetatable({}, {}) }",
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1 + 0, [\"addon_version\"] = 1, [\"catalog\"] = {} }",
+        "-- comment\nEsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = {} }",
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = [[long string]] }",
+        "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = {} }; os.execute(\"x\")",
+        "DifferentRoot = { [\"catalog\"] = {} }",
     ];
     for source in bad {
         assert!(
@@ -114,11 +127,11 @@ fn parser_rejects_executable_referential_and_ambiguous_lua() {
     let invalid_escape = valid.replace("fixture-na", "fixture\\qna");
     assert!(parse_capture(invalid_escape.as_bytes()).is_err());
 
-    let mixed_shape = "EsoWeaveCollectorSaved = { [1] = true, [\"x\"] = false }";
+    let mixed_shape = "EsoWeaveDataSaved = { [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = { [1] = true, [\"x\"] = false } }";
     assert!(parse_capture(mixed_shape.as_bytes()).is_err());
 
     let long_string = format!(
-        "EsoWeaveCollectorSaved = {{ [\"x\"] = \"{}\" }}",
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = {{ [\"x\"] = \"{}\" }} }}",
         "x".repeat(65_537)
     );
     assert!(parse_capture(long_string.as_bytes()).is_err());
@@ -126,8 +139,20 @@ fn parser_rejects_executable_referential_and_ambiguous_lua() {
     let nested = (0..20).fold("1".to_string(), |value, _| {
         format!("{{ [\"x\"] = {value} }}")
     });
-    let deep = format!("EsoWeaveCollectorSaved = {nested}");
+    let deep = format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"catalog\"] = {nested} }}"
+    );
     assert!(parse_capture(deep.as_bytes()).is_err());
+
+    for version_mutation in [
+        valid.replace(
+            "\n  [\"schema_version\"] = 1",
+            "\n  [\"schema_version\"] = 2",
+        ),
+        valid.replace("[\"addon_version\"] = 1", "[\"addon_version\"] = 2"),
+    ] {
+        assert!(parse_capture(version_mutation.as_bytes()).is_err());
+    }
 }
 
 #[test]
@@ -216,4 +241,35 @@ fn capture_size_is_checked_before_reading() {
     ))
     .expect_err("oversized capture must fail");
     assert!(error.to_string().contains("byte limit"));
+}
+
+#[test]
+fn linked_capture_input_is_rejected_without_touching_output() {
+    let sandbox = CatalogSandbox::new();
+    let target = sandbox.path("target.lua");
+    let input = sandbox.path("linked.lua");
+    let output = sandbox.path("staged.json");
+    fs::write(&target, fixture(LIVE)).unwrap();
+    fs::write(&output, b"preserve\n").unwrap();
+    if create_file_symlink(&target, &input).is_err() {
+        return;
+    }
+    assert!(import_capture(&ImportRequest::new(
+        &input,
+        &output,
+        Channel::Live,
+        "linked-1",
+    ))
+    .is_err());
+    assert_eq!(bytes(output), b"preserve\n");
+}
+
+#[cfg(unix)]
+fn create_file_symlink(target: &std::path::Path, link: &std::path::Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn create_file_symlink(target: &std::path::Path, link: &std::path::Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(target, link)
 }
