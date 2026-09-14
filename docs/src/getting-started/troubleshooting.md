@@ -81,13 +81,32 @@ exact target manually; do not disable the ownership guard.
 Missing, invalid, stale, or corrupt telemetry becomes unavailable and does not
 authorize automated input.
 
+## ESO Weave Data is missing, outdated, unmanaged, or awaiting reload
+
+- **Not installed**: choose **Install Data**, then obey any reload guidance.
+- Compatibility **Update available**: choose **Update Data** or **Repair Data**;
+  both stage and verify replacement before commit.
+- Ownership **Unmanaged**: move or remove only the exact `EsoWeaveData` target
+  manually. No lifecycle action is offered.
+- **AddOns folder not found**: select the correct Live or PTS environment or
+  configure its existing `AddOns` directory.
+- Reload **Required**: run `/reloadui` or relog before relying on the change.
+- Lifecycle operation failed: keep the prior package, check AddOns permissions,
+  and retry the named operation. Do not delete first.
+
+Enabled, loaded, runtime, catalog, and encounter are separate evidence facts.
+**Unconfirmed** does not mean disabled. Verify ESO Weave Data in ESO's Add-Ons
+menu and use `/ewcollect status` or `/ewencounter status` for the in-game module.
+A running ESO process does not confirm addon loading or collection, and
+SavedVariables on disk may reflect only an earlier flush.
+
 ## Discovery collector capture or import fails
 
-The discovery collector is separate from PixelBeacon. Start with
-`collector-status` against the exact Live or PTS `AddOns` directory. An
-`unmanaged` result is intentionally not repaired or removed automatically. A
-successful install or removal can report `reload_required`; run `/reloadui` or
-relog before relying on ESO's addon state.
+The catalog module is separate from PixelBeacon but shares the managed ESO Weave
+Data package with encounter capture. Use the first-class System and State row for
+package lifecycle. Maintainers may also run `collector-status` against the exact
+Live or PTS `AddOns` directory. An `unmanaged` result is intentionally not
+repaired or removed automatically.
 
 In ESO, `/ewcollect status` reports the current capture state. Combat pauses a
 run and requires `/ewcollect resume`. After completion, run `/reloadui`, log
@@ -135,11 +154,12 @@ If a user selection is invalid, the status visibly identifies the bundled
 fallback. A receipt warning means the selection itself succeeded but redacted
 receipt storage failed, commonly because the application-data volume is full.
 
-For a collector-assisted build, choose **Begin capture wait** before the ESO save
+For a collector-assisted build, manage ESO Weave Data from System and State,
+then choose **Begin capture wait** before the ESO save
 boundary. Then run `/reloadui`, log out, or exit and choose **Build from flushed
 capture**. Unchanged, unstable, incomplete, PTS, or coverage-reducing captures
-remain unaccepted. The cleanup controls refuse unmanaged collector files and do
-not modify PixelBeacon.
+remain unaccepted. Module-local clear guidance never removes the shared package,
+shared SavedVariables, or PixelBeacon.
 
 ## A skill passes through or a weave is dropped
 

@@ -265,6 +265,48 @@ fn altered_manifest_contract_is_detected_and_repaired() {
 }
 
 #[test]
+fn lifecycle_status_bounds_hostile_managed_file_reads() {
+    let sandbox = Sandbox::new();
+    install(sandbox.addons(), RunningState::NotRunning, 101051).unwrap();
+    fs::write(
+        sandbox.data_addon().join(MANIFEST_FILE),
+        vec![b'x'; 65 * 1024],
+    )
+    .unwrap();
+    assert_eq!(status(sandbox.addons()), DataAddonStatus::Unmanaged);
+
+    install(sandbox.addons(), RunningState::NotRunning, 101051).unwrap_err();
+    fs::remove_dir_all(sandbox.data_addon()).unwrap();
+    install(sandbox.addons(), RunningState::NotRunning, 101051).unwrap();
+    fs::write(
+        sandbox.data_addon().join(CATALOG_FILE),
+        vec![b'x'; eso_weave::data_addon::CATALOG.len() + 1],
+    )
+    .unwrap();
+    assert_eq!(
+        status(sandbox.addons()),
+        DataAddonStatus::ManagedVersionMismatch
+    );
+    let oversized = fs::read(sandbox.data_addon().join(CATALOG_FILE)).unwrap();
+    assert!(install(sandbox.addons(), RunningState::NotRunning, 101051).is_err());
+    assert!(uninstall(sandbox.addons(), RunningState::NotRunning).is_err());
+    assert_eq!(
+        fs::read(sandbox.data_addon().join(CATALOG_FILE)).unwrap(),
+        oversized
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn fallible_inspection_distinguishes_io_failure_from_unmanaged_state() {
+    let sandbox = Sandbox::new();
+    let blocking_file = sandbox.addons().join("not-a-directory");
+    fs::write(&blocking_file, b"block child lookup").unwrap();
+    let error = eso_weave::data_addon::inspect(&blocking_file.join("child")).unwrap_err();
+    assert_ne!(error.kind(), std::io::ErrorKind::NotFound);
+}
+
+#[test]
 fn non_directory_roots_and_non_directory_targets_are_refused() {
     let sandbox = Sandbox::new();
     let missing = sandbox.addons().join("missing");

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S093 adds a first-class ESO Weave Data lifecycle row directly beneath
+  PixelBeacon with Install, Update, atomic Repair, and confirmed Uninstall
+  controls. The Data Details view uses dedicated rows to keep ownership,
+  compatibility, configured
+  enablement, loading, reload need, ESO runtime, catalog activity, encounter
+  activity, and the next safe step explicit without manufacturing a live addon
+  channel (issue #185).
 - S092 replaces the temporary collector and encounter packages with one
   marker-managed `EsoWeaveData` package. Its bootstrap, catalog module, and
   encounter module use isolated namespaces and SavedVariables subtrees, a
@@ -34,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-13: Treat data-addon installation, ownership, compatibility,
+  configured enablement, loading, reload need, runtime, catalog activity, and
+  encounter activity as separate evidence facts. ESO process state is not addon
+  load proof, and flush-bound SavedVariables is never called live evidence.
+- 2026-09-13: Make System and State the sole data-addon lifecycle authority.
+  Catalog Update retains capture and catalog-build workflow controls but no
+  longer duplicates package install or uninstall actions.
 - 2026-09-13: Amend the constitution to 3.0.0 and replace the three-package
   development topology with exactly PixelBeacon and ESO Weave Data. Catalog
   and encounter modules retain separate activation, bounds, namespaces, and

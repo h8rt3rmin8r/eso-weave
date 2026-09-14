@@ -27,7 +27,7 @@ const SYNTAX_CASES = [
 const SYNTAX_THEMES = ["navy", "light", "coal", "ayu", "rust"];
 const FIGURE_CASES = [
   { id: "S088-DIAGRAM", page: "development/architecture.html", selector: "figure.docs-flow-diagram .docs-figure-trigger", alternative: DIAGRAMS[0].alt, captionRequired: false },
-  { id: "S088-LANDSCAPE", page: "getting-started/first-launch.html", selector: "figure.docs-screenshot .docs-figure-trigger", alternative: "ESO Weave at first launch with ESO inactive and initial System and State information", captionRequired: true },
+  { id: "S088-LANDSCAPE", page: "getting-started/first-launch.html", selector: "figure.docs-screenshot .docs-figure-trigger", alternative: "ESO Weave at first launch with ESO inactive and separate Install actions for both managed addons", captionRequired: true },
   { id: "S088-PORTRAIT", page: "getting-started/installation.html", selector: "figure.docs-screenshot--portrait .docs-figure-trigger", alternative: "Windows MSI Properties dialog with the Unblock checkbox selected and emphasized", captionRequired: true },
   { id: "S088-ILLUSTRATION", page: "features/pixelbeacon.html", selector: "figure.docs-screenshot--illustration .docs-figure-trigger", alternative: "Synthetic game-window diagram with PixelBeacon color blocks anchored at the top-left", captionRequired: true },
   { id: "S088-BRAND", page: "development/brand-standard.html", selector: "figure.brand-surface--dark .docs-figure-trigger", lightSelector: "figure.brand-surface--light .docs-figure-trigger", alternative: "ESO Weave full-color banner wordmark", lightAlternative: "ESO Weave full-color banner wordmark on light", captionRequired: true },

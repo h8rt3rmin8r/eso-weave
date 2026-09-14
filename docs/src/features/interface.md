@@ -7,7 +7,7 @@ region, and optional live log panel.
 | --- | --- |
 | Menu bar | Settings, Exit, Live Log, and the offline Documentation action |
 | Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, and one composed Quickslot classification, availability, and cooldown row |
-| System and State | Game/provider state, World State, ESO Weave state, PixelBeacon Status and Signal, Fishing, Auto Potion, and lifecycle actions |
+| System and State | Game/provider state, World State, ESO Weave state, PixelBeacon Status and Signal, first-class ESO Weave Data lifecycle and evidence, Fishing, and Auto Potion |
 | Skills | Slot label, enablement, weave type, timing override, effective delay, and cooldown |
 | Live Log | Recent structured events with a local level filter |
 
@@ -37,11 +37,24 @@ overlap.
 Dashboard rows reserve stable label and interaction regions. Dynamic values use
 the remaining width, and full constrained text is available through pointer hover
 and keyboard focus, with identical text for both access paths. A fixed trailing
-region is reserved only for System and State interactions. Install, Update, and
-Uninstall actions use equal compact sizes and share a right-aligned column with
-toggles. At most two lifecycle actions are available together, and they render in
-one primary-then-secondary horizontal row. The managed-marker uninstall guard and
-confirmation remain unchanged.
+region is reserved only for System and State interactions. PixelBeacon actions
+use equal compact sizes and share a right-aligned column with toggles. ESO Weave
+Data appears immediately beneath PixelBeacon with uniquely named Install,
+Update, Repair, and Uninstall actions when each action is safe. Managed drift
+exposes both Update and Repair without hiding removal. Each addon has its own
+marker guard and unmistakable uninstall confirmation.
+At most two lifecycle actions share a primary-then-secondary horizontal row.
+Every uninstall retains the managed-marker uninstall guard and confirmation.
+
+Choose **Data Details** beside **Data Addon Next Step** to open the complete
+evidence view. Its dedicated rows label ownership, compatibility, configured
+enablement, loading, reload requirement, ESO runtime, catalog collection,
+encounter collection, and the next safe step independently. Installed files
+never imply enabled or loaded. A running ESO process never implies loaded or
+collecting. Because the application has no live data-addon channel, those
+current-session facts remain **Unconfirmed** and explain the evidence gap
+instead of guessing. Each row remains directly keyboard accessible and carries
+its own explanation. Closing the modal returns focus to the lifecycle surface.
 
 System and State defaults expanded. Its full header is accessible by pointer,
 keyboard, and assistive technology. Activating the header hides or restores the

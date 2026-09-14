@@ -33,7 +33,7 @@ use crate::app::settings_form::{SettingsForm, UiPrefs};
 use crate::app::{
     app_toggle_intent, beacon_primary_action, effective_dashboard_layout, modal_extent,
     override_edit_for, strings, widgets, AppModel, AppView, BeaconPrimaryAction, DashboardLayout,
-    ResourceTheme, SkillEdit, StatusLine, UiIntent,
+    DataAddonPrimaryAction, ResourceTheme, SkillEdit, StatusLine, UiIntent,
 };
 use crate::beacon::api_check::ApiCheckOutcome;
 use crate::catalog::Channel;
@@ -83,6 +83,27 @@ fn lifecycle_button(
     }
     ui.add_sized(
         [LIFECYCLE_BUTTON_WIDTH, ui.spacing().interact_size.y],
+        button,
+    )
+    .clickable()
+}
+
+fn data_lifecycle_button(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    text: &str,
+    primary: bool,
+) -> egui::Response {
+    let mut button = egui::Button::new(if primary {
+        egui::RichText::new(text).color(palette.gold_text)
+    } else {
+        egui::RichText::new(text)
+    });
+    if primary {
+        button = button.fill(palette.gold);
+    }
+    ui.add_sized(
+        [DATA_LIFECYCLE_BUTTON_WIDTH, ui.spacing().interact_size.y],
         button,
     )
     .clickable()
@@ -147,8 +168,11 @@ const DASHBOARD_NARROW_GAP: f32 = 4.0;
 const DASHBOARD_LABEL_WIDTH: f32 = 118.0;
 const DASHBOARD_RESOURCE_GAP: f32 = 6.0;
 const LIFECYCLE_BUTTON_WIDTH: f32 = 76.0;
+const DATA_LIFECYCLE_BUTTON_WIDTH: f32 = 104.0;
 const LIFECYCLE_BUTTON_GAP: f32 = 4.0;
 const DASHBOARD_INTERACTION_WIDTH: f32 = 2.0 * LIFECYCLE_BUTTON_WIDTH + LIFECYCLE_BUTTON_GAP;
+const DATA_DASHBOARD_INTERACTION_WIDTH: f32 =
+    2.0 * DATA_LIFECYCLE_BUTTON_WIDTH + LIFECYCLE_BUTTON_GAP;
 const DASHBOARD_FRAME_VERTICAL_OVERHEAD: f32 = 14.0;
 
 /// The log text row height (points) used to size the six-line log minimum. Read
@@ -209,6 +233,7 @@ pub struct EsoWeaveApp {
     settings_draft: Option<SettingsForm>,
     settings_applied: Option<SettingsForm>,
     confirm_uninstall: bool,
+    confirm_data_uninstall: bool,
     toast: Option<widgets::Toast>,
     /// The last window geometry captured from the viewport, used to detect a
     /// change and to keep the normal geometry while maximized. Seeded from the
@@ -268,6 +293,7 @@ pub struct EsoWeaveApp {
     documentation: DocumentationService,
     documentation_opener: Box<dyn BrowserOpener>,
     documentation_error: Option<String>,
+    data_addon_details_open: bool,
     catalog_worker: Option<CatalogUpdateWorker>,
     catalog_update_open: bool,
     catalog_candidates: Vec<CandidateSummary>,
@@ -281,8 +307,6 @@ pub struct EsoWeaveApp {
     catalog_live_state: LiveUpdateState,
     catalog_status_ready: bool,
     collector_waiting_fingerprint: Option<CaptureFingerprint>,
-    collector_status: Option<crate::data_addon::DataAddonStatus>,
-    collector_status_requested: bool,
     encounter_history_worker: Option<EncounterHistoryWorker>,
     encounter_history_open: bool,
     encounter_history_initialized: bool,
@@ -326,6 +350,7 @@ impl EsoWeaveApp {
             settings_draft: None,
             settings_applied: None,
             confirm_uninstall: false,
+            confirm_data_uninstall: false,
             toast: None,
             last_geometry: restored_geometry,
             delay_edit: None,
@@ -350,6 +375,7 @@ impl EsoWeaveApp {
             documentation: DocumentationService::new(),
             documentation_opener: Box::new(NativeBrowser),
             documentation_error: None,
+            data_addon_details_open: false,
             catalog_worker: None,
             catalog_update_open: false,
             catalog_candidates: Vec::new(),
@@ -363,8 +389,6 @@ impl EsoWeaveApp {
             catalog_live_state: LiveUpdateState::OfflineStaleCheck,
             catalog_status_ready: false,
             collector_waiting_fingerprint: None,
-            collector_status: None,
-            collector_status_requested: false,
             encounter_history_worker: None,
             encounter_history_open: false,
             encounter_history_initialized: false,
@@ -638,6 +662,16 @@ impl EsoWeaveApp {
         self.confirm_uninstall = confirm;
     }
 
+    /// Shows or hides the data-addon-specific uninstall confirmation row.
+    pub fn set_confirm_data_uninstall(&mut self, confirm: bool) {
+        self.confirm_data_uninstall = confirm;
+    }
+
+    /// Opens or closes the dedicated data-addon evidence modal.
+    pub fn set_data_addon_details_open(&mut self, open: bool) {
+        self.data_addon_details_open = open;
+    }
+
     /// Opens or closes the settings modal directly, bypassing the menu. Exposed so
     /// the rendered-frame sizing tests can reach the modal cases (contract C5).
     pub fn set_settings_open(&mut self, open: bool) {
@@ -742,9 +776,7 @@ impl EsoWeaveApp {
                     );
                 }
                 WorkerEvent::CollectorState { status, message } => {
-                    if let Some(status) = status {
-                        self.collector_status = Some(status);
-                    }
+                    let _ = status;
                     self.catalog_update_message = Some(message);
                 }
                 WorkerEvent::Progress(progress) => {
@@ -816,20 +848,6 @@ impl EsoWeaveApp {
                         "Catalog operation cancelled. The prior catalog remains active.".into(),
                     );
                 }
-            }
-        }
-        if self.catalog_update_open
-            && !self.collector_status_requested
-            && self
-                .catalog_worker
-                .as_ref()
-                .is_some_and(|worker| !worker.is_busy())
-        {
-            if let (Some(worker), Some(root)) = (
-                self.catalog_worker.as_ref(),
-                self.model.catalog_collector_addons_root(),
-            ) {
-                self.collector_status_requested = worker.inspect_collector(root);
             }
         }
         self.request_catalog_changed_history_detail();
@@ -1437,6 +1455,10 @@ impl EsoWeaveApp {
             self.catalog_update_modal(&ctx);
         }
 
+        if self.data_addon_details_open {
+            self.data_addon_details_modal(&ctx);
+        }
+
         if self.encounter_history_open {
             self.encounter_history_window(&ctx);
         }
@@ -1522,6 +1544,31 @@ impl EsoWeaveApp {
                     .clicked()
                 {
                     self.confirm_uninstall = false;
+                }
+            });
+            self.note_content_width(row.response.rect.width());
+            ui.separator();
+        }
+
+        if self.confirm_data_uninstall {
+            let row = ui.horizontal(|ui| {
+                ui.label("Remove the ESO Weave Data addon?");
+                if ui
+                    .button("Confirm Data Uninstall")
+                    .on_hover_text(strings::DATA_ADDON_UNINSTALL_TOOLTIP)
+                    .clickable()
+                    .clicked()
+                {
+                    intents.push(UiIntent::UninstallDataAddon);
+                    self.confirm_data_uninstall = false;
+                }
+                if ui
+                    .button("Cancel Data Uninstall")
+                    .on_hover_text("Keep ESO Weave Data installed.")
+                    .clickable()
+                    .clicked()
+                {
+                    self.confirm_data_uninstall = false;
                 }
             });
             self.note_content_width(row.response.rect.width());
@@ -1970,6 +2017,77 @@ impl EsoWeaveApp {
                             dashboard_status_row(
                                 ui,
                                 palette,
+                                &view.data_addon.lifecycle_line,
+                                DATA_DASHBOARD_INTERACTION_WIDTH,
+                                |ui| {
+                                    ui.spacing_mut().item_spacing.x = LIFECYCLE_BUTTON_GAP;
+                                    let primary = match view.data_addon.primary_action {
+                                        Some(DataAddonPrimaryAction::Install) => {
+                                            data_lifecycle_button(ui, palette, "Install Data", true)
+                                                .on_hover_text(strings::DATA_ADDON_INSTALL_TOOLTIP)
+                                                .clicked()
+                                                .then_some(UiIntent::InstallDataAddon)
+                                        }
+                                        Some(DataAddonPrimaryAction::Update) => {
+                                            data_lifecycle_button(ui, palette, "Update Data", true)
+                                                .on_hover_text(strings::DATA_ADDON_UPDATE_TOOLTIP)
+                                                .clicked()
+                                                .then_some(UiIntent::UpdateDataAddon)
+                                        }
+                                        Some(DataAddonPrimaryAction::Repair) => {
+                                            data_lifecycle_button(ui, palette, "Repair Data", true)
+                                                .on_hover_text(strings::DATA_ADDON_REPAIR_TOOLTIP)
+                                                .clicked()
+                                                .then_some(UiIntent::RepairDataAddon)
+                                        }
+                                        None => None,
+                                    };
+                                    if let Some(intent) = primary {
+                                        intents.push(intent);
+                                    }
+                                    if view.data_addon.uninstall_enabled
+                                        && data_lifecycle_button(
+                                            ui,
+                                            palette,
+                                            "Uninstall Data",
+                                            false,
+                                        )
+                                        .on_hover_text(strings::DATA_ADDON_UNINSTALL_TOOLTIP)
+                                        .clicked()
+                                    {
+                                        self.confirm_data_uninstall = true;
+                                    }
+                                },
+                            );
+                            dashboard_status_row(
+                                ui,
+                                palette,
+                                &view.data_addon.remediation_line,
+                                DATA_DASHBOARD_INTERACTION_WIDTH,
+                                |ui| {
+                                    if view.data_addon.primary_action
+                                        == Some(DataAddonPrimaryAction::Update)
+                                        && data_lifecycle_button(ui, palette, "Repair Data", false)
+                                            .on_hover_text(strings::DATA_ADDON_REPAIR_TOOLTIP)
+                                            .clicked()
+                                    {
+                                        intents.push(UiIntent::RepairDataAddon);
+                                    }
+                                    if data_lifecycle_button(ui, palette, "Data Details", false)
+                                        .on_hover_text(strings::DATA_ADDON_DETAILS_TOOLTIP)
+                                        .clicked()
+                                    {
+                                        self.data_addon_details_open = true;
+                                    }
+                                },
+                            );
+                            if let Some(error) = &view.data_addon.operation_error {
+                                ui.colored_label(ui.visuals().error_fg_color, error);
+                            }
+
+                            dashboard_status_row(
+                                ui,
+                                palette,
                                 &view.beacon_signal_line,
                                 0.0,
                                 |_| {},
@@ -2076,6 +2194,47 @@ impl EsoWeaveApp {
                     ui.label(egui::RichText::new(row.text).monospace().color(color));
                 }
             });
+    }
+
+    fn data_addon_details_modal(&mut self, ctx: &egui::Context) {
+        let view = self.model.view().data_addon;
+        let palette = crate::app::theme::palette(self.ui_prefs.theme);
+        let modal = egui::Modal::new(egui::Id::new("eso_weave_data_addon_details")).show(
+            ctx,
+            |ui| {
+                let width = 680.0_f32
+                    .min(ctx.content_rect().width() * 0.92)
+                    .max(300.0);
+                ui.set_min_width(width);
+                ui.set_max_width(width);
+                ui.heading("ESO Weave Data Details");
+                ui.label(
+                    "Each line has its own evidence boundary. Installation and ESO process state never prove enablement, loading, or collection.",
+                );
+                ui.separator();
+                for line in [
+                    &view.lifecycle_line,
+                    &view.ownership_line,
+                    &view.compatibility_line,
+                    &view.enabled_line,
+                    &view.loaded_line,
+                    &view.reload_line,
+                    &view.runtime_line,
+                    &view.catalog_line,
+                    &view.encounter_line,
+                    &view.remediation_line,
+                ] {
+                    dashboard_status_row(ui, &palette, line, 0.0, |_| {});
+                }
+                ui.separator();
+                if ui.button("Close Data Details").clickable().clicked() {
+                    self.data_addon_details_open = false;
+                }
+            },
+        );
+        if modal.should_close() {
+            self.data_addon_details_open = false;
+        }
     }
 
     fn catalog_update_modal(&mut self, ctx: &egui::Context) {
@@ -2212,41 +2371,12 @@ impl EsoWeaveApp {
             ui.label(
                 "Collected categories: player skills, crafted abilities, item sets, champion skills, companions, races, and classes. Account and character names are excluded or represented only by a one-way scope key.",
             );
-            let collector_status = match self.collector_status {
-                Some(crate::data_addon::DataAddonStatus::NotInstalled) => "not installed",
-                Some(crate::data_addon::DataAddonStatus::ManagedUpToDate) => "managed and current",
-                Some(crate::data_addon::DataAddonStatus::ManagedVersionMismatch) => {
-                    "managed update available"
-                }
-                Some(crate::data_addon::DataAddonStatus::Unmanaged) => {
-                    "unmanaged (will not be modified)"
-                }
-                None => "AddOns directory unavailable",
-            };
-            ui.label(format!("ESO Weave Data: {collector_status}"));
+            let data_addon = self.model.view().data_addon;
+            ui.label(format!(
+                "ESO Weave Data lifecycle: {}. Manage it from System and State.",
+                data_addon.lifecycle_line.state_text
+            ));
             ui.horizontal_wrapped(|ui| {
-                if ui
-                    .add_enabled(!busy, egui::Button::new("Install/update data addon"))
-                    .clickable()
-                    .clicked()
-                {
-                    match (
-                        self.catalog_worker.as_ref(),
-                        self.model.catalog_collector_addons_root(),
-                    ) {
-                        (Some(worker), Some(root)) => {
-                            let _ = worker.install_collector(
-                                root,
-                                self.model.catalog_collector_running_state(),
-                                self.model.effective_api_version(),
-                            );
-                        }
-                        _ => {
-                            self.catalog_update_message =
-                                Some("The ESO AddOns directory could not be resolved.".into());
-                        }
-                    }
-                }
                 let wait_label = if self.collector_waiting_fingerprint.is_some() {
                     "Build from flushed capture"
                 } else {
@@ -2290,27 +2420,6 @@ impl EsoWeaveApp {
                             .into(),
                     );
                     self.collector_waiting_fingerprint = None;
-                }
-                if ui
-                    .add_enabled(!busy, egui::Button::new("Uninstall data addon"))
-                    .clickable()
-                    .clicked()
-                {
-                    match (
-                        self.catalog_worker.as_ref(),
-                        self.model.catalog_collector_addons_root(),
-                    ) {
-                        (Some(worker), Some(root)) => {
-                            let _ = worker.uninstall_collector(
-                                root,
-                                self.model.catalog_collector_running_state(),
-                            );
-                        }
-                        _ => {
-                            self.catalog_update_message =
-                                Some("The ESO AddOns directory could not be resolved.".into());
-                        }
-                    }
                 }
             });
 

@@ -30,10 +30,11 @@ manifest, so changing a count cannot hide an omission or substitution.
 - Plans 001 through 027 and the website announcement live under `docs/archive/`.
 - The post-baseline lifecycle preserves every completed plan with concrete
   delivery evidence. Plans 028 through 040 are archived after their named pull
-  requests merged. Plan 041 is active for the v0.16.0 release under issue #163.
-  Independent release verification does not reactivate a completed plan or
-  block the active plan. The policy requires the matching plan file and index
-  row for every state and rejects simultaneous current and archive copies.
+  requests merged. Plan 041 is archived after v0.16.0 published with all five
+  required assets. Plan 042 is active for the persistent data-addon subsystem.
+  Independent release verification does not reactivate a completed plan. The
+  policy requires the matching plan file and index row for every state and
+  rejects simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six
   safety invariants have named canonical destinations.
 

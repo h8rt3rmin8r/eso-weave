@@ -11,8 +11,8 @@ layer proves and what it does not prove.
 | Pure engines and controllers | `tests/input_engine.rs`, `tests/weave_engine.rs`, `tests/fishing.rs`, `tests/potion.rs` | Decisions, state transitions, ordering, deadlines, cancellation, and no replay without live ESO or device input |
 | Protocol codec and reader | `tests/pixelbus.rs`, `tests/pixelbus_display.rs` | Exact colors, markers, checksums, versions, geometry, freshness, aggregate events, corruption, and display reconciliation |
 | Embedded addon contract | `tests/beacon.rs` parses `addon/PixelBeacon/PixelBeacon.lua` and its manifest | Rust and Lua constants agree, required ESO APIs and events remain present, lifecycle invalidation is represented, embedded files stay managed and versioned |
-| Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, settings and state persist, and visible states remain truthful |
-| Headless interface geometry | `tests/app_ui_sizing.rs` through `egui_kittest` | Responsive cards, controls, meter geometry, disclosure, text allocation, scaling, and layout boundaries without a GPU |
+| Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, data-addon lifecycle and evidence facts remain separate, settings and state persist, and visible states remain truthful |
+| Headless interface geometry | `tests/app_ui_sizing.rs` through `egui_kittest` | Responsive cards, uniquely named addon actions, row ordering, confirmations, meter geometry, disclosure, text allocation, scaling, and layout boundaries without a GPU |
 | Logging and startup | `tests/logging.rs`, `tests/app_log_view.rs`, unit tests in `src/startup/mod.rs` | Runtime filtering, ring eviction, file format, input suppression, log presentation, and pre-GUI notification gating |
 | Packaging and release scripts | `scripts/release-notes.test.sh`, `scripts/validate-debian-package.test.sh`, and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, required Debian control fields, and asset gating |
 | Documentation policy | `.github/scripts/docs-policy.test.mjs` | Navigation, links, offline assets, lifecycle boundaries, preservation, coverage, aliases, and prose constraints |
@@ -25,7 +25,7 @@ layer proves and what it does not prove.
 | Encounter metrics | `tests/encounter_metrics.rs`, `tests/encounter_cli.rs` | Deterministic DPS, effective HPS, damage share, clipped effect uptime, cast order, explicit loss quality, player attribution, zero-duration behavior, catalog compatibility, later ID resolution, atomic no-clobber output, and CLI publication |
 | Local icon cache | `tests/icon_cache.rs` | Synthetic PNG/DDS decode, hostile paths and links, source preservation, deterministic objects, explicit fallback mappings, immutable publication, tamper rejection, and manifest privacy |
 | Catalog candidate pipeline | `tests/catalog_pipeline.rs`, `tests/catalog_pipeline_workflow.rs` | Exact channel and version identity, dual network gates, source-cache integrity, deterministic allowlisted reports, failed-publication preservation, and read-only automation authority |
-| User catalog updates | `tests/catalog_update.rs`, `tests/app_ui_sizing.rs` | Redacted inspection, Live/PTS availability, trusted-origin acknowledgement, immutable install, cancellation, restart resolution, file locking, collector save boundary, receipts, recovery, rollback, and accessible modal controls |
+| User catalog updates | `tests/catalog_update.rs`, `tests/app_ui_sizing.rs` | Redacted inspection, Live/PTS availability, trusted-origin acknowledgement, immutable catalog install, cancellation, restart resolution, file locking, collector save boundary, receipts, recovery, rollback, and accessible modal controls without duplicate addon lifecycle mutation |
 | Documentation capture sandbox | `tests/documentation_capture.rs` | Exact scene catalog, deterministic model truth, dark and light themes, narrow and wide viewports, production isolation, repository-contained output, and zero emitted input without live ESO or a native window |
 
 ## Deterministic seams
@@ -46,7 +46,10 @@ These seams make negative properties reviewable:
 - no Fishing output after SignalLost;
 - no Auto Potion output from Unknown resources, quickslot, cooldown, life,
   world, or travel;
-- no PixelBeacon removal without the managed marker; and
+- no PixelBeacon removal without the managed marker;
+- no ESO Weave Data mutation without its exact managed inventory and marker;
+- no enabled, loaded, or collecting claim inferred from installed files or ESO
+  process state; and
 - no partial or corrupt Pixel Bus layout accepted as current.
 
 ## Safety evidence map
@@ -65,6 +68,7 @@ These seams make negative properties reviewable:
 | Auto Potion death retry | `AutoPotionController::tick` | [S067](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/067-death-recovery-safety/spec.md) proves recovery starts a complete new retry episode in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |
 | Managed removal | `beacon::uninstall` | `uninstall_refuses_unmanaged_folder` |
 | Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves unproven targets, unmanaged manifests, and unproven links cannot be mutated in the [PixelBeacon tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/beacon.rs) |
+| Data-addon lifecycle and presentation | `data_addon::install`, `data_addon::uninstall`, `data_addon_view` | Data-addon and app tests prove marker-gated atomic replacement, neighbor preservation, stale-intent refusal, reload retention, separate evidence facts, row ordering, and unique confirmations |
 | Fishing suspension | `FishingController::set_suspended` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves initial-cast refusal and cancellation of pending reel and recast work in the [Fishing tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/fishing.rs) |
 | Protocol compatibility | `decode_layout_header` | `recognized_header_corruption_never_falls_back_to_legacy` |
 

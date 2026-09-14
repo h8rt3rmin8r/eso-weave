@@ -36,6 +36,16 @@ Observed numeric zero is different from all four states.
 | PixelBeacon Status: **Installed (current)** | Managed version matches | No action |
 | PixelBeacon Status: **Installed (outdated)** | The managed marker exists but the embedded version differs | Update the managed copy in place |
 | PixelBeacon Status: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
+| ESO Weave Data: **Not installed** | The data-addon package is absent | Choose **Install Data** when catalog or encounter workflows are needed |
+| ESO Weave Data: **Installed** with Ownership **Managed** and Compatibility **Current** | Exact marker, inventory, version, and embedded bytes match | No lifecycle action is required; Repair and Uninstall remain explicit choices |
+| ESO Weave Data: **Installed** with Compatibility **Update available** | Ownership is proven but package content differs | Choose **Update Data** or **Repair Data**, then follow reload guidance |
+| ESO Weave Data: Ownership **Unmanaged** | A target exists but ownership or safe shape cannot be proven | No mutation is offered; move or remove only `EsoWeaveData` manually |
+| ESO Weave Data: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
+| Data Addon Enabled or Data Addon Loaded: **Unconfirmed** | No supported current-session account or addon-load source exists | Verify enablement in ESO; reload after lifecycle changes; do not infer from process state |
+| Data Addon Reload: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
+| Data Runtime: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
+| Catalog Collection or Encounter Collection: **Unconfirmed (no live channel)** | Desktop has no current-session module channel | Use the matching in-game status command; disk SavedVariables remains flush-bound historical evidence |
+| Data Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
 | PixelBeacon Signal: **Not detected** | Active game, no heartbeat seen | Enable/reload addon and expose overlay |
@@ -55,14 +65,16 @@ separately and never participate in Live selection.
 
 The shared ESO Weave Data addon has separate package lifecycle values:
 
-| Collector value | Meaning | Recovery or effect |
+| Lifecycle API value | Meaning | Recovery or effect |
 | --- | --- | --- |
 | `not-installed` | The shared data-addon package is absent | Install it explicitly when local catalog or encounter capture is needed |
 | `managed-up-to-date` | Marker, version, and embedded checksum match | Capture may be started in ESO after any required reload |
-| `managed-version-mismatch` | Ownership is proven but content differs | Run the explicit install command to update the managed copy |
+| `managed-version-mismatch` | Ownership is proven but content differs | Use the main interface Update or Repair action, or the maintainer CLI |
 | `unmanaged` | Ownership, file type, or link safety could not be proven | No change is made; inspect only that exact target manually |
 
-These values do not describe PixelBeacon and do not affect automation state.
+These API values back the first-class lifecycle row. They do not describe
+PixelBeacon, configured enablement, addon loading, collection, or automation
+state.
 
 The local icon cache exposes library lookup states for future interface work:
 

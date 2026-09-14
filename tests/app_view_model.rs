@@ -6,17 +6,18 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{
     app_state_label, auto_potion_view, beacon_light, beacon_primary_action, beacon_signal_line,
-    combat_view, dashboard_layout, default_delay_for, effective_dashboard_layout, fishing_label,
-    life_state_view, menu_view, modal_extent, movement_view, override_edit_for, quickslot_view,
-    resource_view, resource_view_with_watch, roll_dodge_view, route_game_observation,
-    route_reader_event, route_reader_safety_gate, skill_rows, status_line_app, status_line_beacon,
-    status_line_fishing, travel_state_view, ultimate_view, ultimate_view_for_world,
-    uninstall_enabled, weapon_bar_view, world_state_view, AppModel, BeaconCondition,
-    BeaconPrimaryAction, DashboardLayout, ResourcePresentation, SkillEdit, StatusRole, UiIntent,
-    UltimatePresentation,
+    combat_view, dashboard_layout, data_addon_view, default_delay_for, effective_dashboard_layout,
+    fishing_label, life_state_view, menu_view, modal_extent, movement_view, override_edit_for,
+    quickslot_view, resource_view, resource_view_with_watch, roll_dodge_view,
+    route_game_observation, route_reader_event, route_reader_safety_gate, skill_rows,
+    status_line_app, status_line_beacon, status_line_fishing, travel_state_view, ultimate_view,
+    ultimate_view_for_world, uninstall_enabled, weapon_bar_view, world_state_view, AppModel,
+    BeaconCondition, BeaconPrimaryAction, DashboardLayout, DataAddonPrimaryAction,
+    ResourcePresentation, SkillEdit, StatusRole, UiIntent, UltimatePresentation,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::config::{LevelName, LoggingPrefs, Settings};
+use eso_weave::data_addon::DataAddonStatus;
 use eso_weave::fishing::{
     FishingConfig, FishingController, FishingState, MockFishingSink, StopReason,
 };
@@ -1175,6 +1176,234 @@ fn install_and_uninstall_beacon_intents() {
     model.apply_intent(UiIntent::UninstallBeacon);
     assert_eq!(model.view().beacon_condition, BeaconCondition::NotInstalled);
     assert!(!model.view().uninstall_enabled);
+}
+
+#[test]
+fn s093_data_addon_projection_keeps_lifecycle_and_runtime_facts_separate() {
+    let current = data_addon_view(
+        Some(DataAddonStatus::ManagedUpToDate),
+        true,
+        eso_weave::game::GameRuntime::Active,
+        true,
+        None,
+    );
+    assert_eq!(current.lifecycle_line.state_text, "Installed");
+    assert_eq!(current.ownership_line.state_text, "Managed");
+    assert_eq!(current.compatibility_line.state_text, "Current");
+    assert_eq!(current.enabled_line.state_text, "Unconfirmed");
+    assert_eq!(current.loaded_line.state_text, "Unconfirmed");
+    assert_eq!(current.reload_line.state_text, "Required");
+    assert_eq!(current.runtime_line.state_text, "Available");
+    assert_eq!(
+        current.catalog_line.state_text,
+        "Unconfirmed (no live channel)"
+    );
+    assert_eq!(
+        current.encounter_line.state_text,
+        "Unconfirmed (no live channel)"
+    );
+    assert_eq!(current.primary_action, Some(DataAddonPrimaryAction::Repair));
+    assert!(current.uninstall_enabled);
+
+    let missing = data_addon_view(
+        Some(DataAddonStatus::NotInstalled),
+        true,
+        eso_weave::game::GameRuntime::Inactive,
+        false,
+        None,
+    );
+    assert_eq!(
+        missing.primary_action,
+        Some(DataAddonPrimaryAction::Install)
+    );
+    assert!(!missing.uninstall_enabled);
+
+    let outdated = data_addon_view(
+        Some(DataAddonStatus::ManagedVersionMismatch),
+        true,
+        eso_weave::game::GameRuntime::Active,
+        false,
+        None,
+    );
+    assert_eq!(
+        outdated.primary_action,
+        Some(DataAddonPrimaryAction::Update)
+    );
+    assert!(outdated.uninstall_enabled);
+
+    let unmanaged = data_addon_view(
+        Some(DataAddonStatus::Unmanaged),
+        true,
+        eso_weave::game::GameRuntime::Unknown,
+        false,
+        None,
+    );
+    assert_eq!(unmanaged.primary_action, None);
+    assert!(!unmanaged.uninstall_enabled);
+    assert!(unmanaged.remediation.contains("manually"));
+}
+
+#[test]
+fn s093_data_addon_intents_use_managed_lifecycle_authority() {
+    let root = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(root.path());
+
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Not installed"
+    );
+    model.apply_intent(UiIntent::InstallDataAddon);
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Installed"
+    );
+    assert_eq!(model.view().data_addon.reload_line.state_text, "Required");
+
+    std::fs::write(
+        root.path()
+            .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
+            .join(eso_weave::data_addon::CATALOG_FILE),
+        "-- drifted managed file\n",
+    )
+    .unwrap();
+    model.refresh_data_addon_status();
+    assert_eq!(
+        model.view().data_addon.primary_action,
+        Some(DataAddonPrimaryAction::Update)
+    );
+    model.apply_intent(UiIntent::RepairDataAddon);
+    assert_eq!(
+        model.view().data_addon.compatibility_line.state_text,
+        "Current"
+    );
+
+    model.apply_intent(UiIntent::UninstallDataAddon);
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Not installed"
+    );
+}
+
+#[test]
+fn s093_stopped_runtime_clears_reload_reminder_across_restart() {
+    use eso_weave::game::{FocusObservation, Presence, ProcessObservation};
+
+    let root = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(root.path());
+    let game = model.game_state();
+    game.update_processes(ProcessObservation {
+        game: Presence::Present,
+        launcher: Presence::Absent,
+        focus: FocusObservation::Focused,
+    });
+    model.apply_intent(UiIntent::InstallDataAddon);
+    assert_eq!(model.view().data_addon.reload_line.state_text, "Required");
+
+    game.update_processes(ProcessObservation {
+        game: Presence::Absent,
+        launcher: Presence::Absent,
+        focus: FocusObservation::Unknown,
+    });
+    assert_eq!(
+        model.view().data_addon.reload_line.state_text,
+        "Not required"
+    );
+
+    game.update_processes(ProcessObservation {
+        game: Presence::Present,
+        launcher: Presence::Absent,
+        focus: FocusObservation::Focused,
+    });
+    assert_eq!(
+        model.view().data_addon.reload_line.state_text,
+        "Not required"
+    );
+}
+
+#[test]
+fn s093_resolution_failure_retains_last_known_data_addon_state() {
+    let root = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(root.path());
+    model.apply_intent(UiIntent::InstallDataAddon);
+    assert_eq!(
+        model.view().data_addon.compatibility_line.state_text,
+        "Current"
+    );
+
+    drop(root);
+    model.apply_intent(UiIntent::RepairDataAddon);
+    let view = model.view();
+    assert_eq!(view.data_addon.compatibility_line.state_text, "Current");
+    assert!(view.data_addon.primary_action.is_none());
+    assert!(!view.data_addon.uninstall_enabled);
+    assert!(view
+        .data_addon
+        .lifecycle_line
+        .state_text
+        .starts_with("Unavailable"));
+    assert!(view
+        .data_addon
+        .operation_error
+        .as_deref()
+        .is_some_and(|message| message.contains("last known lifecycle state is retained")));
+}
+
+#[test]
+fn s093_stale_uninstall_reports_an_already_absent_target() {
+    let root = tempfile::tempdir().unwrap();
+    let mut model = model_with_beacon_root(root.path());
+    model.apply_intent(UiIntent::InstallDataAddon);
+    std::fs::remove_dir_all(
+        root.path()
+            .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER),
+    )
+    .unwrap();
+
+    model.apply_intent(UiIntent::UninstallDataAddon);
+    let view = model.view();
+    assert_eq!(view.data_addon.lifecycle_line.state_text, "Not installed");
+    assert!(view
+        .data_addon
+        .operation_error
+        .as_deref()
+        .is_some_and(|message| message.contains("already absent")));
+}
+
+#[test]
+fn s093_unmanaged_data_addon_rejects_stale_mutation_intents() {
+    let root = tempfile::tempdir().unwrap();
+    let target = root
+        .path()
+        .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER);
+    std::fs::create_dir_all(&target).unwrap();
+    let manifest = b"## Title: Foreign Data Addon\n";
+    std::fs::write(target.join(eso_weave::data_addon::MANIFEST_FILE), manifest).unwrap();
+    let mut model = model_with_beacon_root(root.path());
+    let view = model.view();
+    assert_eq!(view.data_addon.primary_action, None);
+    assert!(!view.data_addon.uninstall_enabled);
+
+    for intent in [
+        UiIntent::InstallDataAddon,
+        UiIntent::UpdateDataAddon,
+        UiIntent::RepairDataAddon,
+        UiIntent::UninstallDataAddon,
+    ] {
+        model.apply_intent(intent);
+    }
+
+    assert_eq!(
+        std::fs::read(target.join(eso_weave::data_addon::MANIFEST_FILE)).unwrap(),
+        manifest
+    );
+    let after = model.view();
+    assert_eq!(after.data_addon.ownership_line.state_text, "Unmanaged");
+    assert_eq!(after.data_addon.reload_line.state_text, "Not required");
+    assert!(after
+        .data_addon
+        .operation_error
+        .as_deref()
+        .is_some_and(|message| message.contains("target is unmanaged")));
 }
 
 #[test]
