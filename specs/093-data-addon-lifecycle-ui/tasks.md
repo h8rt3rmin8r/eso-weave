@@ -51,7 +51,7 @@
 - [x] T033 Address every first-round external review and CI finding
 - [x] T034 Trigger exactly one authorized second `@Codex review` round
 - [x] T035 Address every second-round finding without a third trigger
-- [ ] T036 Confirm CI green and request final review and merge ritual
+- [x] T036 Confirm CI green and request final review and merge ritual
 
 ## Execution Order
 

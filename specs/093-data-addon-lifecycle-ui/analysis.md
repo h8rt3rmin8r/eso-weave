@@ -93,6 +93,13 @@ matches the checked-in alternative exactly, preserving the strict accessible
 name assertion. The PNG itself and the shared figure implementation were not
 changed for this CI correction.
 
+## Final External Gates
+
+PASS for final review and merge readiness. Ubuntu and Windows CI, the rendered
+documentation workflow, CodeQL, dependency review, and both issue-linkage
+checks are green. Both first-round review threads are resolved, the authorized
+second review reported no findings, and no third review was triggered.
+
 ## Local Validation
 
 - `cargo fmt --all -- --check`: PASS
