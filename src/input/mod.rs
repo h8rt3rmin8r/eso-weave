@@ -335,6 +335,18 @@ impl<B: InputBackend> NativeActionExecutor<B> {
             self.cleanup_owned();
             return false;
         }
+        let generated = self
+            .pressed_modifiers
+            .iter()
+            .fold(ModifierSet::EMPTY, |set, modifier| set | modifier.flag());
+        if self.gates.physical_modifiers() | generated != chord.modifiers {
+            self.cleanup_owned();
+            return false;
+        }
+        if !self.gates.admits(epoch) {
+            self.cleanup_owned();
+            return false;
+        }
         if let Err(error) = self
             .backend
             .synthesize_native(chord.primary, Transition::Down)
