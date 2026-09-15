@@ -89,8 +89,8 @@
 ## Phase 9: Publication and Hosted Review
 
 - [x] T044 Commit S097 with changelog evidence and the Codex co-author trailer.
-- [ ] T045 Push the authorized branch and publish an official PR that closes #172.
-- [ ] T046 Move issue and PR project items to S097 PR review.
+- [x] T045 Push the authorized branch and publish an official PR that closes #172.
+- [x] T046 Move issue and PR project items to S097 PR review.
 - [ ] T047 Wait for CI, CodeQL, dependency, Codex, and security results; address every comment and resolve every thread.
 - [ ] T048 Trigger at most one authorized second `@Codex review` round and address its results.
 - [ ] T049 Confirm all required checks green, zero unresolved threads, and ask the operator for final review and merge.
