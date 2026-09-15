@@ -100,6 +100,45 @@ menu and use `/ewcollect status` or `/ewencounter status` for the in-game module
 A running ESO process does not confirm addon loading or collection, and
 SavedVariables on disk may reflect only an earlier flush.
 
+## Encounter capture is waiting, interrupted, or failed
+
+Run `/ewencounter status` inside ESO. The desktop can show only a validated
+last-saved snapshot and cannot toggle capture or acknowledge current addon
+state.
+
+- **Stopped**: choose `single` or `continuous`, select `live` or `pts`, then use
+  `/ewencounter toggle` inside ESO.
+- **Waiting**: the selected mode is enabled and detailed capture handlers are
+  dormant until combat starts. Toggle again to disable it.
+- **Capturing**: the current encounter is recording. Toggling off finalizes it
+  as a user-stopped partial record.
+- **Interrupted**: reload or relog created an explicit gap. Single stops;
+  continuous resumes only from valid durably saved authority and retains the
+  interruption fact.
+- **Failed**: callback, clock, recovered-state, marker, or storage pressure made
+  continued capture unsafe. Retained evidence remains in place and the failed
+  request does not retry automatically. Flush and import it before following
+  the controlled clear and restart guidance.
+
+A malformed same-version controller is never normalized by guessing. The addon
+preserves it unchanged, keeps it inactive, and reports `state-invalid` through
+`/ewencounter status`; use `clear confirm` only when you intentionally accept
+discarding that unimportable state.
+
+Single mode enabled during combat truthfully marks the unseen prefix and is
+partial even when the next combat exit is observed. Continuous encounters share
+one session identity but have separate contiguous ordinals, raw sequences, and
+replay outcomes. A missing ordinal, changed prior member, malformed spool, or
+identity collision rejects the complete desktop import batch without changing
+existing history.
+
+No old encounter is automatically removed when the spool reaches its record,
+marker, or 32 MiB estimated-data limit. The controller preserves terminal and
+failure evidence and stops. Run `/reloadui`, relog, or exit ESO to flush data,
+then use **Import Saved Capture** in Encounter History. An ESO or operating-system
+crash before a flush can lose unflushed control and encounter state; the product
+does not invent a recovery marker for facts that never reached disk.
+
 ## Discovery collector capture or import fails
 
 The catalog module is separate from PixelBeacon but shares the managed ESO Weave

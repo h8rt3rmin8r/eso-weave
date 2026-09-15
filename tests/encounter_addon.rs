@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 
 use eso_weave::catalog::Channel;
 use eso_weave::encounter::{
-    assess_replay, canonical_bytes, import_encounter, load_encounter, parse_capture, ImportRequest,
-    ReplayAssessment, MAX_ESTIMATED_BYTES, MAX_EVENTS,
+    assess_replay, canonical_bytes, import_capture_set, import_encounter, list_encounters,
+    load_encounter, parse_capture, parse_capture_set, ImportRequest, ReplayAssessment,
+    MAX_ESTIMATED_BYTES, MAX_EVENTS,
 };
 use mlua::{Lua, Table, Value as LuaValue};
 use serde_json::Value;
@@ -118,9 +119,19 @@ function __contains_saved_string(needle)
     end
     return visit(EsoWeaveDataSaved.encounter)
 end
+function __capture()
+    local saved = EsoWeaveDataSaved.encounter
+    if saved.state_schema_version ~= 1 then return saved end
+    if saved.current then return saved.current end
+    if saved.session and saved.session.completed_encounter_count > 0 then
+        local key = string.format("%010d", saved.session.completed_encounter_count)
+        return saved.records[key].capture
+    end
+    return nil
+end
 function __raw_observation(sourceId, occurrence)
     occurrence = occurrence or 1
-    local observations = EsoWeaveDataSaved.encounter.raw_observations
+    local observations = __capture().raw_observations
     assert(type(observations) == "table", "raw_observations is missing")
     local found = 0
     for _, observation in ipairs(observations) do
@@ -184,13 +195,13 @@ function __assert_tagged_negative_zero(observation, position)
 end
 function __projection_count(sourceSequence)
     local count = 0
-    for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+    for _, event in ipairs(__capture().events) do
         if event.source_sequence == sourceSequence then count = count + 1 end
     end
     return count
 end
 function __assert_raw_loss(reason)
-    local saved = EsoWeaveDataSaved.encounter
+    local saved = __capture()
     local loss = saved.raw_loss
     assert(saved.status == "partial")
     assert(type(loss) == "table")
@@ -384,7 +395,7 @@ fn complete_current_capture_differentially_replays_selected_projection_families(
         __advance(1000)
         __run_updates()
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
+        assert(__capture().status == "complete")
         "#,
     );
     let source = serialized_saved_variables(&lua);
@@ -567,7 +578,7 @@ fn complete_current_capture_differentially_replays_selected_projection_families(
     run(
         &lua,
         r#"
-        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+        for _, event in ipairs(__capture().events) do
             if event.kind == "damage" then event.payload.amount = 991337 break end
         end
         "#,
@@ -768,47 +779,739 @@ fn assert_saved_variables_round_trip_through_sqlite(lua: &Lua, name: &str) {
 }
 
 #[test]
+fn addon_exposes_exactly_two_modes_and_one_toggle_transition() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state_schema_version == 1)
+        assert(saved.addon_version == 4)
+        assert(saved.selected_mode == "single")
+        assert(saved.state == "stopped")
+
+        SLASH_COMMANDS["/ewencounter"]("mode automatic")
+        assert(saved.selected_mode == "single")
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        assert(saved.requested_mode == "continuous")
+        assert(saved.active_mode == "continuous")
+        assert(saved.state == "waiting")
+
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        assert(saved.state == "capturing")
+        local first = saved.current
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        assert(saved.state == "waiting")
+        assert(saved.session.completed_encounter_count == 1)
+        assert(saved.records["0000000001"].capture == first)
+
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        assert(saved.session.completed_encounter_count == 2)
+        assert(saved.records["0000000002"].ordinal == 2)
+        assert(saved.records["0000000001"].capture.session_id
+            == saved.records["0000000002"].capture.session_id)
+        assert(saved.records["0000000001"].capture.first_sequence == 1)
+        assert(saved.records["0000000002"].capture.first_sequence == 1)
+
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        assert(saved.session.completed_encounter_count == 3)
+        assert(saved.session.next_encounter_ordinal == 4)
+        assert(saved.records["0000000003"].ordinal == 3)
+        assert(saved.records["0000000003"].capture.first_sequence == 1)
+        assert(saved.records["0000000003"].capture.encounter_id
+            ~= saved.records["0000000002"].capture.encounter_id)
+
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        assert(saved.state == "stopped")
+        assert(saved.requested_mode == nil and saved.active_mode == nil)
+        "#,
+    );
+}
+
+#[test]
+fn enablement_warns_about_persisted_values_before_authority_is_committed() {
+    for in_combat in [false, true] {
+        let lua = harness("");
+        run(
+            &lua,
+            &format!(
+                r#"
+                SLASH_COMMANDS["/ewencounter"]("channel live")
+                __in_combat = {in_combat}
+                local original = d
+                local authorityAtWarning = "not-seen"
+                function d(text)
+                    if string.find(text, "names and identifiers", 1, true) then
+                        authorityAtWarning = EsoWeaveDataSaved.encounter.requested_mode
+                    end
+                    original(text)
+                end
+                SLASH_COMMANDS["/ewencounter"]("toggle")
+                assert(authorityAtWarning == nil)
+                assert(EsoWeaveDataSaved.encounter.requested_mode == "single")
+                assert(EsoWeaveDataSaved.encounter.state
+                    == ({in_combat} and "capturing" or "waiting"))
+                "#
+            ),
+        );
+    }
+}
+
+#[test]
+fn in_game_status_names_requested_effective_and_failure_authority() {
+    let lua = harness("EsoWeaveEncounterTestLimits = { max_interruptions = 0 }");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        SLASH_COMMANDS["/ewencounter"]("status")
+        local waiting = __messages[#__messages]
+        assert(string.find(waiting, "Selected mode: continuous", 1, true))
+        assert(string.find(waiting, "requested mode: continuous", 1, true))
+        assert(string.find(waiting, "active mode: continuous", 1, true))
+        assert(string.find(waiting, "channel: live", 1, true))
+        assert(string.find(waiting, "state: waiting", 1, true))
+        assert(string.find(waiting, "current encounter: none", 1, true))
+        assert(string.find(waiting, "session: active", 1, true))
+
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        SLASH_COMMANDS["/ewencounter"]("status")
+        local capturing = __messages[#__messages]
+        assert(string.find(capturing, "state: capturing", 1, true))
+        assert(not string.find(capturing, "current encounter: none", 1, true))
+
+        __fire(EVENT_PLAYER_DEACTIVATED)
+        SLASH_COMMANDS["/ewencounter"]("status")
+        local failed = __messages[#__messages]
+        assert(string.find(failed, "state: failed", 1, true))
+        assert(string.find(failed, "last interruption: none", 1, true))
+        assert(string.find(failed, "failure: interruption-limit", 1, true))
+        "#,
+    );
+}
+
+#[test]
+fn single_mode_started_mid_combat_is_truthfully_partial() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        __in_combat = true
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "capturing")
+        assert(saved.current.pending_partial_reason == "started-mid-combat")
+        local start = saved.current.raw_observations[1]
+        assert(start.source_kind == "api-sample")
+        assert(start.source_id == "IsUnitInCombat")
+        assert(start.argument_count == 1 and start.return_count == 1)
+        __assert_tagged_string(start, 1, "player")
+        __assert_tagged_boolean(start, 2, true)
+
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        local capture = saved.records["0000000001"].capture
+        assert(saved.state == "stopped")
+        assert(capture.status == "partial")
+        assert(capture.partial_reason == "started-mid-combat")
+        assert(capture.events[1].payload.reason == "started-mid-combat")
+        assert(capture.events[#capture.events].payload.complete == false)
+        "#,
+    );
+}
+
+#[test]
+fn mid_combat_toggle_off_remains_importable_without_fabricating_an_exit() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        __in_combat = true
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "stopped")
+        assert(saved.records["0000000001"].capture.partial_reason
+            == "started-mid-combat")
+        "#,
+    );
+    let capture =
+        parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(capture.status, eso_weave::encounter::CaptureStatus::Partial);
+    assert_eq!(
+        assess_replay(&capture).unwrap(),
+        ReplayAssessment::Indeterminate
+    );
+
+    let deactivated = harness("");
+    run(
+        &deactivated,
+        r#"
+        __in_combat = true
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __fire(EVENT_PLAYER_DEACTIVATED)
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "stopped")
+        assert(saved.stop_reason == "single-interrupted")
+        assert(saved.records["0000000001"].capture.partial_reason
+            == "started-mid-combat")
+        assert(saved.interruptions[1].reason == "player-deactivated")
+        "#,
+    );
+    let capture = parse_capture(
+        serialized_saved_variables(&deactivated).as_bytes(),
+        Channel::Live,
+    )
+    .unwrap();
+    assert_eq!(capture.status, eso_weave::encounter::CaptureStatus::Partial);
+    assert_eq!(
+        assess_replay(&capture).unwrap(),
+        ReplayAssessment::Indeterminate
+    );
+}
+
+#[test]
+fn reload_recovers_active_authority_without_silently_losing_the_prefix() {
+    let waiting = harness("");
+    run(
+        &waiting,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        "#,
+    );
+    let waiting_source = serialized_saved_variables(&waiting);
+    let waiting_revision: i64 = waiting
+        .load("return EsoWeaveDataSaved.encounter.revision")
+        .eval()
+        .unwrap();
+    let waiting_recovered = harness(&waiting_source);
+    run(
+        &waiting_recovered,
+        &format!(
+            r#"
+            local saved = EsoWeaveDataSaved.encounter
+            assert(saved.state == "waiting")
+            assert(saved.revision == {waiting_revision})
+            assert(saved.session.completed_encounter_count == 0)
+            assert(saved.session.interruption_count == 0)
+            assert(saved.current == nil)
+            "#
+        ),
+    );
+
+    let waiting_single = harness("");
+    run(
+        &waiting_single,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        assert(EsoWeaveDataSaved.encounter.state == "waiting")
+        "#,
+    );
+    let waiting_single_recovered = harness(&serialized_saved_variables(&waiting_single));
+    run(
+        &waiting_single_recovered,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "stopped")
+        assert(saved.stop_reason == "single-interrupted")
+        assert(saved.requested_mode == nil and saved.active_mode == nil)
+        assert(saved.session.completed_encounter_count == 0)
+        assert(saved.interruptions[1].reason == "runtime-interrupted")
+        "#,
+    );
+
+    let continuous = harness("");
+    run(
+        &continuous,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "ability",
+            0, 0, "source", 1, "target", 2, 10, 3, 4, true,
+            100, 200, 300, 0)
+        "#,
+    );
+    let active_source = serialized_saved_variables(&continuous);
+    let recovered = harness(&format!("{active_source}; __in_combat = true"));
+    run(
+        &recovered,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "capturing")
+        assert(saved.requested_mode == "continuous")
+        assert(saved.active_mode == "continuous")
+        assert(saved.session.completed_encounter_count == 1)
+        assert(saved.session.degraded_encounter_count == 1)
+        assert(saved.session.next_encounter_ordinal == 3)
+        assert(saved.records["0000000001"].capture.partial_reason
+            == "runtime-interrupted")
+        assert(saved.records["0000000001"].capture.warnings.recovered_interruption == 1)
+        assert(saved.interruptions[1].reason == "runtime-interrupted")
+        assert(saved.current.pending_partial_reason == "started-mid-combat")
+        assert(saved.current.encounter_id ~= saved.records["0000000001"].capture.encounter_id)
+        "#,
+    );
+
+    let single = harness("");
+    run(
+        &single,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("channel pts")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        "#,
+    );
+    let single_source = serialized_saved_variables(&single);
+    let single_recovered = harness(&single_source);
+    run(
+        &single_recovered,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "stopped")
+        assert(saved.requested_mode == nil and saved.active_mode == nil)
+        assert(saved.stop_reason == "single-interrupted")
+        assert(saved.session.completed_encounter_count == 1)
+        assert(saved.records["0000000001"].capture.partial_reason
+            == "runtime-interrupted")
+        assert(saved.interruptions[1].reason == "runtime-interrupted")
+        "#,
+    );
+
+    for (name, lua, channel) in [
+        ("continuous-recovery", &recovered, Channel::Live),
+        ("single-recovery", &single_recovered, Channel::Pts),
+    ] {
+        let source = serialized_saved_variables(lua);
+        assert_eq!(
+            parse_capture_set(source.as_bytes(), channel)
+                .unwrap()
+                .records
+                .len(),
+            1
+        );
+        let sandbox = tempfile::tempdir().unwrap();
+        let input = sandbox.path().join(format!("{name}.lua"));
+        let store = sandbox.path().join(format!("{name}.sqlite"));
+        std::fs::write(&input, source).unwrap();
+        let report = import_capture_set(&ImportRequest::new(&input, &store, channel)).unwrap();
+        assert_eq!(report.imported_count, 1);
+        assert_eq!(list_encounters(&store).unwrap().len(), 1);
+    }
+}
+
+#[test]
+fn toggle_off_while_capturing_retains_a_non_destructive_partial_record() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        local current = EsoWeaveDataSaved.encounter.current
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "stopped")
+        assert(saved.stop_reason == "user-disabled")
+        assert(saved.requested_mode == nil and saved.active_mode == nil)
+        assert(saved.current == nil)
+        assert(saved.session.completed_encounter_count == 1)
+        assert(saved.records["0000000001"].capture == current)
+        assert(current.status == "partial")
+        assert(current.partial_reason == "user-stopped")
+        assert(current.events[#current.events].kind == "encounter-end")
+        assert(EVENT_MANAGER.events[EVENT_COMBAT_EVENT] == nil)
+        assert(next(EVENT_MANAGER.updates) == nil)
+        "#,
+    );
+}
+
+#[test]
+fn aggregate_encounter_and_interruption_bounds_fail_closed_without_eviction() {
+    let encounters = harness("EsoWeaveEncounterTestLimits = { max_session_encounters = 2 }");
+    run(
+        &encounters,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        for ordinal = 1, 2 do
+            __in_combat = true
+            __fire(EVENT_PLAYER_COMBAT_STATE, true)
+            __in_combat = false
+            __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        end
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "failed")
+        assert(saved.failure.reason == "storage-pressure")
+        assert(saved.session.completed_encounter_count == 2)
+        assert(saved.records["0000000001"].capture.status == "complete")
+        assert(saved.records["0000000002"].capture.status == "complete")
+        assert(saved.records["0000000003"] == nil)
+        "#,
+    );
+
+    let first = harness("EsoWeaveEncounterTestLimits = { max_interruptions = 1 }");
+    run(
+        &first,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __fire(EVENT_PLAYER_DEACTIVATED)
+        assert(EsoWeaveDataSaved.encounter.state == "interrupted")
+        "#,
+    );
+    let interrupted_source = serialized_saved_variables(&first);
+    let second = harness(&format!(
+        "EsoWeaveEncounterTestLimits = {{ max_interruptions = 1 }}; {interrupted_source}"
+    ));
+    run(
+        &second,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "waiting")
+        __fire(EVENT_PLAYER_DEACTIVATED)
+        assert(saved.state == "failed")
+        assert(saved.failure.reason == "interruption-limit")
+        assert(#saved.interruptions == 1)
+        assert(saved.interruptions[1].sequence == 1)
+        "#,
+    );
+}
+
+#[test]
+fn exact_next_encounter_reserves_produce_an_importable_terminal_prefix() {
+    let lua = harness(
+        "EsoWeaveEncounterTestLimits = { max_events = 6, max_raw_observations = 7, max_estimated_bytes = 1048576 }",
+    );
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        for _ = 1, 2 do
+            __in_combat = true
+            __fire(EVENT_PLAYER_COMBAT_STATE, true)
+            __in_combat = false
+            __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        end
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.session.completed_encounter_count == 2)
+        assert(saved.records["0000000001"].capture.events[1].kind == "encounter-start")
+        assert(saved.records["0000000002"].capture.events[1].kind == "encounter-start")
+        assert(saved.state == "failed")
+        assert(saved.failure.reason == "storage-pressure")
+        "#,
+    );
+    let parsed =
+        parse_capture_set(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(parsed.records.len(), 2);
+}
+
+#[test]
+fn failed_and_unknown_controller_states_never_auto_retry_or_rewrite_evidence() {
+    let invalid = harness(
+        r#"__invalid_controller = {
+            state_schema_version = 1,
+            addon_version = 4,
+            selected_mode = "continuous",
+            selected_channel = "live",
+            requested_mode = "continuous",
+            active_mode = "continuous",
+            state = "capturing",
+            current_encounter_id = "encounter-invalid",
+            records = {},
+            interruptions = {},
+            revision = 7,
+        }
+        EsoWeaveDataSaved.encounter = __invalid_controller"#,
+    );
+    run(
+        &invalid,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved == __invalid_controller)
+        assert(saved.state == "capturing")
+        assert(saved.requested_mode == "continuous")
+        assert(saved.revision == 7)
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        assert(saved == __invalid_controller)
+        assert(saved.revision == 7)
+        "#,
+    );
+    let invalid_source = serialized_saved_variables(&invalid);
+    let reloaded = harness(&invalid_source);
+    run(
+        &reloaded,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "capturing")
+        assert(saved.revision == 7)
+        SLASH_COMMANDS["/ewencounter"]("clear confirm")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(EsoWeaveDataSaved.encounter.stop_reason == "cleared")
+        "#,
+    );
+
+    let unknown = harness(
+        r#"__unknown = {
+            state_schema_version = 77,
+            addon_version = 81,
+            sentinel = "preserve-unknown-controller",
+        }
+        EsoWeaveDataSaved.encounter = __unknown"#,
+    );
+    run(
+        &unknown,
+        r#"
+        assert(EsoWeaveDataSaved.encounter == __unknown)
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        assert(EsoWeaveDataSaved.encounter == __unknown)
+        assert(EsoWeaveDataSaved.encounter.sentinel
+            == "preserve-unknown-controller")
+        "#,
+    );
+}
+
+#[test]
+fn malformed_recovery_arithmetic_is_preserved_inactive_without_crashing_load() {
+    let active = harness("");
+    run(
+        &active,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        "#,
+    );
+    let active_source = serialized_saved_variables(&active);
+    let corrupted = harness(&format!(
+        "{active_source}; EsoWeaveDataSaved.encounter.current.raw_last_sequence = 'not-a-number'"
+    ));
+    run(
+        &corrupted,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == "capturing")
+        assert(saved.current.raw_last_sequence == "not-a-number")
+        assert(EVENT_MANAGER.events[EVENT_PLAYER_COMBAT_STATE] ~= nil)
+        SLASH_COMMANDS["/ewencounter"]("status")
+        assert(saved.current.raw_last_sequence == "not-a-number")
+        "#,
+    );
+
+    for mutation in [
+        "current.last_sequence = 0",
+        "current.raw_first_sequence = 0; current.raw_last_sequence = 0",
+        "current.source = 'not-a-table'",
+        "current.raw_observations[1] = 1",
+        "current.raw_observations[1] = {}",
+        "current.events.extra = current.events[1]",
+        "current.raw_observations.extra = current.raw_observations[1]",
+        "current.raw_observations[1].values.extra = current.raw_observations[1].values[1]",
+        "current.normalization_profile.damage_results.extra = 1",
+        "current.events[1].session_id = 'session-corrupt-1'",
+        "current.raw_omitted_observation_count = 1; current.raw_last_sequence = current.raw_last_sequence + 1; current.raw_loss = { missing_sequence_from = current.raw_last_sequence, missing_sequence_to = current.raw_last_sequence, reason = 'unknown-loss' }",
+    ] {
+        let corrupted = harness(&format!(
+            "{active_source}; local current = EsoWeaveDataSaved.encounter.current; {mutation}; __corrupted = EsoWeaveDataSaved.encounter"
+        ));
+        run(
+            &corrupted,
+            r#"
+            local saved = EsoWeaveDataSaved.encounter
+            assert(saved == __corrupted)
+            local revision = saved.revision
+            SLASH_COMMANDS["/ewencounter"]("toggle")
+            assert(saved == __corrupted and saved.revision == revision)
+            SLASH_COMMANDS["/ewencounter"]("status")
+            assert(string.find(__messages[#__messages], "state-invalid", 1, true))
+            "#,
+        );
+    }
+
+    let terminal = harness("");
+    run(
+        &terminal,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel live")
+        SLASH_COMMANDS["/ewencounter"]("toggle")
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let terminal_source = serialized_saved_variables(&terminal);
+    for mutation in [
+        "capture.events[1].session_id = 'session-corrupt-1'",
+        "capture.started_at = '9007199254740993'; capture.finished_at = '9007199254740992'",
+        "capture.events.extra = capture.events[1]",
+    ] {
+        let corrupted_terminal = harness(&format!(
+            "{terminal_source}; local capture = EsoWeaveDataSaved.encounter.records['0000000001'].capture; {mutation}; __corrupted = EsoWeaveDataSaved.encounter"
+        ));
+        run(
+            &corrupted_terminal,
+            r#"
+            local saved = EsoWeaveDataSaved.encounter
+            local revision = saved.revision
+            assert(saved == __corrupted and saved.state == "waiting")
+            __in_combat = true
+            __fire(EVENT_PLAYER_COMBAT_STATE, true)
+            assert(saved.current == nil and saved.revision == revision)
+            SLASH_COMMANDS["/ewencounter"]("status")
+            assert(string.find(__messages[#__messages], "state-invalid", 1, true))
+            "#,
+        );
+    }
+}
+
+#[test]
+fn inconsistent_controller_combinations_remain_inactive_and_unchanged() {
+    for setup in [
+        "EsoWeaveDataSaved.encounter.stop_reason = nil",
+        "SLASH_COMMANDS['/ewencounter']('channel live'); SLASH_COMMANDS['/ewencounter']('toggle'); EsoWeaveDataSaved.encounter.stop_reason = 'cleared'",
+        "SLASH_COMMANDS['/ewencounter']('channel live'); __in_combat = true; SLASH_COMMANDS['/ewencounter']('toggle'); EsoWeaveDataSaved.encounter.failure = { reason = 'state-invalid', occurred_at = '1788912000' }",
+        "SLASH_COMMANDS['/ewencounter']('mode continuous'); SLASH_COMMANDS['/ewencounter']('channel live'); SLASH_COMMANDS['/ewencounter']('toggle'); __fire(EVENT_PLAYER_DEACTIVATED); EsoWeaveDataSaved.encounter.interruptions = {}; EsoWeaveDataSaved.encounter.session.interruption_count = 0",
+        "SLASH_COMMANDS['/ewencounter']('mode continuous'); SLASH_COMMANDS['/ewencounter']('channel live'); SLASH_COMMANDS['/ewencounter']('toggle'); __fire(EVENT_PLAYER_DEACTIVATED); EsoWeaveDataSaved.encounter.interruptions[1].occurred_at = '99999999999999999999'",
+        "EsoWeaveDataSaved.encounter.revision = 9007199254740992",
+        "SLASH_COMMANDS['/ewencounter']('mode continuous'); SLASH_COMMANDS['/ewencounter']('channel live'); SLASH_COMMANDS['/ewencounter']('toggle'); __fire(EVENT_PLAYER_DEACTIVATED); EsoWeaveDataSaved.encounter.interruptions.extra = EsoWeaveDataSaved.encounter.interruptions[1]",
+        "SLASH_COMMANDS['/ewencounter']('mode continuous'); SLASH_COMMANDS['/ewencounter']('channel live'); SLASH_COMMANDS['/ewencounter']('toggle'); for _ = 1, 2 do __in_combat = true; __fire(EVENT_PLAYER_COMBAT_STATE, true); __in_combat = false; __fire(EVENT_PLAYER_COMBAT_STATE, false) end; SLASH_COMMANDS['/ewencounter']('toggle'); EsoWeaveDataSaved.encounter.selected_mode = 'single'; EsoWeaveDataSaved.encounter.session.mode = 'single'",
+    ] {
+        let base = harness("");
+        run(&base, setup);
+        let source = serialized_saved_variables(&base);
+        let reloaded = harness(&format!("{source}; __corrupted = EsoWeaveDataSaved.encounter"));
+        run(
+            &reloaded,
+            r#"
+            local saved = EsoWeaveDataSaved.encounter
+            local revision = saved.revision
+            SLASH_COMMANDS["/ewencounter"]("toggle")
+            assert(saved == __corrupted and saved.revision == revision)
+            SLASH_COMMANDS["/ewencounter"]("status")
+            assert(string.find(__messages[#__messages], "state-invalid", 1, true))
+            "#,
+        );
+    }
+}
+
+#[test]
+fn malformed_legacy_current_is_preserved_inactive_and_clearable() {
+    let lua = harness(
+        r#"__legacy = {
+            schema_version = 1, addon_version = 1, status = "capturing",
+            channel = "live", privacy_profile = "anonymous-local-v1",
+            source = { api_version = 101050, game_version = "12.0.7", locale = "en", platform = "1" },
+            session_id = "session-1788912000-1000",
+            encounter_id = "encounter-1788912000-1000",
+            started_at = "1788912000", finished_at = "",
+            started_monotonic_ms = 1000, ended_monotonic_ms = 0,
+            first_sequence = 1, last_sequence = 1,
+            stored_event_count = 1, omitted_event_count = 0,
+            estimated_bytes = 900,
+            warnings = { recovered_interruption = "not-a-number" },
+            events = {{
+                session_id = "session-1788912000-1000",
+                encounter_id = "encounter-1788912000-1000",
+                sequence = 1, monotonic_ms = 0, kind = "encounter-start",
+                payload = { reason = "combat-started" },
+            }},
+        }
+        EsoWeaveDataSaved.encounter = __legacy"#,
+    );
+    run(
+        &lua,
+        r#"
+        assert(EsoWeaveDataSaved.encounter == __legacy)
+        assert(__legacy.warnings.recovered_interruption == "not-a-number")
+        SLASH_COMMANDS["/ewencounter"]("status")
+        assert(string.find(__messages[#__messages], "state-invalid", 1, true))
+        SLASH_COMMANDS["/ewencounter"]("clear confirm")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(EsoWeaveDataSaved.encounter.stop_reason == "cleared")
+        "#,
+    );
+}
+
+#[test]
 fn addon_is_dormant_until_one_explicit_channel_arm() {
     let lua = harness("");
     run(
         &lua,
         r#"
-        assert(EsoWeaveDataSaved.encounter.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveDataSaved.encounter.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
 
         SLASH_COMMANDS["/ewencounter"]("arm live")
-        assert(EsoWeaveDataSaved.encounter.status == "armed")
-        assert(EsoWeaveDataSaved.encounter.channel == "live")
+        assert(EsoWeaveDataSaved.encounter.state == "waiting")
+        assert(EsoWeaveDataSaved.encounter.selected_channel == "live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveDataSaved.encounter.status == "capturing")
+        assert(EsoWeaveDataSaved.encounter.state == "capturing")
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
-        assert(EsoWeaveDataSaved.encounter.events[1].kind == "encounter-start")
-        assert(EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events].kind == "encounter-end")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(__capture().status == "complete")
+        assert(__capture().events[1].kind == "encounter-start")
+        assert(__capture().events[#__capture().events].kind == "encounter-end")
 
+        local retainedSession = EsoWeaveDataSaved.encounter.session.session_id
+        SLASH_COMMANDS["/ewencounter"]("mode continuous")
+        SLASH_COMMANDS["/ewencounter"]("channel pts")
         SLASH_COMMANDS["/ewencounter"]("arm pts")
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(EsoWeaveDataSaved.encounter.selected_mode == "single")
+        assert(EsoWeaveDataSaved.encounter.selected_channel == "live")
+        assert(EsoWeaveDataSaved.encounter.session.session_id == retainedSession)
+        assert(__capture().status == "complete")
         SLASH_COMMANDS["/ewencounter"]("clear")
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.session ~= nil)
         SLASH_COMMANDS["/ewencounter"]("clear confirm")
-        assert(EsoWeaveDataSaved.encounter.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
         SLASH_COMMANDS["/ewencounter"]("arm pts")
-        assert(EsoWeaveDataSaved.encounter.channel == "pts")
+        assert(EsoWeaveDataSaved.encounter.selected_channel == "pts")
         SLASH_COMMANDS["/ewencounter"]("disarm")
-        assert(EsoWeaveDataSaved.encounter.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
 
+        SLASH_COMMANDS["/ewencounter"]("clear confirm")
         __in_combat = true
         SLASH_COMMANDS["/ewencounter"]("arm live")
-        __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveDataSaved.encounter.status == "armed")
+        assert(EsoWeaveDataSaved.encounter.state == "capturing")
+        assert(EsoWeaveDataSaved.encounter.current.pending_partial_reason
+            == "started-mid-combat")
         __in_combat = false
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        __in_combat = true
-        __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        assert(EsoWeaveDataSaved.encounter.status == "capturing")
-        __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(__capture().status == "partial")
         "#,
     );
 }
@@ -866,14 +1569,32 @@ fn schema_v1_terminal_capture_is_preserved_without_fabricated_raw_evidence() {
     run(
         &lua,
         r#"
-        assert(EsoWeaveDataSaved.encounter == __legacy_encounter)
-        assert(EsoWeaveDataSaved.encounter.schema_version == 1)
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
-        assert(EsoWeaveDataSaved.encounter.raw_observations == nil)
-        assert(EsoWeaveDataSaved.encounter.raw_observation_count == nil)
-        assert(EsoWeaveDataSaved.encounter.events[2].payload.complete == true)
+        assert(EsoWeaveDataSaved.encounter.state_schema_version == 1)
+        assert(__capture() == __legacy_encounter)
+        assert(__capture().schema_version == 1)
+        assert(__capture().status == "complete")
+        assert(__capture().raw_observations == nil)
+        assert(__capture().raw_observation_count == nil)
+        assert(__capture().events[2].payload.complete == true)
         SLASH_COMMANDS["/ewencounter"]("arm live")
-        assert(EsoWeaveDataSaved.encounter == __legacy_encounter)
+        assert(__capture() == __legacy_encounter)
+        "#,
+    );
+
+    let wrapped = serialized_saved_variables(&lua);
+    let invalid_continuous = harness(&format!(
+        "{wrapped}; local saved = EsoWeaveDataSaved.encounter; saved.selected_mode = 'continuous'; saved.session.mode = 'continuous'; saved.requested_mode = 'continuous'; saved.active_mode = 'continuous'; saved.state = 'waiting'; saved.session.status = 'active'; saved.session.finished_at = nil; saved.stop_reason = nil; __corrupted = saved"
+    ));
+    run(
+        &invalid_continuous,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        local revision = saved.revision
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        assert(saved == __corrupted and saved.revision == revision and saved.current == nil)
+        SLASH_COMMANDS["/ewencounter"]("status")
+        assert(string.find(__messages[#__messages], "state-invalid", 1, true))
         "#,
     );
 }
@@ -889,8 +1610,8 @@ fn pre_profile_v2_terminal_is_preserved_and_idle_state_advances_safely() {
     run(
         &terminal,
         r#"
-        assert(EsoWeaveDataSaved.encounter == __legacy_v2)
-        assert(EsoWeaveDataSaved.encounter.addon_version == 2)
+        assert(__capture() == __legacy_v2)
+        assert(__capture().addon_version == 2)
         "#,
     );
 
@@ -904,9 +1625,9 @@ fn pre_profile_v2_terminal_is_preserved_and_idle_state_advances_safely() {
     run(
         &idle,
         r#"
-        assert(EsoWeaveDataSaved.encounter.status == "idle")
-        assert(EsoWeaveDataSaved.encounter.addon_version == 3)
-        assert(EsoWeaveDataSaved.encounter.schema_version == 2)
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(EsoWeaveDataSaved.encounter.addon_version == 4)
+        assert(EsoWeaveDataSaved.encounter.state_schema_version == 1)
         "#,
     );
 }
@@ -957,9 +1678,11 @@ fn representative_capture_retains_every_selected_source_and_links_projections() 
         __now = 500
         __fire(EVENT_POWER_UPDATE, "group1", 1, 3, 700, 1000, 1000)
 
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "clock-reset")
-        assert(EsoWeaveDataSaved.encounter.schema_version == 2)
+        local capture = __capture()
+        assert(EsoWeaveDataSaved.encounter.state == "failed")
+        assert(capture.status == "partial")
+        assert(capture.partial_reason == "clock-reset")
+        assert(capture.schema_version == 2)
         local required = {
             ["encounter-start"] = false, ["encounter-end"] = false,
             damage = false, healing = false, effect = false, resource = false,
@@ -972,13 +1695,13 @@ fn representative_capture_retains_every_selected_source_and_links_projections() 
         local bossSamples = 0
         local performanceSamples = 0
         local usedQuickslotAbility = 0
-        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+        for _, event in ipairs(capture.events) do
             assert(required[event.kind] ~= nil, event.kind)
             required[event.kind] = true
             assert(event.sequence > previousSequence)
             assert(event.monotonic_ms >= previousTime)
-            assert(event.session_id == EsoWeaveDataSaved.encounter.session_id)
-            assert(event.encounter_id == EsoWeaveDataSaved.encounter.encounter_id)
+            assert(event.session_id == capture.session_id)
+            assert(event.encounter_id == capture.encounter_id)
             if event.kind == "boss-health" then bossSamples = bossSamples + 1 end
             if event.kind == "performance" then
                 performanceSamples = performanceSamples + 1
@@ -995,7 +1718,7 @@ fn representative_capture_retains_every_selected_source_and_links_projections() 
             "performance samples: " .. tostring(performanceSamples))
         assert(usedQuickslotAbility == 9004,
             "used quickslot ability: " .. tostring(usedQuickslotAbility))
-        assert(EsoWeaveDataSaved.encounter.stored_event_count == #EsoWeaveDataSaved.encounter.events)
+        assert(capture.stored_event_count == #capture.events)
 
         local callbacks = {
             { "EVENT_PLAYER_COMBAT_STATE", EVENT_PLAYER_COMBAT_STATE, 2 },
@@ -1081,23 +1804,23 @@ fn representative_capture_retains_every_selected_source_and_links_projections() 
         __assert_tagged_string(finish, 1, "clock-reset")
         __assert_tagged_boolean(finish, 2, false)
 
-        local raw = EsoWeaveDataSaved.encounter.raw_observations
-        assert(EsoWeaveDataSaved.encounter.raw_observation_count == #raw)
-        assert(EsoWeaveDataSaved.encounter.raw_omitted_observation_count == 0)
-        assert(EsoWeaveDataSaved.encounter.raw_first_sequence == raw[1].sequence)
-        assert(EsoWeaveDataSaved.encounter.raw_last_sequence == raw[#raw].sequence)
+        local raw = capture.raw_observations
+        assert(capture.raw_observation_count == #raw)
+        assert(capture.raw_omitted_observation_count == 0)
+        assert(capture.raw_first_sequence == raw[1].sequence)
+        assert(capture.raw_last_sequence == raw[#raw].sequence)
         local previousRawSequence = 0
         local previousRawTime = 0
         for _, observation in ipairs(raw) do
             assert(observation.sequence > previousRawSequence)
             assert(observation.monotonic_ms >= previousRawTime)
-            assert(observation.session_id == EsoWeaveDataSaved.encounter.session_id)
-            assert(observation.encounter_id == EsoWeaveDataSaved.encounter.encounter_id)
+            assert(observation.session_id == capture.session_id)
+            assert(observation.encounter_id == capture.encounter_id)
             previousRawSequence = observation.sequence
             previousRawTime = observation.monotonic_ms
         end
         local nextOrdinal = {}
-        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+        for _, event in ipairs(capture.events) do
             assert(type(event.source_sequence) == "number")
             local expectedOrdinal = nextOrdinal[event.source_sequence] or 0
             assert(event.projection_ordinal == expectedOrdinal)
@@ -1153,8 +1876,8 @@ fn unknown_callbacks_retain_future_scalar_arguments_and_exact_tagged_edges() {
         assert(observation.values[28].exponent == 971)
         __assert_tagged_nil(observation, 29)
         assert(__projection_count(observation.sequence) == 0)
-        assert(EsoWeaveDataSaved.encounter.status == "complete")
-        assert(EsoWeaveDataSaved.encounter.raw_omitted_observation_count == 0)
+        assert(__capture().status == "complete")
+        assert(__capture().raw_omitted_observation_count == 0)
         "#,
     );
 }
@@ -1258,7 +1981,7 @@ fn callback_value_ceiling_declares_whole_observation_loss() {
         __fire(EVENT_PLAYER_DEAD, unpack(extras, 1, 256))
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
         __assert_raw_loss("record-limit")
-        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+        for _, event in ipairs(__capture().events) do
             assert(event.kind ~= "death")
         end
         "#,
@@ -1278,9 +2001,9 @@ fn lost_initial_callback_keeps_a_truthful_importable_start_boundary() {
         __fire(EVENT_PLAYER_COMBAT_STATE, true, unpack(extras, 1, 255))
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
         __assert_raw_loss("record-limit")
-        assert(EsoWeaveDataSaved.encounter.raw_loss.missing_sequence_from == 1)
-        assert(EsoWeaveDataSaved.encounter.events[1].kind == "encounter-start")
-        assert(EsoWeaveDataSaved.encounter.events[1].source_sequence == 1)
+        assert(__capture().raw_loss.missing_sequence_from == 1)
+        assert(__capture().events[1].kind == "encounter-start")
+        assert(__capture().events[1].source_sequence == 1)
         "#,
     );
     assert_saved_variables_round_trip_through_sqlite(&lua, "lost-initial");
@@ -1302,11 +2025,11 @@ fn clock_reset_at_normalized_ceiling_remains_importable() {
             100, 200, 300, 0)
         __now = 5
         __fire(EVENT_POWER_UPDATE, "group1", 1, 3, 700, 1000, 1000)
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "clock-reset")
+        assert(__capture().status == "partial")
+        assert(__capture().partial_reason == "clock-reset")
         assert(__raw_observation("clock-reset").source_kind == "lifecycle")
-        assert(EsoWeaveDataSaved.encounter.events[3].kind == "discontinuity")
-        assert(EsoWeaveDataSaved.encounter.events[3].payload.reason == "capture-overflow")
+        assert(__capture().events[3].kind == "discontinuity")
+        assert(__capture().events[3].payload.reason == "capture-overflow")
         "#,
     );
     assert_saved_variables_round_trip_through_sqlite(&lua, "clock-ceiling");
@@ -1328,39 +2051,33 @@ fn overflow_and_actor_limits_preserve_terminal_capacity_and_exact_loss() {
                 0, 0, "source", 1, "target", 2, index, 3, 4, true,
                 10000 + index, 20000 + index, 7001, 0)
         end
-        assert(EsoWeaveDataSaved.encounter.pending_partial_reason == "capture-overflow")
-        assert(EsoWeaveDataSaved.encounter.pending_loss_from ~= nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_to
-            - EsoWeaveDataSaved.encounter.pending_loss_from + 1
-            == EsoWeaveDataSaved.encounter.omitted_event_count)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_reason == "capture-overflow")
-        __fire(EVENT_PLAYER_COMBAT_STATE, false)
-
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "capture-overflow")
-        assert(#EsoWeaveDataSaved.encounter.events <= 6)
-        assert(EsoWeaveDataSaved.encounter.estimated_bytes <= 1048576)
-        assert(EsoWeaveDataSaved.encounter.omitted_event_count > 0)
-        assert(EsoWeaveDataSaved.encounter.warnings.actor_limit > 0)
-        local marker = EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events - 1]
-        local terminal = EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events]
+        local controller = EsoWeaveDataSaved.encounter
+        local capture = __capture()
+        assert(controller.state == "failed")
+        assert(controller.failure.reason == "storage-pressure")
+        assert(capture.status == "partial")
+        assert(capture.partial_reason == "capture-overflow")
+        assert(#capture.events <= 6)
+        assert(capture.estimated_bytes <= 1048576)
+        assert(capture.omitted_event_count > 0)
+        assert(capture.warnings.actor_limit > 0)
+        local marker = capture.events[#capture.events - 1]
+        local terminal = capture.events[#capture.events]
         assert(marker.kind == "discontinuity")
         assert(marker.payload.reason == "capture-overflow")
         assert(marker.payload.missing_sequence_to - marker.payload.missing_sequence_from + 1
-            == EsoWeaveDataSaved.encounter.omitted_event_count)
+            == capture.omitted_event_count)
         assert(marker.sequence == marker.payload.missing_sequence_to + 1)
         assert(terminal.kind == "encounter-end")
         assert(terminal.sequence == marker.sequence + 1)
         assert(terminal.payload.complete == false)
-        assert(EsoWeaveDataSaved.encounter.pending_partial_reason == nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_from == nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_to == nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_reason == nil)
-        __assert_raw_loss("record-limit")
-        assert(EsoWeaveDataSaved.encounter.raw_last_sequence
-            - EsoWeaveDataSaved.encounter.raw_first_sequence + 1
-            == EsoWeaveDataSaved.encounter.raw_observation_count
-                + EsoWeaveDataSaved.encounter.raw_omitted_observation_count)
+        assert(capture.pending_partial_reason == nil)
+        assert(capture.pending_loss_from == nil)
+        assert(capture.pending_loss_to == nil)
+        assert(capture.pending_loss_reason == nil)
+        assert(capture.raw_omitted_observation_count == 0)
+        assert(capture.raw_last_sequence - capture.raw_first_sequence + 1
+            == capture.raw_observation_count)
         "#,
     );
 }
@@ -1374,8 +2091,9 @@ fn stop_deactivation_and_callback_failure_are_partial_and_torn_down() {
         SLASH_COMMANDS["/ewencounter"]("arm live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         SLASH_COMMANDS["/ewencounter"]("stop")
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "user-stopped")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(__capture().status == "partial")
+        assert(__capture().partial_reason == "user-stopped")
         assert(EVENT_MANAGER.events[EVENT_COMBAT_EVENT] == nil)
         assert(next(EVENT_MANAGER.updates) == nil)
 
@@ -1383,7 +2101,9 @@ fn stop_deactivation_and_callback_failure_are_partial_and_torn_down() {
         SLASH_COMMANDS["/ewencounter"]("arm live")
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         __fire(EVENT_PLAYER_DEACTIVATED)
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "player-deactivated")
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(__capture().partial_reason == "player-deactivated")
+        assert(EsoWeaveDataSaved.encounter.session.interruption_count == 1)
         assert(EVENT_MANAGER.events[EVENT_EFFECT_CHANGED] == nil)
         local deactivated = __raw_observation("EVENT_PLAYER_DEACTIVATED")
         __assert_raw_callback(
@@ -1395,7 +2115,9 @@ fn stop_deactivation_and_callback_failure_are_partial_and_torn_down() {
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         GetSlotBoundId = function() error("injected callback failure") end
         __fire(EVENT_ACTION_SLOT_ABILITY_USED, 3)
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "callback-failed")
+        assert(EsoWeaveDataSaved.encounter.state == "failed")
+        assert(EsoWeaveDataSaved.encounter.failure.reason == "callback-failed")
+        assert(__capture().partial_reason == "callback-failed")
         assert(EVENT_MANAGER.events[EVENT_ACTION_SLOT_ABILITY_USED] == nil)
         assert(next(EVENT_MANAGER.updates) == nil)
         assert(not __contains_saved_string("injected callback failure"))
@@ -1448,7 +2170,7 @@ fn oversized_strings_and_unsupported_values_declare_whole_observation_loss() {
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
         __assert_raw_loss("string-limit")
         assert(not __contains_saved_string("oversized-private-canary"))
-        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+        for _, event in ipairs(__capture().events) do
             assert(event.kind ~= "damage")
         end
         "#,
@@ -1468,7 +2190,7 @@ fn oversized_strings_and_unsupported_values_declare_whole_observation_loss() {
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
         __assert_raw_loss("unsupported-value")
         assert(not __contains_saved_string("unsupported-private-canary"))
-        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+        for _, event in ipairs(__capture().events) do
             assert(event.kind ~= "damage")
         end
         "#,
@@ -1507,8 +2229,10 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
                 10000, 20000, 7001, 0)
         end
         __fire(EVENT_PLAYER_COMBAT_STATE, false)
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.estimated_bytes <= 8192)
+        assert(EsoWeaveDataSaved.encounter.state == "failed")
+        assert(EsoWeaveDataSaved.encounter.failure.reason == "storage-pressure")
+        assert(__capture().status == "partial")
+        assert(__capture().estimated_bytes <= 8192)
         __assert_raw_loss("byte-limit")
 
         "#,
@@ -1548,11 +2272,14 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
     run(
         &recovery,
         r#"
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "player-deactivated")
-        assert(EsoWeaveDataSaved.encounter.events[#EsoWeaveDataSaved.encounter.events].kind
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(__capture().status == "partial")
+        assert(__capture().partial_reason == "player-deactivated")
+        assert(__capture().events[#__capture().events].kind
             == "encounter-end")
-        assert(EsoWeaveDataSaved.encounter.warnings.recovered_interruption == 1)
+        assert(__capture().warnings.recovered_interruption == 1)
+        assert(EsoWeaveDataSaved.encounter.interruptions[1].reason
+            == "runtime-interrupted")
         "#,
     );
 
@@ -1594,11 +2321,13 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
     run(
         &overflow_recovery,
         r#"
-        assert(EsoWeaveDataSaved.encounter.status == "partial")
-        assert(EsoWeaveDataSaved.encounter.partial_reason == "capture-overflow")
-        assert(EsoWeaveDataSaved.encounter.omitted_event_count == 2)
-        local marker = EsoWeaveDataSaved.encounter.events[2]
-        local terminal = EsoWeaveDataSaved.encounter.events[3]
+        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        local capture = __capture()
+        assert(capture.status == "partial")
+        assert(capture.partial_reason == "capture-overflow")
+        assert(capture.omitted_event_count == 2)
+        local marker = capture.events[2]
+        local terminal = capture.events[3]
         assert(marker.kind == "discontinuity")
         assert(marker.sequence == 4)
         assert(marker.payload.missing_sequence_from == 2)
@@ -1606,10 +2335,10 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
         assert(marker.payload.reason == "capture-overflow")
         assert(terminal.kind == "encounter-end")
         assert(terminal.sequence == 5)
-        assert(EsoWeaveDataSaved.encounter.pending_partial_reason == nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_from == nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_to == nil)
-        assert(EsoWeaveDataSaved.encounter.pending_loss_reason == nil)
+        assert(capture.pending_partial_reason == nil)
+        assert(capture.pending_loss_from == nil)
+        assert(capture.pending_loss_to == nil)
+        assert(capture.pending_loss_reason == nil)
         "#,
     );
 }
@@ -1617,7 +2346,7 @@ fn byte_overflow_and_saved_interruption_remain_bounded_and_partial() {
 #[test]
 fn addon_identity_and_source_are_strictly_confined() {
     assert!(MANIFEST.contains("## Title: ESO Weave Data"));
-    assert!(MANIFEST.contains("## AddOnVersion: 1"));
+    assert!(MANIFEST.contains("## AddOnVersion: 2"));
     assert!(MANIFEST.contains("## APIVersion: 101051 101050"));
     assert!(MANIFEST.contains("## SavedVariables: EsoWeaveDataSaved"));
     assert!(MANIFEST.contains("## X-ESO-Weave-Data-Managed: true"));
@@ -1625,8 +2354,11 @@ fn addon_identity_and_source_are_strictly_confined() {
 
     for required in [
         "MAX_EVENTS = 100000",
+        "MAX_RAW_OBSERVATIONS = 100000",
         "MAX_ESTIMATED_BYTES = 33554432",
         "MAX_ACTORS = 4096",
+        "MAX_SESSION_ENCOUNTERS = 1024",
+        "MAX_INTERRUPTION_MARKERS = 1024",
         "EVENT_COMBAT_EVENT",
         "EVENT_EFFECT_CHANGED",
         "EVENT_POWER_UPDATE",
@@ -1638,6 +2370,7 @@ fn addon_identity_and_source_are_strictly_confined() {
         "EVENT_ACTIVE_QUICKSLOT_CHANGED",
         "EVENT_PLAYER_DEACTIVATED",
         "GetGameTimeMilliseconds",
+        "IsUnitInCombat",
         "GetFramerate",
         "GetLatency",
         "/ewencounter",
@@ -1658,6 +2391,9 @@ fn addon_identity_and_source_are_strictly_confined() {
         "require(",
         "os.execute",
         "io.open",
+        "mode automatic",
+        "ZO_CreateStringId",
+        "KEYBIND_STRIP",
     ] {
         assert!(!ADDON.contains(forbidden), "forbidden surface {forbidden}");
     }

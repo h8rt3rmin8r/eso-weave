@@ -24,16 +24,19 @@ pub use metrics::{
     OrderedCastSequence, ProjectionRequest, ALGORITHM_VERSION, PROJECTION_SCHEMA_VERSION,
 };
 pub use model::{
-    BackupReceipt, CaptureStatus, DeleteReceipt, EncounterCapture, EncounterEvent,
-    EncounterSummary, ImportOutcome, ImportReceipt, NormalizationProfile, PartialReason,
-    PayloadValue, RawLoss, RawLossReason, RawObservation, RawSourceKind, RawValue, RawValueType,
-    SourceProvenance,
+    BackupReceipt, CaptureControllerState, CaptureFailure, CaptureFailureReason,
+    CaptureImportReport, CaptureInterruption, CaptureInterruptionReason, CaptureMode,
+    CaptureSession, CaptureSessionStatus, CaptureStateSummary, CaptureStatus, CaptureStopReason,
+    DeleteReceipt, EncounterCapture, EncounterEvent, EncounterModuleState, EncounterSummary,
+    ImportOutcome, ImportReceipt, NormalizationProfile, OrderedEncounterCapture, ParsedCaptureSet,
+    PartialReason, PayloadValue, RawLoss, RawLossReason, RawObservation, RawSourceKind, RawValue,
+    RawValueType, SourceProvenance,
 };
 pub use replay::{assess_replay, ReplayAssessment};
 pub use store::{backup_store, delete_all, delete_encounter, list_encounters, load_encounter};
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
-pub const STORE_SCHEMA_VERSION: u32 = 3;
+pub const STORE_SCHEMA_VERSION: u32 = 4;
 pub const CANONICAL_FORMAT_VERSION: u32 = 2;
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;
@@ -43,6 +46,8 @@ pub const MAX_PARSE_DEPTH: usize = 16;
 pub const MAX_PARSE_TOKENS: usize = crate::data_addon::MAX_SAVED_VARIABLES_TOKENS;
 pub const MAX_TABLE_ENTRIES: usize = crate::data_addon::MAX_SAVED_VARIABLES_ENTRIES;
 pub const MAX_ACTORS: u64 = 4_096;
+pub const MAX_SESSION_ENCOUNTERS: usize = 1_024;
+pub const MAX_SESSION_INTERRUPTION_MARKERS: usize = 1_024;
 
 const ROOT: &str = "EsoWeaveDataSaved";
 
@@ -78,6 +83,38 @@ impl ImportRequest {
 }
 
 pub fn import_encounter(request: &ImportRequest) -> Result<ImportReceipt, EncounterError> {
+    let (source_sha256, parsed) = read_capture_set(request)?;
+    if parsed.records.len() != 1 {
+        return invalid("single encounter import requires exactly one terminal record");
+    }
+    let canonical = canonical_bytes(&parsed.records[0].capture)?;
+    let content_sha256 = sha256(&canonical);
+    let report = store::append_set(
+        &request.store_path,
+        &parsed,
+        &[(canonical, content_sha256)],
+        source_sha256,
+    )?;
+    report.receipts.into_iter().next().ok_or_else(|| {
+        EncounterError::Validation("single encounter import produced no receipt".into())
+    })
+}
+
+pub fn import_capture_set(request: &ImportRequest) -> Result<CaptureImportReport, EncounterError> {
+    let (source_sha256, parsed) = read_capture_set(request)?;
+    let prepared = parsed
+        .records
+        .iter()
+        .map(|record| {
+            let canonical = canonical_bytes(&record.capture)?;
+            let content_sha256 = sha256(&canonical);
+            Ok((canonical, content_sha256))
+        })
+        .collect::<Result<Vec<_>, EncounterError>>()?;
+    store::append_set(&request.store_path, &parsed, &prepared, source_sha256)
+}
+
+fn read_capture_set(request: &ImportRequest) -> Result<(String, ParsedCaptureSet), EncounterError> {
     ensure_distinct_paths(&request.input_path, &request.store_path)?;
     let absolute_input = absolute_path(&request.input_path)?;
     let parent = absolute_input
@@ -87,22 +124,30 @@ pub fn import_encounter(request: &ImportRequest) -> Result<ImportReceipt, Encoun
     let bytes = read_bounded_stable(&canonical_parent, &absolute_input, MAX_CAPTURE_BYTES)
         .map_err(map_stable_read)?;
     let source_sha256 = sha256(&bytes);
-    let capture = parse_capture(&bytes, request.expected_channel)?;
-    let canonical = canonical_bytes(&capture)?;
-    let content_sha256 = sha256(&canonical);
-    store::append(
-        &request.store_path,
-        &capture,
-        &canonical,
-        source_sha256,
-        content_sha256,
-    )
+    let parsed = parse_capture_set(&bytes, request.expected_channel)?;
+    Ok((source_sha256, parsed))
 }
 
 pub fn parse_capture(
     bytes: &[u8],
     expected_channel: Channel,
 ) -> Result<EncounterCapture, EncounterError> {
+    let parsed = parse_capture_set(bytes, expected_channel)?;
+    if parsed.records.len() != 1 {
+        return invalid("single capture parser requires exactly one terminal record");
+    }
+    Ok(parsed
+        .records
+        .into_iter()
+        .next()
+        .expect("validated one record")
+        .capture)
+}
+
+pub fn parse_capture_set(
+    bytes: &[u8],
+    expected_channel: Channel,
+) -> Result<ParsedCaptureSet, EncounterError> {
     if bytes.len() as u64 > MAX_CAPTURE_BYTES {
         return invalid(format!(
             "capture exceeds the {MAX_CAPTURE_BYTES} byte limit"
@@ -124,6 +169,12 @@ pub fn parse_capture(
     .map_err(|error| EncounterError::Validation(error.to_string()))?;
     let mut value = crate::data_addon::take_module(&mut root, "encounter")
         .map_err(EncounterError::Validation)?;
+    if value.get("state_schema_version").is_some() {
+        normalize_state_empty_arrays(&mut value);
+        let state: EncounterModuleState = serde_json::from_value(value)
+            .map_err(|_| EncounterError::Validation("invalid encounter state schema".into()))?;
+        return validate::validate_state(state, expected_channel);
+    }
     normalize_empty_raw_value_arrays(&mut value);
     let capture: EncounterCapture = serde_json::from_value(value)
         .map_err(|_| EncounterError::Validation("invalid encounter schema".into()))?;
@@ -135,7 +186,37 @@ pub fn parse_capture(
     }
     validate::validate(&capture)?;
     replay::enforce(&capture)?;
-    Ok(capture)
+    Ok(ParsedCaptureSet {
+        records: vec![OrderedEncounterCapture {
+            mode: CaptureMode::Single,
+            ordinal: 1,
+            capture,
+        }],
+        state: None,
+    })
+}
+
+fn normalize_state_empty_arrays(value: &mut serde_json::Value) {
+    for field in ["interruptions"] {
+        if value
+            .get(field)
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(serde_json::Map::is_empty)
+        {
+            value[field] = serde_json::Value::Array(Vec::new());
+        }
+    }
+    let Some(records) = value
+        .get_mut("records")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    for record in records.values_mut() {
+        if let Some(capture) = record.get_mut("capture") {
+            normalize_empty_raw_value_arrays(capture);
+        }
+    }
 }
 
 fn normalize_empty_raw_value_arrays(value: &mut serde_json::Value) {

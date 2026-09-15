@@ -8,13 +8,16 @@ use crate::bounded_file::is_link_like;
 use crate::catalog::Channel;
 
 use super::model::{
-    BackupReceipt, CaptureStatus, DeleteReceipt, EncounterCapture, EncounterSummary, ImportOutcome,
-    ImportReceipt,
+    BackupReceipt, CaptureImportReport, CaptureMode, CaptureStateSummary, CaptureStatus,
+    DeleteReceipt, EncounterCapture, EncounterSummary, ImportOutcome, ImportReceipt,
+    OrderedEncounterCapture, ParsedCaptureSet, SessionEncounterReference, SessionSnapshot,
 };
 use super::{
     ensure_distinct_paths, invalid, sha256, EncounterError, CANONICAL_FORMAT_VERSION,
     STORE_SCHEMA_VERSION,
 };
+
+const MAX_SESSION_SNAPSHOT_BYTES: usize = 1024 * 1024;
 
 const V1_META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -65,14 +68,12 @@ const V2_RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
            (capture_schema_version = 2 AND canonical_format_version = 2))
 )"#;
-const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+const V3_META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version = 3),
     canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
 )"#;
-const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
-VALUES (1, 3, 2)"#;
-const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
+const V3_RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
     source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
     session_id TEXT NOT NULL,
@@ -93,10 +94,60 @@ const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
            (capture_schema_version = 2 AND canonical_format_version = 2))
 )"#;
+const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 4),
+    canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+)"#;
+const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
+VALUES (1, 4, 2)"#;
+const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
+    content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
+    source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+    session_id TEXT NOT NULL,
+    encounter_id TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+    capture_schema_version INTEGER NOT NULL CHECK (capture_schema_version IN (1, 2)),
+    addon_version INTEGER NOT NULL CHECK (addon_version IN (1, 2, 3)),
+    canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version IN (1, 2)),
+    status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    first_sequence INTEGER NOT NULL,
+    last_sequence INTEGER NOT NULL,
+    stored_event_count INTEGER NOT NULL,
+    omitted_event_count INTEGER NOT NULL,
+    capture_mode TEXT NOT NULL CHECK (capture_mode IN ('single', 'continuous')),
+    encounter_ordinal INTEGER NOT NULL CHECK (encounter_ordinal > 0),
+    canonical_json BLOB NOT NULL,
+    UNIQUE (session_id, encounter_id),
+    UNIQUE (session_id, encounter_ordinal),
+    CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
+           (capture_schema_version = 2 AND canonical_format_version = 2))
+)"#;
+const SESSION_TABLE_SQL: &str = r#"CREATE TABLE encounter_session_snapshots (
+    session_id TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+    channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+    mode TEXT NOT NULL CHECK (mode IN ('single', 'continuous')),
+    disposition TEXT NOT NULL CHECK (disposition IN ('active', 'stopped', 'failed')),
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    interruption_count INTEGER NOT NULL CHECK (interruption_count >= 0),
+    canonical_json BLOB NOT NULL CHECK (length(canonical_json) <= 1048576),
+    PRIMARY KEY (session_id, revision),
+    UNIQUE (content_sha256)
+)"#;
 const IMMUTABILITY_TRIGGER_SQL: &str = r#"CREATE TRIGGER raw_encounters_no_update
 BEFORE UPDATE ON raw_encounters
 BEGIN
     SELECT RAISE(ABORT, 'raw encounter records are immutable');
+END"#;
+const SESSION_IMMUTABILITY_TRIGGER_SQL: &str = r#"CREATE TRIGGER encounter_session_snapshots_no_update
+BEFORE UPDATE ON encounter_session_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'encounter session snapshots are immutable');
 END"#;
 
 struct StoredRecord {
@@ -115,69 +166,246 @@ struct StoredRecord {
     last_sequence: i64,
     stored_event_count: i64,
     omitted_event_count: i64,
+    capture_mode: String,
+    encounter_ordinal: i64,
     canonical_json: Vec<u8>,
 }
 
-pub(crate) fn append(
-    store_path: &Path,
-    capture: &EncounterCapture,
-    canonical: &[u8],
-    source_sha256: String,
+struct StoredSessionMember {
     content_sha256: String,
-) -> Result<ImportReceipt, EncounterError> {
+    session_id: String,
+    encounter_id: String,
+    channel: String,
+    capture_mode: String,
+    encounter_ordinal: i64,
+}
+
+pub(crate) fn append_set(
+    store_path: &Path,
+    parsed: &ParsedCaptureSet,
+    prepared: &[(Vec<u8>, String)],
+    source_sha256: String,
+) -> Result<CaptureImportReport, EncounterError> {
+    if parsed.records.len() != prepared.len() {
+        return invalid("prepared encounter count does not match parsed records");
+    }
     let mut connection = open_store(store_path, true, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let existing = transaction
+    let outcomes = parsed
+        .records
+        .iter()
+        .zip(prepared)
+        .map(|(record, (_, hash))| preflight_record(&transaction, record, hash))
+        .collect::<Result<Vec<_>, EncounterError>>()?;
+    let snapshot = build_snapshot(parsed, prepared)?;
+    let snapshot_advances = snapshot
+        .as_ref()
+        .map(|(snapshot, canonical, hash)| {
+            preflight_snapshot(&transaction, snapshot, canonical, hash)
+        })
+        .transpose()?;
+    for ((record, (canonical, hash)), outcome) in parsed.records.iter().zip(prepared).zip(&outcomes)
+    {
+        if *outcome == ImportOutcome::Imported {
+            insert_record(&transaction, record, canonical, &source_sha256, hash)?;
+        }
+    }
+    if let Some((snapshot, canonical, hash)) = snapshot.as_ref() {
+        if snapshot_advances == Some(true) {
+            validate_snapshot_members(&transaction, snapshot)?;
+        } else if let Some(latest) = latest_session_snapshot(&transaction, &snapshot.session_id)? {
+            validate_snapshot_members(&transaction, &latest)?;
+        }
+        insert_snapshot_if_absent(&transaction, snapshot, canonical, hash)?;
+    } else {
+        for record in &parsed.records {
+            if let Some(snapshot) =
+                latest_session_snapshot(&transaction, &record.capture.session_id)?
+            {
+                validate_snapshot_members(&transaction, &snapshot)?;
+            }
+        }
+    }
+    transaction.commit()?;
+    let receipts = parsed
+        .records
+        .iter()
+        .zip(prepared)
+        .zip(&outcomes)
+        .map(|((record, (_, hash)), outcome)| {
+            receipt(record, *outcome, source_sha256.clone(), hash.clone())
+        })
+        .collect::<Vec<_>>();
+    Ok(CaptureImportReport {
+        source_sha256,
+        imported_count: outcomes
+            .iter()
+            .filter(|outcome| **outcome == ImportOutcome::Imported)
+            .count(),
+        already_present_count: outcomes
+            .iter()
+            .filter(|outcome| **outcome == ImportOutcome::AlreadyPresent)
+            .count(),
+        receipts,
+        last_saved_state: parsed.state.as_ref().map(CaptureStateSummary::from),
+    })
+}
+
+fn latest_session_snapshot(
+    transaction: &rusqlite::Transaction<'_>,
+    session_id: &str,
+) -> Result<Option<SessionSnapshot>, EncounterError> {
+    let bytes = transaction
         .query_row(
-            "SELECT content_sha256 FROM raw_encounters WHERE session_id = ?1 AND encounter_id = ?2",
-            params![capture.session_id, capture.encounter_id],
-            |row| row.get::<_, String>(0),
+            "SELECT canonical_json FROM encounter_session_snapshots
+             WHERE session_id = ?1 ORDER BY revision DESC LIMIT 1",
+            params![session_id],
+            |row| row.get::<_, Vec<u8>>(0),
         )
         .optional()?;
-    let outcome = match existing {
-        Some(existing) if existing == content_sha256 => ImportOutcome::AlreadyPresent,
-        Some(_) => return invalid("encounter identity already exists with different content"),
-        None => {
-            transaction.execute(
-                "INSERT INTO raw_encounters (
-                    content_sha256, source_sha256, session_id, encounter_id, channel,
-                    capture_schema_version, addon_version, canonical_format_version,
-                    status, started_at, finished_at,
-                    first_sequence, last_sequence, stored_event_count, omitted_event_count,
-                    canonical_json
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-                params![
-                    content_sha256,
-                    source_sha256,
-                    capture.session_id,
-                    capture.encounter_id,
-                    capture.channel.as_str(),
-                    capture.schema_version,
-                    capture.addon_version,
-                    canonical_format_for(capture.schema_version)?,
-                    capture.status.as_str(),
-                    capture.started_at,
-                    capture.finished_at,
-                    i64::try_from(capture.first_sequence).map_err(|_| {
-                        EncounterError::Validation("first sequence is out of range".into())
-                    })?,
-                    i64::try_from(capture.last_sequence).map_err(
-                        |_| EncounterError::Validation("last sequence is out of range".into())
-                    )?,
-                    i64::try_from(capture.stored_event_count).map_err(|_| {
-                        EncounterError::Validation("stored count is out of range".into())
-                    })?,
-                    i64::try_from(capture.omitted_event_count).map_err(|_| {
-                        EncounterError::Validation("omitted count is out of range".into())
-                    })?,
-                    canonical,
-                ],
-            )?;
-            ImportOutcome::Imported
+    bytes
+        .map(|bytes| {
+            serde_json::from_slice(&bytes).map_err(|_| {
+                EncounterError::Validation("stored session snapshot is invalid".into())
+            })
+        })
+        .transpose()
+}
+
+fn validate_snapshot_members(
+    transaction: &rusqlite::Transaction<'_>,
+    snapshot: &SessionSnapshot,
+) -> Result<(), EncounterError> {
+    let mut statement = transaction.prepare(
+        "SELECT content_sha256, encounter_id, channel, capture_mode, encounter_ordinal
+         FROM raw_encounters WHERE session_id = ?1",
+    )?;
+    let rows = statement.query_map(params![snapshot.session_id], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, i64>(4)?,
+        ))
+    })?;
+    for row in rows {
+        let (content_sha256, encounter_id, channel, mode, ordinal) = row?;
+        let reference = snapshot
+            .encounters
+            .iter()
+            .find(|reference| reference.encounter_id == encounter_id);
+        if reference.is_none_or(|reference| {
+            reference.content_sha256 != content_sha256
+                || i64::try_from(reference.ordinal) != Ok(ordinal)
+        }) || snapshot.channel.as_str() != channel
+            || snapshot.mode.as_str() != mode
+        {
+            return invalid("encounter store member does not match its session snapshot");
         }
-    };
-    transaction.commit()?;
-    Ok(ImportReceipt {
+    }
+    Ok(())
+}
+
+fn preflight_record(
+    transaction: &rusqlite::Transaction<'_>,
+    record: &OrderedEncounterCapture,
+    content_sha256: &str,
+) -> Result<ImportOutcome, EncounterError> {
+    let capture = &record.capture;
+    let existing = transaction
+        .query_row(
+            "SELECT content_sha256, capture_mode, encounter_ordinal FROM raw_encounters
+             WHERE session_id = ?1 AND encounter_id = ?2",
+            params![capture.session_id, capture.encounter_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    match existing {
+        Some((hash, mode, ordinal))
+            if hash == content_sha256
+                && mode == record.mode.as_str()
+                && u64::try_from(ordinal) == Ok(record.ordinal) =>
+        {
+            Ok(ImportOutcome::AlreadyPresent)
+        }
+        Some(_) => invalid("encounter identity already exists with different content"),
+        None => {
+            let ordinal_collision = transaction
+                .query_row(
+                    "SELECT content_sha256, encounter_id FROM raw_encounters
+                     WHERE session_id = ?1 AND encounter_ordinal = ?2",
+                    params![
+                        capture.session_id,
+                        to_i64(record.ordinal, "encounter ordinal")?
+                    ],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?;
+            if ordinal_collision.is_some() {
+                return invalid("encounter session ordinal already exists with different content");
+            }
+            Ok(ImportOutcome::Imported)
+        }
+    }
+}
+
+fn insert_record(
+    transaction: &rusqlite::Transaction<'_>,
+    record: &OrderedEncounterCapture,
+    canonical: &[u8],
+    source_sha256: &str,
+    content_sha256: &str,
+) -> Result<(), EncounterError> {
+    let capture = &record.capture;
+    transaction.execute(
+        "INSERT INTO raw_encounters (
+            content_sha256, source_sha256, session_id, encounter_id, channel,
+            capture_schema_version, addon_version, canonical_format_version,
+            status, started_at, finished_at, first_sequence, last_sequence,
+            stored_event_count, omitted_event_count, capture_mode, encounter_ordinal,
+            canonical_json
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                   ?14, ?15, ?16, ?17, ?18)",
+        params![
+            content_sha256,
+            source_sha256,
+            capture.session_id,
+            capture.encounter_id,
+            capture.channel.as_str(),
+            capture.schema_version,
+            capture.addon_version,
+            canonical_format_for(capture.schema_version)?,
+            capture.status.as_str(),
+            capture.started_at,
+            capture.finished_at,
+            to_i64(capture.first_sequence, "first sequence")?,
+            to_i64(capture.last_sequence, "last sequence")?,
+            i64::try_from(capture.stored_event_count)
+                .map_err(|_| EncounterError::Validation("stored count is out of range".into()))?,
+            to_i64(capture.omitted_event_count, "omitted count")?,
+            record.mode.as_str(),
+            to_i64(record.ordinal, "encounter ordinal")?,
+            canonical,
+        ],
+    )?;
+    Ok(())
+}
+
+fn receipt(
+    record: &OrderedEncounterCapture,
+    outcome: ImportOutcome,
+    source_sha256: String,
+    content_sha256: String,
+) -> ImportReceipt {
+    let capture = &record.capture;
+    ImportReceipt {
         outcome,
         source_sha256,
         content_sha256,
@@ -187,20 +415,184 @@ pub(crate) fn append(
         encounter_id: capture.encounter_id.clone(),
         stored_event_count: capture.stored_event_count,
         omitted_event_count: capture.omitted_event_count,
-    })
+        capture_mode: record.mode,
+        encounter_ordinal: record.ordinal,
+    }
+}
+
+fn build_snapshot(
+    parsed: &ParsedCaptureSet,
+    prepared: &[(Vec<u8>, String)],
+) -> Result<Option<(SessionSnapshot, Vec<u8>, String)>, EncounterError> {
+    let Some(state) = parsed.state.as_ref() else {
+        return Ok(None);
+    };
+    let Some(session) = state.session.as_ref() else {
+        return Ok(None);
+    };
+    let encounters = parsed
+        .records
+        .iter()
+        .zip(prepared)
+        .map(|(record, (_, content_sha256))| SessionEncounterReference {
+            ordinal: record.ordinal,
+            encounter_id: record.capture.encounter_id.clone(),
+            content_sha256: content_sha256.clone(),
+        })
+        .collect();
+    let snapshot = SessionSnapshot {
+        session_id: session.session_id.clone(),
+        revision: state.revision,
+        channel: session.channel,
+        mode: session.mode,
+        disposition: session.status,
+        started_at: session.started_at.clone(),
+        finished_at: session.finished_at.clone(),
+        interruptions: state.interruptions.clone(),
+        failure: state.failure.clone(),
+        encounters,
+    };
+    let canonical = serde_json::to_vec(&snapshot)
+        .map_err(|_| EncounterError::Validation("session snapshot is not serializable".into()))?;
+    if canonical.len() > MAX_SESSION_SNAPSHOT_BYTES {
+        return invalid("session snapshot exceeds its byte limit");
+    }
+    let hash = sha256(&canonical);
+    Ok(Some((snapshot, canonical, hash)))
+}
+
+fn preflight_snapshot(
+    transaction: &rusqlite::Transaction<'_>,
+    snapshot: &SessionSnapshot,
+    canonical: &[u8],
+    content_sha256: &str,
+) -> Result<bool, EncounterError> {
+    validate_snapshot_facts(snapshot)?;
+    let same_revision = transaction
+        .query_row(
+            "SELECT content_sha256, canonical_json FROM encounter_session_snapshots
+             WHERE session_id = ?1 AND revision = ?2",
+            params![
+                snapshot.session_id,
+                to_i64(snapshot.revision, "session revision")?
+            ],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?)),
+        )
+        .optional()?;
+    if let Some((stored_hash, stored_bytes)) = same_revision {
+        return if stored_hash == content_sha256 && stored_bytes == canonical {
+            Ok(false)
+        } else {
+            invalid("encounter session revision already exists with different content")
+        };
+    }
+
+    let latest = transaction
+        .query_row(
+            "SELECT revision, canonical_json FROM encounter_session_snapshots
+             WHERE session_id = ?1 ORDER BY revision DESC LIMIT 1",
+            params![snapshot.session_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?)),
+        )
+        .optional()?;
+    let Some((latest_revision, latest_bytes)) = latest else {
+        return Ok(true);
+    };
+    let latest_revision = u64::try_from(latest_revision)
+        .map_err(|_| EncounterError::Validation("stored session revision is invalid".into()))?;
+    if snapshot.revision <= latest_revision {
+        return invalid("encounter session revision is not monotonic");
+    }
+    let previous: SessionSnapshot = serde_json::from_slice(&latest_bytes)
+        .map_err(|_| EncounterError::Validation("stored session snapshot is invalid".into()))?;
+    validate_snapshot_extension(&previous, snapshot)?;
+    Ok(true)
+}
+
+fn validate_snapshot_extension(
+    previous: &SessionSnapshot,
+    current: &SessionSnapshot,
+) -> Result<(), EncounterError> {
+    let encounter_prefix = current.encounters.starts_with(&previous.encounters);
+    let interruption_prefix = current.interruptions.starts_with(&previous.interruptions);
+    let failure_monotonic = previous
+        .failure
+        .as_ref()
+        .is_none_or(|failure| current.failure.as_ref() == Some(failure));
+    let finished_monotonic = previous
+        .finished_at
+        .as_ref()
+        .is_none_or(|finished| current.finished_at.as_ref() == Some(finished));
+    let disposition_monotonic = match previous.disposition {
+        super::model::CaptureSessionStatus::Active => true,
+        disposition => current.disposition == disposition,
+    };
+    if previous.session_id != current.session_id
+        || previous.channel != current.channel
+        || previous.mode != current.mode
+        || previous.started_at != current.started_at
+        || !encounter_prefix
+        || !interruption_prefix
+        || !failure_monotonic
+        || !finished_monotonic
+        || !disposition_monotonic
+    {
+        return invalid("encounter session snapshot is not an append-only extension");
+    }
+    Ok(())
+}
+
+fn insert_snapshot_if_absent(
+    transaction: &rusqlite::Transaction<'_>,
+    snapshot: &SessionSnapshot,
+    canonical: &[u8],
+    content_sha256: &str,
+) -> Result<(), EncounterError> {
+    transaction.execute(
+        "INSERT OR IGNORE INTO encounter_session_snapshots (
+            session_id, revision, content_sha256, channel, mode, disposition,
+            started_at, finished_at, interruption_count, canonical_json
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            snapshot.session_id,
+            to_i64(snapshot.revision, "session revision")?,
+            content_sha256,
+            snapshot.channel.as_str(),
+            snapshot.mode.as_str(),
+            snapshot.disposition.as_str(),
+            snapshot.started_at,
+            snapshot.finished_at,
+            i64::try_from(snapshot.interruptions.len()).map_err(|_| {
+                EncounterError::Validation("session interruption count is out of range".into())
+            })?,
+            canonical,
+        ],
+    )?;
+    Ok(())
 }
 
 pub fn list_encounters(
     store_path: impl AsRef<Path>,
 ) -> Result<Vec<EncounterSummary>, EncounterError> {
     let connection = open_store(store_path.as_ref(), false, false)?;
-    let mut statement = connection.prepare(
+    let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let query = if version == STORE_SCHEMA_VERSION {
         "SELECT content_sha256, session_id, encounter_id, channel, status, started_at,
                 finished_at, first_sequence, last_sequence, stored_event_count,
-                omitted_event_count
+                omitted_event_count, capture_mode, encounter_ordinal
          FROM raw_encounters
-         ORDER BY length(started_at), started_at, session_id, encounter_id",
-    )?;
+         ORDER BY length(started_at), started_at, session_id, encounter_ordinal"
+    } else {
+        "SELECT content_sha256, session_id, encounter_id, channel, status, started_at,
+                finished_at, first_sequence, last_sequence, stored_event_count,
+                omitted_event_count, 'single',
+                ROW_NUMBER() OVER (
+                    PARTITION BY session_id
+                    ORDER BY length(started_at), started_at, encounter_id, content_sha256)
+         FROM raw_encounters
+         ORDER BY length(started_at), started_at, session_id, encounter_id"
+    };
+    let mut statement = connection.prepare(query)?;
     let rows = statement.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -214,6 +606,8 @@ pub fn list_encounters(
             row.get::<_, i64>(8)?,
             row.get::<_, i64>(9)?,
             row.get::<_, i64>(10)?,
+            row.get::<_, String>(11)?,
+            row.get::<_, i64>(12)?,
         ))
     })?;
     rows.map(|row| {
@@ -229,6 +623,8 @@ pub fn list_encounters(
             last_sequence,
             stored_event_count,
             omitted_event_count,
+            capture_mode,
+            encounter_ordinal,
         ) = row?;
         Ok(EncounterSummary {
             content_sha256,
@@ -246,6 +642,8 @@ pub fn list_encounters(
             )?)
             .map_err(|_| EncounterError::Validation("stored event count is out of range".into()))?,
             omitted_event_count: nonnegative_db(omitted_event_count, "omitted event count")?,
+            capture_mode: parse_mode(&capture_mode)?,
+            encounter_ordinal: nonnegative_db(encounter_ordinal, "encounter ordinal")?,
         })
     })
     .collect()
@@ -374,7 +772,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
             return invalid("encounter store has an unrecognized schema");
         }
         let schema = format!(
-            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 3;"
+            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{SESSION_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\n{SESSION_IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 4;"
         );
         connection.execute_batch("BEGIN IMMEDIATE;")?;
         if let Err(error) = connection
@@ -398,7 +796,15 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
         validate_schema(&connection, 2)?;
         validate_records(&connection, 2)?;
         if write {
-            migrate_v2_to_v3(&connection)?;
+            migrate_v2_to_current(&connection)?;
+            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
+            validate_records(&connection, STORE_SCHEMA_VERSION)?;
+        }
+    } else if version == 3 {
+        validate_schema(&connection, 3)?;
+        validate_records(&connection, 3)?;
+        if write {
+            migrate_v3_to_current(&connection)?;
             validate_schema(&connection, STORE_SCHEMA_VERSION)?;
             validate_records(&connection, STORE_SCHEMA_VERSION)?;
         }
@@ -413,7 +819,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
 
 fn validate_store_contents(connection: &Connection) -> Result<(), EncounterError> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if !matches!(version, 1 | 2 | STORE_SCHEMA_VERSION) {
+    if !matches!(version, 1 | 2 | 3 | STORE_SCHEMA_VERSION) {
         return invalid(format!("unsupported encounter store schema {version}"));
     }
     validate_schema(connection, version)?;
@@ -429,19 +835,26 @@ fn migrate_v1_to_current(connection: &Connection) -> Result<(), EncounterError> 
          {META_TABLE_SQL};
          {META_INSERT_SQL};
          {RAW_TABLE_SQL};
+         {SESSION_TABLE_SQL};
          INSERT INTO raw_encounters (
              content_sha256, source_sha256, session_id, encounter_id, channel,
              capture_schema_version, addon_version, canonical_format_version,
              status, started_at, finished_at, first_sequence, last_sequence,
-             stored_event_count, omitted_event_count, canonical_json)
+             stored_event_count, omitted_event_count, capture_mode,
+             encounter_ordinal, canonical_json)
          SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
              capture_schema_version, addon_version, 1, status, started_at,
              finished_at, first_sequence, last_sequence, stored_event_count,
-             omitted_event_count, canonical_json
+             omitted_event_count, 'single',
+             ROW_NUMBER() OVER (
+                 PARTITION BY session_id
+                 ORDER BY length(started_at), started_at, encounter_id, content_sha256),
+             canonical_json
          FROM raw_encounters_v1;
          DROP TABLE raw_encounters_v1;
          {IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 3;
+         {SESSION_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 4;
          COMMIT;"
     );
     if let Err(error) = connection.execute_batch(&migration) {
@@ -451,7 +864,7 @@ fn migrate_v1_to_current(connection: &Connection) -> Result<(), EncounterError> 
     Ok(())
 }
 
-fn migrate_v2_to_v3(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_v2_to_current(connection: &Connection) -> Result<(), EncounterError> {
     let migration = format!(
         "BEGIN IMMEDIATE;
          DROP TRIGGER raw_encounters_no_update;
@@ -460,19 +873,64 @@ fn migrate_v2_to_v3(connection: &Connection) -> Result<(), EncounterError> {
          {META_TABLE_SQL};
          {META_INSERT_SQL};
          {RAW_TABLE_SQL};
+         {SESSION_TABLE_SQL};
          INSERT INTO raw_encounters (
              content_sha256, source_sha256, session_id, encounter_id, channel,
              capture_schema_version, addon_version, canonical_format_version,
              status, started_at, finished_at, first_sequence, last_sequence,
-             stored_event_count, omitted_event_count, canonical_json)
+             stored_event_count, omitted_event_count, capture_mode,
+             encounter_ordinal, canonical_json)
          SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
              capture_schema_version, addon_version, canonical_format_version,
              status, started_at, finished_at, first_sequence, last_sequence,
-             stored_event_count, omitted_event_count, canonical_json
+             stored_event_count, omitted_event_count, 'single',
+             ROW_NUMBER() OVER (
+                 PARTITION BY session_id
+                 ORDER BY length(started_at), started_at, encounter_id, content_sha256),
+             canonical_json
          FROM raw_encounters_v2;
          DROP TABLE raw_encounters_v2;
          {IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 3;
+         {SESSION_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 4;
+         COMMIT;"
+    );
+    if let Err(error) = connection.execute_batch(&migration) {
+        let _ = connection.execute_batch("ROLLBACK;");
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+fn migrate_v3_to_current(connection: &Connection) -> Result<(), EncounterError> {
+    let migration = format!(
+        "BEGIN IMMEDIATE;
+         DROP TRIGGER raw_encounters_no_update;
+         ALTER TABLE raw_encounters RENAME TO raw_encounters_v3;
+         DROP TABLE encounter_store_meta;
+         {META_TABLE_SQL};
+         {META_INSERT_SQL};
+         {RAW_TABLE_SQL};
+         {SESSION_TABLE_SQL};
+         INSERT INTO raw_encounters (
+             content_sha256, source_sha256, session_id, encounter_id, channel,
+             capture_schema_version, addon_version, canonical_format_version,
+             status, started_at, finished_at, first_sequence, last_sequence,
+             stored_event_count, omitted_event_count, capture_mode,
+             encounter_ordinal, canonical_json)
+         SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
+             capture_schema_version, addon_version, canonical_format_version,
+             status, started_at, finished_at, first_sequence, last_sequence,
+             stored_event_count, omitted_event_count, 'single',
+             ROW_NUMBER() OVER (
+                 PARTITION BY session_id
+                 ORDER BY length(started_at), started_at, encounter_id, content_sha256),
+             canonical_json
+         FROM raw_encounters_v3;
+         DROP TABLE raw_encounters_v3;
+         {IMMUTABILITY_TRIGGER_SQL};
+         {SESSION_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 4;
          COMMIT;"
     );
     if let Err(error) = connection.execute_batch(&migration) {
@@ -519,10 +977,11 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
     let (meta_sql, raw_sql) = match version {
         1 => (V1_META_TABLE_SQL, V1_RAW_TABLE_SQL),
         2 => (V2_META_TABLE_SQL, V2_RAW_TABLE_SQL),
-        3 => (META_TABLE_SQL, RAW_TABLE_SQL),
+        3 => (V3_META_TABLE_SQL, V3_RAW_TABLE_SQL),
+        4 => (META_TABLE_SQL, RAW_TABLE_SQL),
         _ => return invalid("unsupported encounter store schema"),
     };
-    let expected = [
+    let mut expected = vec![
         (
             "table",
             "encounter_store_meta",
@@ -537,8 +996,26 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
             IMMUTABILITY_TRIGGER_SQL,
         ),
     ];
+    if version == STORE_SCHEMA_VERSION {
+        expected.insert(
+            1,
+            (
+                "table",
+                "encounter_session_snapshots",
+                "encounter_session_snapshots",
+                SESSION_TABLE_SQL,
+            ),
+        );
+        expected.push((
+            "trigger",
+            "encounter_session_snapshots_no_update",
+            "encounter_session_snapshots",
+            SESSION_IMMUTABILITY_TRIGGER_SQL,
+        ));
+        expected.sort_by_key(|entry| (entry.0, entry.1));
+    }
     let schema_matches = actual.len() == expected.len()
-        && actual.iter().zip(expected).all(|(actual, expected)| {
+        && actual.iter().zip(&expected).all(|(actual, expected)| {
             actual.0 == expected.0
                 && actual.1 == expected.1
                 && actual.2 == expected.2
@@ -560,7 +1037,8 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
     let expected_meta = match version {
         1 => (1, 1),
         2 => (2, 2),
-        3 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
+        3 => (3, CANONICAL_FORMAT_VERSION),
+        4 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
         _ => unreachable!(),
     };
     if meta != Some(expected_meta) {
@@ -578,13 +1056,20 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
         "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
                 capture_schema_version, addon_version, 1, status, started_at, finished_at,
                 first_sequence, last_sequence, stored_event_count, omitted_event_count,
-                canonical_json
+                'single', 1, canonical_json
+         FROM raw_encounters"
+    } else if version < STORE_SCHEMA_VERSION {
+        "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
+                capture_schema_version, addon_version, canonical_format_version,
+                status, started_at, finished_at, first_sequence, last_sequence,
+                stored_event_count, omitted_event_count, 'single', 1, canonical_json
          FROM raw_encounters"
     } else {
         "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
                 capture_schema_version, addon_version, canonical_format_version,
                 status, started_at, finished_at, first_sequence, last_sequence,
-                stored_event_count, omitted_event_count, canonical_json
+                stored_event_count, omitted_event_count, capture_mode,
+                encounter_ordinal, canonical_json
          FROM raw_encounters"
     };
     let mut statement = connection.prepare(query)?;
@@ -605,9 +1090,12 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
             last_sequence: row.get(12)?,
             stored_event_count: row.get(13)?,
             omitted_event_count: row.get(14)?,
-            canonical_json: row.get(15)?,
+            capture_mode: row.get(15)?,
+            encounter_ordinal: row.get(16)?,
+            canonical_json: row.get(17)?,
         })
     })?;
+    let mut session_members = Vec::new();
     for row in rows {
         let stored = row?;
         if sha256(&stored.canonical_json) != stored.content_sha256 {
@@ -637,9 +1125,171 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
             && u64::try_from(stored.first_sequence) == Ok(capture.first_sequence)
             && u64::try_from(stored.last_sequence) == Ok(capture.last_sequence)
             && usize::try_from(stored.stored_event_count) == Ok(capture.stored_event_count)
-            && u64::try_from(stored.omitted_event_count) == Ok(capture.omitted_event_count);
+            && u64::try_from(stored.omitted_event_count) == Ok(capture.omitted_event_count)
+            && parse_mode(&stored.capture_mode).is_ok()
+            && stored.encounter_ordinal > 0;
         if !indexed_fields_match {
             return invalid("encounter store index fields do not match canonical content");
+        }
+        if version == STORE_SCHEMA_VERSION {
+            session_members.push(StoredSessionMember {
+                content_sha256: stored.content_sha256,
+                session_id: stored.session_id,
+                encounter_id: stored.encounter_id,
+                channel: stored.channel,
+                capture_mode: stored.capture_mode,
+                encounter_ordinal: stored.encounter_ordinal,
+            });
+        }
+    }
+    if version == STORE_SCHEMA_VERSION {
+        validate_session_snapshots(connection, &session_members)?;
+    }
+    Ok(())
+}
+
+fn validate_session_snapshots(
+    connection: &Connection,
+    stored_members: &[StoredSessionMember],
+) -> Result<(), EncounterError> {
+    let mut statement = connection.prepare(
+        "SELECT session_id, revision, content_sha256, channel, mode, disposition,
+                started_at, finished_at, interruption_count, length(canonical_json),
+                CASE WHEN length(canonical_json) <= 1048576 THEN canonical_json END
+         FROM encounter_session_snapshots ORDER BY session_id, revision",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, String>(6)?,
+            row.get::<_, Option<String>>(7)?,
+            row.get::<_, i64>(8)?,
+            row.get::<_, i64>(9)?,
+            row.get::<_, Option<Vec<u8>>>(10)?,
+        ))
+    })?;
+    let mut previous: Option<SessionSnapshot> = None;
+    let mut latest_snapshots = std::collections::HashMap::new();
+    for row in rows {
+        let (
+            session_id,
+            revision,
+            content_sha256,
+            channel,
+            mode,
+            disposition,
+            started_at,
+            finished_at,
+            interruption_count,
+            canonical_length,
+            canonical,
+        ) = row?;
+        let canonical_length = usize::try_from(canonical_length).map_err(|_| {
+            EncounterError::Validation("stored session snapshot byte length is invalid".into())
+        })?;
+        if canonical_length > MAX_SESSION_SNAPSHOT_BYTES {
+            return invalid("stored session snapshot exceeds its byte limit");
+        }
+        let canonical = canonical.ok_or_else(|| {
+            EncounterError::Validation("stored session snapshot exceeds its byte limit".into())
+        })?;
+        if sha256(&canonical) != content_sha256 {
+            return invalid("encounter store contains a session snapshot hash mismatch");
+        }
+        let snapshot: SessionSnapshot = serde_json::from_slice(&canonical)
+            .map_err(|_| EncounterError::Validation("stored session snapshot is invalid".into()))?;
+        validate_snapshot_facts(&snapshot)?;
+        if serde_json::to_vec(&snapshot)
+            .map_err(|_| EncounterError::Validation("stored session snapshot is invalid".into()))?
+            != canonical
+            || snapshot.session_id != session_id
+            || u64::try_from(revision) != Ok(snapshot.revision)
+            || snapshot.channel.as_str() != channel
+            || snapshot.mode.as_str() != mode
+            || snapshot.disposition.as_str() != disposition
+            || snapshot.started_at != started_at
+            || snapshot.finished_at != finished_at
+            || usize::try_from(interruption_count) != Ok(snapshot.interruptions.len())
+        {
+            return invalid("encounter store session snapshot index does not match its content");
+        }
+        if let Some(prior) = previous
+            .as_ref()
+            .filter(|prior| prior.session_id == session_id)
+        {
+            if snapshot.revision <= prior.revision {
+                return invalid("encounter store session revisions are not monotonic");
+            }
+            validate_snapshot_extension(prior, &snapshot)?;
+        }
+        latest_snapshots.insert(snapshot.session_id.clone(), snapshot.clone());
+        previous = Some(snapshot);
+    }
+    for member in stored_members {
+        let Some(snapshot) = latest_snapshots.get(&member.session_id) else {
+            continue;
+        };
+        let reference = snapshot
+            .encounters
+            .iter()
+            .find(|reference| reference.encounter_id == member.encounter_id);
+        if reference.is_none_or(|reference| {
+            reference.content_sha256 != member.content_sha256
+                || i64::try_from(reference.ordinal) != Ok(member.encounter_ordinal)
+        }) || snapshot.channel.as_str() != member.channel
+            || snapshot.mode.as_str() != member.capture_mode
+        {
+            return invalid("encounter store member does not match its session snapshot");
+        }
+    }
+    Ok(())
+}
+
+fn validate_snapshot_facts(snapshot: &SessionSnapshot) -> Result<(), EncounterError> {
+    super::validate::validate_opaque_id(&snapshot.session_id, "session")?;
+    let started_at = super::validate::validate_decimal_time(&snapshot.started_at)?;
+    let finished_at = snapshot
+        .finished_at
+        .as_deref()
+        .map(super::validate::validate_decimal_time)
+        .transpose()?;
+    if snapshot.revision == 0
+        || snapshot.encounters.len() > super::MAX_SESSION_ENCOUNTERS
+        || snapshot.interruptions.len() > super::MAX_SESSION_INTERRUPTION_MARKERS
+        || finished_at.is_some_and(|finished| finished < started_at)
+        || (snapshot.disposition == super::model::CaptureSessionStatus::Active)
+            != snapshot.finished_at.is_none()
+        || (snapshot.disposition == super::model::CaptureSessionStatus::Failed)
+            != snapshot.failure.is_some()
+    {
+        return invalid("stored session snapshot facts are invalid");
+    }
+    for (index, encounter) in snapshot.encounters.iter().enumerate() {
+        if encounter.ordinal != (index + 1) as u64 || !is_sha256(&encounter.content_sha256) {
+            return invalid("stored session encounter references are invalid");
+        }
+        super::validate::validate_opaque_id(&encounter.encounter_id, "encounter")?;
+    }
+    for (index, interruption) in snapshot.interruptions.iter().enumerate() {
+        if interruption.sequence != (index + 1) as u64
+            || interruption.after_encounter_ordinal > snapshot.encounters.len() as u64
+        {
+            return invalid("stored session interruption references are invalid");
+        }
+        super::validate::validate_decimal_time(&interruption.occurred_at)?;
+    }
+    if let Some(failure) = snapshot.failure.as_ref() {
+        super::validate::validate_decimal_time(&failure.occurred_at)?;
+        if failure
+            .encounter_ordinal
+            .is_some_and(|ordinal| ordinal == 0 || ordinal > snapshot.encounters.len() as u64 + 1)
+        {
+            return invalid("stored session failure reference is invalid");
         }
     }
     Ok(())
@@ -668,6 +1318,14 @@ fn parse_status(value: &str) -> Result<CaptureStatus, EncounterError> {
     }
 }
 
+fn parse_mode(value: &str) -> Result<CaptureMode, EncounterError> {
+    match value {
+        "single" => Ok(CaptureMode::Single),
+        "continuous" => Ok(CaptureMode::Continuous),
+        _ => invalid("encounter store contains an invalid capture mode"),
+    }
+}
+
 fn canonical_format_for(capture_schema_version: u32) -> Result<u32, EncounterError> {
     match capture_schema_version {
         1 => Ok(1),
@@ -679,6 +1337,10 @@ fn canonical_format_for(capture_schema_version: u32) -> Result<u32, EncounterErr
 fn nonnegative_db(value: i64, label: &str) -> Result<u64, EncounterError> {
     u64::try_from(value)
         .map_err(|_| EncounterError::Validation(format!("stored {label} is negative")))
+}
+
+fn to_i64(value: u64, label: &str) -> Result<i64, EncounterError> {
+    i64::try_from(value).map_err(|_| EncounterError::Validation(format!("{label} is out of range")))
 }
 
 fn hash_file(path: &Path) -> Result<(u64, String), EncounterError> {

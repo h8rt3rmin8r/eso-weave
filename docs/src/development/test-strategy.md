@@ -20,9 +20,9 @@ layer proves and what it does not prove.
 | Catalog compiler and runtime | `tests/catalog_compiler.rs`, `tests/catalog_runtime.rs` | Strict data-only input, provenance, constraints, deterministic hashes and bytes, atomic rollback, typed read-only queries, and graceful degradation |
 | Catalog packaging | `tests/catalog_packaging.rs` | MSI, Debian, AppImage, and tarball catalog paths plus baseline rights boundaries |
 | Shared data addon and discovery collector | `tests/data_addon.rs`, `tests/collector_addon.rs`, `tests/collector_import.rs` | Combined package identity, isolated catalog and encounter modules, explicit bounded collection, hostile non-executing parsing, truthful coverage, atomic package lifecycle, and marker-gated ownership |
-| Encounter capture addon | `tests/encounter_addon.rs` with vendored Lua 5.1 | Exact production Lua state transitions, explicit one-shot consent, selected callback and API values in exact tagged order, unknown values, projection linkage, bounded declared loss, v1 preservation, interruption recovery, teardown, and source confinement |
+| Encounter capture addon | `tests/encounter_addon.rs` with vendored Lua 5.1 | Exact production Lua transitions for single and continuous modes, in-game consent, mid-combat activation, session and encounter ordering, selected callback and API values in exact tagged order, aggregate bounds, interruption and failure recovery, legacy preservation, teardown, and source confinement |
 | Encounter normalization replay | `tests/encounter_addon.rs`, `tests/encounter_import.rs` | Production Lua differential replay, normalization profile validation, strict API correlation, projection mutation rejection, loss and legacy outcomes, value-free diagnostics, and store-schema migration |
-| Encounter import and raw store | `tests/encounter_import.rs` plus shared parser unit tests | Non-executing bounded v1/v2 parsing, terminal and raw-loss invariants, exact tagged scalar round trips, canonical identity, byte-preserving store migration, immutable mixed-version storage, collision preservation, explicit deletion, consistent backup, corruption handling, and production ceilings |
+| Encounter import and raw store | `tests/encounter_import.rs` plus shared parser unit tests | Non-executing bounded legacy and session-spool parsing, whole-batch preflight and transactionality, terminal and raw-loss invariants, exact tagged scalar round trips, authoritative ordinals, growing-snapshot idempotency, byte-preserving store migration, collision preservation, explicit deletion, consistent backup, corruption handling, and production ceilings |
 | Encounter metrics | `tests/encounter_metrics.rs`, `tests/encounter_cli.rs` | Deterministic DPS, effective HPS, damage share, clipped effect uptime, cast order, explicit loss quality, player attribution, zero-duration behavior, catalog compatibility, later ID resolution, atomic no-clobber output, and CLI publication |
 | Local icon cache | `tests/icon_cache.rs` | Synthetic PNG/DDS decode, hostile paths and links, source preservation, deterministic objects, explicit fallback mappings, immutable publication, tamper rejection, and manifest privacy |
 | Catalog candidate pipeline | `tests/catalog_pipeline.rs`, `tests/catalog_pipeline_workflow.rs` | Exact channel and version identity, dual network gates, source-cache integrity, deterministic allowlisted reports, failed-publication preservation, and read-only automation authority |
@@ -50,7 +50,12 @@ These seams make negative properties reviewable:
 - no PixelBeacon removal without the managed marker;
 - no ESO Weave Data mutation without its exact managed inventory and marker;
 - no enabled, loaded, or collecting claim inferred from installed files or ESO
-  process state; and
+  process state;
+- no desktop command, binding, generated input, clipboard, Pixel Bus, or live
+  SavedVariables path that can change encounter capture authority;
+- no continuous-session limit that evicts retained encounters, omits terminal
+  failure evidence, or retries a failed request automatically;
+- no last-saved encounter controller fact presented as current in-game state; and
 - no partial or corrupt Pixel Bus layout accepted as current.
 
 ## Safety evidence map
@@ -70,6 +75,9 @@ These seams make negative properties reviewable:
 | Managed removal | `beacon::uninstall` | `uninstall_refuses_unmanaged_folder` |
 | Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves unproven targets, unmanaged manifests, and unproven links cannot be mutated in the [PixelBeacon tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/beacon.rs) |
 | Data-addon lifecycle and presentation | `data_addon::install`, `data_addon::uninstall`, `data_addon_view` | Data-addon and app tests prove marker-gated atomic replacement, neighbor preservation, stale-intent refusal, reload retention, separate evidence facts, row ordering, and unique confirmations |
+| Encounter mode control | `addon/EsoWeaveData/Encounter.lua` command transitions | Production Lua tests prove exactly single and continuous modes, one in-game toggle, immediate truthful mid-combat start, gap handler teardown, explicit disablement, and zero desktop command ingress |
+| Encounter spool recovery | Encounter controller recovery and aggregate reserve | Production Lua tests prove contiguous ordinals, same-session continuation, partial interruption records, hard-failure retention, no eviction, and no automatic retry after failure |
+| Atomic session import | Encounter spool validation and store transaction | Import tests prove hostile wrappers and every member are validated before writes, repeated prefixes are idempotent, conflicts roll back the batch, and legacy canonical bytes and hashes remain unchanged |
 | Fishing suspension | `FishingController::set_suspended` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves initial-cast refusal and cancellation of pending reel and recast work in the [Fishing tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/fishing.rs) |
 | Protocol compatibility | `decode_layout_header` | `recognized_header_corruption_never_falls_back_to_legacy` |
 

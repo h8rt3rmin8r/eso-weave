@@ -6,9 +6,9 @@ use std::sync::{Arc, RwLock};
 use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 
 use super::{
-    calculate_projection, delete_all, delete_encounter, import_encounter, list_encounters,
-    load_encounter, DeleteReceipt, EncounterError, EncounterProjection, EncounterSummary,
-    ImportReceipt, ImportRequest,
+    calculate_projection, delete_all, delete_encounter, import_capture_set, list_encounters,
+    load_encounter, CaptureImportReport, DeleteReceipt, EncounterError, EncounterProjection,
+    EncounterSummary, ImportRequest,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -113,7 +113,7 @@ impl EncounterHistoryService {
         &self,
         source_path: impl AsRef<Path>,
         expected_channel: Channel,
-    ) -> Result<ImportReceipt, HistoryDiagnostic> {
+    ) -> Result<CaptureImportReport, HistoryDiagnostic> {
         let source_path = source_path.as_ref();
         if !source_path.is_file() {
             return Err(HistoryDiagnostic::new(
@@ -121,7 +121,7 @@ impl EncounterHistoryService {
                 "The selected ESO environment has no terminal encounter capture to import.",
             ));
         }
-        import_encounter(&ImportRequest::new(
+        import_capture_set(&ImportRequest::new(
             source_path,
             &self.store_path,
             expected_channel,

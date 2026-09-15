@@ -3,10 +3,11 @@ use std::fs;
 
 use eso_weave::catalog::Channel;
 use eso_weave::encounter::{
-    assess_replay, backup_store, canonical_bytes, delete_all, delete_encounter, import_encounter,
-    list_encounters, load_encounter, parse_capture, EncounterEvent, ImportOutcome, ImportRequest,
-    PayloadValue, RawObservation, RawSourceKind, RawValue, RawValueType, ReplayAssessment,
-    MAX_CAPTURE_BYTES, MAX_ESTIMATED_BYTES, MAX_EVENTS, STORE_SCHEMA_VERSION,
+    assess_replay, backup_store, canonical_bytes, delete_all, delete_encounter, import_capture_set,
+    import_encounter, list_encounters, load_encounter, parse_capture, parse_capture_set,
+    CaptureMode, EncounterEvent, ImportOutcome, ImportRequest, PayloadValue, RawObservation,
+    RawSourceKind, RawValue, RawValueType, ReplayAssessment, MAX_CAPTURE_BYTES,
+    MAX_ESTIMATED_BYTES, MAX_EVENTS, STORE_SCHEMA_VERSION,
 };
 use sha2::{Digest, Sha256};
 
@@ -77,6 +78,87 @@ fn lossless_v2_lua() -> String {
     capture_lua(&lossless_v2())
 }
 
+fn current_terminal(session_id: &str, encounter_id: &str) -> serde_json::Value {
+    let mut capture = lossless_v2();
+    capture["addon_version"] = serde_json::json!(3);
+    capture["status"] = serde_json::json!("partial");
+    capture["partial_reason"] = serde_json::json!("user-stopped");
+    capture["normalization_profile"] = serde_json::json!({
+        "version": 1,
+        "api_version": 101050,
+        "player_combat_unit_type": 4,
+        "health_power_type": 1,
+        "quickslot_category": 9,
+        "damage_results": [10, 11, 12, 13, 14, 15],
+        "healing_results": [20, 21, 22, 23],
+        "death_results": [30, 31],
+        "resurrect_result": 32
+    });
+    capture["session_id"] = serde_json::json!(session_id);
+    capture["encounter_id"] = serde_json::json!(encounter_id);
+    for observation in capture["raw_observations"].as_array_mut().unwrap() {
+        observation["session_id"] = serde_json::json!(session_id);
+        observation["encounter_id"] = serde_json::json!(encounter_id);
+    }
+    for event in capture["events"].as_array_mut().unwrap() {
+        event["session_id"] = serde_json::json!(session_id);
+        event["encounter_id"] = serde_json::json!(encounter_id);
+    }
+    capture["events"][1]["payload"] =
+        serde_json::json!({"complete": false, "reason": "user-stopped"});
+    capture["raw_observations"][3]["values"][0]["string"] = serde_json::json!("user-stopped");
+    capture["raw_observations"][3]["values"][1]["boolean"] = serde_json::json!(false);
+    capture
+}
+
+fn capture_state(records: Vec<serde_json::Value>, revision: u64) -> serde_json::Value {
+    let session_id = "session-1788912002-2000";
+    let record_map = records
+        .into_iter()
+        .enumerate()
+        .map(|(index, capture)| {
+            (
+                format!("{:010}", index + 1),
+                serde_json::json!({"ordinal": index + 1, "capture": capture}),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>();
+    let completed = record_map.len();
+    serde_json::json!({
+        "state_schema_version": 1,
+        "addon_version": 4,
+        "selected_mode": "continuous",
+        "selected_channel": "live",
+        "requested_mode": "continuous",
+        "active_mode": "continuous",
+        "state": "waiting",
+        "session": {
+            "session_id": session_id,
+            "mode": "continuous",
+            "channel": "live",
+            "status": "active",
+            "started_at": "1788912002",
+            "next_encounter_ordinal": completed + 1,
+            "completed_encounter_count": completed,
+            "degraded_encounter_count": completed,
+            "aggregate_estimated_bytes": completed * 4096,
+            "aggregate_event_count": completed * 2,
+            "aggregate_raw_observation_count": completed * 4,
+            "interruption_count": 0
+        },
+        "records": record_map,
+        "interruptions": [],
+        "revision": revision
+    })
+}
+
+fn state_lua(state: &serde_json::Value) -> String {
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(state)
+    )
+}
+
 fn partial_v2_with_raw_loss() -> serde_json::Value {
     let mut capture = lossless_v2();
     capture["status"] = serde_json::json!("partial");
@@ -100,6 +182,393 @@ fn partial_v2_with_raw_loss() -> serde_json::Value {
     });
     capture["events"][1]["source_sequence"] = serde_json::json!(5);
     capture
+}
+
+#[test]
+fn state_schema_dispatch_imports_only_terminal_records_in_authoritative_order() {
+    let session = "session-1788912002-2000";
+    let state = capture_state(
+        vec![
+            current_terminal(session, "encounter-1788912002-1"),
+            current_terminal(session, "encounter-1788912002-2"),
+        ],
+        7,
+    );
+    let source = state_lua(&state);
+    let parsed = parse_capture_set(source.as_bytes(), Channel::Live).unwrap();
+    assert_eq!(parsed.records.len(), 2);
+    assert_eq!(parsed.records[0].mode, CaptureMode::Continuous);
+    assert_eq!(parsed.records[0].ordinal, 1);
+    assert_eq!(parsed.records[1].ordinal, 2);
+
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    fs::write(&input, source).unwrap();
+    let report = import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(report.imported_count, 2);
+    assert_eq!(report.already_present_count, 0);
+    assert_eq!(report.receipts.len(), 2);
+    let public_report = serde_json::to_string(&report).unwrap();
+    assert!(!public_report.contains("raw_observations"));
+    assert!(!public_report.contains("events"));
+    assert!(!public_report.contains("records"));
+    assert!(!public_report.contains("normalization_profile"));
+    assert_eq!(list_encounters(&store).unwrap().len(), 2);
+}
+
+#[test]
+fn outer_controller_keeps_a_wrapped_legacy_terminal_importable() {
+    let capture: serde_json::Value = serde_json::from_str(PARTIAL_JSON).unwrap();
+    let session_id = capture["session_id"].as_str().unwrap();
+    let state = serde_json::json!({
+        "state_schema_version": 1,
+        "addon_version": 4,
+        "selected_mode": "single",
+        "selected_channel": "live",
+        "state": "stopped",
+        "session": {
+            "session_id": session_id,
+            "mode": "single",
+            "channel": "live",
+            "status": "stopped",
+            "started_at": capture["started_at"],
+            "finished_at": capture["finished_at"],
+            "next_encounter_ordinal": 2,
+            "completed_encounter_count": 1,
+            "degraded_encounter_count": 1,
+            "aggregate_estimated_bytes": capture["estimated_bytes"],
+            "aggregate_event_count": capture["stored_event_count"],
+            "aggregate_raw_observation_count": 0,
+            "interruption_count": 0
+        },
+        "records": {
+            "0000000001": {"ordinal": 1, "capture": capture}
+        },
+        "interruptions": [],
+        "stop_reason": "single-partial",
+        "revision": 1
+    });
+    let parsed = parse_capture_set(state_lua(&state).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(parsed.records.len(), 1);
+    assert_eq!(parsed.records[0].mode, CaptureMode::Single);
+    assert_eq!(parsed.records[0].ordinal, 1);
+    assert_eq!(parsed.records[0].capture.schema_version, 1);
+
+    let capture = lossless_v2();
+    let session_id = capture["session_id"].as_str().unwrap();
+    let state = serde_json::json!({
+        "state_schema_version": 1,
+        "addon_version": 4,
+        "selected_mode": "single",
+        "selected_channel": "live",
+        "state": "stopped",
+        "session": {
+            "session_id": session_id,
+            "mode": "single",
+            "channel": "live",
+            "status": "stopped",
+            "started_at": capture["started_at"],
+            "finished_at": capture["finished_at"],
+            "next_encounter_ordinal": 2,
+            "completed_encounter_count": 1,
+            "degraded_encounter_count": 0,
+            "aggregate_estimated_bytes": capture["estimated_bytes"],
+            "aggregate_event_count": capture["stored_event_count"],
+            "aggregate_raw_observation_count": capture["raw_observation_count"],
+            "interruption_count": 0
+        },
+        "records": {
+            "0000000001": {"ordinal": 1, "capture": capture}
+        },
+        "interruptions": [],
+        "stop_reason": "single-complete",
+        "revision": 1
+    });
+    let parsed = parse_capture_set(state_lua(&state).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(parsed.records.len(), 1);
+    assert_eq!(parsed.records[0].capture.schema_version, 2);
+    assert_eq!(parsed.records[0].capture.addon_version, 2);
+}
+
+#[test]
+fn state_schema_validation_rejects_unknown_fields_sparse_ordinals_and_unbounded_ids() {
+    let session = "session-1788912002-2000";
+    let valid = capture_state(vec![current_terminal(session, "encounter-1788912002-1")], 2);
+    let mut unknown = valid.clone();
+    unknown["hostile_canary"] = serde_json::json!("never echo this");
+    let diagnostic = parse_capture_set(state_lua(&unknown).as_bytes(), Channel::Live)
+        .unwrap_err()
+        .to_string();
+    assert!(!diagnostic.contains("never echo this"));
+
+    let mut sparse = valid.clone();
+    let first = sparse["records"]
+        .as_object_mut()
+        .unwrap()
+        .remove("0000000001")
+        .unwrap();
+    sparse["records"]["0000000002"] = first;
+    assert!(parse_capture_set(state_lua(&sparse).as_bytes(), Channel::Live).is_err());
+
+    let oversized = format!("session-{}-1", "1".repeat(129));
+    let mut unbounded = capture_state(
+        vec![current_terminal(&oversized, "encounter-1788912002-1")],
+        2,
+    );
+    unbounded["session"]["session_id"] = serde_json::json!(oversized);
+    assert!(parse_capture_set(state_lua(&unbounded).as_bytes(), Channel::Live).is_err());
+
+    let terminal = current_terminal(session, "encounter-1788912002-1");
+    let records = (1..=1024)
+        .map(|ordinal| {
+            (
+                format!("{ordinal:010}"),
+                serde_json::json!({"ordinal": ordinal, "capture": terminal}),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>();
+    let mut terminal_plus_active = capture_state(Vec::new(), 2);
+    terminal_plus_active["records"] = serde_json::Value::Object(records);
+    terminal_plus_active["current"] = serde_json::json!({});
+    assert!(parse_capture_set(state_lua(&terminal_plus_active).as_bytes(), Channel::Live).is_err());
+}
+
+#[test]
+fn batch_import_is_all_or_nothing_and_growing_reimports_are_idempotent() {
+    let session = "session-1788912002-2000";
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    let first = capture_state(vec![current_terminal(session, "encounter-1788912002-1")], 2);
+    fs::write(&input, state_lua(&first)).unwrap();
+    let initial = import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(
+        (initial.imported_count, initial.already_present_count),
+        (1, 0)
+    );
+
+    let growing = capture_state(
+        vec![
+            current_terminal(session, "encounter-1788912002-1"),
+            current_terminal(session, "encounter-1788912002-2"),
+        ],
+        4,
+    );
+    fs::write(&input, state_lua(&growing)).unwrap();
+    let expanded = import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(
+        (expanded.imported_count, expanded.already_present_count),
+        (1, 1)
+    );
+    let repeated = import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(
+        (repeated.imported_count, repeated.already_present_count),
+        (0, 2)
+    );
+
+    let mut colliding = growing;
+    colliding["records"]["0000000002"]["capture"]["warnings"]["actor_limit"] = serde_json::json!(1);
+    fs::write(&input, state_lua(&colliding)).unwrap();
+    assert!(import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
+    assert_eq!(list_encounters(&store).unwrap().len(), 2);
+}
+
+#[test]
+fn session_snapshots_reject_revision_reuse_and_member_prefix_regression() {
+    let session = "session-1788912002-2000";
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    let two = capture_state(
+        vec![
+            current_terminal(session, "encounter-1788912002-1"),
+            current_terminal(session, "encounter-1788912002-2"),
+        ],
+        4,
+    );
+    fs::write(&input, state_lua(&two)).unwrap();
+    import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+
+    let mut reused = two.clone();
+    reused["state"] = serde_json::json!("interrupted");
+    reused["active_mode"] = serde_json::Value::Null;
+    reused["interruptions"] = serde_json::json!([{
+        "sequence": 1, "occurred_at": "1788912003",
+        "after_encounter_ordinal": 2, "reason": "runtime-interrupted"
+    }]);
+    reused["session"]["interruption_count"] = serde_json::json!(1);
+    assert!(parse_capture_set(state_lua(&reused).as_bytes(), Channel::Live).is_ok());
+    fs::write(&input, state_lua(&reused)).unwrap();
+    assert!(import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
+
+    let regressed = capture_state(vec![current_terminal(session, "encounter-1788912002-1")], 5);
+    fs::write(&input, state_lua(&regressed)).unwrap();
+    assert!(import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
+    assert_eq!(list_encounters(&store).unwrap().len(), 2);
+}
+
+#[test]
+fn session_snapshots_authenticate_present_member_mode_and_ordinal_indexes() {
+    let session = "session-1788912002-2000";
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    let state = capture_state(vec![current_terminal(session, "encounter-1788912002-1")], 2);
+    fs::write(&input, state_lua(&state)).unwrap();
+    import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER raw_encounters_no_update;
+             UPDATE raw_encounters
+             SET capture_mode = 'single', encounter_ordinal = 7;
+             CREATE TRIGGER raw_encounters_no_update
+             BEFORE UPDATE ON raw_encounters
+             BEGIN
+                 SELECT RAISE(ABORT, 'raw encounter records are immutable');
+             END;",
+        )
+        .unwrap();
+    drop(connection);
+
+    let diagnostic = list_encounters(&store).unwrap_err().to_string();
+    assert!(diagnostic.contains("member does not match its session snapshot"));
+}
+
+#[test]
+fn exact_one_state_import_advances_snapshot_and_omitted_members_fail_atomically() {
+    let session = "session-1788912002-2000";
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+
+    fs::write(&input, state_lua(&capture_state(Vec::new(), 1))).unwrap();
+    let empty = import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert!(empty.receipts.is_empty());
+
+    let one = capture_state(vec![current_terminal(session, "encounter-1788912002-1")], 2);
+    fs::write(&input, state_lua(&one)).unwrap();
+    let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(receipt.encounter_ordinal, 1);
+    assert_eq!(list_encounters(&store).unwrap().len(), 1);
+
+    let two = capture_state(
+        vec![
+            current_terminal(session, "encounter-1788912002-1"),
+            current_terminal(session, "encounter-1788912002-2"),
+        ],
+        4,
+    );
+    fs::write(&input, state_lua(&two)).unwrap();
+    import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    fs::write(&input, state_lua(&one)).unwrap();
+    let older_retry =
+        import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(older_retry.already_present_count, 1);
+    assert_eq!(list_encounters(&store).unwrap().len(), 2);
+
+    let separate_store = sandbox.path().join("legacy.sqlite");
+    let standalone = current_terminal(session, "encounter-1788912002-1");
+    fs::write(&input, capture_lua(&standalone)).unwrap();
+    import_encounter(&ImportRequest::new(&input, &separate_store, Channel::Live)).unwrap();
+    fs::write(&input, state_lua(&capture_state(Vec::new(), 3))).unwrap();
+    assert!(
+        import_capture_set(&ImportRequest::new(&input, &separate_store, Channel::Live)).is_err()
+    );
+    assert_eq!(list_encounters(&separate_store).unwrap().len(), 1);
+}
+
+#[test]
+fn session_snapshot_blob_is_rejected_at_the_query_boundary() {
+    let session = "session-1788912002-2000";
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    let state = capture_state(vec![current_terminal(session, "encounter-1788912002-1")], 2);
+    fs::write(&input, state_lua(&state)).unwrap();
+    import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    connection
+        .execute_batch("PRAGMA ignore_check_constraints = ON;")
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO encounter_session_snapshots (
+                session_id, revision, content_sha256, channel, mode, disposition,
+                started_at, finished_at, interruption_count, canonical_json
+             ) VALUES ('session-1788912003-3000', 1, ?1, 'live', 'continuous',
+                       'active', '1788912003', NULL, 0, ?2)",
+            rusqlite::params!["0".repeat(64), vec![b'x'; 1024 * 1024 + 1]],
+        )
+        .unwrap();
+    drop(connection);
+
+    let diagnostic = list_encounters(&store).unwrap_err().to_string();
+    assert!(diagnostic.contains("snapshot exceeds its byte limit"));
+}
+
+#[test]
+fn mid_combat_partial_binds_exact_api_start_to_its_label_and_terminal_authority() {
+    let mut capture = current_terminal("session-1788912002-2000", "encounter-1788912002-1");
+    capture["partial_reason"] = serde_json::json!("started-mid-combat");
+    capture["events"][0]["payload"]["reason"] = serde_json::json!("started-mid-combat");
+    capture["events"][1]["payload"] =
+        serde_json::json!({"complete": false, "reason": "started-mid-combat"});
+    capture["events"][1]["source_sequence"] = serde_json::json!(5);
+    capture["raw_observations"][0]["source_kind"] = serde_json::json!("api-sample");
+    capture["raw_observations"][0]["source_id"] = serde_json::json!("IsUnitInCombat");
+    capture["raw_observations"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("source_code");
+    capture["raw_observations"][0]["argument_count"] = serde_json::json!(1);
+    capture["raw_observations"][0]["return_count"] = serde_json::json!(1);
+    capture["raw_observations"][0]["values"] = serde_json::json!([
+        {"position": 1, "value_type": "string", "string": "player"},
+        {"position": 2, "value_type": "boolean", "boolean": true}
+    ]);
+    let mut exit = capture["raw_observations"][0].clone();
+    exit["sequence"] = serde_json::json!(4);
+    exit["monotonic_ms"] = serde_json::json!(1000);
+    exit["source_kind"] = serde_json::json!("callback");
+    exit["source_id"] = serde_json::json!("EVENT_PLAYER_COMBAT_STATE");
+    exit["source_code"] = serde_json::json!(2);
+    exit["argument_count"] = serde_json::json!(2);
+    exit["return_count"] = serde_json::json!(0);
+    exit["values"] = serde_json::json!([
+        {"position": 1, "value_type": "number", "sign": 1, "significand": "2", "exponent": 0},
+        {"position": 2, "value_type": "boolean", "boolean": false}
+    ]);
+    capture["raw_observations"]
+        .as_array_mut()
+        .unwrap()
+        .insert(3, exit);
+    capture["raw_observations"][4]["sequence"] = serde_json::json!(5);
+    capture["raw_observations"][4]["values"][0]["string"] = serde_json::json!("started-mid-combat");
+    capture["raw_observation_count"] = serde_json::json!(5);
+    capture["raw_last_sequence"] = serde_json::json!(5);
+
+    let parsed = parse_capture(capture_lua(&capture).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(
+        assess_replay(&parsed).unwrap(),
+        ReplayAssessment::Indeterminate
+    );
+    let mut mislabeled = capture.clone();
+    mislabeled["events"][0]["payload"]["reason"] = serde_json::json!("combat-started");
+    assert!(parse_capture(capture_lua(&mislabeled).as_bytes(), Channel::Live).is_err());
+
+    let mut mislinked = capture.clone();
+    mislinked["events"][0]["source_sequence"] = serde_json::json!(2);
+    assert!(parse_capture(capture_lua(&mislinked).as_bytes(), Channel::Live).is_err());
+
+    let mut fabricated = capture;
+    fabricated["raw_observations"][0]["source_kind"] = serde_json::json!("callback");
+    fabricated["raw_observations"][0]["source_id"] = serde_json::json!("EVENT_PLAYER_COMBAT_STATE");
+    fabricated["raw_observations"][0]["source_code"] = serde_json::json!(2);
+    assert!(parse_capture(capture_lua(&fabricated).as_bytes(), Channel::Live).is_err());
 }
 
 #[test]
@@ -280,6 +749,8 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
         .execute_batch(
             "BEGIN IMMEDIATE;
              DROP TRIGGER raw_encounters_no_update;
+             DROP TRIGGER encounter_session_snapshots_no_update;
+             DROP TABLE encounter_session_snapshots;
              ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
              DROP TABLE encounter_store_meta;
              CREATE TABLE encounter_store_meta (
@@ -411,7 +882,7 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
 }
 
 #[test]
-fn populated_v2_store_migrates_to_v3_without_rewriting_canonical_evidence() {
+fn populated_v2_store_migrates_to_v4_without_rewriting_canonical_evidence() {
     let sandbox = tempfile::tempdir().unwrap();
     let input = sandbox.path().join("capture-v2.lua");
     let store = sandbox.path().join("encounters-v2.sqlite");
@@ -498,6 +969,156 @@ fn populated_v2_store_migrates_to_v3_without_rewriting_canonical_evidence() {
         )
         .unwrap();
     assert_eq!(preserved, canonical_bytes(&capture).unwrap());
+}
+
+#[test]
+fn populated_v3_store_migrates_to_v4_without_rewriting_canonical_evidence() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("capture-v3.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    let capture_value = current_terminal("session-1788912002-2000", "encounter-1788912002-1");
+    let source = capture_lua(&capture_value);
+    fs::write(&input, &source).unwrap();
+    let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    let canonical = canonical_bytes(&capture).unwrap();
+    let content_sha256 = format!("{:x}", Sha256::digest(&canonical));
+    let second_value = current_terminal("session-1788912002-2000", "encounter-1788912002-2");
+    let second = parse_capture(capture_lua(&second_value).as_bytes(), Channel::Live).unwrap();
+    let second_canonical = canonical_bytes(&second).unwrap();
+    let second_content_sha256 = format!("{:x}", Sha256::digest(&second_canonical));
+    let original_source_sha256 = "ab".repeat(32);
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE encounter_store_meta (
+                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                 schema_version INTEGER NOT NULL CHECK (schema_version = 3),
+                 canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+             );
+             INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
+             VALUES (1, 3, 2);
+             CREATE TABLE raw_encounters (
+                 content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
+                 source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+                 session_id TEXT NOT NULL,
+                 encounter_id TEXT NOT NULL,
+                 channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+                 capture_schema_version INTEGER NOT NULL CHECK (capture_schema_version IN (1, 2)),
+                 addon_version INTEGER NOT NULL CHECK (addon_version IN (1, 2, 3)),
+                 canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version IN (1, 2)),
+                 status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+                 started_at TEXT NOT NULL,
+                 finished_at TEXT NOT NULL,
+                 first_sequence INTEGER NOT NULL,
+                 last_sequence INTEGER NOT NULL,
+                 stored_event_count INTEGER NOT NULL,
+                 omitted_event_count INTEGER NOT NULL,
+                 canonical_json BLOB NOT NULL,
+                 UNIQUE (session_id, encounter_id),
+                 CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
+                        (capture_schema_version = 2 AND canonical_format_version = 2))
+             );
+             CREATE TRIGGER raw_encounters_no_update
+             BEFORE UPDATE ON raw_encounters
+             BEGIN
+                 SELECT RAISE(ABORT, 'raw encounter records are immutable');
+             END;
+             PRAGMA user_version = 3;",
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO raw_encounters (
+                content_sha256, source_sha256, session_id, encounter_id, channel,
+                capture_schema_version, addon_version, canonical_format_version,
+                status, started_at, finished_at, first_sequence, last_sequence,
+                stored_event_count, omitted_event_count, canonical_json
+             ) VALUES (?1, ?2, ?3, ?4, 'live', 2, 3, 2, 'partial', ?5, ?6, ?7,
+                       ?8, ?9, ?10, ?11)",
+            rusqlite::params![
+                content_sha256,
+                original_source_sha256,
+                capture.session_id,
+                capture.encounter_id,
+                capture.started_at,
+                capture.finished_at,
+                capture.first_sequence as i64,
+                capture.last_sequence as i64,
+                capture.stored_event_count as i64,
+                capture.omitted_event_count as i64,
+                canonical,
+            ],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO raw_encounters (
+                content_sha256, source_sha256, session_id, encounter_id, channel,
+                capture_schema_version, addon_version, canonical_format_version,
+                status, started_at, finished_at, first_sequence, last_sequence,
+                stored_event_count, omitted_event_count, canonical_json
+             ) VALUES (?1, ?2, ?3, ?4, 'live', 2, 3, 2, 'partial', ?5, ?6, ?7,
+                       ?8, ?9, ?10, ?11)",
+            rusqlite::params![
+                second_content_sha256,
+                original_source_sha256,
+                second.session_id,
+                second.encounter_id,
+                second.started_at,
+                second.finished_at,
+                second.first_sequence as i64,
+                second.last_sequence as i64,
+                second.stored_event_count as i64,
+                second.omitted_event_count as i64,
+                second_canonical,
+            ],
+        )
+        .unwrap();
+    let before: (String, String, Vec<u8>) = connection
+        .query_row(
+            "SELECT source_sha256, content_sha256, canonical_json FROM raw_encounters
+             WHERE content_sha256 = ?1",
+            [&content_sha256],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    drop(connection);
+
+    let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(receipt.outcome, ImportOutcome::AlreadyPresent);
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        STORE_SCHEMA_VERSION
+    );
+    let after: (String, String, Vec<u8>, String, i64) = connection
+        .query_row(
+            "SELECT source_sha256, content_sha256, canonical_json, capture_mode,
+                    encounter_ordinal FROM raw_encounters WHERE content_sha256 = ?1",
+            [&content_sha256],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        (&after.0, &after.1, &after.2),
+        (&before.0, &before.1, &before.2)
+    );
+    assert_eq!((after.3.as_str(), after.4), ("single", 1));
+    let summaries = list_encounters(&store).unwrap();
+    assert_eq!(summaries.len(), 2);
+    assert_eq!(summaries[0].encounter_ordinal, 1);
+    assert_eq!(summaries[1].encounter_ordinal, 2);
 }
 
 #[test]

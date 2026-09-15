@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use crate::catalog::Channel;
 use crate::encounter::{
-    EncounterHistoryService, EncounterIdentity, EncounterProjection, EncounterSummary,
-    HistoryDiagnostic, ImportOutcome, LossRange, MetricQuality, MetricResult,
+    CaptureImportReport, CaptureStateSummary, EncounterHistoryService, EncounterIdentity,
+    EncounterProjection, EncounterSummary, HistoryDiagnostic, LossRange, MetricQuality,
+    MetricResult,
 };
 use crate::recommendation::{
     generate_recommendations, AdviceQualification, AdviceRule, RecommendationAvailability,
@@ -40,6 +41,7 @@ pub enum HistoryEvent {
         encounters: Vec<EncounterSummary>,
         operation: HistoryOperation,
         message: Option<String>,
+        last_saved_state: Option<CaptureStateSummary>,
     },
     Detail {
         identity: EncounterIdentity,
@@ -70,21 +72,17 @@ impl EncounterHistoryWorker {
             while let Ok(command) = command_rx.recv() {
                 let event = match command {
                     HistoryCommand::Refresh => {
-                        snapshot_event(&thread_service, HistoryOperation::Refresh, None)
+                        snapshot_event(&thread_service, HistoryOperation::Refresh, None, None)
                     }
                     HistoryCommand::Import {
                         source_path,
                         expected_channel,
                     } => match thread_service.import_current(source_path, expected_channel) {
-                        Ok(receipt) => snapshot_event(
+                        Ok(report) => snapshot_event(
                             &thread_service,
                             HistoryOperation::Import,
-                            Some(match receipt.outcome {
-                                ImportOutcome::Imported => "Encounter imported.".into(),
-                                ImportOutcome::AlreadyPresent => {
-                                    "Encounter is already present in local history.".into()
-                                }
-                            }),
+                            Some(import_message(&report)),
+                            report.last_saved_state,
                         ),
                         Err(diagnostic) => HistoryEvent::Failed {
                             operation: HistoryOperation::Import,
@@ -108,6 +106,7 @@ impl EncounterHistoryWorker {
                                 } else {
                                     "Encounter deleted from local history.".into()
                                 }),
+                                None,
                             ),
                             Err(diagnostic) => HistoryEvent::Failed {
                                 operation: HistoryOperation::DeleteOne,
@@ -128,6 +127,7 @@ impl EncounterHistoryWorker {
                                     "s"
                                 }
                             )),
+                            None,
                         ),
                         Err(diagnostic) => HistoryEvent::Failed {
                             operation: HistoryOperation::DeleteAll,
@@ -228,17 +228,37 @@ fn snapshot_event(
     service: &EncounterHistoryService,
     operation: HistoryOperation,
     message: Option<String>,
+    last_saved_state: Option<CaptureStateSummary>,
 ) -> HistoryEvent {
     match service.snapshot() {
         Ok(encounters) => HistoryEvent::Snapshot {
             encounters,
             operation,
             message,
+            last_saved_state,
         },
         Err(diagnostic) => HistoryEvent::Failed {
             operation,
             diagnostic,
         },
+    }
+}
+
+fn import_message(report: &CaptureImportReport) -> String {
+    match (report.imported_count, report.already_present_count) {
+        (0, 0) => "No terminal encounters were available to import.".into(),
+        (0, present) => format!(
+            "{present} encounter{} already present in local history.",
+            if present == 1 { " is" } else { "s are" }
+        ),
+        (imported, 0) => format!(
+            "{imported} encounter{} imported.",
+            if imported == 1 { "" } else { "s" }
+        ),
+        (imported, present) => format!(
+            "{imported} encounter{} imported; {present} already present.",
+            if imported == 1 { "" } else { "s" }
+        ),
     }
 }
 

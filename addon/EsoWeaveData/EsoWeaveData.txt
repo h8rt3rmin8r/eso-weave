@@ -1,8 +1,8 @@
 ## Title: ESO Weave Data
 ## Description: Explicit bounded local catalog and encounter data capture.
 ## Author: ESO Weave contributors
-## AddOnVersion: 1
-## Version: 1
+## AddOnVersion: 2
+## Version: 2
 ## APIVersion: 101051 101050
 ## SavedVariables: EsoWeaveDataSaved
 ## X-ESO-Weave-Data-Managed: true
