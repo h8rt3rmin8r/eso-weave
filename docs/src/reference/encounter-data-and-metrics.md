@@ -12,6 +12,9 @@ sources already selected by ESO Weave Data while retaining the normalized metric
 surface as a compatibility projection.
 S095 completes the source decision audit and independently replays complete
 addon-v3 schema-v2 captures before their compatibility projection can be stored.
+S096 adds exactly single and continuous in-game-controlled modes, a bounded
+ordered session spool, truthful recovery, and atomic multi-encounter import
+without adding desktop command ingress.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -30,18 +33,22 @@ planes distinct:
 Raw and derived rows do not belong in the bundled `catalog.sqlite`. The current
 Pixel Bus remains a small safety and action-observation channel and is not a bulk
 encounter transport. The [ESO Weave Data encounter module](../features/encounter-capture.md)
-writes one explicitly armed, bounded SavedVariables capture under its isolated subtree.
-The S076 importer reads one explicitly selected file through a stable no-follow
-handle, accepts only the fixed data-only table grammar, validates the complete
-terminal contract, and never executes Lua.
+writes a bounded SavedVariables session spool under its isolated subtree after
+the user explicitly enables `single` or `continuous` inside ESO. The importer
+reads one explicitly selected file through a stable no-follow handle, accepts
+only the fixed data-only table grammar, validates the controller and every
+terminal member, and never executes Lua.
 
 Accepted observations become deterministic compact JSON and receive separate
 source-byte and canonical-content SHA-256 hashes. The canonical bytes enter a
 caller-selected `encounters.sqlite`, not `catalog.sqlite` or the settings file.
-Store schema v3 holds capture schemas 1 and 2 with a per-row canonical format.
+Store schema v4 holds capture schemas 1 and 2 with a per-row canonical format,
+session mode, and authoritative encounter ordinal.
 Transactional migration copies legacy schema-v1 blobs and hashes byte-for-byte.
 Raw records cannot be updated, exact canonical reimports are idempotent, and
 changed content under an existing session and encounter identity is rejected.
+The complete spool is preflighted before one immediate transaction, so a bad
+member, ordinal conflict, or changed prior prefix cannot leave a partial batch.
 
 S077 reads one validated raw record and one schema-verified catalog, then writes
 an explicit canonical schema-v1 JSON projection outside both SQLite authorities.
@@ -52,7 +59,7 @@ history-UI decision rather than an extension of the raw store.
 
 S078 gives the desktop one private Encounter History window. UI imports go to
 `encounters/encounters.sqlite` beneath the per-user application root. The Import
-Current Capture action derives the fixed `SavedVariables/EsoWeaveData.lua`
+Saved Capture action derives the fixed `SavedVariables/EsoWeaveData.lua`
 source and expected channel from the explicitly selected Live or PTS AddOns
 environment. It performs no arbitrary scan and uses the same bounded,
 non-executing S076 import contract.
@@ -66,11 +73,17 @@ values are labeled observed, and unavailable denominators remain unavailable
 rather than becoming zero. Import, listing, calculation, and deletion run on a
 serialized background worker so large captures do not block the GUI.
 
+The desktop can display validated controller metadata only as **Last saved
+capture state** or historical evidence. It cannot select a mode, toggle capture,
+write live SavedVariables, or acknowledge the current addon state. Current
+requested and effective state is available through `/ewencounter status` inside
+ESO.
+
 There is no automatic upload. Schema-v2 raw observations retain exact scalar
 values from deliberately selected callbacks and normalization-dependent API
 reads, including names, tags, identifiers, and locations when ESO supplies them.
-The explicit arm warns about this local sensitivity. Logs, receipts, diagnostics,
-public fixtures, and default UI summaries remain value-free. Compatibility
+Explicit in-game enablement warns about this local sensitivity. Logs, receipts,
+diagnostics, public fixtures, and default UI summaries remain value-free. Compatibility
 projections may use encounter-local actor IDs for current metrics, but they do
 not replace or redact the source-exact raw record.
 
@@ -89,8 +102,10 @@ or action automation.
 
 ## Ordering and incomplete captures
 
-`(session_id, sequence)` identifies and orders each stream. Raw source sequence
-is authoritative; normalized event sequence orders the compatibility projection.
+Each explicitly enabled period owns one session identity and mode. A positive
+contiguous ordinal is authoritative across encounters in that session. Inside
+one encounter, raw source sequence is authoritative and normalized event sequence
+orders the compatibility projection.
 One raw source can produce zero, one, or multiple normalized events, so each v2
 projection also carries a source sequence and projection ordinal. Monotonic
 milliseconds measure durations. Wall-clock timestamps must not decide order.
@@ -100,6 +115,27 @@ undeclared gap. A `discontinuity` event may declare the immediately preceding
 missing range and its reason. Metrics spanning that range remain available as
 observed values, but their quality is `degraded` and the loss range stays visible.
 This prevents an incomplete capture from looking complete.
+
+Single mode waits for the next combat entry when enabled outside combat and
+stops at its exit. When enabled during combat, an exact
+`IsUnitInCombat("player")` API observation starts capture immediately and the
+unknown pre-activation prefix remains explicit. Continuous mode completes each
+combat period independently, removes detailed handlers during gaps, and waits
+under the same session identity until explicit disablement or a controlled hard
+failure.
+
+The spool has aggregate ceilings of 100,000 normalized events, 100,000 raw
+observations, 1,024 terminal encounters, 1,024 interruption markers, and 32 MiB
+of estimated encounter data. Terminal and outer failure facts are reserved
+before ordinary observations. No ceiling evicts retained evidence. Exhaustion
+stops capture and remains visible as a hard failure.
+
+Reload and relog recovery trust only the last durably flushed request. Active
+evidence becomes partial and an interruption remains visible; valid continuous
+authority may resume waiting, while single stops and failed sessions never
+retry automatically. A desktop exit cannot change addon authority. A game or
+operating-system crash before an ESO flush is unknowable and is never presented
+as reconstructed evidence.
 
 The selected raw sources cover combat-state and deactivation boundaries, combat,
 effect, power, slot, weapon-pair, life-state, boss, and quickslot callbacks plus

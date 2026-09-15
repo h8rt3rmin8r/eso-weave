@@ -26,7 +26,7 @@ use eframe::egui;
 
 use crate::app::encounter_history::{
     metric_presentation, quality_label, recommendation_presentation, EncounterDetail,
-    EncounterHistoryWorker, HistoryEvent,
+    EncounterHistoryWorker, HistoryEvent, HistoryOperation,
 };
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
@@ -47,8 +47,9 @@ use crate::config::state::WindowGeometry;
 use crate::config::{LevelName, Theme};
 use crate::documentation::{BrowserOpener, DocumentationService, NativeBrowser};
 use crate::encounter::{
-    EncounterHistoryService, EncounterIdentity, EncounterProjection, EncounterSummary,
-    HistoryDiagnostic, HistoryDiagnosticKind, MetricResult,
+    CaptureControllerState, CaptureFailureReason, CaptureMode, CaptureSessionStatus,
+    CaptureStateSummary, EncounterHistoryService, EncounterIdentity, EncounterProjection,
+    EncounterSummary, HistoryDiagnostic, HistoryDiagnosticKind, MetricResult,
 };
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
@@ -316,6 +317,7 @@ pub struct EsoWeaveApp {
     encounter_history_detail: Option<Result<EncounterDetail, HistoryDiagnostic>>,
     encounter_history_diagnostic: Option<HistoryDiagnostic>,
     encounter_history_message: Option<String>,
+    encounter_last_saved_state: Option<CaptureStateSummary>,
     encounter_history_catalog_refresh_pending: bool,
     encounter_delete_confirmation: Option<EncounterDeleteConfirmation>,
 }
@@ -398,6 +400,7 @@ impl EsoWeaveApp {
             encounter_history_detail: None,
             encounter_history_diagnostic: None,
             encounter_history_message: None,
+            encounter_last_saved_state: None,
             encounter_history_catalog_refresh_pending: false,
             encounter_delete_confirmation: None,
         }
@@ -990,11 +993,15 @@ impl EsoWeaveApp {
             match event {
                 HistoryEvent::Snapshot {
                     encounters,
+                    operation,
                     message,
-                    ..
+                    last_saved_state,
                 } => {
                     self.encounter_history = encounters;
                     self.encounter_history_message = message;
+                    if operation == HistoryOperation::Import || last_saved_state.is_some() {
+                        self.encounter_last_saved_state = last_saved_state;
+                    }
                     self.encounter_history_diagnostic = None;
                     let selection_still_exists = self
                         .encounter_history_selected
@@ -2546,7 +2553,7 @@ impl EsoWeaveApp {
                         .add_enabled(
                             !self.encounter_history_busy
                                 && self.encounter_history_worker.is_some(),
-                            egui::Button::new("Import Current Capture"),
+                            egui::Button::new("Import Saved Capture"),
                         )
                         .on_hover_text(
                             "Import the terminal ESO Weave Encounter capture from the selected Live or PTS environment.",
@@ -2590,6 +2597,45 @@ impl EsoWeaveApp {
                     ui.label(&diagnostic.message);
                 }
 
+                if let Some(state) = &self.encounter_last_saved_state {
+                    ui.separator();
+                    ui.heading("Last saved capture state");
+                    ui.label(
+                        "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state.",
+                    );
+                    ui.label(format!(
+                        "{} mode | {} | revision {}",
+                        capture_mode_label(state.selected_mode),
+                        capture_controller_state_label(state.state),
+                        state.revision
+                    ));
+                    ui.label(format!(
+                        "Saved channel: {} | Session: {}",
+                        state
+                            .selected_channel
+                            .map_or_else(|| "not selected".into(), |channel| channel.to_string()),
+                        state
+                            .session_status
+                            .map_or("none", capture_session_status_label)
+                    ));
+                    if let Some(session_id) = &state.session_id {
+                        ui.small(format!(
+                            "Session {} | {} terminal encounter{} | {} interruption{}",
+                            session_id,
+                            state.completed_encounter_count,
+                            if state.completed_encounter_count == 1 { "" } else { "s" },
+                            state.interruption_count,
+                            if state.interruption_count == 1 { "" } else { "s" }
+                        ));
+                    }
+                    if let Some(failure) = state.failure_reason {
+                        ui.strong(format!(
+                            "Hard failure: {}",
+                            capture_failure_label(failure)
+                        ));
+                    }
+                }
+
                 ui.separator();
                 ui.heading("Local Encounters");
                 if self.encounter_history.is_empty() && !self.encounter_history_busy {
@@ -2601,28 +2647,51 @@ impl EsoWeaveApp {
                     .id_salt("encounter_history_list")
                     .max_height(190.0)
                     .show(ui, |ui| {
-                        for summary in self.encounter_history.iter().rev() {
-                            let identity = EncounterIdentity::from(summary);
-                            let active = self.encounter_history_selected.as_ref() == Some(&identity);
+                        let mut sessions = Vec::new();
+                        let mut start = 0;
+                        while start < self.encounter_history.len() {
+                            let session_id = &self.encounter_history[start].session_id;
+                            let mut end = start + 1;
+                            while end < self.encounter_history.len()
+                                && self.encounter_history[end].session_id == *session_id
+                            {
+                                end += 1;
+                            }
+                            sessions.push(start..end);
+                            start = end;
+                        }
+                        for range in sessions.into_iter().rev() {
+                            let first = &self.encounter_history[range.start];
                             ui.group(|ui| {
-                                if ui
-                                    .selectable_label(active, &summary.encounter_id)
-                                    .clickable()
-                                    .clicked()
-                                {
-                                    selected = Some(identity);
+                                ui.strong(format!(
+                                    "Session {} | {} mode",
+                                    first.session_id,
+                                    capture_mode_label(first.capture_mode)
+                                ));
+                                for summary in &self.encounter_history[range] {
+                                    let identity = EncounterIdentity::from(summary);
+                                    let active =
+                                        self.encounter_history_selected.as_ref() == Some(&identity);
+                                    ui.label(format!("Encounter {}", summary.encounter_ordinal));
+                                    if ui
+                                        .selectable_label(active, &summary.encounter_id)
+                                        .clickable()
+                                        .clicked()
+                                    {
+                                        selected = Some(identity);
+                                    }
+                                    ui.label(format!(
+                                        "{} | {} capture | {} stored, {} omitted",
+                                        summary.channel,
+                                        capture_status_label(summary.status),
+                                        summary.stored_event_count,
+                                        summary.omitted_event_count
+                                    ));
+                                    ui.small(format!(
+                                        "{} to {}",
+                                        summary.started_at, summary.finished_at
+                                    ));
                                 }
-                                ui.label(format!(
-                                    "{} | {} capture | {} stored, {} omitted",
-                                    summary.channel,
-                                    capture_status_label(summary.status),
-                                    summary.stored_event_count,
-                                    summary.omitted_event_count
-                                ));
-                                ui.small(format!(
-                                    "{} to {} | Session {}",
-                                    summary.started_at, summary.finished_at, summary.session_id
-                                ));
                             });
                         }
                     });
@@ -2890,6 +2959,42 @@ fn capture_status_label(status: crate::encounter::CaptureStatus) -> &'static str
     match status {
         crate::encounter::CaptureStatus::Complete => "Complete",
         crate::encounter::CaptureStatus::Partial => "Partial",
+    }
+}
+
+fn capture_mode_label(mode: CaptureMode) -> &'static str {
+    match mode {
+        CaptureMode::Single => "Single",
+        CaptureMode::Continuous => "Continuous",
+    }
+}
+
+fn capture_controller_state_label(state: CaptureControllerState) -> &'static str {
+    match state {
+        CaptureControllerState::Stopped => "Stopped",
+        CaptureControllerState::Waiting => "Waiting",
+        CaptureControllerState::Capturing => "Capturing",
+        CaptureControllerState::Interrupted => "Interrupted",
+        CaptureControllerState::Failed => "Failed",
+    }
+}
+
+fn capture_failure_label(reason: CaptureFailureReason) -> &'static str {
+    match reason {
+        CaptureFailureReason::StoragePressure => "storage pressure",
+        CaptureFailureReason::CallbackFailed => "callback failure",
+        CaptureFailureReason::ClockReset => "clock reset",
+        CaptureFailureReason::TerminalReserveExhausted => "terminal reserve exhausted",
+        CaptureFailureReason::InterruptionLimit => "interruption limit",
+        CaptureFailureReason::StateInvalid => "invalid recovered state",
+    }
+}
+
+fn capture_session_status_label(status: CaptureSessionStatus) -> &'static str {
+    match status {
+        CaptureSessionStatus::Active => "active",
+        CaptureSessionStatus::Stopped => "stopped",
+        CaptureSessionStatus::Failed => "failed",
     }
 }
 

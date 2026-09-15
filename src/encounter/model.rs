@@ -23,10 +23,12 @@ impl CaptureStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PartialReason {
+    StartedMidCombat,
     CaptureOverflow,
     ClockReset,
     UserStopped,
     PlayerDeactivated,
+    RuntimeInterrupted,
     CallbackFailed,
     UnsupportedValue,
     RecordLimit,
@@ -37,10 +39,12 @@ pub enum PartialReason {
 impl PartialReason {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
+            Self::StartedMidCombat => "started-mid-combat",
             Self::CaptureOverflow => "capture-overflow",
             Self::ClockReset => "clock-reset",
             Self::UserStopped => "user-stopped",
             Self::PlayerDeactivated => "player-deactivated",
+            Self::RuntimeInterrupted => "runtime-interrupted",
             Self::CallbackFailed => "callback-failed",
             Self::UnsupportedValue => "unsupported-value",
             Self::RecordLimit => "record-limit",
@@ -48,6 +52,164 @@ impl PartialReason {
             Self::StringLimit => "string-limit",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureMode {
+    Single,
+    Continuous,
+}
+
+impl CaptureMode {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Single => "single",
+            Self::Continuous => "continuous",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureControllerState {
+    Stopped,
+    Waiting,
+    Capturing,
+    Interrupted,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureSessionStatus {
+    Active,
+    Stopped,
+    Failed,
+}
+
+impl CaptureSessionStatus {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Stopped => "stopped",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureStopReason {
+    NeverStarted,
+    SingleComplete,
+    SinglePartial,
+    SingleInterrupted,
+    UserDisabled,
+    Cleared,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureFailureReason {
+    StoragePressure,
+    CallbackFailed,
+    ClockReset,
+    TerminalReserveExhausted,
+    InterruptionLimit,
+    StateInvalid,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureInterruptionReason {
+    PlayerDeactivated,
+    RuntimeInterrupted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureSession {
+    pub session_id: String,
+    pub mode: CaptureMode,
+    pub channel: Channel,
+    pub status: CaptureSessionStatus,
+    pub started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    pub next_encounter_ordinal: u64,
+    pub completed_encounter_count: usize,
+    pub degraded_encounter_count: usize,
+    pub aggregate_estimated_bytes: u64,
+    pub aggregate_event_count: usize,
+    pub aggregate_raw_observation_count: usize,
+    pub interruption_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionEncounterRecord {
+    pub ordinal: u64,
+    pub capture: EncounterCapture,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureInterruption {
+    pub sequence: u64,
+    pub occurred_at: String,
+    pub after_encounter_ordinal: u64,
+    pub reason: CaptureInterruptionReason,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureFailure {
+    pub reason: CaptureFailureReason,
+    pub occurred_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encounter_ordinal: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EncounterModuleState {
+    pub state_schema_version: u32,
+    pub addon_version: u32,
+    pub selected_mode: CaptureMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_channel: Option<Channel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_mode: Option<CaptureMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_mode: Option<CaptureMode>,
+    pub state: CaptureControllerState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_encounter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<CaptureSession>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<serde_json::Value>,
+    pub records: BTreeMap<String, SessionEncounterRecord>,
+    pub interruptions: Vec<CaptureInterruption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_reason: Option<CaptureStopReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<CaptureFailure>,
+    pub revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OrderedEncounterCapture {
+    pub mode: CaptureMode,
+    pub ordinal: u64,
+    pub capture: EncounterCapture,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ParsedCaptureSet {
+    pub state: Option<EncounterModuleState>,
+    pub records: Vec<OrderedEncounterCapture>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -238,6 +400,64 @@ pub struct ImportReceipt {
     pub encounter_id: String,
     pub stored_event_count: usize,
     pub omitted_event_count: u64,
+    pub capture_mode: CaptureMode,
+    pub encounter_ordinal: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CaptureImportReport {
+    pub source_sha256: String,
+    pub imported_count: usize,
+    pub already_present_count: usize,
+    pub receipts: Vec<ImportReceipt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_saved_state: Option<CaptureStateSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CaptureStateSummary {
+    pub selected_mode: CaptureMode,
+    pub selected_channel: Option<Channel>,
+    pub state: CaptureControllerState,
+    pub revision: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_status: Option<CaptureSessionStatus>,
+    pub completed_encounter_count: usize,
+    pub degraded_encounter_count: usize,
+    pub interruption_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<CaptureFailureReason>,
+}
+
+impl From<&EncounterModuleState> for CaptureStateSummary {
+    fn from(state: &EncounterModuleState) -> Self {
+        Self {
+            selected_mode: state.selected_mode,
+            selected_channel: state.selected_channel,
+            state: state.state,
+            revision: state.revision,
+            session_id: state
+                .session
+                .as_ref()
+                .map(|session| session.session_id.clone()),
+            session_status: state.session.as_ref().map(|session| session.status),
+            completed_encounter_count: state
+                .session
+                .as_ref()
+                .map_or(0, |session| session.completed_encounter_count),
+            degraded_encounter_count: state
+                .session
+                .as_ref()
+                .map_or(0, |session| session.degraded_encounter_count),
+            interruption_count: state
+                .session
+                .as_ref()
+                .map_or(0, |session| session.interruption_count),
+            failure_reason: state.failure.as_ref().map(|failure| failure.reason),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -253,6 +473,33 @@ pub struct EncounterSummary {
     pub last_sequence: u64,
     pub stored_event_count: usize,
     pub omitted_event_count: u64,
+    pub capture_mode: CaptureMode,
+    pub encounter_ordinal: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SessionEncounterReference {
+    pub ordinal: u64,
+    pub encounter_id: String,
+    pub content_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SessionSnapshot {
+    pub session_id: String,
+    pub revision: u64,
+    pub channel: Channel,
+    pub mode: CaptureMode,
+    pub disposition: CaptureSessionStatus,
+    pub started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    pub interruptions: Vec<CaptureInterruption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<CaptureFailure>,
+    pub encounters: Vec<SessionEncounterReference>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -53,8 +53,13 @@ encounter collection, and the next safe step independently. Installed files
 never imply enabled or loaded. A running ESO process never implies loaded or
 collecting. Because the application has no live data-addon channel, those
 current-session facts remain **Unconfirmed** and explain the evidence gap
-instead of guessing. Each row remains directly keyboard accessible and carries
-its own explanation. Closing the modal returns focus to the lifecycle surface.
+instead of guessing. A compatible encounter spool may add a **Last saved capture
+state** summary with mode, state, session, and failure facts, but it remains
+historical and read-only. Mode selection and the one capture toggle exist only
+in ESO through `/ewencounter`; the desktop provides no command or
+SavedVariables-write path. Each row remains directly keyboard accessible and
+carries its own explanation. Closing the modal returns focus to the lifecycle
+surface.
 
 System and State defaults expanded. Its full header is accessible by pointer,
 keyboard, and assistive technology. Activating the header hides or restores the

@@ -29,7 +29,20 @@ use eso_weave::weave::{WeaveConfig, WeaveEngine};
 
 const CAPTURE: &str =
     include_str!("../specs/077-encounter-metrics/fixtures/encounter-metrics-capture.json");
+const LOSSLESS_CAPTURE: &str = include_str!("fixtures/encounter/valid-v2-lossless.json");
 const WORKER_TIMEOUT: Duration = Duration::from_secs(5);
+const DESKTOP_CONTROL_SOURCES: [&str; 9] = [
+    include_str!("../src/app/routing.rs"),
+    include_str!("../src/app/mod.rs"),
+    include_str!("../src/config/mod.rs"),
+    include_str!("../src/config/state.rs"),
+    include_str!("../src/input/action.rs"),
+    include_str!("../src/input/bindings.rs"),
+    include_str!("../src/input/mod.rs"),
+    include_str!("../src/app/settings_form.rs"),
+    include_str!("../src/main.rs"),
+];
+const DESKTOP_UI_SOURCE: &str = include_str!("../src/app/ui.rs");
 
 fn json_to_lua(value: &serde_json::Value) -> String {
     match value {
@@ -82,13 +95,9 @@ fn seeded_service_with_capture(
     ))
     .unwrap();
     let service = EncounterHistoryService::new(root, catalog);
-    assert_eq!(
-        service
-            .import_current(&input, Channel::Live)
-            .unwrap()
-            .outcome,
-        ImportOutcome::Imported
-    );
+    let report = service.import_current(&input, Channel::Live).unwrap();
+    assert_eq!(report.imported_count, 1);
+    assert_eq!(report.receipts[0].outcome, ImportOutcome::Imported);
     service
 }
 
@@ -121,6 +130,78 @@ fn complete_capture() -> serde_json::Value {
     object.insert("last_sequence".into(), event_count.into());
     object.insert("stored_event_count".into(), event_count.into());
     value
+}
+
+fn continuous_terminal(session_id: &str, encounter_id: &str) -> serde_json::Value {
+    let mut capture: serde_json::Value = serde_json::from_str(LOSSLESS_CAPTURE).unwrap();
+    capture["addon_version"] = serde_json::json!(3);
+    capture["status"] = serde_json::json!("partial");
+    capture["partial_reason"] = serde_json::json!("user-stopped");
+    capture["normalization_profile"] = serde_json::json!({
+        "version": 1,
+        "api_version": 101050,
+        "player_combat_unit_type": 4,
+        "health_power_type": 1,
+        "quickslot_category": 9,
+        "damage_results": [10, 11, 12, 13, 14, 15],
+        "healing_results": [20, 21, 22, 23],
+        "death_results": [30, 31],
+        "resurrect_result": 32
+    });
+    capture["session_id"] = serde_json::json!(session_id);
+    capture["encounter_id"] = serde_json::json!(encounter_id);
+    for observation in capture["raw_observations"].as_array_mut().unwrap() {
+        observation["session_id"] = serde_json::json!(session_id);
+        observation["encounter_id"] = serde_json::json!(encounter_id);
+    }
+    for event in capture["events"].as_array_mut().unwrap() {
+        event["session_id"] = serde_json::json!(session_id);
+        event["encounter_id"] = serde_json::json!(encounter_id);
+    }
+    capture["events"][1]["payload"] =
+        serde_json::json!({"complete": false, "reason": "user-stopped"});
+    capture["raw_observations"][3]["values"][0]["string"] = serde_json::json!("user-stopped");
+    capture["raw_observations"][3]["values"][1]["boolean"] = serde_json::json!(false);
+    capture
+}
+
+fn continuous_state_lua() -> String {
+    let session_id = "session-1788912002-2000";
+    let first = continuous_terminal(session_id, "encounter-1788912002-1");
+    let second = continuous_terminal(session_id, "encounter-1788912002-2");
+    let state = serde_json::json!({
+        "state_schema_version": 1,
+        "addon_version": 4,
+        "selected_mode": "continuous",
+        "selected_channel": "live",
+        "requested_mode": "continuous",
+        "active_mode": "continuous",
+        "state": "waiting",
+        "session": {
+            "session_id": session_id,
+            "mode": "continuous",
+            "channel": "live",
+            "status": "active",
+            "started_at": "1788912002",
+            "next_encounter_ordinal": 3,
+            "completed_encounter_count": 2,
+            "degraded_encounter_count": 2,
+            "aggregate_estimated_bytes": 8192,
+            "aggregate_event_count": 4,
+            "aggregate_raw_observation_count": 8,
+            "interruption_count": 0
+        },
+        "records": {
+            "0000000001": {"ordinal": 1, "capture": first},
+            "0000000002": {"ordinal": 2, "capture": second}
+        },
+        "interruptions": [],
+        "revision": 7
+    });
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(&state)
+    )
 }
 
 fn qualified_capture() -> serde_json::Value {
@@ -286,6 +367,42 @@ fn worker_serializes_refresh_detail_and_deletion_results() {
 }
 
 #[test]
+fn worker_imports_an_ordered_batch_and_reports_last_saved_state() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("continuous.lua");
+    fs::write(&input, continuous_state_lua()).unwrap();
+    let catalog = root.path().join("catalog.sqlite");
+    build_catalog(&BuildRequest::new(
+        "specs/070-catalog-compiler/fixtures/minimal-live.json",
+        &catalog,
+        Channel::Live,
+    ))
+    .unwrap();
+    let worker = EncounterHistoryWorker::spawn(EncounterHistoryService::new(root.path(), catalog));
+
+    worker.import_current(input, Channel::Live).unwrap();
+    match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+        HistoryEvent::Snapshot {
+            encounters,
+            message,
+            last_saved_state,
+            ..
+        } => {
+            assert_eq!(encounters.len(), 2);
+            assert_eq!(encounters[0].encounter_ordinal, 1);
+            assert_eq!(encounters[1].encounter_ordinal, 2);
+            assert_eq!(message.as_deref(), Some("2 encounters imported."));
+            let saved = last_saved_state.unwrap();
+            assert_eq!(
+                saved.state,
+                eso_weave::encounter::CaptureControllerState::Waiting
+            );
+        }
+        event => panic!("unexpected event: {event:?}"),
+    }
+}
+
+#[test]
 fn worker_uses_catalog_path_replacements_for_subsequent_details() {
     let root = tempfile::tempdir().unwrap();
     let service = seeded_service(root.path());
@@ -443,11 +560,125 @@ fn rendered_import_uses_the_explicitly_selected_environment() {
     settle(&mut harness);
     assert_eq!(harness.state().encounter_history_count(), 0);
     harness
-        .get_by_role_and_label(egui::accesskit::Role::Button, "Import Current Capture")
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Import Saved Capture")
         .click_accesskit();
     settle(&mut harness);
     assert_eq!(harness.state().encounter_history_count(), 1);
-    harness.get_by_label("Encounter imported.");
+    harness.get_by_label("1 encounter imported.");
+}
+
+#[test]
+fn rendered_batch_import_groups_ordinals_and_labels_last_saved_state() {
+    let root = tempfile::tempdir().unwrap();
+    let environment = root.path().join("live");
+    let addons = environment.join("AddOns");
+    let saved_variables = environment.join("SavedVariables");
+    fs::create_dir_all(&addons).unwrap();
+    fs::create_dir_all(&saved_variables).unwrap();
+    fs::write(
+        saved_variables.join("EsoWeaveData.lua"),
+        continuous_state_lua(),
+    )
+    .unwrap();
+    let catalog = root.path().join("catalog.sqlite");
+    build_catalog(&BuildRequest::new(
+        "specs/070-catalog-compiler/fixtures/minimal-live.json",
+        &catalog,
+        Channel::Live,
+    ))
+    .unwrap();
+    let service = EncounterHistoryService::new(root.path().join("app-data"), catalog);
+    let settings = Settings {
+        beacon: eso_weave::beacon::prefs_to_value(&BeaconPrefs {
+            path_override: Some(addons),
+            environment: Environment::Live,
+        }),
+        ..Settings::default()
+    };
+    let mut harness = harness_with_settings(service, settings);
+    for _ in 0..6 {
+        harness.step();
+    }
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+        .click_accesskit();
+    harness.step();
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            eso_weave::app::strings::MENU_ENCOUNTER_HISTORY,
+        )
+        .click_accesskit();
+    settle(&mut harness);
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Import Saved Capture")
+        .click_accesskit();
+    settle(&mut harness);
+
+    assert_eq!(harness.state().encounter_history_count(), 2);
+    harness.get_by_label("2 encounters imported.");
+    harness.get_by_label("Last saved capture state");
+    harness.get_by_label("Continuous mode | Waiting | revision 7");
+    harness.get_by_label(
+        "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state.",
+    );
+    harness.get_by_label("Encounter 1");
+    harness.get_by_label("Encounter 2");
+    assert!(harness
+        .query_by_role_and_label(egui::accesskit::Role::Button, "Start Capture")
+        .is_none());
+
+    let legacy: serde_json::Value = serde_json::from_str(CAPTURE).unwrap();
+    fs::write(
+        saved_variables.join("EsoWeaveData.lua"),
+        format!(
+            "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+            json_to_lua(&legacy)
+        ),
+    )
+    .unwrap();
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Import Saved Capture")
+        .click_accesskit();
+    settle(&mut harness);
+    assert_eq!(harness.state().encounter_history_count(), 3);
+    harness.get_by_label("1 encounter imported.");
+    assert!(harness.query_by_label("Last saved capture state").is_none());
+}
+
+#[test]
+fn desktop_action_and_configuration_surfaces_have_zero_encounter_command_ingress() {
+    for source in DESKTOP_CONTROL_SOURCES
+        .into_iter()
+        .chain(std::iter::once(DESKTOP_UI_SOURCE))
+    {
+        let source = source.to_ascii_lowercase();
+        for forbidden in [
+            "toggleencounter",
+            "startencounter",
+            "stopencounter",
+            "encounter_mode",
+            "requested_mode",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "desktop control source contains forbidden ingress token {forbidden}"
+            );
+        }
+    }
+    for source in DESKTOP_CONTROL_SOURCES {
+        assert!(!source.contains("/ewencounter"));
+    }
+    assert!(DESKTOP_UI_SOURCE.contains(
+        "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state."
+    ));
+    for forbidden in [
+        "/ewencounter toggle",
+        "/ewencounter mode",
+        "/ewencounter channel",
+    ] {
+        assert!(!DESKTOP_UI_SOURCE.contains(forbidden));
+    }
 }
 
 #[test]

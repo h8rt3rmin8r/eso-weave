@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S096 adds explicit single-encounter and continuous-until-disabled capture
+  modes through user-owned in-game controls, a bounded ordered session spool,
+  truthful interruption and hard-failure evidence, atomic multi-encounter
+  import with snapshot-authenticated session indexes, fail-closed recovered-state
+  validation, historical-only desktop session presentation, and managed
+  data-addon package version 2 delivery (issue #183, epic #182).
+
 - S095 adds deterministic raw-to-normalized encounter replay for current
   addon-v3 schema-v2 captures, rejects divergent compatibility projections before
   storage, preserves partial and legacy evidence with explicit replay outcomes,
@@ -52,6 +59,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Amend the constitution to 5.0.0. Replace one-shot-only encounter
+  authority with exactly single and continuous capture modes while retaining
+  explicit in-game user action, aggregate bounds, exact selected-source values,
+  declared interruption and loss, local ownership, and no gameplay automation.
+- 2026-09-15: Deliberately replace issue #183's desktop-button assumption with
+  one authoritative in-game toggle and historical-only desktop status. S092
+  proved that no supported real-time desktop-to-addon command path satisfies
+  delivery, acknowledgement, and account-visibility requirements.
+- 2026-09-15: Version continuous controller state independently as outer state
+  schema 1 and addon version 4 while retaining nested S095 capture schema 2,
+  addon-format version 3, and canonical format 2. Mid-combat starts are explicit
+  partial evidence rather than fabricated complete or replay-verified captures.
 
 - 2026-09-15: Keep encounter capture schema v2 while advancing the producer to
   addon version 3 with normalization profile version 1. This avoids undocumented

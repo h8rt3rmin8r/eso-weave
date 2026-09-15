@@ -125,6 +125,41 @@ fn baseline_projection_is_deterministic_loss_aware_and_actor_safe() {
 }
 
 #[test]
+fn same_session_encounters_keep_metrics_strictly_encounter_local() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let catalog_path = catalog(sandbox.path(), LIVE_CATALOG, "catalog.sqlite");
+    let catalog = CatalogAccess::open_or_empty(&catalog_path);
+    let first: EncounterCapture = serde_json::from_str(CAPTURE).unwrap();
+    let mut second = first.clone();
+    second.encounter_id = "encounter-1788998400-2".into();
+    for event in &mut second.events {
+        event.encounter_id.clone_from(&second.encounter_id);
+        if event.kind == "damage" {
+            let amount = match event.payload.get("amount") {
+                Some(PayloadValue::Integer(amount)) => *amount,
+                _ => continue,
+            };
+            event
+                .payload
+                .insert("amount".into(), PayloadValue::Integer(amount * 2));
+        }
+    }
+
+    let first_projection = calculate_projection(&first, &catalog).unwrap();
+    let second_projection = calculate_projection(&second, &catalog).unwrap();
+    assert_eq!(first.session_id, second.session_id);
+    assert_eq!(first_projection.observed_dps.value, Some(300.0));
+    assert_eq!(second_projection.observed_dps.value, Some(600.0));
+    assert_eq!(
+        calculate_projection(&first, &catalog)
+            .unwrap()
+            .observed_dps
+            .value,
+        Some(300.0)
+    );
+}
+
+#[test]
 fn raw_only_loss_degrades_metrics_without_fabricating_normalized_ranges() {
     let sandbox = tempfile::tempdir().unwrap();
     let catalog_path = catalog(sandbox.path(), LIVE_CATALOG, "catalog.sqlite");

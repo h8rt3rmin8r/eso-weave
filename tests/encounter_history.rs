@@ -104,9 +104,11 @@ fn explicit_import_lists_and_projects_truthful_quality_and_catalog_coverage() {
     let service = EncounterHistoryService::new(root.path(), &catalog);
 
     let first = service.import_current(&input, Channel::Live).unwrap();
-    assert_eq!(first.outcome, ImportOutcome::Imported);
+    assert_eq!(first.imported_count, 1);
+    assert_eq!(first.receipts[0].outcome, ImportOutcome::Imported);
     let repeated = service.import_current(&input, Channel::Live).unwrap();
-    assert_eq!(repeated.outcome, ImportOutcome::AlreadyPresent);
+    assert_eq!(repeated.already_present_count, 1);
+    assert_eq!(repeated.receipts[0].outcome, ImportOutcome::AlreadyPresent);
 
     let snapshot = service.snapshot().unwrap();
     assert_eq!(snapshot.len(), 1);

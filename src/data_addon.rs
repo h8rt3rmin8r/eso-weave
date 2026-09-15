@@ -20,7 +20,7 @@ pub const MAX_SAVED_VARIABLES_TOKENS: usize = 4_000_000;
 pub const MAX_SAVED_VARIABLES_ENTRIES: usize = 2_600_000;
 pub const SAVED_VARIABLES_SCHEMA_VERSION: u64 = 1;
 pub const DATA_ADDON_VERSION: u64 = 1;
-pub const DATA_ADDON_PACKAGE_VERSION: u32 = 1;
+pub const DATA_ADDON_PACKAGE_VERSION: u32 = 2;
 pub const MANAGED_MARKER: &str = "## X-ESO-Weave-Data-Managed: true";
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const CHECKSUM_PREFIX: &str = "local COLLECTOR_CHECKSUM = \"";

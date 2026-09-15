@@ -1,15 +1,14 @@
 <!--
 Sync Impact Report
-- Version change: 3.0.0 -> 4.0.0
-- Amendment: replace privacy-minimized encounter observations with a selective,
-  lossless, local raw-source contract. Every value from a deliberately selected
-  callback is retained exactly unless a declared hard limit or unsupported
-  runtime value causes explicit whole-observation loss.
-- Modified principles: II replaces the personal-name prohibition with tests for
-  explicit authority, exact selected-source retention, hard bounds, declared
-  loss, and value-free diagnostics; V permits names, identifiers, group facts,
-  and locations supplied by selected encounter sources while preserving the
-  one-shot, local-only, no-upload, no-automation boundary.
+- Version change: 4.0.0 -> 5.0.0
+- Amendment: replace one-shot-only encounter authority with exactly two explicit,
+  bounded modes: single encounter and continuous until manually disabled or a
+  declared hard failure. Continuous sessions retain independently bounded
+  encounters, authoritative order, interruption facts, and aggregate ceilings.
+- Modified principles: II and V replace one-shot and one-capture wording with
+  explicit two-mode user authority, bounded session state, truthful recovery,
+  and no silent eviction while preserving exact selected-source retention,
+  local-only data, no uploads, no input, and no automation.
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -23,9 +22,8 @@ Sync Impact Report
   CLAUDE.md ................................... aligned
   docs/src/getting-started/responsible-use.md . aligned
   docs/project/build-autopilot.md ............. aligned
-- Follow-up TODOs: issue #186 remains open for subscription expansion and pure
-  Rust renormalization after S094; issue #131 verifies live Combat Metrics
-  parity; issue #190 verifies native-log platforms independently.
+- Follow-up TODOs: issue #131 verifies live Combat Metrics parity; issue #190
+  verifies native-log platforms independently.
 -->
 
 # ESO Weave Constitution
@@ -71,9 +69,11 @@ skipped, or made conditional:
   shared SavedVariables file from the desktop while ESO may own its in-memory
   contents.
 - The ESO Weave Data encounter module remains dormant until the user explicitly
-  arms one capture. It retains selected callback values exactly, declares every
-  bounded or unsupported-value loss, uses no Pixel Bus transport, and cannot
-  drive automation. Diagnostics and public evidence never disclose raw values.
+  enables single-encounter or continuous-until-disabled capture. These are its
+  only modes. It retains selected callback values exactly, bounds each encounter
+  and the aggregate session spool, declares every loss, interruption, and hard
+  failure without silent eviction, uses no Pixel Bus transport, and cannot drive
+  automation. Diagnostics and public evidence never disclose raw values.
 - Fishing degrades to disabled on SignalLost rather than firing inputs blind.
 
 Rationale: each surface, if wrong, silently breaks input handling or destroys
@@ -120,10 +120,11 @@ addon surfaces are:
   encounter-capture modules behind one managed package boundary. The catalog
   module reads documented public addon API values into bounded local
   SavedVariables for later hostile-data parsing. The encounter module records
-  one explicitly armed, bounded, selectively subscribed set of public combat
-  API observations for the same restricted local parsing boundary. Once a
-  source is selected, its scalar callback values are retained exactly unless a
-  declared hard limit or unsupported runtime type omits the whole observation.
+  an explicitly enabled, bounded single encounter or continuous session of
+  selectively subscribed public combat API observations for the same restricted
+  local parsing boundary. Once a source is selected, its scalar callback values
+  are retained exactly unless a declared hard limit or unsupported runtime type
+  omits the whole observation.
 
 The data addon MUST remain separately managed from PixelBeacon and MUST preserve
 independent module activation, state, event ownership, limits, and clearing. It
@@ -134,15 +135,19 @@ automatic navigation. Partial or corrupt captures never become active data.
 The catalog module MUST remain prohibited during combat and dormant without an
 explicit user request.
 
-The encounter module MUST remain dormant without explicit one-shot user
-authority, bounded in observations and estimated bytes, independent of action
-automation, and free of uploads, telemetry, synthesized input, equipment
-changes, item consumption, or automatic navigation. Selected encounter sources
-may retain names, identifiers, chat, guild, location, and other values exactly
-as ESO supplies them. It MUST warn the user before arming, keep raw data local
-and user-owned, declare every capture loss, and MUST NOT present partial
-observations as complete. Logs, diagnostics, receipts, public fixtures, and
-default UI summaries MUST NOT reproduce raw payload values.
+The encounter module MUST remain dormant without explicit user authority for one
+of exactly two modes: single encounter or continuous until manually disabled or
+a declared hard failure. It MUST bound each encounter and the aggregate session
+spool in observations, records, and estimated bytes; preserve authoritative
+encounter order; declare interruption and storage-pressure facts; and never
+silently evict retained evidence. It remains independent of action automation
+and free of uploads, telemetry, synthesized input, equipment changes, item
+consumption, or automatic navigation. Selected encounter sources may retain
+names, identifiers, chat, guild, location, and other values exactly as ESO
+supplies them. It MUST warn the user before enablement, keep raw data local and
+user-owned, declare every capture loss, and MUST NOT present partial or
+interrupted observations as complete. Logs, diagnostics, receipts, public
+fixtures, and default UI summaries MUST NOT reproduce raw payload values.
 
 Rationale: these two managed packages preserve three narrow local surfaces,
 PixelBeacon output, catalog discovery, and encounter capture, while making the
@@ -215,4 +220,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 4.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-15
+**Version**: 5.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-15

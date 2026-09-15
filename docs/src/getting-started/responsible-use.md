@@ -32,11 +32,20 @@ PixelBeacon ships only inside ESO Weave. It is not published to addon indexes.
 The separately managed ESO Weave Data addon contains catalog and encounter
 modules with isolated state and activation rules. Catalog capture runs only
 after an explicit user command and reads documented public addon APIs outside
-combat. Encounter capture remains dormant until the user explicitly arms one
-Live or PTS encounter, warns that exact local values can include names and
-identifiers, records bounded observations from deliberately selected sources,
-declares capture loss, then disarms. Neither module uploads data, drives
+combat. Encounter capture remains dormant until the user explicitly enables
+`single` or `continuous` inside ESO for a selected Live or PTS channel. It warns
+that exact local values can include names and identifiers, records bounded
+observations from deliberately selected sources, and declares capture loss,
+interruptions, and hard failure. Single stops after one combat period;
+continuous keeps one bounded session across combat gaps until the user disables
+it or a reported hard failure stops it. Neither module uploads data, drives
 gameplay, or uses Pixel Bus for bulk records.
+
+The desktop cannot enable, disable, or change encounter mode. It has no custom
+binding, generated-input, clipboard, Pixel Bus, or live SavedVariables command
+path. Any controller state read from disk is labeled last-saved or historical
+because ESO may not have flushed its current state. Use `/ewencounter status`
+inside ESO for the current requested and effective capture state.
 
 ## Privacy and network behavior
 

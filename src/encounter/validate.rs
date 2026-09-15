@@ -1,10 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::{
-    CaptureStatus, EncounterCapture, EncounterEvent, PayloadValue, RawObservation, RawSourceKind,
-    RawValue, RawValueType,
+    CaptureControllerState, CaptureMode, CaptureSession, CaptureSessionStatus, CaptureStatus,
+    EncounterCapture, EncounterEvent, EncounterModuleState, OrderedEncounterCapture,
+    ParsedCaptureSet, PayloadValue, RawObservation, RawSourceKind, RawValue, RawValueType,
 };
-use super::{invalid, EncounterError, MAX_ACTORS, MAX_ESTIMATED_BYTES, MAX_EVENTS};
+use super::{
+    invalid, EncounterError, MAX_ACTORS, MAX_ESTIMATED_BYTES, MAX_EVENTS, MAX_SESSION_ENCOUNTERS,
+    MAX_SESSION_INTERRUPTION_MARKERS,
+};
+use crate::catalog::Channel;
+
+const TERMINAL_EVENT_RESERVE: usize = 2;
+const RAW_TERMINAL_RESERVE: usize = 2;
+const TERMINAL_BYTE_RESERVE: u64 = 4_096;
+const OUTER_FAILURE_BYTE_RESERVE: u64 = 1_024;
 
 const EVENT_KINDS: [&str; 14] = [
     "encounter-start",
@@ -145,6 +155,14 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
     }
 
     validate_projection_links(capture)?;
+    let mid_combat_labeled = string(&first.payload, "reason")? == "started-mid-combat";
+    let mid_combat_opening = capture.raw_observations.first().is_some_and(|observation| {
+        observation.source_kind == RawSourceKind::ApiSample
+            && observation.source_id == "IsUnitInCombat"
+    });
+    if (mid_combat_labeled || mid_combat_opening) && !has_mid_combat_authority(capture) {
+        return invalid("mid-combat opening lacks matching exact authority");
+    }
 
     let terminal_reason = string(&last.payload, "reason")?;
     let terminal_complete = boolean(&last.payload, "complete")?;
@@ -179,6 +197,13 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
                 super::model::PartialReason::UserStopped
                     | super::model::PartialReason::PlayerDeactivated
             ) || discontinuity_reasons.contains(reason.as_str())
+                || (reason == super::model::PartialReason::RuntimeInterrupted
+                    && capture
+                        .warnings
+                        .get("recovered_interruption")
+                        .is_some_and(|count| *count > 0))
+                || (reason == super::model::PartialReason::StartedMidCombat
+                    && has_mid_combat_authority(capture))
                 || (reason == super::model::PartialReason::ClockReset && has_raw_clock_reset)
                 || capture
                     .raw_loss
@@ -190,6 +215,449 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
         }
     }
     Ok(())
+}
+
+pub(crate) fn validate_state(
+    state: EncounterModuleState,
+    expected_channel: Channel,
+) -> Result<ParsedCaptureSet, EncounterError> {
+    if state.state_schema_version != 1 || state.addon_version != 4 || state.revision == 0 {
+        return invalid("unsupported encounter state version");
+    }
+    if state.records.len() > MAX_SESSION_ENCOUNTERS
+        || state.interruptions.len() > MAX_SESSION_INTERRUPTION_MARKERS
+        || state.records.len() + usize::from(state.current.is_some()) > MAX_SESSION_ENCOUNTERS
+    {
+        return invalid("encounter state exceeds its bounded record count");
+    }
+    if state
+        .selected_channel
+        .is_some_and(|channel| channel != expected_channel)
+    {
+        return invalid("encounter state channel does not match the expected channel");
+    }
+
+    let mut records = Vec::with_capacity(state.records.len());
+    let mut identities = BTreeSet::new();
+    let mut aggregate_bytes = 0_u64;
+    let mut aggregate_events = 0_usize;
+    let mut aggregate_raw = 0_usize;
+    let mut degraded = 0_usize;
+    let session = state.session.as_ref();
+    for (index, (key, record)) in state.records.iter().enumerate() {
+        let ordinal = u64::try_from(index + 1)
+            .map_err(|_| EncounterError::Validation("encounter ordinal is out of range".into()))?;
+        if key != &format!("{ordinal:010}") || record.ordinal != ordinal {
+            return invalid("encounter record ordinals are not contiguous");
+        }
+        let Some(session) = session else {
+            return invalid("encounter records require a session");
+        };
+        let capture = &record.capture;
+        let current_format = capture.schema_version == 2 && capture.addon_version == 3;
+        let preserved_legacy = session.mode == CaptureMode::Single
+            && ordinal == 1
+            && matches!(
+                (capture.schema_version, capture.addon_version),
+                (1, 1) | (2, 2)
+            );
+        if (!current_format && !preserved_legacy)
+            || capture.session_id != session.session_id
+            || capture.channel != session.channel
+            || !identities.insert(capture.encounter_id.as_str())
+        {
+            return invalid("encounter record does not match its session");
+        }
+        validate(capture)?;
+        super::replay::enforce(capture)?;
+        aggregate_bytes = aggregate_bytes
+            .checked_add(capture.estimated_bytes)
+            .ok_or_else(|| EncounterError::Validation("encounter byte count overflow".into()))?;
+        aggregate_events = aggregate_events
+            .checked_add(capture.stored_event_count)
+            .ok_or_else(|| EncounterError::Validation("encounter event count overflow".into()))?;
+        aggregate_raw = aggregate_raw
+            .checked_add(capture.raw_observation_count.unwrap_or(0))
+            .ok_or_else(|| EncounterError::Validation("encounter raw count overflow".into()))?;
+        degraded += usize::from(capture.status == CaptureStatus::Partial);
+        records.push(OrderedEncounterCapture {
+            mode: session.mode,
+            ordinal,
+            capture: capture.clone(),
+        });
+    }
+
+    for (index, interruption) in state.interruptions.iter().enumerate() {
+        if interruption.sequence != (index + 1) as u64
+            || interruption.after_encounter_ordinal > records.len() as u64
+        {
+            return invalid("encounter interruption ordering is invalid");
+        }
+        validate_decimal_time(&interruption.occurred_at)?;
+    }
+
+    if let Some(session) = session {
+        validate_opaque_id(&session.session_id, "session")?;
+        let started_at = validate_decimal_time(&session.started_at)?;
+        let finished_at = session
+            .finished_at
+            .as_deref()
+            .map(validate_decimal_time)
+            .transpose()?;
+        if finished_at.is_some_and(|finished| finished < started_at)
+            || session.channel != expected_channel
+            || state.selected_channel != Some(session.channel)
+            || session.mode != state.selected_mode
+            || session.completed_encounter_count != records.len()
+            || session.degraded_encounter_count != degraded
+            || session.interruption_count != state.interruptions.len()
+            || (session.mode == CaptureMode::Single && records.len() > 1)
+            || session.next_encounter_ordinal
+                != records.len() as u64 + if state.current.is_some() { 2 } else { 1 }
+            || session.next_encounter_ordinal > MAX_SESSION_ENCOUNTERS as u64 + 1
+            || (session.status == CaptureSessionStatus::Active) != session.finished_at.is_none()
+        {
+            return invalid("encounter session metadata is inconsistent");
+        }
+        let (current_bytes, current_events, current_raw) = match state.current.as_ref() {
+            Some(current) => {
+                let counts =
+                    validate_current(current, session, state.current_encounter_id.as_deref())?;
+                if state
+                    .current_encounter_id
+                    .as_deref()
+                    .is_some_and(|identity| identities.contains(identity))
+                {
+                    return invalid("encounter current identity duplicates a terminal record");
+                }
+                counts
+            }
+            None => (0, 0, 0),
+        };
+        if session.aggregate_estimated_bytes
+            != aggregate_bytes
+                .checked_add(current_bytes)
+                .ok_or_else(|| EncounterError::Validation("encounter byte count overflow".into()))?
+            || session.aggregate_event_count
+                != aggregate_events
+                    .checked_add(current_events)
+                    .ok_or_else(|| {
+                        EncounterError::Validation("encounter event count overflow".into())
+                    })?
+            || session.aggregate_raw_observation_count
+                != aggregate_raw.checked_add(current_raw).ok_or_else(|| {
+                    EncounterError::Validation("encounter raw count overflow".into())
+                })?
+            || session.aggregate_estimated_bytes > MAX_ESTIMATED_BYTES
+            || session.aggregate_event_count > MAX_EVENTS
+            || session.aggregate_raw_observation_count > MAX_EVENTS
+            || (state.current.is_some() && !active_reserves_available(session))
+        {
+            return invalid("encounter session aggregate counts are inconsistent");
+        }
+    } else if !state.records.is_empty()
+        || !state.interruptions.is_empty()
+        || state.current.is_some()
+        || state.current_encounter_id.is_some()
+        || state.failure.is_some()
+    {
+        return invalid("encounter state facts require a session");
+    }
+
+    validate_controller_combination(&state)?;
+    if let Some(failure) = &state.failure {
+        validate_decimal_time(&failure.occurred_at)?;
+        if failure
+            .encounter_ordinal
+            .is_some_and(|ordinal| ordinal == 0 || ordinal > records.len() as u64 + 1)
+        {
+            return invalid("encounter failure ordinal is invalid");
+        }
+    }
+    Ok(ParsedCaptureSet {
+        records,
+        state: Some(state),
+    })
+}
+
+fn active_reserves_available(session: &CaptureSession) -> bool {
+    session.aggregate_event_count <= MAX_EVENTS - TERMINAL_EVENT_RESERVE
+        && session.aggregate_raw_observation_count <= MAX_EVENTS - RAW_TERMINAL_RESERVE
+        && session.aggregate_estimated_bytes
+            <= MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE - OUTER_FAILURE_BYTE_RESERVE
+}
+
+fn validate_controller_combination(state: &EncounterModuleState) -> Result<(), EncounterError> {
+    let session_status = state.session.as_ref().map(|session| session.status);
+    let selected = Some(state.selected_mode);
+    let valid = match state.state {
+        CaptureControllerState::Stopped => {
+            state.requested_mode.is_none()
+                && state.active_mode.is_none()
+                && state.current.is_none()
+                && state.current_encounter_id.is_none()
+                && state.failure.is_none()
+                && state.stop_reason.is_some()
+                && matches!(session_status, None | Some(CaptureSessionStatus::Stopped))
+        }
+        CaptureControllerState::Waiting => {
+            state.requested_mode == selected
+                && state.active_mode == selected
+                && state.current.is_none()
+                && state.current_encounter_id.is_none()
+                && state.stop_reason.is_none()
+                && state.failure.is_none()
+                && session_status == Some(CaptureSessionStatus::Active)
+        }
+        CaptureControllerState::Capturing => {
+            state.requested_mode == selected
+                && state.active_mode == selected
+                && state.current.is_some()
+                && state.current_encounter_id.is_some()
+                && state.stop_reason.is_none()
+                && state.failure.is_none()
+                && session_status == Some(CaptureSessionStatus::Active)
+        }
+        CaptureControllerState::Interrupted => {
+            state.requested_mode == selected
+                && state.active_mode.is_none()
+                && state.current.is_none()
+                && state.current_encounter_id.is_none()
+                && state.stop_reason.is_none()
+                && state.failure.is_none()
+                && !state.interruptions.is_empty()
+                && session_status == Some(CaptureSessionStatus::Active)
+        }
+        CaptureControllerState::Failed => {
+            state.requested_mode.is_none()
+                && state.active_mode.is_none()
+                && state.current.is_none()
+                && state.current_encounter_id.is_none()
+                && state.stop_reason.is_none()
+                && state.failure.is_some()
+                && session_status == Some(CaptureSessionStatus::Failed)
+        }
+    };
+    if valid {
+        Ok(())
+    } else {
+        invalid("encounter controller state is inconsistent")
+    }
+}
+
+fn validate_current(
+    current: &serde_json::Value,
+    session: &super::model::CaptureSession,
+    current_id: Option<&str>,
+) -> Result<(u64, usize, usize), EncounterError> {
+    let Some(object) = current.as_object() else {
+        return invalid("encounter current record is invalid");
+    };
+    let string = |name: &str| object.get(name).and_then(serde_json::Value::as_str);
+    let number = |name: &str| object.get(name).and_then(serde_json::Value::as_u64);
+    let optional_number = |name: &str| match object.get(name) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value.as_u64().map(Some).ok_or_else(|| {
+            EncounterError::Validation("encounter current pending number is invalid".into())
+        }),
+    };
+    let optional_string = |name: &str| match object.get(name) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value.as_str().map(Some).ok_or_else(|| {
+            EncounterError::Validation("encounter current pending token is invalid".into())
+        }),
+    };
+    let encounter_id = string("encounter_id");
+    if number("schema_version") != Some(2)
+        || number("addon_version") != Some(3)
+        || string("status") != Some("capturing")
+        || string("session_id") != Some(session.session_id.as_str())
+        || encounter_id != current_id
+        || string("channel") != Some(session.channel.as_str())
+    {
+        return invalid("encounter current record does not match its session");
+    }
+    validate_opaque_id(
+        encounter_id.expect("validated current identity"),
+        "encounter",
+    )?;
+    let _pending_reason = object
+        .get("pending_partial_reason")
+        .filter(|value| !value.is_null())
+        .map(|value| serde_json::from_value::<super::model::PartialReason>(value.clone()))
+        .transpose()
+        .map_err(|_| {
+            EncounterError::Validation("encounter current partial reason is invalid".into())
+        })?;
+    let pending_loss_from = optional_number("pending_loss_from")?;
+    let pending_loss_to = optional_number("pending_loss_to")?;
+    let pending_loss_reason = optional_string("pending_loss_reason")?;
+
+    let mut normalized = current.clone();
+    let normalized_object = normalized
+        .as_object_mut()
+        .expect("validated current object");
+    normalized_object.remove("pending_partial_reason");
+    normalized_object.remove("pending_loss_from");
+    normalized_object.remove("pending_loss_to");
+    normalized_object.remove("pending_loss_reason");
+    normalized_object.insert("status".into(), serde_json::json!("partial"));
+    let capture: EncounterCapture = serde_json::from_value(normalized).map_err(|_| {
+        EncounterError::Validation("encounter current record schema is invalid".into())
+    })?;
+
+    if capture.privacy_profile.is_some()
+        || capture.partial_reason.is_some()
+        || capture
+            .normalization_profile
+            .as_ref()
+            .is_none_or(|profile| validate_normalization_profile(&capture, profile).is_err())
+        || capture.source.api_version == 0
+        || capture.source.game_version.is_empty()
+        || capture.source.game_version.len() > 128
+        || !safe_source_token(&capture.source.game_version)
+        || capture.source.locale.is_empty()
+        || capture.source.locale.len() > 16
+        || !safe_source_token(&capture.source.locale)
+        || capture.source.platform.is_empty()
+        || capture.source.platform.len() > 32
+        || !safe_source_token(&capture.source.platform)
+        || !capture.finished_at.is_empty()
+        || capture.stored_event_count != capture.events.len()
+        || !(1..=MAX_EVENTS).contains(&capture.stored_event_count)
+        || capture.estimated_bytes > MAX_ESTIMATED_BYTES
+    {
+        return invalid("encounter current envelope is invalid");
+    }
+    validate_opaque_id(&capture.session_id, "session")?;
+    validate_opaque_id(&capture.encounter_id, "encounter")?;
+    validate_decimal_time(&capture.started_at)?;
+    for (name, count) in &capture.warnings {
+        if !matches!(
+            name.as_str(),
+            "actor_limit" | "terminal_reserve_exhausted" | "recovered_interruption"
+        ) || *count == 0
+        {
+            return invalid("encounter current warning is invalid");
+        }
+    }
+
+    let first = capture
+        .events
+        .first()
+        .expect("validated current event minimum");
+    if capture.first_sequence != 1
+        || first.kind != "encounter-start"
+        || first.sequence != 1
+        || first.monotonic_ms != 0
+        || (capture.events.len() as u64).checked_add(capture.omitted_event_count)
+            != Some(capture.last_sequence)
+        || capture.ended_monotonic_ms
+            != capture
+                .events
+                .last()
+                .expect("validated current event minimum")
+                .monotonic_ms
+    {
+        return invalid("encounter current event metadata is invalid");
+    }
+    let mut previous_time = 0;
+    for (index, event) in capture.events.iter().enumerate() {
+        if event.sequence != index as u64 + 1
+            || event.monotonic_ms < previous_time
+            || matches!(event.kind.as_str(), "encounter-end" | "discontinuity")
+        {
+            return invalid("encounter current event ordering is invalid");
+        }
+        validate_event(&capture, event)?;
+        previous_time = event.monotonic_ms;
+    }
+    validate_active_raw_capture(&capture)?;
+    validate_projection_links(&capture)?;
+
+    let pending_loss_valid = match (pending_loss_from, pending_loss_to, pending_loss_reason) {
+        (None, None, None) => capture.omitted_event_count == 0,
+        (Some(from), Some(to), Some("capture-overflow")) => {
+            from == capture.events.len() as u64 + 1
+                && to == capture.last_sequence
+                && to.checked_sub(from).and_then(|span| span.checked_add(1))
+                    == Some(capture.omitted_event_count)
+        }
+        _ => false,
+    };
+    if !pending_loss_valid {
+        return invalid("encounter current pending loss is invalid");
+    }
+
+    Ok((
+        capture.estimated_bytes,
+        capture.stored_event_count,
+        capture
+            .raw_observation_count
+            .expect("validated current raw count"),
+    ))
+}
+
+fn validate_active_raw_capture(capture: &EncounterCapture) -> Result<(), EncounterError> {
+    let (Some(first_sequence), Some(last_sequence), Some(stored_count), Some(omitted_count)) = (
+        capture.raw_first_sequence,
+        capture.raw_last_sequence,
+        capture.raw_observation_count,
+        capture.raw_omitted_observation_count,
+    ) else {
+        return invalid("encounter current raw metadata is incomplete");
+    };
+    if first_sequence != 1
+        || capture.raw_observations.len() != stored_count
+        || !(1..=MAX_EVENTS).contains(&stored_count)
+        || last_sequence
+            .checked_sub(first_sequence)
+            .and_then(|span| span.checked_add(1))
+            .and_then(|span| span.checked_sub(omitted_count))
+            != Some(stored_count as u64)
+    {
+        return invalid("encounter current raw metadata is invalid");
+    }
+    match (&capture.raw_loss, omitted_count) {
+        (None, 0) => {}
+        (Some(loss), count) if count > 0 => {
+            if loss.missing_sequence_from == 0
+                || loss.missing_sequence_to < loss.missing_sequence_from
+                || loss
+                    .missing_sequence_to
+                    .checked_sub(loss.missing_sequence_from)
+                    .and_then(|span| span.checked_add(1))
+                    != Some(count)
+            {
+                return invalid("encounter current raw loss is invalid");
+            }
+        }
+        _ => return invalid("encounter current raw loss does not match omissions"),
+    }
+
+    let mut expected = first_sequence;
+    let mut previous_time = 0;
+    for observation in &capture.raw_observations {
+        if observation.sequence != expected || observation.monotonic_ms < previous_time {
+            return invalid("encounter current raw ordering is invalid");
+        }
+        validate_raw_observation(capture, observation)?;
+        expected = observation
+            .sequence
+            .checked_add(1)
+            .ok_or_else(|| EncounterError::Validation("raw sequence overflow".into()))?;
+        previous_time = observation.monotonic_ms;
+    }
+    match &capture.raw_loss {
+        None if last_sequence.checked_add(1) == Some(expected) => Ok(()),
+        Some(loss)
+            if expected == loss.missing_sequence_from
+                && loss.missing_sequence_to == last_sequence =>
+        {
+            Ok(())
+        }
+        _ => invalid("encounter current raw loss is not a trailing exact range"),
+    }
 }
 
 fn validate_legacy_raw_absence(capture: &EncounterCapture) -> Result<(), EncounterError> {
@@ -436,6 +904,7 @@ fn validate_raw_signature(observation: &RawObservation) -> Result<(), EncounterE
         (RawSourceKind::Callback, "EVENT_PLAYER_DEAD")
         | (RawSourceKind::Callback, "EVENT_PLAYER_ALIVE") => counts.0 >= 1 && counts.1 == 0,
         (RawSourceKind::Callback, "EVENT_BOSSES_CHANGED") => counts.0 >= 2 && counts.1 == 0,
+        (RawSourceKind::ApiSample, "IsUnitInCombat") => counts == (1, 1),
         (RawSourceKind::ApiSample, "GetSlotBoundId") => {
             matches!(counts, (1, 1) | (2, 1))
         }
@@ -582,7 +1051,9 @@ fn validate_projection_links(capture: &EncounterCapture) -> Result<(), Encounter
 
 fn projection_source_matches(event_kind: &str, source_id: &str) -> bool {
     match event_kind {
-        "encounter-start" => source_id == "EVENT_PLAYER_COMBAT_STATE",
+        "encounter-start" => {
+            matches!(source_id, "EVENT_PLAYER_COMBAT_STATE" | "IsUnitInCombat")
+        }
         "encounter-end" => source_id == "capture-finish",
         "damage" | "healing" => source_id == "EVENT_COMBAT_EVENT",
         "effect" => source_id == "EVENT_EFFECT_CHANGED",
@@ -617,7 +1088,10 @@ fn validate_event(
     match event.kind.as_str() {
         "encounter-start" => {
             exact_keys(&event.payload, &["reason"])?;
-            if string(&event.payload, "reason")? != "combat-started" {
+            if !matches!(
+                string(&event.payload, "reason")?,
+                "combat-started" | "started-mid-combat"
+            ) {
                 return invalid("encounter start reason is invalid");
             }
         }
@@ -835,7 +1309,9 @@ fn terminal_reason(reason: &str, schema_version: u32) -> Result<(), EncounterErr
             | "clock-reset"
             | "user-stopped"
             | "player-deactivated"
+            | "runtime-interrupted"
             | "callback-failed"
+            | "started-mid-combat"
     );
     let raw = schema_version == 2
         && matches!(
@@ -849,7 +1325,10 @@ fn terminal_reason(reason: &str, schema_version: u32) -> Result<(), EncounterErr
     }
 }
 
-fn validate_opaque_id(value: &str, prefix: &str) -> Result<(), EncounterError> {
+pub(crate) fn validate_opaque_id(value: &str, prefix: &str) -> Result<(), EncounterError> {
+    if value.len() > 128 || !value.is_ascii() {
+        return invalid("encounter opaque identity is invalid");
+    }
     let Some(remainder) = value
         .strip_prefix(prefix)
         .and_then(|value| value.strip_prefix('-'))
@@ -870,13 +1349,42 @@ fn validate_opaque_id(value: &str, prefix: &str) -> Result<(), EncounterError> {
     Ok(())
 }
 
-fn validate_decimal_time(value: &str) -> Result<u64, EncounterError> {
+pub(crate) fn validate_decimal_time(value: &str) -> Result<u64, EncounterError> {
     if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
         return invalid("encounter wall-clock value is invalid");
     }
     value.parse::<u64>().map_err(|_| {
         EncounterError::Validation("encounter wall-clock value is out of range".into())
     })
+}
+
+fn has_mid_combat_authority(capture: &EncounterCapture) -> bool {
+    let Some(start) = capture.events.first() else {
+        return false;
+    };
+    let Some(first) = capture.raw_observations.first() else {
+        return false;
+    };
+    let Some(finish) = capture.raw_observations.last() else {
+        return false;
+    };
+    matches!(
+        start.payload.get("reason"),
+        Some(PayloadValue::String(reason)) if reason == "started-mid-combat"
+    ) && start.source_sequence == Some(first.sequence)
+        && start.projection_ordinal == Some(0)
+        && first.source_kind == RawSourceKind::ApiSample
+        && first.source_id == "IsUnitInCombat"
+        && first.argument_count == 1
+        && first.return_count == 1
+        && first.values.first().is_some_and(|value| {
+            value.value_type == RawValueType::String && value.string.as_deref() == Some("player")
+        })
+        && first.values.get(1).is_some_and(|value| {
+            value.value_type == RawValueType::Boolean && value.boolean == Some(true)
+        })
+        && finish.source_kind == RawSourceKind::Lifecycle
+        && finish.source_id == "capture-finish"
 }
 
 fn safe_source_token(value: &str) -> bool {

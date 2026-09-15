@@ -44,7 +44,9 @@ Observed numeric zero is different from all four states.
 | Data Addon Enabled or Data Addon Loaded: **Unconfirmed** | No supported current-session account or addon-load source exists | Verify enablement in ESO; reload after lifecycle changes; do not infer from process state |
 | Data Addon Reload: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
 | Data Runtime: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
-| Catalog Collection or Encounter Collection: **Unconfirmed (no live channel)** | Desktop has no current-session module channel | Use the matching in-game status command; disk SavedVariables remains flush-bound historical evidence |
+| Catalog Collection: **Unconfirmed (no live channel)** | Desktop has no current-session catalog channel | Use `/ewcollect status`; disk SavedVariables remains flush-bound historical evidence |
+| Encounter Collection: **Last saved MODE / STATE** | A compatible bounded spool was read from the last disk flush | Historical evidence only; use `/ewencounter status` inside ESO for current mode and state |
+| Encounter Collection: **Unconfirmed (no saved state)** | No compatible last-saved controller fact is available | Verify and control capture inside ESO; never infer activity from process or package state |
 | Data Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
@@ -75,6 +77,29 @@ The shared ESO Weave Data addon has separate package lifecycle values:
 These API values back the first-class lifecycle row. They do not describe
 PixelBeacon, configured enablement, addon loading, collection, or automation
 state.
+
+The encounter controller exposes exactly two selected modes. `single` records
+one combat period and stops; `continuous` retains one bounded session across
+combat gaps until explicit disablement or hard failure. Live authority belongs
+only to user commands inside ESO:
+
+- `stopped` means no capture request is effective. Select mode and channel, then
+  use `/ewencounter toggle`.
+- `waiting` means single or continuous is enabled outside combat. Detailed
+  handlers stay dormant until combat begins; toggle again to disable.
+- `capturing` means one encounter is active. A combat exit completes it;
+  toggling off makes it a user-stopped partial record.
+- `interrupted` means reload, relog, or recovery opened an explicit observation
+  gap. Single stops; valid durably saved continuous authority can return to
+  waiting under the same session.
+- `failed` means a controlled integrity or storage failure stopped capture.
+  Retained evidence stays in place and no automatic retry occurs.
+
+Mode, requested enablement, effective state, active channel, session identity,
+current encounter, last interruption, and failure are independent facts. The
+desktop may display only validated, bounded versions from the last saved spool,
+always under a **Last saved capture state** or historical label. It has no capture
+toggle or addon command ingress.
 
 The local icon cache exposes library lookup states for future interface work:
 

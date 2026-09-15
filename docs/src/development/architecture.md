@@ -24,8 +24,8 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
 | Data Addon Manager | Exact marker-owned deployment of the `EsoWeaveData` manifest, bootstrap, catalog module, and encounter module | PixelBeacon files, user SavedVariables deletion, parsing, or capture policy |
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic `EsoWeaveDataSaved.catalog` records, and restricted staging | Package lifecycle, encounter state, PixelBeacon, input generation, network transfer, direct SQLite publication, or distributable game art |
-| Encounter Capture Module | One explicitly armed Live or PTS encounter in `EsoWeaveDataSaved.encounter`, source-exact selected callbacks and API reads, linked compatibility projections, bounded state, and declared loss | Package lifecycle, catalog state, Pixel Bus transport, upload, telemetry, input generation, or gameplay mutation |
-| Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing v1/v2 parsing, terminal and loss validation, canonical content identity, byte-preserving migration, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
+| Encounter Capture Module | Explicit in-game control of exactly single and continuous modes, a bounded ordered spool in `EsoWeaveDataSaved.encounter`, source-exact callbacks and API reads, linked compatibility projections, interruptions, and declared loss | Desktop command ingress, package lifecycle, catalog state, Pixel Bus transport, upload, telemetry, input generation, or gameplay mutation |
+| Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing legacy and session-spool parsing, atomic batch validation and storage, terminal and loss validation, canonical content identity, byte-preserving migration, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
 | Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
 | Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog reads and mutation, persistence, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
 
@@ -123,17 +123,25 @@ User-local API discovery precedes that path when explicitly requested:
 
 Encounter observation and import follow the isolated encounter-module path:
 
-`explicit one-shot arm -> clean combat boundary -> bounded exact selected-source observations -> linked compatibility events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> deterministic replay -> canonical hash -> immutable encounters.sqlite record`
+`explicit in-game mode and channel selection -> one in-game toggle -> single encounter OR bounded continuous session -> independently terminal ordered encounters -> SavedVariables flush -> explicit stable read -> restricted spool parser -> full batch validation and deterministic replay -> one SQLite transaction`
 
 The desktop importer consumes terminal schema-v1 legacy and schema-v2 lossless
-handoffs and requires the caller to name both the file and its expected Live or
-PTS channel. It retains exact selected values and unknown identifiers, accepts
-truthful partial captures, and rejects syntax, structural schema, ordering,
-count, loss, channel, and identity conflicts before publication. SQLite
+handoffs plus the versioned S096 session spool. It requires the caller to name
+both the file and its expected Live or PTS channel. Every terminal spool member
+is structurally validated and replayed before one immediate transaction stores
+the batch. Session identity and contiguous ordinal provide authoritative
+cross-encounter order; raw and compatibility sequences remain encounter-local.
+Repeated and growing snapshots are idempotent, while a changed prefix, malformed
+member, ordinal conflict, or identity collision rejects the whole batch. SQLite
 transactions make migration, append, and explicit deletion atomic; an
 update-blocking trigger keeps raw records immutable. Consistent snapshot backup
 is separate from derived metric projection. Logs, receipts, diagnostics, and
 default UI summaries do not reproduce raw payload values.
+
+Only explicit user commands inside ESO change encounter authority. The desktop
+has no binding, generated-input, clipboard, Pixel Bus, or SavedVariables command
+path. Its controller presentation is read-only and always labeled last-saved or
+historical because the file can lag current in-game state.
 
 Current addon-v3 schema-v2 captures include normalization profile version 1.
 The pure replay verifier derives only from that bounded profile and raw
@@ -177,10 +185,22 @@ download, archive extraction, upload, or application activation.
 ESO Weave Data is one lifecycle boundary separate from PixelBeacon. Its catalog
 module does limited work per update tick, pauses in combat, and emits bounded
 deterministic JSON-line chunks under `EsoWeaveDataSaved.catalog`. Its encounter
-module remains dormant until one explicit Live or PTS arm, captures only the
-next clean encounter under `EsoWeaveDataSaved.encounter`, stores no personal
-names, and disarms on every terminal path. Neither module uses Pixel Bus for
-bulk data or authorizes gameplay actions.
+module remains dormant until an explicit in-game toggle enables either `single`
+or `continuous` for an explicitly selected Live or PTS channel. Single records
+one combat period and stops. Continuous retains one session identity and
+contiguous encounter ordinals across combat gaps until explicit disablement or a
+declared hard failure. Selected callback values can include source-exact names
+and identifiers, remain local, and are bounded with explicit loss. Neither
+module uses Pixel Bus for bulk data or authorizes gameplay actions.
+
+Detailed encounter handlers exist only while capturing. The small combat-state
+and deactivation boundary handlers transition between stopped, waiting,
+capturing, interrupted, and failed. Mid-combat activation begins from an exact
+`IsUnitInCombat("player")` API observation and declares the unknown prefix rather
+than fabricating callback values. Reload or relog recovery trusts only the last
+durably flushed request, marks an interruption, resumes only valid continuous
+authority, and never retries a failed session automatically. Native encounter-log
+qualification remains isolated under issue #190.
 
 Both importers parse the shared outer root through one crate-private restricted
 table grammar, validate its schema and addon version, and then select only their
