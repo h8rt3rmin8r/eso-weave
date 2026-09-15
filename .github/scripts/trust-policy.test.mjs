@@ -31,7 +31,7 @@ ${body}`;
 }
 
 test("accepts an immutable read-only workflow", () => {
-  const errors = validateWorkflow(".github/workflows/ci.yml", workflow(""));
+  const errors = validateWorkflow(".github/workflows/example.yml", workflow(""));
   assert.deepEqual(errors, []);
 });
 
@@ -56,11 +56,33 @@ test("rejects privileged untrusted-content triggers", () => {
     const candidate = workflow("").replace("pull_request", trigger);
     assert.match(validateWorkflow(".github/workflows/ci.yml", candidate).join("\n"), /prohibited trigger/);
   }
+
+  const quoted = workflow("").replace("  pull_request:", '  "pull_request_target":');
+  assert.match(validateWorkflow(".github/workflows/example.yml", quoted).join("\n"), /prohibited trigger/);
+
+  const flowList = workflow("").replace("on:\n  pull_request:", 'on: [push, "pull_request_target"]');
+  assert.match(validateWorkflow(".github/workflows/example.yml", flowList).join("\n"), /prohibited trigger/);
+
+  const flowMap = workflow("").replace("on:\n  pull_request:", 'on: {"pull_request_target": {}, push: {}}');
+  assert.match(validateWorkflow(".github/workflows/example.yml", flowMap).join("\n"), /prohibited trigger/);
 });
 
 test("rejects missing read-only defaults and unexpected writes", () => {
   assert.match(validateWorkflow(".github/workflows/ci.yml", workflow("", "  actions: read")).join("\n"), /contents: read/);
   assert.match(validateWorkflow(".github/workflows/ci.yml", workflow("", "  contents: write")).join("\n"), /write permission/);
+
+  const quotedWrite = workflow("", '  contents: "write"');
+  assert.match(validateWorkflow(".github/workflows/example.yml", quotedWrite).join("\n"), /write permission/);
+
+  const flowWrite = workflow("").replace("permissions:\n  contents: read", "permissions: {contents: write}");
+  assert.match(validateWorkflow(".github/workflows/example.yml", flowWrite).join("\n"), /write permission/);
+});
+
+test("requires CI to execute the trust scan from protected-base code", () => {
+  const candidate = workflow("");
+  const errors = validateWorkflow(".github/workflows/ci.yml", candidate).join("\n");
+  assert.match(errors, /protected-base trust-policy checkout/);
+  assert.match(errors, /protected-base trust-policy execution/);
 });
 
 test("allows only the documented workflow write permissions", () => {

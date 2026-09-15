@@ -32,11 +32,29 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Checkout protected-base trust policy
+        if: runner.os == 'Linux' && github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-policy
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/trust-policy.mjs
+            .github/scripts/trust-policy.test.mjs
+          sparse-checkout-cone-mode: false
+
       - name: Test repository trust policy
         if: runner.os == 'Linux'
         run: |
-          node --test .github/scripts/trust-policy.test.mjs
-          node .github/scripts/trust-policy.mjs .
+          if [ -f trusted-policy/.github/scripts/trust-policy.mjs ]; then
+            node --test trusted-policy/.github/scripts/trust-policy.test.mjs
+            node trusted-policy/.github/scripts/trust-policy.mjs .
+          else
+            echo "::notice::Protected main does not yet contain the trust policy; using the bootstrap policy from this pull request."
+            node --test .github/scripts/trust-policy.test.mjs
+            node .github/scripts/trust-policy.mjs .
+          fi
 
       - name: Test release-note generator
         if: runner.os == 'Linux'

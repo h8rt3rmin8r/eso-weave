@@ -57,6 +57,89 @@ function owningJob(lines, index) {
   return null;
 }
 
+function yamlToken(value) {
+  const trimmed = value.trim().replace(/,$/u, "").trim();
+  if (
+    trimmed.length >= 2
+    && ((trimmed.startsWith('"') && trimmed.endsWith('"'))
+      || (trimmed.startsWith("'") && trimmed.endsWith("'")))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function topLevelSection(lines, key) {
+  const headerPattern = new RegExp(`^["']?${key}["']?\\s*:\\s*(.*)$`, "u");
+  const index = lines.findIndex((line) => headerPattern.test(line));
+  if (index < 0) {
+    return "";
+  }
+
+  const section = [lines[index]];
+  for (let next = index + 1; next < lines.length; next += 1) {
+    if (/^\S/u.test(lines[next])) {
+      break;
+    }
+    section.push(lines[next]);
+  }
+  return section.join("\n");
+}
+
+function permissionEntries(lines) {
+  const entries = [];
+  const headerPattern = /^(\s*)["']?permissions["']?\s*:\s*(.*)$/u;
+  const pairPattern = /["']?([a-z-]+)["']?\s*:\s*(["']?(?:read|write)["']?)/gu;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = lines[index].match(headerPattern);
+    if (!header) {
+      continue;
+    }
+
+    const indent = header[1].length;
+    const job = indent === 0 ? null : owningJob(lines, index);
+    const inline = yamlToken(header[2]);
+    if (inline === "write-all" || inline === "read-all") {
+      entries.push({ key: "*", value: inline, index, job, topLevel: indent === 0 });
+    } else {
+      for (const match of header[2].matchAll(pairPattern)) {
+        entries.push({ key: match[1], value: yamlToken(match[2]), index, job, topLevel: indent === 0 });
+      }
+    }
+
+    for (let next = index + 1; next < lines.length; next += 1) {
+      if (lines[next].trim() === "") {
+        continue;
+      }
+      if (leadingSpaces(lines[next]) <= indent) {
+        break;
+      }
+      const pair = lines[next].match(/^\s*["']?([a-z-]+)["']?\s*:\s*(["']?(?:read|write)["']?)\s*(?:#.*)?$/u);
+      if (pair) {
+        entries.push({ key: pair[1], value: yamlToken(pair[2]), index: next, job, topLevel: indent === 0 });
+      }
+    }
+  }
+
+  return entries;
+}
+
+function validateCiWorkflow(text, errors) {
+  if (
+    !/ref:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/u.test(text)
+    || !/^\s*path:\s*trusted-policy\s*$/mu.test(text)
+  ) {
+    errors.push(".github/workflows/ci.yml: CI requires a protected-base trust-policy checkout");
+  }
+  if (
+    !/node --test trusted-policy\/\.github\/scripts\/trust-policy\.test\.mjs/u.test(text)
+    || !/node trusted-policy\/\.github\/scripts\/trust-policy\.mjs\s+\./u.test(text)
+  ) {
+    errors.push(".github/workflows/ci.yml: CI requires protected-base trust-policy execution against the proposed checkout");
+  }
+}
+
 function validateReleaseWorkflow(text, errors) {
   const digestMatch = text.match(/^\s*APPIMAGETOOL_SHA256:\s*([0-9a-f]+)\s*$/mu);
   if (!digestMatch || digestMatch[1].length !== 64) {
@@ -87,32 +170,25 @@ export function validateWorkflow(filePath, text) {
   const errors = [];
   const lines = text.split(/\r?\n/u);
 
-  const topPermissionsIndex = lines.findIndex((line) => line === "permissions:");
-  const topPermissionLines = [];
-  if (topPermissionsIndex >= 0) {
-    for (let index = topPermissionsIndex + 1; index < lines.length; index += 1) {
-      if (!/^ {2}\S/u.test(lines[index])) {
-        break;
-      }
-      topPermissionLines.push(lines[index]);
-    }
-  }
-  if (!topPermissionLines.some((line) => /^ {2}contents:\s*read\s*$/u.test(line))) {
+  const permissions = permissionEntries(lines);
+  const topPermissions = permissions.filter((entry) => entry.topLevel);
+  if (!topPermissions.some((entry) => entry.key === "contents" && entry.value === "read")) {
     errors.push(`${normalized}: workflow requires top-level contents: read`);
   }
-  if (topPermissionLines.some((line) => /:\s*write\s*$/u.test(line))) {
+  if (topPermissions.some((entry) => entry.value === "write" || entry.value === "write-all")) {
     errors.push(`${normalized}: top-level workflow permissions must remain read-only`);
   }
 
+  const onSection = topLevelSection(lines, "on");
   for (const trigger of PROHIBITED_TRIGGERS) {
-    const triggerPattern = new RegExp(`(?:^|[\\s[,] )${trigger}(?=[:\\s,\\]])`, "mu");
-    if (triggerPattern.test(text)) {
+    const triggerPattern = new RegExp(`(?:^|[\\s\\[,{])["']?${trigger}["']?(?=\\s*[:,}\\]]|\\s*$)`, "mu");
+    if (triggerPattern.test(onSection)) {
       errors.push(`${normalized}: prohibited trigger ${trigger}`);
     }
   }
 
   for (const [index, line] of lines.entries()) {
-    const actionMatch = line.match(/^\s*-?\s*uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#\s*(\S.*))?\s*$/u);
+    const actionMatch = line.match(/^\s*-?\s*uses:\s*(?:["']?)([^\s@"']+)@([^\s#"']+)(?:["']?)(?:\s+#\s*(\S.*))?\s*$/u);
     if (!actionMatch) {
       continue;
     }
@@ -136,13 +212,12 @@ export function validateWorkflow(filePath, text) {
   }
 
   const allowedWrites = ALLOWED_WRITES.get(normalized) ?? new Map();
-  for (const [index, line] of lines.entries()) {
-    const writeMatch = line.match(/^\s+([a-z-]+):\s*write\s*$/u);
-    if (writeMatch) {
-      const requiredJob = allowedWrites.get(writeMatch[1]);
-      const actualJob = owningJob(lines, index);
+  for (const permission of permissions) {
+    if (permission.value === "write" || permission.value === "write-all") {
+      const requiredJob = allowedWrites.get(permission.key);
+      const actualJob = permission.job;
       if (!requiredJob || actualJob !== requiredJob) {
-        errors.push(`${normalized}:${index + 1}: unexpected ${writeMatch[1]} write permission`);
+        errors.push(`${normalized}:${permission.index + 1}: unexpected ${permission.key} write permission`);
       }
     }
   }
@@ -160,6 +235,9 @@ export function validateWorkflow(filePath, text) {
 
   if (normalized === ".github/workflows/release.yml") {
     validateReleaseWorkflow(text, errors);
+  }
+  if (normalized === ".github/workflows/ci.yml") {
+    validateCiWorkflow(text, errors);
   }
 
   return errors;
