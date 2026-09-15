@@ -43,6 +43,70 @@ fn publish_interact(input: &InputEngine) {
     input.set_native_bindings(bindings);
 }
 
+struct RejectAfterSink {
+    successful_attempts: usize,
+    attempts: usize,
+}
+
+impl FishingSink for RejectAfterSink {
+    fn interact(&mut self) -> bool {
+        self.attempts += 1;
+        self.attempts <= self.successful_attempts
+    }
+}
+
+#[test]
+fn s102_rejected_reel_stays_cancelled_while_fishing_is_disabled() {
+    let cfg = FishingConfig::default();
+    let mut controller = controller();
+    let mut sink = RejectAfterSink {
+        successful_attempts: 1,
+        attempts: 0,
+    };
+    controller.set_enabled(true, 0, &mut sink);
+    controller.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    controller.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+
+    let reel_due = 20 + u64::from(cfg.reel_delay_ms);
+    controller.tick(reel_due, &mut sink);
+    assert_eq!(controller.state(), FishingState::Disabled);
+    assert_eq!(
+        controller.stop_reason(),
+        Some(StopReason::InteractUnavailable)
+    );
+    assert_eq!(sink.attempts, 2);
+
+    controller.tick(reel_due + 10_000, &mut sink);
+    assert_eq!(sink.attempts, 2, "a rejected reel must not be retried");
+}
+
+#[test]
+fn s102_rejected_recast_stays_cancelled_while_fishing_is_disabled() {
+    let cfg = FishingConfig::default();
+    let mut controller = controller();
+    let mut sink = RejectAfterSink {
+        successful_attempts: 2,
+        attempts: 0,
+    };
+    controller.set_enabled(true, 0, &mut sink);
+    controller.on_event(DetectorEvent::FishingStarted, 10, &mut sink);
+    controller.on_event(DetectorEvent::BiteDetected, 20, &mut sink);
+
+    let reel_due = 20 + u64::from(cfg.reel_delay_ms);
+    controller.tick(reel_due, &mut sink);
+    let recast_due = reel_due + u64::from(cfg.recast_delay_ms);
+    controller.tick(recast_due, &mut sink);
+    assert_eq!(controller.state(), FishingState::Disabled);
+    assert_eq!(
+        controller.stop_reason(),
+        Some(StopReason::InteractUnavailable)
+    );
+    assert_eq!(sink.attempts, 3);
+
+    controller.tick(recast_due + 10_000, &mut sink);
+    assert_eq!(sink.attempts, 3, "a rejected recast must not be retried");
+}
+
 #[test]
 fn configuration_generation_changes_only_for_a_distinct_config() {
     let mut controller = controller();

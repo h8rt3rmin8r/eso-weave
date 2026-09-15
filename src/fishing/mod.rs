@@ -534,9 +534,6 @@ impl FishingController {
                         now_ms + u64::from(self.config.recast_delay_ms),
                         TimerKind::RecastDue,
                     ));
-                } else {
-                    sink.arm_authorization();
-                    self.deadline = Some((now_ms + GATE_DEFER_MS, TimerKind::ReelDue));
                 }
             }
             TimerKind::RecastDue => {
@@ -551,9 +548,6 @@ impl FishingController {
                         now_ms + u64::from(self.config.arm_timeout_ms),
                         TimerKind::RecastArmTimeout,
                     ));
-                } else {
-                    sink.arm_authorization();
-                    self.deadline = Some((now_ms + GATE_DEFER_MS, TimerKind::RecastDue));
                 }
             }
             TimerKind::RecastArmTimeout => {
