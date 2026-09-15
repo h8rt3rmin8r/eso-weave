@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S094 establishes a versioned lossless raw-source envelope for the encounter
+  callbacks and normalization-dependent API observations already selected by
+  ESO Weave Data. Exact local scalar values, source order, versions, declared
+  loss, compatibility projections, and non-destructive v1 history support form
+  the first bounded tranche of issue #186 (issue #198).
 - S093 adds a first-class ESO Weave Data lifecycle row directly beneath
   PixelBeacon with Install, Update, atomic Repair, and confirmed Uninstall
   controls. The Data Details view uses dedicated rows to keep ownership,
@@ -41,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-15: Amend the constitution to 4.0.0. Deliberately selected encounter
+  sources retain their exact scalar values locally, including names and
+  identifiers, while one-shot authority, hard bounds, declared loss, no upload,
+  value-free diagnostics, and no gameplay authority remain mandatory.
+- 2026-09-15: Keep normalized encounter events as a linked compatibility
+  projection during S094 and make a separate raw source sequence authoritative.
+  Defer full Rust-side renormalization and event-family expansion to later #186
+  slices.
+- 2026-09-15: Preserve schema-v1 SavedVariables and immutable SQLite bytes
+  without fabricated raw evidence or hash rewriting during the v2 transition.
 - 2026-09-13: Treat data-addon installation, ownership, compatibility,
   configured enablement, loading, reload need, runtime, catalog activity, and
   encounter activity as separate evidence facts. ESO process state is not addon

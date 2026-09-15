@@ -7,6 +7,9 @@ implements its hostile-data import and dedicated raw store. S077 implements
 versioned metric projection and catalog reconciliation. S078 implements the
 desktop history interface. S090 adds provisional, evidence-scoped encounter
 review prompts.
+S094 replaces privacy-minimized raw capture with a lossless authority for the
+sources already selected by ESO Weave Data while retaining the normalized metric
+surface as a compatibility projection.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -32,10 +35,11 @@ terminal contract, and never executes Lua.
 
 Accepted observations become deterministic compact JSON and receive separate
 source-byte and canonical-content SHA-256 hashes. The canonical bytes enter a
-caller-selected schema-v1 `encounters.sqlite`, not `catalog.sqlite` or the
-settings file. Raw records cannot be updated, exact canonical reimports are
-idempotent, and changed content under an existing session and encounter identity
-is rejected.
+caller-selected `encounters.sqlite`, not `catalog.sqlite` or the settings file.
+Store schema v2 holds capture schemas 1 and 2 with a per-row canonical format.
+Transactional migration copies legacy schema-v1 blobs and hashes byte-for-byte.
+Raw records cannot be updated, exact canonical reimports are idempotent, and
+changed content under an existing session and encounter identity is rejected.
 
 S077 reads one validated raw record and one schema-verified catalog, then writes
 an explicit canonical schema-v1 JSON projection outside both SQLite authorities.
@@ -60,9 +64,13 @@ values are labeled observed, and unavailable denominators remain unavailable
 rather than becoming zero. Import, listing, calculation, and deletion run on a
 serialized background worker so large captures do not block the GUI.
 
-There is no automatic upload. Account names, character names, chat, guild, and
-location are omitted by default. Actors use opaque encounter-local IDs because
-stable personal identity is unnecessary for encounter metrics.
+There is no automatic upload. Schema-v2 raw observations retain exact scalar
+values from deliberately selected callbacks and normalization-dependent API
+reads, including names, tags, identifiers, and locations when ESO supplies them.
+The explicit arm warns about this local sensitivity. Logs, receipts, diagnostics,
+public fixtures, and default UI summaries remain value-free. Compatibility
+projections may use encounter-local actor IDs for current metrics, but they do
+not replace or redact the source-exact raw record.
 
 Export and import are always explicit user actions. Users control deletion by
 encounter or for the complete local store. The reusable encounter API and
@@ -79,8 +87,11 @@ or action automation.
 
 ## Ordering and incomplete captures
 
-`(session_id, sequence)` identifies and orders events. Monotonic milliseconds
-measure durations. Wall-clock timestamps must not decide order.
+`(session_id, sequence)` identifies and orders each stream. Raw source sequence
+is authoritative; normalized event sequence orders the compatibility projection.
+One raw source can produce zero, one, or multiple normalized events, so each v2
+projection also carries a source sequence and projection ordinal. Monotonic
+milliseconds measure durations. Wall-clock timestamps must not decide order.
 
 A valid stream rejects duplicate sequences, backward monotonic time, and an
 undeclared gap. A `discontinuity` event may declare the immediately preceding
@@ -88,16 +99,18 @@ missing range and its reason. Metrics spanning that range remain available as
 observed values, but their quality is `degraded` and the loss range stays visible.
 This prevents an incomplete capture from looking complete.
 
-The implemented capture families are encounter boundaries, damage, healing,
-effects, resources, casts, bar changes, deaths, resurrections, boss health,
-performance, quickslot use, and discontinuities. Executed Lua 5.1 tests prove
-the repository state machine and privacy contract. Live event completeness and
-same-parse parity remain issues #129 and #131.
+The selected raw sources cover combat-state and deactivation boundaries, combat,
+effect, power, slot, weapon-pair, life-state, boss, and quickslot callbacks plus
+the API reads used for slot, boss-health, frame-rate, and latency normalization.
+Every callback scalar and future scalar argument is retained in positional tagged
+form. API reads retain ordered inputs and outputs. Executed Lua 5.1 tests prove
+this repository contract. Live event completeness and same-parse parity remain
+issues #129 and #131.
 
 ## Raw events and catalog knowledge
 
-Raw events retain numeric ability and effect IDs even if the selected catalog
-does not know them. A catalog join produces a receipt containing kind-scoped
+Raw observations retain names and values as well as numeric ability and effect
+IDs even if the selected catalog does not know them. A catalog join produces a receipt containing kind-scoped
 known and unknown IDs plus aggregate display lists and the raw-content hash. An
 ability and effect may share a numeric ID without either kind falsely resolving
 the other. When a later catalog learns an ID, a new receipt can resolve it
@@ -128,7 +141,8 @@ These are reproducible descriptive calculations. Observation and calculation do
 not authorize input and do not depend on action automation. Later advice must
 consume a named, versioned projection rather than an unversioned summary.
 
-Algorithm `s069-v1` is implemented over S076 capture schema v1. Duration is the
+Algorithm `s069-v1` consumes the normalized compatibility stream from capture
+schema v1 or v2. Duration is the
 validated elapsed `ended_monotonic_ms`; `started_monotonic_ms` is a raw clock
 origin and is not subtracted from it. Outgoing damage and healing require combat
 source type 1, the local player, rather than assuming actor 1. Actor allocation is
@@ -276,4 +290,4 @@ Implementation work proceeds in this order: [addon capture](https://github.com/h
 [Live parity verification](https://github.com/h8rt3rmin8r/eso-weave/issues/131)
 follows the capture, import, and calculation path. Each stage has native GitHub
 dependencies so later product behavior cannot weaken capture integrity or
-privacy boundaries.
+local-data boundaries.

@@ -5,10 +5,12 @@ use eso_weave::catalog::Channel;
 use eso_weave::encounter::{
     backup_store, canonical_bytes, delete_all, delete_encounter, import_encounter, list_encounters,
     load_encounter, parse_capture, EncounterEvent, ImportOutcome, ImportRequest, PayloadValue,
-    MAX_CAPTURE_BYTES, MAX_EVENTS,
+    RawObservation, RawSourceKind, RawValue, RawValueType, MAX_CAPTURE_BYTES, MAX_ESTIMATED_BYTES,
+    MAX_EVENTS,
 };
 
 const COMPLETE: &str = include_str!("fixtures/encounter/valid-complete.lua");
+const LOSSLESS_V2_JSON: &str = include_str!("fixtures/encounter/valid-v2-lossless.json");
 const PARTIAL_JSON: &str =
     include_str!("../specs/075-encounter-capture/fixtures/representative-capture.json");
 
@@ -57,6 +59,389 @@ fn recovered_partial_lua() -> String {
         "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
         json_to_lua(&value)
     )
+}
+
+fn lossless_v2() -> serde_json::Value {
+    serde_json::from_str(LOSSLESS_V2_JSON).expect("valid synthetic capture v2 fixture")
+}
+
+fn capture_lua(value: &serde_json::Value) -> String {
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
+        json_to_lua(value)
+    )
+}
+
+fn lossless_v2_lua() -> String {
+    capture_lua(&lossless_v2())
+}
+
+fn partial_v2_with_raw_loss() -> serde_json::Value {
+    let mut capture = lossless_v2();
+    capture["status"] = serde_json::json!("partial");
+    capture["partial_reason"] = serde_json::json!("record-limit");
+    capture["raw_last_sequence"] = serde_json::json!(5);
+    capture["raw_observation_count"] = serde_json::json!(3);
+    capture["raw_omitted_observation_count"] = serde_json::json!(2);
+    capture["raw_loss"] = serde_json::json!({
+        "missing_sequence_from": 3,
+        "missing_sequence_to": 4,
+        "reason": "record-limit"
+    });
+    capture["raw_observations"]
+        .as_array_mut()
+        .unwrap()
+        .remove(2);
+    capture["raw_observations"][2]["sequence"] = serde_json::json!(5);
+    capture["events"][1]["payload"] = serde_json::json!({
+        "complete": false,
+        "reason": "record-limit"
+    });
+    capture["events"][1]["source_sequence"] = serde_json::json!(5);
+    capture
+}
+
+#[test]
+fn lossless_v2_raw_values_canonicalize_import_and_reload_exactly() {
+    let fixture = lossless_v2();
+    let source = capture_lua(&fixture);
+    let parsed = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    let parsed_json = serde_json::to_value(&parsed).unwrap();
+
+    assert_eq!(parsed_json["schema_version"], 2);
+    assert_eq!(parsed_json["raw_observations"], fixture["raw_observations"]);
+    assert_eq!(
+        parsed_json["raw_observations"][1]["values"],
+        serde_json::json!([
+            {"position": 1, "value_type": "number", "sign": 1, "significand": "3", "exponent": 0},
+            {"position": 2, "value_type": "number", "sign": 1, "significand": "987654321", "exponent": 0},
+            {"position": 3, "value_type": "nil"},
+            {"position": 4, "value_type": "boolean", "boolean": false},
+            {"position": 5, "value_type": "string", "string": "Future @Account Ω"},
+            {"position": 6, "value_type": "number", "sign": 1, "significand": "3", "exponent": -1},
+            {"position": 7, "value_type": "number", "sign": -1, "significand": "0", "exponent": 0},
+            {"position": 8, "value_type": "number", "sign": 1, "significand": "1", "exponent": -1074},
+            {"position": 9, "value_type": "nil"}
+        ])
+    );
+    assert!(parsed_json["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|event| event["source_sequence"] != 2));
+
+    let canonical = canonical_bytes(&parsed).unwrap();
+    assert_eq!(canonical, canonical_bytes(&parsed).unwrap());
+
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("capture-v2.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    fs::write(&input, source).unwrap();
+    let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    let loaded = load_encounter(&store, &receipt.session_id, &receipt.encounter_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(serde_json::to_value(&loaded).unwrap(), parsed_json);
+    assert_eq!(canonical_bytes(&loaded).unwrap(), canonical);
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        2
+    );
+    let stored: (i64, i64, Vec<u8>) = connection
+        .query_row(
+            "SELECT capture_schema_version, canonical_format_version, canonical_json
+             FROM raw_encounters WHERE content_sha256 = ?1",
+            [&receipt.content_sha256],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(stored.0, 2);
+    assert_eq!(stored.1, 2);
+    assert_eq!(stored.2, canonical);
+}
+
+#[test]
+fn raw_loss_is_exact_and_structurally_validated() {
+    let valid = partial_v2_with_raw_loss();
+    let parsed = parse_capture(capture_lua(&valid).as_bytes(), Channel::Live).unwrap();
+    let parsed_json = serde_json::to_value(parsed).unwrap();
+    assert_eq!(parsed_json["raw_omitted_observation_count"], 2);
+    assert_eq!(
+        parsed_json["raw_loss"],
+        serde_json::json!({
+            "missing_sequence_from": 3,
+            "missing_sequence_to": 4,
+            "reason": "record-limit"
+        })
+    );
+
+    let mut invalid = Vec::new();
+
+    let mut missing_loss = valid.clone();
+    missing_loss.as_object_mut().unwrap().remove("raw_loss");
+    invalid.push(missing_loss);
+
+    let mut wrong_count = valid.clone();
+    wrong_count["raw_omitted_observation_count"] = serde_json::json!(1);
+    invalid.push(wrong_count);
+
+    let mut wrong_range = valid.clone();
+    wrong_range["raw_loss"]["missing_sequence_from"] = serde_json::json!(4);
+    invalid.push(wrong_range);
+
+    let mut undeclared_gap = valid.clone();
+    undeclared_gap["raw_loss"] = serde_json::Value::Null;
+    undeclared_gap["raw_omitted_observation_count"] = serde_json::json!(0);
+    invalid.push(undeclared_gap);
+
+    let mut invalid_reason = valid.clone();
+    invalid_reason["raw_loss"]["reason"] = serde_json::json!("silently-dropped");
+    invalid.push(invalid_reason);
+
+    let mut complete_with_loss = valid.clone();
+    complete_with_loss["status"] = serde_json::json!("complete");
+    complete_with_loss
+        .as_object_mut()
+        .unwrap()
+        .remove("partial_reason");
+    complete_with_loss["events"][1]["payload"] = serde_json::json!({
+        "complete": true,
+        "reason": "combat-ended"
+    });
+    invalid.push(complete_with_loss);
+
+    let mut unsupported_partial_reason = valid.clone();
+    unsupported_partial_reason["partial_reason"] = serde_json::json!("capture-overflow");
+    unsupported_partial_reason["events"][1]["payload"]["reason"] =
+        serde_json::json!("capture-overflow");
+    invalid.push(unsupported_partial_reason);
+
+    let mut unknown_source = lossless_v2();
+    unknown_source["raw_observations"][1]["source_id"] = serde_json::json!("EVENT_FUTURE_UNKNOWN");
+    invalid.push(unknown_source);
+
+    let mut mismatched_callback_code = lossless_v2();
+    mismatched_callback_code["raw_observations"][0]["source_code"] = serde_json::json!(3);
+    invalid.push(mismatched_callback_code);
+
+    let mut wrong_projection_time = lossless_v2();
+    wrong_projection_time["raw_observations"][3]["monotonic_ms"] = serde_json::json!(999);
+    invalid.push(wrong_projection_time);
+
+    let mut wrong_projection_source = lossless_v2();
+    wrong_projection_source["raw_observations"][2]["monotonic_ms"] = serde_json::json!(1000);
+    wrong_projection_source["events"][1]["source_sequence"] = serde_json::json!(3);
+    invalid.push(wrong_projection_source);
+
+    let mut overflowing_finite_descriptor = lossless_v2();
+    overflowing_finite_descriptor["raw_observations"][1]["values"][0] = serde_json::json!({
+        "position": 1,
+        "value_type": "number",
+        "sign": 1,
+        "significand": "2",
+        "exponent": 1023
+    });
+    invalid.push(overflowing_finite_descriptor);
+
+    let mut noncontiguous_values = lossless_v2();
+    noncontiguous_values["raw_observations"][1]["values"][8]["position"] = serde_json::json!(10);
+    invalid.push(noncontiguous_values);
+
+    let mut mismatched_value_count = lossless_v2();
+    mismatched_value_count["raw_observations"][1]["argument_count"] = serde_json::json!(7);
+    invalid.push(mismatched_value_count);
+
+    for capture in invalid {
+        assert!(parse_capture(capture_lua(&capture).as_bytes(), Channel::Live).is_err());
+    }
+}
+
+#[test]
+fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let v1_input = sandbox.path().join("capture-v1.lua");
+    let v2_input = sandbox.path().join("capture-v2.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    fs::write(&v1_input, COMPLETE).unwrap();
+    let v1_receipt =
+        import_encounter(&ImportRequest::new(&v1_input, &store, Channel::Live)).unwrap();
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    connection
+        .execute_batch(
+            "BEGIN IMMEDIATE;
+             DROP TRIGGER raw_encounters_no_update;
+             ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
+             DROP TABLE encounter_store_meta;
+             CREATE TABLE encounter_store_meta (
+                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                 schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+                 canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 1)
+             );
+             INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
+             VALUES (1, 1, 1);
+             CREATE TABLE raw_encounters (
+                 content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
+                 source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+                 session_id TEXT NOT NULL,
+                 encounter_id TEXT NOT NULL,
+                 channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+                 capture_schema_version INTEGER NOT NULL CHECK (capture_schema_version = 1),
+                 addon_version INTEGER NOT NULL CHECK (addon_version = 1),
+                 status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+                 started_at TEXT NOT NULL,
+                 finished_at TEXT NOT NULL,
+                 first_sequence INTEGER NOT NULL,
+                 last_sequence INTEGER NOT NULL,
+                 stored_event_count INTEGER NOT NULL,
+                 omitted_event_count INTEGER NOT NULL,
+                 canonical_json BLOB NOT NULL,
+                 UNIQUE (session_id, encounter_id)
+             );
+             INSERT INTO raw_encounters (
+                 content_sha256, source_sha256, session_id, encounter_id, channel,
+                 capture_schema_version, addon_version, status, started_at, finished_at,
+                 first_sequence, last_sequence, stored_event_count, omitted_event_count,
+                 canonical_json)
+             SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
+                 capture_schema_version, addon_version, status, started_at, finished_at,
+                 first_sequence, last_sequence, stored_event_count, omitted_event_count,
+                 canonical_json
+             FROM raw_encounters_v2;
+             DROP TABLE raw_encounters_v2;
+             CREATE TRIGGER raw_encounters_no_update
+             BEFORE UPDATE ON raw_encounters
+             BEGIN
+                 SELECT RAISE(ABORT, 'raw encounter records are immutable');
+             END;
+             PRAGMA user_version = 1;
+             COMMIT;",
+        )
+        .unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        1
+    );
+    let legacy_before: (String, Vec<u8>) = connection
+        .query_row(
+            "SELECT content_sha256, canonical_json FROM raw_encounters
+             WHERE session_id = ?1 AND encounter_id = ?2",
+            [&v1_receipt.session_id, &v1_receipt.encounter_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    drop(connection);
+
+    fs::write(&v2_input, lossless_v2_lua()).unwrap();
+    let v2_receipt =
+        import_encounter(&ImportRequest::new(&v2_input, &store, Channel::Live)).unwrap();
+
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        2
+    );
+    let legacy_after: (String, Vec<u8>, i64) = connection
+        .query_row(
+            "SELECT content_sha256, canonical_json, canonical_format_version
+             FROM raw_encounters WHERE session_id = ?1 AND encounter_id = ?2",
+            [&v1_receipt.session_id, &v1_receipt.encounter_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(legacy_after.0, legacy_before.0);
+    assert_eq!(legacy_after.1, legacy_before.1);
+    assert_eq!(legacy_after.2, 1);
+    let v2_format: i64 = connection
+        .query_row(
+            "SELECT canonical_format_version FROM raw_encounters
+             WHERE session_id = ?1 AND encounter_id = ?2",
+            [&v2_receipt.session_id, &v2_receipt.encounter_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(v2_format, 2);
+    assert!(connection
+        .execute(
+            "UPDATE raw_encounters SET canonical_json = canonical_json
+             WHERE session_id = ?1 AND encounter_id = ?2",
+            [&v1_receipt.session_id, &v1_receipt.encounter_id],
+        )
+        .is_err());
+    drop(connection);
+
+    assert_eq!(list_encounters(&store).unwrap().len(), 2);
+    let legacy = load_encounter(&store, &v1_receipt.session_id, &v1_receipt.encounter_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(canonical_bytes(&legacy).unwrap(), legacy_before.1);
+    let current = load_encounter(&store, &v2_receipt.session_id, &v2_receipt.encounter_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(serde_json::to_value(current).unwrap()["schema_version"], 2);
+    assert_eq!(
+        import_encounter(&ImportRequest::new(&v1_input, &store, Channel::Live))
+            .unwrap()
+            .outcome,
+        ImportOutcome::AlreadyPresent
+    );
+    assert_eq!(
+        import_encounter(&ImportRequest::new(&v2_input, &store, Channel::Live))
+            .unwrap()
+            .outcome,
+        ImportOutcome::AlreadyPresent
+    );
+
+    let backup = sandbox.path().join("mixed-backup.sqlite");
+    backup_store(&store, &backup).unwrap();
+    assert_eq!(list_encounters(&backup).unwrap().len(), 2);
+}
+
+#[test]
+fn capture_version_dispatch_accepts_only_v1_and_v2() {
+    assert!(parse_capture(COMPLETE.as_bytes(), Channel::Live).is_ok());
+    assert!(parse_capture(lossless_v2_lua().as_bytes(), Channel::Live).is_ok());
+
+    for version in [0, 3, u32::MAX] {
+        let mut capture = lossless_v2();
+        capture["schema_version"] = serde_json::json!(version);
+        assert!(parse_capture(capture_lua(&capture).as_bytes(), Channel::Live).is_err());
+    }
+
+    let mut v1_shape_claiming_v2 = lossless_v2();
+    for field in [
+        "raw_first_sequence",
+        "raw_last_sequence",
+        "raw_observation_count",
+        "raw_omitted_observation_count",
+        "raw_observations",
+    ] {
+        v1_shape_claiming_v2.as_object_mut().unwrap().remove(field);
+    }
+    assert!(parse_capture(capture_lua(&v1_shape_claiming_v2).as_bytes(), Channel::Live).is_err());
+
+    let v1_with_v2_reason = partial_lua().replace("clock-reset", "record-limit");
+    assert!(parse_capture(v1_with_v2_reason.as_bytes(), Channel::Live).is_err());
+}
+
+#[test]
+fn schema_errors_never_echo_raw_value_canaries() {
+    let mut capture = lossless_v2();
+    capture["raw_observations"][1]["values"][4]["value_type"] =
+        serde_json::json!("private-canary-never-log");
+    let error = parse_capture(capture_lua(&capture).as_bytes(), Channel::Live).unwrap_err();
+    let diagnostic = error.to_string();
+    assert!(diagnostic.contains("invalid encounter schema"));
+    assert!(!diagnostic.contains("private-canary-never-log"));
+    assert!(!diagnostic.contains("Future @Account"));
 }
 
 #[test]
@@ -305,6 +690,8 @@ fn production_event_ceiling_is_canonicalizable() {
                 ("frames_per_second".into(), PayloadValue::Integer(60)),
                 ("latency_ms".into(), PayloadValue::Integer(45)),
             ]),
+            source_sequence: None,
+            projection_ordinal: None,
         });
     }
     terminal.sequence = MAX_EVENTS as u64;
@@ -315,6 +702,62 @@ fn production_event_ceiling_is_canonicalizable() {
     capture.stored_event_count = MAX_EVENTS;
     let canonical = canonical_bytes(&capture).expect("the S075 event ceiling remains valid");
     assert!(canonical.len() > 10_000_000);
+}
+
+#[test]
+fn production_raw_ceiling_parses_imports_and_reloads() {
+    let mut capture = parse_capture(lossless_v2_lua().as_bytes(), Channel::Live).unwrap();
+    let mut terminal = capture.raw_observations.pop().unwrap();
+    capture.raw_observations.truncate(1);
+    capture.raw_observations.reserve(MAX_EVENTS - 2);
+    for sequence in 2..MAX_EVENTS as u64 {
+        capture.raw_observations.push(RawObservation {
+            session_id: capture.session_id.clone(),
+            encounter_id: capture.encounter_id.clone(),
+            sequence,
+            monotonic_ms: 0,
+            api_version: capture.source.api_version,
+            source_kind: RawSourceKind::Callback,
+            source_id: "EVENT_PLAYER_DEAD".into(),
+            source_code: Some(8),
+            source_version: 1,
+            argument_count: 1,
+            return_count: 0,
+            values: vec![RawValue {
+                position: 1,
+                value_type: RawValueType::Number,
+                boolean: None,
+                string: None,
+                sign: Some(1),
+                significand: Some("1".into()),
+                exponent: Some(3),
+            }],
+        });
+    }
+    terminal.sequence = MAX_EVENTS as u64;
+    capture.raw_observations.push(terminal);
+    capture.raw_last_sequence = Some(MAX_EVENTS as u64);
+    capture.raw_observation_count = Some(MAX_EVENTS);
+    capture.estimated_bytes = MAX_ESTIMATED_BYTES;
+    capture.events[1].source_sequence = Some(MAX_EVENTS as u64);
+
+    let value = serde_json::to_value(&capture).unwrap();
+    let source = capture_lua(&value);
+    let parsed = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    assert_eq!(parsed.raw_observations.len(), MAX_EVENTS);
+    let canonical = canonical_bytes(&parsed).unwrap();
+    assert!(canonical.len() > 20_000_000);
+
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("capture-v2-ceiling.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    fs::write(&input, source).unwrap();
+    let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    let loaded = load_encounter(&store, &receipt.session_id, &receipt.encounter_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(loaded.raw_observations.len(), MAX_EVENTS);
+    assert_eq!(canonical_bytes(&loaded).unwrap(), canonical);
 }
 
 #[test]

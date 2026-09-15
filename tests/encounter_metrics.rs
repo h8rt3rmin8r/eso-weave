@@ -9,6 +9,7 @@ use eso_weave::encounter::{
 
 const CAPTURE: &str =
     include_str!("../specs/077-encounter-metrics/fixtures/encounter-metrics-capture.json");
+const LOSSLESS_V2: &str = include_str!("fixtures/encounter/valid-v2-lossless.json");
 const LIVE_CATALOG: &str = "specs/070-catalog-compiler/fixtures/minimal-live.json";
 const PTS_CATALOG: &str = "specs/070-catalog-compiler/fixtures/minimal-pts.json";
 const SESSION: &str = "session-1788998400-500000";
@@ -121,6 +122,37 @@ fn baseline_projection_is_deterministic_loss_aware_and_actor_safe() {
     assert_eq!(first.catalog_join.unknown_ability_ids, vec![101, 999999]);
     assert_eq!(first.catalog_join.known_effect_ids, vec![200]);
     assert!(first.catalog_join.unknown_effect_ids.is_empty());
+}
+
+#[test]
+fn raw_only_loss_degrades_metrics_without_fabricating_normalized_ranges() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let catalog_path = catalog(sandbox.path(), LIVE_CATALOG, "catalog.sqlite");
+    let catalog = CatalogAccess::open_or_empty(&catalog_path);
+    let mut value: serde_json::Value = serde_json::from_str(LOSSLESS_V2).unwrap();
+    value["status"] = serde_json::json!("partial");
+    value["partial_reason"] = serde_json::json!("record-limit");
+    value["raw_last_sequence"] = serde_json::json!(5);
+    value["raw_observation_count"] = serde_json::json!(3);
+    value["raw_omitted_observation_count"] = serde_json::json!(2);
+    value["raw_loss"] = serde_json::json!({
+        "missing_sequence_from": 3,
+        "missing_sequence_to": 4,
+        "reason": "record-limit"
+    });
+    value["raw_observations"].as_array_mut().unwrap().remove(2);
+    value["raw_observations"][2]["sequence"] = serde_json::json!(5);
+    value["events"][1]["payload"] = serde_json::json!({
+        "complete": false,
+        "reason": "record-limit"
+    });
+    value["events"][1]["source_sequence"] = serde_json::json!(5);
+    let capture: EncounterCapture = serde_json::from_value(value).unwrap();
+
+    let projection = calculate_projection(&capture, &catalog).unwrap();
+    assert_eq!(projection.observed_dps.quality, MetricQuality::Degraded);
+    assert!(projection.observed_dps.loss_ranges.is_empty());
+    assert_eq!(projection.effective_hps.quality, MetricQuality::Degraded);
 }
 
 #[test]

@@ -24,8 +24,8 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
 | Data Addon Manager | Exact marker-owned deployment of the `EsoWeaveData` manifest, bootstrap, catalog module, and encounter module | PixelBeacon files, user SavedVariables deletion, parsing, or capture policy |
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic `EsoWeaveDataSaved.catalog` records, and restricted staging | Package lifecycle, encounter state, PixelBeacon, input generation, network transfer, direct SQLite publication, or distributable game art |
-| Encounter Capture Module | One explicitly armed Live or PTS encounter in `EsoWeaveDataSaved.encounter`, numeric public-API observations, bounded state, and declared loss | Package lifecycle, catalog state, Pixel Bus transport, personal names, upload, input generation, or gameplay mutation |
-| Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing restricted parsing, terminal validation, canonical content identity, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
+| Encounter Capture Module | One explicitly armed Live or PTS encounter in `EsoWeaveDataSaved.encounter`, source-exact selected callbacks and API reads, linked compatibility projections, bounded state, and declared loss | Package lifecycle, catalog state, Pixel Bus transport, upload, telemetry, input generation, or gameplay mutation |
+| Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing v1/v2 parsing, terminal and loss validation, canonical content identity, byte-preserving migration, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
 | Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
 | Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog reads and mutation, persistence, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
 
@@ -123,15 +123,17 @@ User-local API discovery precedes that path when explicitly requested:
 
 Encounter observation and import follow the isolated encounter-module path:
 
-`explicit one-shot arm -> clean combat boundary -> bounded anonymous events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> canonical hash -> immutable encounters.sqlite record`
+`explicit one-shot arm -> clean combat boundary -> bounded exact selected-source observations -> linked compatibility events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> canonical hash -> immutable encounters.sqlite record`
 
-The desktop importer consumes only terminal schema-v1 handoffs and requires the
-caller to name both the file and its expected Live or PTS channel. It retains
-unknown numeric IDs, accepts truthful partial captures, and rejects syntax,
-schema, privacy, ordering, count, loss, channel, and identity conflicts before
-publication. SQLite transactions make append and explicit deletion atomic; an
+The desktop importer consumes terminal schema-v1 legacy and schema-v2 lossless
+handoffs and requires the caller to name both the file and its expected Live or
+PTS channel. It retains exact selected values and unknown identifiers, accepts
+truthful partial captures, and rejects syntax, structural schema, ordering,
+count, loss, channel, and identity conflicts before publication. SQLite
+transactions make migration, append, and explicit deletion atomic; an
 update-blocking trigger keeps raw records immutable. Consistent snapshot backup
-is separate from derived metric projection.
+is separate from derived metric projection. Logs, receipts, diagnostics, and
+default UI summaries do not reproduce raw payload values.
 
 Derived encounter calculation continues through an explicit local path:
 

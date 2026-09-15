@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
@@ -13,7 +13,15 @@ fn request(address: SocketAddr, request: &[u8]) -> Vec<u8> {
         .unwrap();
     stream.write_all(request).unwrap();
     let mut response = Vec::new();
-    stream.read_to_end(&mut response).unwrap();
+    let mut chunk = [0_u8; 1024];
+    loop {
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(count) => response.extend_from_slice(&chunk[..count]),
+            Err(error) if error.kind() == ErrorKind::ConnectionReset => break,
+            Err(error) => panic!("read documentation response: {error}"),
+        }
+    }
     response
 }
 

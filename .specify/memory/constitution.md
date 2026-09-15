@@ -1,15 +1,15 @@
 <!--
 Sync Impact Report
-- Version change: 2.2.0 -> 3.0.0
-- Amendment: replace the superseded three-addon topology with exactly two
-  managed packages, PixelBeacon and ESO Weave Data. The data package keeps
-  catalog discovery and encounter capture as independently activated modules
-  behind one marker-gated lifecycle and one namespaced SavedVariables root.
-- Modified principles: II replaces separate Collector and Encounter package
-  gates with one data-addon package gate plus module-local mutation and
-  isolation rules; V redefines three addon packages as two packages with three
-  narrow internal surfaces while retaining all memory, packet, automation,
-  upload, personal-identity, and multi-account prohibitions.
+- Version change: 3.0.0 -> 4.0.0
+- Amendment: replace privacy-minimized encounter observations with a selective,
+  lossless, local raw-source contract. Every value from a deliberately selected
+  callback is retained exactly unless a declared hard limit or unsupported
+  runtime value causes explicit whole-observation loss.
+- Modified principles: II replaces the personal-name prohibition with tests for
+  explicit authority, exact selected-source retention, hard bounds, declared
+  loss, and value-free diagnostics; V permits names, identifiers, group facts,
+  and locations supplied by selected encounter sources while preserving the
+  one-shot, local-only, no-upload, no-automation boundary.
 - Added principles: none
 - Added sections: none
 - Removed sections: none
@@ -23,9 +23,9 @@ Sync Impact Report
   CLAUDE.md ................................... aligned
   docs/src/getting-started/responsible-use.md . aligned
   docs/project/build-autopilot.md ............. aligned
-- Follow-up TODOs: issue #131 verifies live Combat Metrics parity and exact
-  representative encounter storage; issue #186 owns any lossless-capture
-  change; S092 creates separate native-log platform verification.
+- Follow-up TODOs: issue #186 remains open for subscription expansion and pure
+  Rust renormalization after S094; issue #131 verifies live Combat Metrics
+  parity; issue #190 verifies native-log platforms independently.
 -->
 
 # ESO Weave Constitution
@@ -71,8 +71,9 @@ skipped, or made conditional:
   shared SavedVariables file from the desktop while ESO may own its in-memory
   contents.
 - The ESO Weave Data encounter module remains dormant until the user explicitly
-  arms one capture. It persists no personal names, uses no Pixel Bus transport,
-  and cannot drive automation.
+  arms one capture. It retains selected callback values exactly, declares every
+  bounded or unsupported-value loss, uses no Pixel Bus transport, and cannot
+  drive automation. Diagnostics and public evidence never disclose raw values.
 - Fishing degrades to disabled on SignalLost rather than firing inputs blind.
 
 Rationale: each surface, if wrong, silently breaks input handling or destroys
@@ -119,8 +120,10 @@ addon surfaces are:
   encounter-capture modules behind one managed package boundary. The catalog
   module reads documented public addon API values into bounded local
   SavedVariables for later hostile-data parsing. The encounter module records
-  one explicitly armed, bounded, privacy-minimized set of public combat API
-  observations for the same restricted local parsing boundary.
+  one explicitly armed, bounded, selectively subscribed set of public combat
+  API observations for the same restricted local parsing boundary. Once a
+  source is selected, its scalar callback values are retained exactly unless a
+  declared hard limit or unsupported runtime type omits the whole observation.
 
 The data addon MUST remain separately managed from PixelBeacon and MUST preserve
 independent module activation, state, event ownership, limits, and clearing. It
@@ -132,15 +135,21 @@ The catalog module MUST remain prohibited during combat and dormant without an
 explicit user request.
 
 The encounter module MUST remain dormant without explicit one-shot user
-authority, bounded in events and estimated bytes, independent of action
-automation, and free of uploads, names, chat, guild, location, synthesized
-input, equipment changes, item consumption, or automatic navigation. It MUST
-declare capture loss and MUST NOT present partial observations as complete.
+authority, bounded in observations and estimated bytes, independent of action
+automation, and free of uploads, telemetry, synthesized input, equipment
+changes, item consumption, or automatic navigation. Selected encounter sources
+may retain names, identifiers, chat, guild, location, and other values exactly
+as ESO supplies them. It MUST warn the user before arming, keep raw data local
+and user-owned, declare every capture loss, and MUST NOT present partial
+observations as complete. Logs, diagnostics, receipts, public fixtures, and
+default UI summaries MUST NOT reproduce raw payload values.
 
 Rationale: these two managed packages preserve three narrow local surfaces,
 PixelBeacon output, catalog discovery, and encounter capture, while making the
-product topology maintainable. Any additional in-game feature or transport
-changes what the software is and requires a future constitution amendment.
+product topology maintainable. Exact local capture supports later analysis
+without authorizing disclosure or gameplay action. Any additional in-game
+feature or transport changes what the software is and requires a future
+constitution amendment.
 
 ## Platform, Configuration, and Text Hygiene Constraints
 
@@ -206,4 +215,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 3.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-13
+**Version**: 4.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-15

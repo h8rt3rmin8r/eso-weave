@@ -2747,6 +2747,27 @@ const REQUIRED_ENCOUNTER_KINDS = new Set([
 const REQUIRED_ENCOUNTER_METRICS = new Set([
   "observed-dps", "observed-hps", "ability-damage-share", "effect-uptime", "ordered-cast-sequence",
 ]);
+const REQUIRED_ENCOUNTER_RAW_SOURCES = new Map([
+  ["EVENT_PLAYER_COMBAT_STATE", "callback"],
+  ["EVENT_PLAYER_DEACTIVATED", "callback"],
+  ["EVENT_COMBAT_EVENT", "callback"],
+  ["EVENT_EFFECT_CHANGED", "callback"],
+  ["EVENT_POWER_UPDATE", "callback"],
+  ["EVENT_ACTION_SLOT_ABILITY_USED", "callback"],
+  ["EVENT_ACTIVE_WEAPON_PAIR_CHANGED", "callback"],
+  ["EVENT_PLAYER_DEAD", "callback"],
+  ["EVENT_PLAYER_ALIVE", "callback"],
+  ["EVENT_BOSSES_CHANGED", "callback"],
+  ["EVENT_ACTIVE_QUICKSLOT_CHANGED", "callback"],
+  ["GetSlotBoundId", "api-sample"],
+  ["GetCurrentQuickslot", "api-sample"],
+  ["DoesUnitExist", "api-sample"],
+  ["GetUnitPower", "api-sample"],
+  ["GetFramerate", "api-sample"],
+  ["GetLatency", "api-sample"],
+  ["capture-finish", "lifecycle"],
+  ["clock-reset", "lifecycle"],
+]);
 
 function canonicalEncounterEvents(events) {
   return JSON.stringify([...events].sort((left, right) => left.sequence - right.sequence));
@@ -2761,7 +2782,7 @@ export function validateEncounterModelContract(contract) {
     "retention_policy", "recommendation_policy", "catalog_schema_requirements", "transport_policy",
     "event_kinds", "metrics", "parity_roadmap", "follow_up_order", "follow_up_issues", "synthetic_fixture",
   ]) if (!(field in contract)) errors.push(`encounter model requires ${field}`);
-  if (contract.schema_version !== 1) errors.push("encounter model schema_version must be 1");
+  if (![1, 2].includes(contract.schema_version)) errors.push("encounter model schema_version must be 1 or 2");
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(contract.as_of ?? "")) errors.push("encounter model as_of must be an ISO date");
 
   const snapshots = Array.isArray(contract.source_snapshots) ? contract.source_snapshots : [];
@@ -2787,20 +2808,52 @@ export function validateEncounterModelContract(contract) {
   const envelope = contract.capture_envelope ?? {};
   if (JSON.stringify(envelope.identity) !== JSON.stringify(["session_id", "sequence"])) errors.push("encounter event identity must be session_id plus sequence");
   if (envelope.duration_clock !== "monotonic_ms") errors.push("encounter durations require monotonic_ms");
-  if (envelope.actor_identity !== "encounter-local-opaque") errors.push("encounter actors must use encounter-local opaque identity");
+  const lossless = contract.schema_version === 2;
+  if (lossless) {
+    if (envelope.actor_identity !== "source-exact" || envelope.raw_authority !== "raw-observations") errors.push("lossless encounter actors and authority must use source-exact raw observations");
+  } else if (envelope.actor_identity !== "encounter-local-opaque") errors.push("encounter actors must use encounter-local opaque identity");
 
   const ordering = contract.ordering_policy ?? {};
   if (ordering.authority !== "sequence" || ordering.reject_duplicates !== true || ordering.reject_undeclared_gaps !== true || ordering.reject_backward_monotonic_time !== true) {
     errors.push("encounter ordering must reject duplicate, undeclared-gap, and backward-time input");
   }
   if (contract.loss_policy?.marker !== "discontinuity" || contract.loss_policy?.degrade_spanning_metrics !== true || contract.loss_policy?.expose_ranges !== true) {
-    errors.push("encounter loss must use exposed discontinuities and degrade spanning metrics");
+    errors.push("encounter loss ranges must use exposed discontinuities and degrade spanning metrics");
+  }
+  if (lossless) {
+    const raw = contract.raw_authority ?? {};
+    if (raw.stream !== "raw-observations" || raw.schema_version !== 2 || raw.source_sequence_required !== true || raw.source_version_required !== true) errors.push("encounter raw observations require schema, source sequence, and source version authority");
+    if (raw.preserve_argument_order !== true) errors.push("encounter raw authority must preserve argument order");
+    if (raw.preserve_nil_positions !== true) errors.push("encounter raw authority must preserve nil positions");
+    if (raw.retain_unknown_scalar_values !== true) errors.push("encounter raw authority must retain unknown scalar values");
+    if (raw.retain_future_scalar_arguments !== true) errors.push("encounter raw authority must retain future scalar arguments");
+    if (raw.max_values_per_observation !== 256) errors.push("encounter raw authority must bound each observation at 256 tagged values");
+    if (raw.normalization_inputs !== "callbacks-and-api-samples" || raw.number_encoding !== "finite-binary-exact") errors.push("encounter normalization requires exact callback and API-sample values");
+    for (const type of ["nil", "boolean", "number", "string"]) if (!raw.tagged_value_types?.includes(type)) errors.push(`encounter raw authority is missing tagged value type ${type}`);
+    const selected = new Map((Array.isArray(contract.selected_sources) ? contract.selected_sources : []).map((source) => [source?.id, source]));
+    for (const [id, kind] of REQUIRED_ENCOUNTER_RAW_SOURCES) {
+      const source = selected.get(id);
+      if (!source) errors.push(`encounter model is missing selected source ${id}`);
+      else if (source.kind !== kind || source.source_version !== 1 || source.retain_all_scalar_values !== true) errors.push(`${id} must retain all scalar values with its reviewed source kind and version`);
+    }
+    const loss = contract.loss_policy ?? {};
+    if (loss.raw_marker !== "raw-loss" || loss.whole_observation !== true) errors.push("raw loss must omit and declare the whole observation");
+    if (loss.silent_drop !== false) errors.push("raw loss must prohibit silent drop behavior");
+    if (loss.terminal_reserve !== true) errors.push("raw loss must preserve terminal reserve");
+    if (loss.temporal_discontinuity !== "clock-reset") errors.push("raw loss must identify clock-reset temporal discontinuity");
+    for (const reason of ["record-limit", "byte-limit", "string-limit", "unsupported-value", "callback-failed"]) if (!loss.reasons?.includes(reason)) errors.push(`raw loss reasons must include ${reason}`);
   }
 
   const privacy = contract.privacy_policy ?? {};
   if (privacy.local_only_default !== true || privacy.upload_default !== false) errors.push("encounter data must be local-only and never uploaded by default");
-  for (const omitted of ["account-name", "character-name", "chat", "guild", "location"]) {
-    if (!privacy.omitted_by_default?.includes(omitted)) errors.push(`encounter privacy must omit ${omitted} by default`);
+  if (lossless) {
+    if (privacy.selected_values !== "retain-exactly") errors.push("encounter selected values must retain exactly");
+    if (privacy.diagnostics !== "value-free") errors.push("encounter diagnostics must remain value-free");
+    if (privacy.public_fixtures !== "synthetic-only") errors.push("encounter public fixtures must remain synthetic");
+  } else {
+    for (const omitted of ["account-name", "character-name", "chat", "guild", "location"]) {
+      if (!privacy.omitted_by_default?.includes(omitted)) errors.push(`encounter privacy must omit ${omitted} by default`);
+    }
   }
 
   const integrity = contract.integrity_policy ?? {};
@@ -2813,7 +2866,8 @@ export function validateEncounterModelContract(contract) {
   if (transport.pixel_bus_bulk_transport !== false) errors.push("Pixel Bus cannot be the bulk encounter transport");
   if (transport.automation_independent !== true) errors.push("encounter observation and calculation must remain independent of automation");
   if (transport.future_transport !== "bounded-saved-variables-import") errors.push("future encounter transport must use a bounded SavedVariables import");
-  if (contract.actor_policy?.identity !== "encounter-local-opaque" || !contract.actor_policy?.roles?.includes("pet") || !contract.actor_policy?.pet_owner_relationship || !contract.actor_policy?.ability_aliases) errors.push("encounter actor policy must model opaque actors, pets, owners, and aliases");
+  const actorIdentity = lossless ? "source-exact" : "encounter-local-opaque";
+  if (contract.actor_policy?.identity !== actorIdentity || !contract.actor_policy?.roles?.includes("pet") || !contract.actor_policy?.pet_owner_relationship || !contract.actor_policy?.ability_aliases) errors.push("encounter actor policy must model the selected identity, pets, owners, and aliases");
   if (contract.build_snapshot_policy?.retention !== "derived-versioned" || contract.build_snapshot_policy?.catalog_version_required !== true || contract.build_snapshot_policy?.consent_required_for_personal_identity !== true) errors.push("build snapshots must be versioned, catalog-bound, and consent personal identity");
   const retention = contract.retention_policy ?? {};
   for (const field of ["export", "delete", "backup", "corruption_recovery", "compression"]) if (!retention[field]) errors.push(`encounter retention policy requires ${field}`);
@@ -2878,7 +2932,8 @@ export function validateEncounterFixture(fixture) {
       scanPrivateFields(nested, location);
     }
   };
-  scanPrivateFields(fixture.envelope, "encounter envelope");
+  const scanPrivate = fixture.envelope.schema_version !== 2;
+  if (scanPrivate) scanPrivateFields(fixture.envelope, "encounter envelope");
   for (const event of events) {
     if (!Number.isInteger(event.sequence) || seen.has(event.sequence)) errors.push(`duplicate sequence ${event.sequence}`);
     seen.add(event.sequence);
@@ -2896,7 +2951,7 @@ export function validateEncounterFixture(fixture) {
     }
     if (!previous && event.kind === "discontinuity") errors.push(`discontinuity ${event.sequence} cannot be the first event`);
     if (event.kind === "discontinuity" && (typeof event.payload?.reason !== "string" || event.payload.reason.trim() === "")) errors.push(`discontinuity ${event.sequence} requires a non-empty reason`);
-    scanPrivateFields(event, `event ${event.sequence}`);
+    if (scanPrivate) scanPrivateFields(event, `event ${event.sequence}`);
     previous = event;
   }
   const kinds = new Set(events.map((event) => event.kind));

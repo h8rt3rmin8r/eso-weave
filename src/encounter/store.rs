@@ -16,14 +16,12 @@ use super::{
     STORE_SCHEMA_VERSION,
 };
 
-const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+const V1_META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version = 1),
     canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 1)
 )"#;
-const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
-VALUES (1, 1, 1)"#;
-const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
+const V1_RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
     source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
     session_id TEXT NOT NULL,
@@ -41,6 +39,34 @@ const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     canonical_json BLOB NOT NULL,
     UNIQUE (session_id, encounter_id)
 )"#;
+const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+    canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+)"#;
+const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
+VALUES (1, 2, 2)"#;
+const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
+    content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
+    source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+    session_id TEXT NOT NULL,
+    encounter_id TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+    capture_schema_version INTEGER NOT NULL CHECK (capture_schema_version IN (1, 2)),
+    addon_version INTEGER NOT NULL CHECK (addon_version IN (1, 2)),
+    canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version IN (1, 2)),
+    status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    first_sequence INTEGER NOT NULL,
+    last_sequence INTEGER NOT NULL,
+    stored_event_count INTEGER NOT NULL,
+    omitted_event_count INTEGER NOT NULL,
+    canonical_json BLOB NOT NULL,
+    UNIQUE (session_id, encounter_id),
+    CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
+           (capture_schema_version = 2 AND canonical_format_version = 2))
+)"#;
 const IMMUTABILITY_TRIGGER_SQL: &str = r#"CREATE TRIGGER raw_encounters_no_update
 BEFORE UPDATE ON raw_encounters
 BEGIN
@@ -55,6 +81,7 @@ struct StoredRecord {
     channel: String,
     capture_schema_version: i64,
     addon_version: i64,
+    canonical_format_version: i64,
     status: String,
     started_at: String,
     finished_at: String,
@@ -88,10 +115,11 @@ pub(crate) fn append(
             transaction.execute(
                 "INSERT INTO raw_encounters (
                     content_sha256, source_sha256, session_id, encounter_id, channel,
-                    capture_schema_version, addon_version, status, started_at, finished_at,
+                    capture_schema_version, addon_version, canonical_format_version,
+                    status, started_at, finished_at,
                     first_sequence, last_sequence, stored_event_count, omitted_event_count,
                     canonical_json
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     content_sha256,
                     source_sha256,
@@ -100,6 +128,7 @@ pub(crate) fn append(
                     capture.channel.as_str(),
                     capture.schema_version,
                     capture.addon_version,
+                    canonical_format_for(capture.schema_version)?,
                     capture.status.as_str(),
                     capture.started_at,
                     capture.finished_at,
@@ -262,7 +291,8 @@ pub fn backup_store(
     ensure_distinct_paths(store_path, destination)?;
     reject_link_like_file(destination)?;
     let connection = open_store(store_path, false, false)?;
-    validate_records(&connection)?;
+    let schema_version: u32 =
+        connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     let parent = destination
         .parent()
         .filter(|value| !value.as_os_str().is_empty())
@@ -274,13 +304,13 @@ pub fn backup_store(
         .into_temp_path();
     connection.backup("main", &temporary, None)?;
     let candidate = open_store(&temporary, false, false)?;
-    validate_records(&candidate)?;
+    validate_store_contents(&candidate)?;
     drop(candidate);
     File::options().write(true).open(&temporary)?.sync_all()?;
     let (byte_length, digest) = hash_file(&temporary)?;
     crate::atomic_file::persist(temporary, destination)?;
     Ok(BackupReceipt {
-        schema_version: STORE_SCHEMA_VERSION,
+        schema_version,
         byte_length,
         sha256: digest,
     })
@@ -318,7 +348,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
             return invalid("encounter store has an unrecognized schema");
         }
         let schema = format!(
-            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 1;"
+            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 2;"
         );
         connection.execute_batch("BEGIN IMMEDIATE;")?;
         if let Err(error) = connection
@@ -328,12 +358,63 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
             let _ = connection.execute_batch("ROLLBACK;");
             return Err(error.into());
         }
-    } else if version != STORE_SCHEMA_VERSION {
+        validate_schema(&connection, STORE_SCHEMA_VERSION)?;
+        validate_records(&connection, STORE_SCHEMA_VERSION)?;
+    } else if version == 1 {
+        validate_schema(&connection, 1)?;
+        validate_records(&connection, 1)?;
+        if write {
+            migrate_v1_to_v2(&connection)?;
+            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
+            validate_records(&connection, STORE_SCHEMA_VERSION)?;
+        }
+    } else if version == STORE_SCHEMA_VERSION {
+        validate_schema(&connection, STORE_SCHEMA_VERSION)?;
+        validate_records(&connection, STORE_SCHEMA_VERSION)?;
+    } else {
         return invalid(format!("unsupported encounter store schema {version}"));
     }
-    validate_schema(&connection)?;
-    validate_records(&connection)?;
     Ok(connection)
+}
+
+fn validate_store_contents(connection: &Connection) -> Result<(), EncounterError> {
+    let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if !matches!(version, 1 | STORE_SCHEMA_VERSION) {
+        return invalid(format!("unsupported encounter store schema {version}"));
+    }
+    validate_schema(connection, version)?;
+    validate_records(connection, version)
+}
+
+fn migrate_v1_to_v2(connection: &Connection) -> Result<(), EncounterError> {
+    let migration = format!(
+        "BEGIN IMMEDIATE;
+         DROP TRIGGER raw_encounters_no_update;
+         ALTER TABLE raw_encounters RENAME TO raw_encounters_v1;
+         DROP TABLE encounter_store_meta;
+         {META_TABLE_SQL};
+         {META_INSERT_SQL};
+         {RAW_TABLE_SQL};
+         INSERT INTO raw_encounters (
+             content_sha256, source_sha256, session_id, encounter_id, channel,
+             capture_schema_version, addon_version, canonical_format_version,
+             status, started_at, finished_at, first_sequence, last_sequence,
+             stored_event_count, omitted_event_count, canonical_json)
+         SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
+             capture_schema_version, addon_version, 1, status, started_at,
+             finished_at, first_sequence, last_sequence, stored_event_count,
+             omitted_event_count, canonical_json
+         FROM raw_encounters_v1;
+         DROP TABLE raw_encounters_v1;
+         {IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 2;
+         COMMIT;"
+    );
+    if let Err(error) = connection.execute_batch(&migration) {
+        let _ = connection.execute_batch("ROLLBACK;");
+        return Err(error.into());
+    }
+    Ok(())
 }
 
 fn validate_integrity(connection: &Connection) -> Result<(), EncounterError> {
@@ -353,7 +434,7 @@ fn schema_is_empty(connection: &Connection) -> Result<bool, EncounterError> {
     Ok(count == 0)
 }
 
-fn validate_schema(connection: &Connection) -> Result<(), EncounterError> {
+fn validate_schema(connection: &Connection, version: u32) -> Result<(), EncounterError> {
     let mut statement = connection.prepare(
         "SELECT type, name, tbl_name, sql
          FROM sqlite_schema
@@ -370,14 +451,19 @@ fn validate_schema(connection: &Connection) -> Result<(), EncounterError> {
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
+    let (meta_sql, raw_sql) = match version {
+        1 => (V1_META_TABLE_SQL, V1_RAW_TABLE_SQL),
+        2 => (META_TABLE_SQL, RAW_TABLE_SQL),
+        _ => return invalid("unsupported encounter store schema"),
+    };
     let expected = [
         (
             "table",
             "encounter_store_meta",
             "encounter_store_meta",
-            META_TABLE_SQL,
+            meta_sql,
         ),
-        ("table", "raw_encounters", "raw_encounters", RAW_TABLE_SQL),
+        ("table", "raw_encounters", "raw_encounters", raw_sql),
         (
             "trigger",
             "raw_encounters_no_update",
@@ -393,7 +479,9 @@ fn validate_schema(connection: &Connection) -> Result<(), EncounterError> {
                 && normalize_sql(&actual.3) == normalize_sql(expected.3)
         });
     if !schema_matches {
-        return invalid("encounter store schema objects do not match schema version 1");
+        return invalid(format!(
+            "encounter store schema objects do not match schema version {version}"
+        ));
     }
 
     let meta: Option<(u32, u32)> = connection
@@ -403,7 +491,12 @@ fn validate_schema(connection: &Connection) -> Result<(), EncounterError> {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
-    if meta != Some((STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION)) {
+    let expected_meta = match version {
+        1 => (1, 1),
+        2 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
+        _ => unreachable!(),
+    };
+    if meta != Some(expected_meta) {
         return invalid("encounter store metadata does not match its schema");
     }
     Ok(())
@@ -413,14 +506,21 @@ fn normalize_sql(sql: &str) -> String {
     sql.split_ascii_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn validate_records(connection: &Connection) -> Result<(), EncounterError> {
-    let mut statement = connection.prepare(
+fn validate_records(connection: &Connection, version: u32) -> Result<(), EncounterError> {
+    let query = if version == 1 {
         "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
-                capture_schema_version, addon_version, status, started_at, finished_at,
+                capture_schema_version, addon_version, 1, status, started_at, finished_at,
                 first_sequence, last_sequence, stored_event_count, omitted_event_count,
                 canonical_json
-         FROM raw_encounters",
-    )?;
+         FROM raw_encounters"
+    } else {
+        "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
+                capture_schema_version, addon_version, canonical_format_version,
+                status, started_at, finished_at, first_sequence, last_sequence,
+                stored_event_count, omitted_event_count, canonical_json
+         FROM raw_encounters"
+    };
+    let mut statement = connection.prepare(query)?;
     let rows = statement.query_map([], |row| {
         Ok(StoredRecord {
             content_sha256: row.get(0)?,
@@ -430,14 +530,15 @@ fn validate_records(connection: &Connection) -> Result<(), EncounterError> {
             channel: row.get(4)?,
             capture_schema_version: row.get(5)?,
             addon_version: row.get(6)?,
-            status: row.get(7)?,
-            started_at: row.get(8)?,
-            finished_at: row.get(9)?,
-            first_sequence: row.get(10)?,
-            last_sequence: row.get(11)?,
-            stored_event_count: row.get(12)?,
-            omitted_event_count: row.get(13)?,
-            canonical_json: row.get(14)?,
+            canonical_format_version: row.get(7)?,
+            status: row.get(8)?,
+            started_at: row.get(9)?,
+            finished_at: row.get(10)?,
+            first_sequence: row.get(11)?,
+            last_sequence: row.get(12)?,
+            stored_event_count: row.get(13)?,
+            omitted_event_count: row.get(14)?,
+            canonical_json: row.get(15)?,
         })
     })?;
     for row in rows {
@@ -461,6 +562,8 @@ fn validate_records(connection: &Connection) -> Result<(), EncounterError> {
             && stored.channel == capture.channel.as_str()
             && stored.capture_schema_version == i64::from(capture.schema_version)
             && stored.addon_version == i64::from(capture.addon_version)
+            && stored.canonical_format_version
+                == i64::from(canonical_format_for(capture.schema_version)?)
             && stored.status == capture.status.as_str()
             && stored.started_at == capture.started_at
             && stored.finished_at == capture.finished_at
@@ -495,6 +598,14 @@ fn parse_status(value: &str) -> Result<CaptureStatus, EncounterError> {
         "complete" => Ok(CaptureStatus::Complete),
         "partial" => Ok(CaptureStatus::Partial),
         _ => invalid("encounter store contains an invalid status"),
+    }
+}
+
+fn canonical_format_for(capture_schema_version: u32) -> Result<u32, EncounterError> {
+    match capture_schema_version {
+        1 => Ok(1),
+        2 => Ok(CANONICAL_FORMAT_VERSION),
+        _ => invalid("unsupported encounter capture version in store"),
     }
 }
 
