@@ -15,7 +15,8 @@ Sequence:
 4. S095 implements child issue #200 as the final #186 tranche. It independently
    replays complete current captures, rejects divergent projections, preserves
    explicit partial and legacy outcomes, and closes the reviewed include and
-   exclude decision surface without adding a source family.
+   exclude decision surface without adding a source family. The official review
+   surface is [pull request #201](https://github.com/h8rt3rmin8r/eso-weave/pull/201).
 5. Issue #183 follows sufficient #186 progress and ingestion qualification to implement
    approved encounter operating modes without assuming an unproven transport.
 6. Issue #190 remains independent Release verification and gates native-log

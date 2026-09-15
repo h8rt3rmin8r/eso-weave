@@ -40,7 +40,7 @@
 
 - [x] T022 Run independent code, security, and domain reviews and resolve all findings
 - [x] T023 Run full local merge gates plus UTF-8/BOM/mojibake and diff checks
-- [ ] T024 Commit with traceability trailer, push, and open the official S095 PR
+- [x] T024 Commit with traceability trailer, push, and open the official S095 PR
 - [ ] T025 Move issue and PR project items to PR review and wait for hosted CI/reviews
 - [ ] T026 Resolve every first-round review and request at most one second `@Codex` review
 - [ ] T027 Resolve second-round findings, verify green CI and zero open threads, then request operator merge ritual
