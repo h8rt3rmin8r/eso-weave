@@ -60,3 +60,10 @@ sequences, differentially verifies nil and non-numeric actors, exercises every
 compared projection component plus omission/insertion/order, documents the
 actual profile, and pins API 101051 with its machine-readable duel signature
 delta.
+
+## Hosted Gate
+
+Pull request #201 completed Windows and Ubuntu CI, documentation validation,
+dependency review, and CodeQL successfully. The automatic Codex review and the
+single authorized manual second round both completed without findings. No
+review thread remains open, and no third review round was requested.
