@@ -1,6 +1,6 @@
 -- PixelBeacon: a minimal ESO screen-signal beacon managed by ESO Weave.
 --
--- It renders a three-cell negotiated layout header followed by twenty-nine square
+-- It renders a three-cell negotiated layout header followed by forty square
 -- signal blocks (BLOCK_PX physical pixels on a side, default 16; the companion
 -- sets this value on deploy) anchored to the top-left of the client area. Signals
 -- encode load status (B0), fishing state (B1), server latency
@@ -12,7 +12,8 @@
 -- cooldown (B16), item identity (B17 to B19), explicit classification (B20),
 -- the player's life state (B21), world-transition state (B22), and bounded
 -- roll-dodge state (B23), bounded travel state (B24), and exact Ultimate current,
--- maximum, front cost, and back cost (B25 to B28).
+-- maximum, front cost, and back cost (B25 to B28), followed by read-only native
+-- binding evidence for eleven gameplay actions (B29 to B39).
 --
 -- It has no settings, no user interface beyond the blocks, no external libraries,
 -- and no saved variables. Values follow the ESO Weave master specification
@@ -23,7 +24,7 @@
 -- PixelBeacon alone chooses how many complete physical blocks fit the live client
 -- width and publishes that 16-bit count in the invariant header. The companion
 -- validates and consumes this decision before locating any signal. All current
--- cells remain on one row at every supported client width and block size.
+-- cells wrap downward when they do not fit one physical row.
 --
 -- Fishing detection is poll-authoritative, mirroring the game's own reticle: a
 -- periodic tick samples the interaction type for the waiting state, and the
@@ -35,12 +36,12 @@ local BLOCK_PX = 16
 -- The block count, stated once. The root extent and every block placement derive
 -- from it. The companion states the same number once as pixelbus::NUM_BLOCKS, and
 -- its test suite parses this line to assert the two agree.
-local NUM_BLOCKS = 29
--- Version-5 negotiated geometry header, shared byte for byte with the companion.
+local NUM_BLOCKS = 40
+-- Version-6 negotiated geometry header, shared byte for byte with the companion.
 -- H0 is magic plus version. H1 and H2 carry the high and low column bytes with
 -- distinct markers and complement checksums. Signal B0 begins at logical cell 3.
-local LAYOUT_PROTOCOL_VERSION = 5
-local LAYOUT_VERSION_CODE = 0xA0
+local LAYOUT_PROTOCOL_VERSION = 6
+local LAYOUT_VERSION_CODE = 0xC0
 local LAYOUT_HEADER_BLOCKS = 3
 local LAYOUT_MAGIC_R = 0x45
 local LAYOUT_MAGIC_G = 0x53
@@ -342,6 +343,219 @@ local layoutScale = nil
 local function channel(value)
     return value / 255
 end
+
+-- B29 to B39 Native bindings ------------------------------------------------
+
+blocks.nativeModel = (function()
+local nativeBindings = {
+    unavailable = 0x00,
+    unbound = 0x01,
+    conflicting = 0x02,
+    unsupported = 0x03,
+    nibbleStep = 17,
+    facts = {},
+}
+
+-- Fixed order shared with input::native::NativeAction.
+nativeBindings.actions = {
+    { name = "ACTION_BUTTON_3", suffix = "Skill1" },
+    { name = "ACTION_BUTTON_4", suffix = "Skill2" },
+    { name = "ACTION_BUTTON_5", suffix = "Skill3" },
+    { name = "ACTION_BUTTON_6", suffix = "Skill4" },
+    { name = "ACTION_BUTTON_7", suffix = "Skill5" },
+    { name = "ACTION_BUTTON_8", suffix = "Ultimate" },
+    { name = "USE_SYNERGY", suffix = "Synergy" },
+    { name = "SPECIAL_MOVE_ATTACK", suffix = "Attack" },
+    { name = "SPECIAL_MOVE_BLOCK", suffix = "Block" },
+    { name = "GAME_CAMERA_INTERACT", suffix = "Interact" },
+    { name = "ACTION_BUTTON_9", suffix = "Quickslot" },
+}
+
+-- ESO key codes are runtime values, not a portable wire contract. Map them to
+-- the stable codes owned by the companion. Modifiers are deliberately absent as
+-- primaries, and every unlisted key is reported as unsupported.
+nativeBindings.controls = {
+    [KEY_0] = 16, [KEY_1] = 17, [KEY_2] = 18, [KEY_3] = 19, [KEY_4] = 20,
+    [KEY_5] = 21, [KEY_6] = 22, [KEY_7] = 23, [KEY_8] = 24, [KEY_9] = 25,
+    [KEY_A] = 26, [KEY_B] = 27, [KEY_C] = 28, [KEY_D] = 29, [KEY_E] = 30,
+    [KEY_F] = 31, [KEY_G] = 32, [KEY_H] = 33, [KEY_I] = 34, [KEY_J] = 35,
+    [KEY_K] = 36, [KEY_L] = 37, [KEY_M] = 38, [KEY_N] = 39, [KEY_O] = 40,
+    [KEY_P] = 41, [KEY_Q] = 42, [KEY_R] = 43, [KEY_S] = 44, [KEY_T] = 45,
+    [KEY_U] = 46, [KEY_V] = 47, [KEY_W] = 48, [KEY_X] = 49, [KEY_Y] = 50,
+    [KEY_Z] = 51,
+    [KEY_F1] = 52, [KEY_F2] = 53, [KEY_F3] = 54, [KEY_F4] = 55,
+    [KEY_F5] = 56, [KEY_F6] = 57, [KEY_F7] = 58, [KEY_F8] = 59,
+    [KEY_F9] = 60, [KEY_F10] = 61, [KEY_F11] = 62, [KEY_F12] = 63,
+    [KEY_F13] = 64, [KEY_F14] = 65, [KEY_F15] = 66, [KEY_F16] = 67,
+    [KEY_F17] = 68, [KEY_F18] = 69, [KEY_F19] = 70, [KEY_F20] = 71,
+    [KEY_F21] = 72, [KEY_F22] = 73, [KEY_F23] = 74, [KEY_F24] = 75,
+    [KEY_BACKSPACE] = 76, [KEY_CAPSLOCK] = 77, [KEY_DELETE] = 78,
+    [KEY_DOWNARROW] = 79, [KEY_END] = 80, [KEY_ENTER] = 81,
+    [KEY_ESCAPE] = 82, [KEY_HOME] = 83, [KEY_INSERT] = 84,
+    [KEY_LEFTARROW] = 85, [KEY_NUMLOCK] = 86,
+    [KEY_NUMPAD0] = 87, [KEY_NUMPAD1] = 88, [KEY_NUMPAD2] = 89,
+    [KEY_NUMPAD3] = 90, [KEY_NUMPAD4] = 91, [KEY_NUMPAD5] = 92,
+    [KEY_NUMPAD6] = 93, [KEY_NUMPAD7] = 94, [KEY_NUMPAD8] = 95,
+    [KEY_NUMPAD9] = 96, [KEY_NUMPAD_ADD] = 97, [KEY_NUMPAD_DOT] = 98,
+    [KEY_NUMPAD_ENTER] = 99, [KEY_NUMPAD_MINUS] = 100,
+    [KEY_NUMPAD_SLASH] = 101, [KEY_NUMPAD_STAR] = 102,
+    [KEY_PAGEDOWN] = 103, [KEY_PAGEUP] = 104, [KEY_PAUSE] = 105,
+    [KEY_PRINTSCREEN] = 106, [KEY_RIGHTARROW] = 107,
+    [KEY_SCROLLLOCK] = 108, [KEY_SPACEBAR] = 109, [KEY_TAB] = 110,
+    [KEY_UPARROW] = 111, [KEY_OEM_102_GERMAN_LESS_THAN] = 112,
+    [KEY_OEM_1_SEMICOLON] = 113, [KEY_OEM_2_FORWARD_SLASH] = 114,
+    [KEY_OEM_3_TICK] = 115, [KEY_OEM_4_LEFT_SQUARE_BRACKET] = 116,
+    [KEY_OEM_5_BACK_SLASH] = 117, [KEY_OEM_6_RIGHT_SQUARE_BRACKET] = 118,
+    [KEY_OEM_7_SINGLE_QUOTE] = 119, [KEY_OEM_8_BACK_TICK] = 120,
+    [KEY_OEM_COMMA] = 121, [KEY_OEM_MINUS] = 122,
+    [KEY_OEM_PERIOD] = 123, [KEY_OEM_PLUS] = 124,
+    [KEY_LWINDOWS] = 125, [KEY_RWINDOWS] = 126,
+    [KEY_MOUSE_LEFT] = 200, [KEY_MOUSE_RIGHT] = 201,
+    [KEY_MOUSE_MIDDLE] = 202, [KEY_MOUSE_4] = 203, [KEY_MOUSE_5] = 204,
+    [KEY_MOUSEWHEEL_UP] = 205, [KEY_MOUSEWHEEL_DOWN] = 206,
+}
+
+nativeBindings.modifierBits = {
+    [KEY_SHIFT] = 1,
+    [KEY_CTRL] = 2,
+    [KEY_ALT] = 4,
+    [KEY_COMMAND] = 8,
+}
+
+function nativeBindings.signature(primary, modifiers)
+    table.sort(modifiers)
+    local parts = { tostring(primary) }
+    for _, modifier in ipairs(modifiers) do
+        parts[#parts + 1] = tostring(modifier)
+    end
+    return table.concat(parts, ":")
+end
+
+function nativeBindings.portableModifierBits(modifiers)
+    local bits = 0
+    local seen = {}
+    for _, modifier in ipairs(modifiers) do
+        local bit = nativeBindings.modifierBits[modifier]
+        if bit == nil or seen[modifier] then
+            return nil
+        end
+        seen[modifier] = true
+        bits = bits + bit
+    end
+    return bits
+end
+
+function nativeBindings.discover(actionName)
+    if type(GetActionIndicesFromName) ~= "function"
+        or type(GetMaxBindingsPerAction) ~= "function"
+        or type(GetActionBindingInfo) ~= "function" then
+        return { code = nativeBindings.unavailable, modifiers = 0 }
+    end
+    local layerIndex, categoryIndex, actionIndex = GetActionIndicesFromName(actionName)
+    local maxBindings = GetMaxBindingsPerAction()
+    if layerIndex == nil or categoryIndex == nil or actionIndex == nil
+        or type(maxBindings) ~= "number" or maxBindings < 0 then
+        return { code = nativeBindings.unavailable, modifiers = 0 }
+    end
+
+    local distinct = {}
+    local count = 0
+    local candidate = nil
+    for bindingIndex = 1, maxBindings do
+        local primary, mod1, mod2, mod3, mod4 = GetActionBindingInfo(
+            layerIndex, categoryIndex, actionIndex, bindingIndex
+        )
+        if primary ~= nil and primary ~= KEY_INVALID then
+            local modifiers = {}
+            for _, modifier in ipairs({
+                mod1 or KEY_INVALID,
+                mod2 or KEY_INVALID,
+                mod3 or KEY_INVALID,
+                mod4 or KEY_INVALID,
+            }) do
+                if modifier ~= nil and modifier ~= KEY_INVALID then
+                    modifiers[#modifiers + 1] = modifier
+                end
+            end
+            local signature = nativeBindings.signature(primary, modifiers)
+            if not distinct[signature] then
+                distinct[signature] = true
+                count = count + 1
+                local portable = nativeBindings.controls[primary]
+                local modifierBits = nativeBindings.portableModifierBits(modifiers)
+                local unsupportedKind = type(IsKeyCodeGamepadKey) == "function"
+                    and IsKeyCodeGamepadKey(primary)
+                local unsupportedChord = type(IsKeyCodeChordKey) == "function"
+                    and IsKeyCodeChordKey(primary)
+                local unsupportedHold = type(IsKeyCodeHoldKey) == "function"
+                    and IsKeyCodeHoldKey(primary)
+                if portable == nil or modifierBits == nil
+                    or nativeBindings.modifierBits[primary] ~= nil
+                    or unsupportedKind or unsupportedChord or unsupportedHold then
+                    candidate = { code = nativeBindings.unsupported, modifiers = 0 }
+                else
+                    candidate = { code = portable, modifiers = modifierBits }
+                end
+            end
+        end
+    end
+    if count == 0 then
+        return { code = nativeBindings.unbound, modifiers = 0 }
+    elseif count > 1 then
+        return { code = nativeBindings.conflicting, modifiers = 0 }
+    end
+    return candidate
+end
+
+function nativeBindings.update()
+    local changed = false
+    local nextFacts = {}
+    for index, action in ipairs(nativeBindings.actions) do
+        local fact = nativeBindings.discover(action.name)
+        nextFacts[index] = fact
+        local previous = nativeBindings.facts[index]
+        if previous == nil or previous.code ~= fact.code
+            or previous.modifiers ~= fact.modifiers then
+            changed = true
+        end
+    end
+    nativeBindings.facts = nextFacts
+    return changed
+end
+
+function nativeBindings.cell(actionIndex, fact)
+    local red = math.floor(fact.code / 16) * nativeBindings.nibbleStep
+    local green = (fact.code % 16) * nativeBindings.nibbleStep
+    local check = (((actionIndex - 1) * 5) + (fact.code * 3) + 7) % 16
+    local blue = (fact.modifiers * 16) + check
+    return red, green, blue
+end
+
+function nativeBindings.render()
+    for index, block in ipairs(blocks.nativeBindings) do
+        if blocks.status:IsHidden() then
+            block:SetHidden(true)
+        else
+            local fact = nativeBindings.facts[index]
+                or { code = nativeBindings.unavailable, modifiers = 0 }
+            local red, green, blue = nativeBindings.cell(index, fact)
+            block:SetCenterColor(channel(red), channel(green), channel(blue), 1)
+            block:SetHidden(false)
+        end
+    end
+end
+
+function nativeBindings.onChanged()
+    nativeBindings.update()
+    nativeBindings.render()
+end
+
+if type(ESO_WEAVE_TEST_EXPORTS) == "table" then
+    ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding = nativeBindings.discover
+    ESO_WEAVE_TEST_EXPORTS.bindingCell = nativeBindings.cell
+end
+return nativeBindings
+end)()
 
 -- Converts a physical-pixel measurement to UI units so block geometry is constant
 -- in physical pixels regardless of the user's UI scale.
@@ -1915,6 +2129,10 @@ local function buildBlocks()
     blocks.ultimateMax = createBlock("UltimateMax")
     blocks.ultimateFrontCost = createBlock("UltimateFrontCost")
     blocks.ultimateBackCost = createBlock("UltimateBackCost")
+    blocks.nativeBindings = {}
+    for index, action in ipairs(blocks.nativeModel.actions) do
+        blocks.nativeBindings[index] = createBlock("Binding" .. action.suffix)
+    end
 
     -- Payload order is the wire contract. The layout owns positions, and adding a
     -- signal requires adding exactly one entry here beside its block creation.
@@ -1949,6 +2167,9 @@ local function buildBlocks()
         blocks.ultimateFrontCost,
         blocks.ultimateBackCost,
     }
+    for _, bindingBlock in ipairs(blocks.nativeBindings) do
+        payloadBlocks[#payloadBlocks + 1] = bindingBlock
+    end
     refreshLayout(true)
 
     renderStatus()
@@ -1976,6 +2197,8 @@ local function buildBlocks()
     renderWorldState()
     renderRollDodgeState()
     renderTravelState()
+    blocks.nativeModel.update()
+    blocks.nativeModel.render()
 end
 
 local function onLatencyTick()
@@ -2016,6 +2239,9 @@ local function onLatencyTick()
     if updateUltimate() then
         renderUltimate()
     end
+    if blocks.nativeModel.update() then
+        blocks.nativeModel.render()
+    end
 end
 
 local function onScreenResized()
@@ -2035,6 +2261,21 @@ local function onAddOnLoaded(_, name)
     em:RegisterForEvent(ADDON_NAME .. "Resize", EVENT_SCREEN_RESIZED, onScreenResized)
     em:RegisterForEvent(ADDON_NAME .. "Inv", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, onInventorySlotUpdate)
     em:RegisterForEvent(ADDON_NAME .. "Chatter", EVENT_CHATTER_END, onChatterEnd)
+    em:RegisterForEvent(
+        ADDON_NAME .. "BindingsLoaded",
+        EVENT_KEYBINDINGS_LOADED,
+        blocks.nativeModel.onChanged
+    )
+    em:RegisterForEvent(
+        ADDON_NAME .. "BindingSet",
+        EVENT_KEYBINDING_SET,
+        blocks.nativeModel.onChanged
+    )
+    em:RegisterForEvent(
+        ADDON_NAME .. "BindingCleared",
+        EVENT_KEYBINDING_CLEARED,
+        blocks.nativeModel.onChanged
+    )
 
     -- Weapon-bar tracking: react immediately to a real bar swap, and re-baseline
     -- after each loading screen (the pair-changed event may not fire for the

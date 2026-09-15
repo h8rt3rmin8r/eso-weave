@@ -9,7 +9,7 @@ evidence never becomes a newer valid payload or a positive authorization value.
 wire authority for contributors. Feature pages link here instead of copying the
 encoding.
 
-PixelBeacon renders a three-cell layout header followed by twenty-nine payload
+PixelBeacon renders a three-cell layout header followed by forty payload
 blocks at the top-left of the ESO client area. Blocks are 16 by 16 physical
 pixels by default. Interface scaling is compensated so geometry remains physical.
 Loading screens hide the blocks.
@@ -26,17 +26,18 @@ PixelBeacon computes the number of complete physical blocks that fit the current
 `GuiRoot` width. ESO Weave does not derive a competing count. This authority
 supersedes the fixed 16-column contract while retaining that geometry only for a
 positively identified pre-version-14 addon. At all supported client widths and
-block sizes, the current 32 cells fit on one row. The occupied extent is:
+block sizes, the current 43 cells may wrap downward. The occupied extent is:
 
 ```text
 width = BLOCK_PX * min(3 + NUM_BLOCKS, columns)
 height = BLOCK_PX * ceil((3 + NUM_BLOCKS) / columns)
 ```
 
-At the default block size, that is 512 by 16 physical pixels. Cells after the
-last payload block are neither drawn nor read.
+At the default block size on a client at least 688 pixels wide, that is 688 by
+16 physical pixels. Narrower clients wrap complete cells onto later rows. Cells
+after the last payload block are neither drawn nor read.
 
-H0 is `(0x45, 0x53, 0xA0)`, where `0xA0` represents protocol version 5. H1 is
+H0 is `(0x45, 0x53, 0xC0)`, where `0xC0` represents protocol version 6. H1 is
 `(columns_high, 0x64, 255 - columns_high)` and H2 is
 `(columns_low, 0x9C, 255 - columns_low)`. Invalid magic, markers, complements,
 versions, counts, or surface fit make the complete layout unavailable.
@@ -47,8 +48,9 @@ even when payload tolerance is broader.
 
 A non-magic H0 selects the legacy 16-column layout only when it is a valid legacy
 magenta heartbeat. Version 1 retains 22 payload cells, version 2 retains 23,
-version 3 retains 24, and version 4 retains 25. B22 is sampled only from version
-2, B23 from version 3, B24 from version 4, and B25 through B28 from version 5.
+version 3 retains 24, version 4 retains 25, and version 5 retains 29. B22 is
+sampled only from version 2, B23 from version 3, B24 from version 4, B25 through
+B28 from version 5, and B29 through B39 from version 6.
 The corresponding PixelBeacon addon versions were 16 for world state, 17 for
 roll dodge, 18 for travel, 19 for explicit on-foot sprint, and 20 for Ultimate.
 
@@ -60,7 +62,7 @@ initial negotiation or growth beyond the prepared frame.
 
 ## Payload blocks
 
-Positions below use the default block size and current one-row layout.
+Positions below use the default block size and a current one-row layout.
 
 | Block | Sample | Encoding and meaning |
 | --- | --- | --- |
@@ -86,6 +88,7 @@ Positions below use the default block size and current one-row layout.
 | B26 Ultimate Maximum | (472, 8) | The same exact codec with G `0x1B` or `0x5F`; zero and 511 are unavailable |
 | B27 Primary Ultimate Cost | (488, 8) | The same exact codec with G `0x27` or `0x48`; 511 is unavailable |
 | B28 Backup Ultimate Cost | (504, 8) | The same exact codec with G `0x32` or `0x3D`; 511 is unavailable |
+| B29 through B39 Native Bindings | (520, 8) through (680, 8) | Version 6 fixed order: Skill 1 through 5, Ultimate, Synergy, Attack, Block, Interact, Quickslot. R and G carry the portable control or state byte as nibbles multiplied by 17. B carries Shift, Control, Alt, and Command bits plus an action-and-control check nibble. States are unavailable, unbound, conflicting, unsupported, or valid. |
 
 B9 mounted state comes from `IsMounted()`. Sprint requires moving and trying to
 move while every slot on `GetActiveHotbarCategory()` reports
@@ -141,6 +144,21 @@ which defaults to plus or minus 2. There is no nearest-match fallback. Invalid
 samples produce unavailable, and any signal that can authorize behavior clears on
 a failed decode rather than retaining stale state.
 
+B29 through B39 come only from read-only binding inspection. PixelBeacon resolves
+each invariant action name, scans every binding slot, ignores empty slots, and
+deduplicates exact chords after modifier-order normalization. Zero assignments
+is unbound, more than one distinct assignment is conflicting, and one unknown,
+gamepad, hold, combined, or invalid chord is unsupported. PixelBeacon never
+creates, binds, unbinds, resets, or persists an ESO action binding.
+
+For a state or portable control byte `c` and zero-based action index `a`, R is
+the high nibble of `c` times 17 and G is the low nibble times 17. The modifier
+mask `m` uses Shift bit 0, Control bit 1, Alt bit 2, and Command bit 3. B is
+`m * 16 + ((a * 5 + c * 3 + 7) mod 16)`. The reader tolerates at most seven
+channel values while decoding either expanded nibble and validates B exactly.
+This can turn drift into unavailable evidence, but cannot turn one key, modifier,
+or action position into another.
+
 A new marker is selected at the midpoint of the widest remaining gap. This keeps
 the minimum separation high as the registry grows.
 
@@ -160,6 +178,7 @@ full-pool compositor drift remains stable.
 | Resources and Quickslot | Auto Potion |
 | Movement | Display and explicit sprint blocking for Auto Potion |
 | Combat, skill cooldowns, and Ultimate | Display only |
+| Native bindings | Evidence foundation only in S100; controller adoption follows in #207 and #208 |
 
 Observable-only signals are covered by tests ensuring they cannot change engine
 behavior.

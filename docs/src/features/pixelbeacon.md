@@ -17,14 +17,21 @@ The addon is also described as the pixel addon, telemetry overlay, color blocks,
 screen telemetry, or beacon. These terms refer to PixelBeacon and its Pixel Bus,
 not to game memory or packet inspection.
 
-At the default block size, protocol version 5 occupies 512 by 16 physical pixels:
-three layout-header cells and twenty-nine payload cells. PixelBeacon calculates
+At the default block size, protocol version 6 occupies 688 by 16 physical pixels
+when one row fits: three layout-header cells and forty payload cells. PixelBeacon calculates
 how many complete blocks fit the current client width. Lowering Block Size in
 Settings reduces the footprint. A changed size takes effect after the addon is
 redeployed, `/reloadui` is run, and ESO Weave restarts.
 
 The overlay cannot be moved. Its origin is part of the shared protocol; changing
 only one side would create an undetectable geometry disagreement.
+
+The final eleven cells expose read-only native ESO bindings for Skill 1 through
+5, Ultimate, Synergy, Attack, Block, Interact, and Quickslot. They distinguish
+unavailable, unbound, conflicting, unsupported, and valid keyboard or mouse
+chords. S100 makes this evidence available to the desktop but does not change
+automation or remove existing settings. Those migrations remain in the next two
+children of issue #188.
 
 <figure class="docs-screenshot docs-screenshot--illustration">
 <img src="../assets/illustrations/pixelbeacon-overlay-example.svg" alt="Synthetic game-window diagram with PixelBeacon color blocks anchored at the top-left" width="960" height="480">
