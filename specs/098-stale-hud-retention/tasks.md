@@ -96,9 +96,9 @@
 - [x] T043 Commit S098 with changelog evidence and the Codex co-author trailer.
 - [x] T044 Push the authorized branch and publish an official PR that closes #171.
 - [x] T045 Move issue and PR project items to S098 PR review.
-- [ ] T046 Wait for CI, CodeQL, dependency, Codex, and security results; address every comment and resolve every thread.
-- [ ] T047 Trigger at most one authorized second `@Codex review` round and address its results.
-- [ ] T048 Confirm all required checks green, zero unresolved threads, and ask the operator for final review and merge.
+- [x] T046 Wait for CI, CodeQL, dependency, Codex, and security results; address every comment and resolve every thread.
+- [x] T047 Trigger at most one authorized second `@Codex review` round and address its results.
+- [x] T048 Confirm all required checks green, zero unresolved threads, and ask the operator for final review and merge.
 
 ## Dependencies
 
