@@ -42,7 +42,7 @@
 - [x] T021 Run focused tests, formatting, strict clippy, full tests, release build, docs tests, mdBook, docs policy, typos, and diff checks.
 - [x] T022 Run local code, security, and domain reviews and resolve every finding.
 - [x] T023 Commit with S094 traceability, push, open the official PR, and set Project 2 Stage to PR review.
-- [ ] T024 Process every first-round hosted review comment and hosted check.
+- [x] T024 Process every first-round hosted review comment and hosted check.
 - [ ] T025 Request at most one second `@Codex review`, process it fully, and stop when checks are green for the operator merge ritual.
 
 ## Dependencies
