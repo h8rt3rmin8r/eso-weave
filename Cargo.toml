@@ -73,7 +73,7 @@ pollster = "1.0"
 # Executes the exact encounter addon under ESO-compatible Lua 5.1 semantics.
 # Vendoring keeps the privacy and loss state-machine tests deterministic on both
 # CI platforms without adding Lua to the shipped application.
-mlua = { version = "0.11", features = ["lua51", "vendored"] }
+mlua = { version = "0.12", features = ["lua51", "vendored"] }
 
 [[test]]
 name = "documentation_capture"
