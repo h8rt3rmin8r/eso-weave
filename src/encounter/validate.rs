@@ -1,15 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::{
-    CaptureControllerState, CaptureMode, CaptureSessionStatus, CaptureStatus, EncounterCapture,
-    EncounterEvent, EncounterModuleState, OrderedEncounterCapture, ParsedCaptureSet, PayloadValue,
-    RawObservation, RawSourceKind, RawValue, RawValueType,
+    CaptureControllerState, CaptureMode, CaptureSession, CaptureSessionStatus, CaptureStatus,
+    EncounterCapture, EncounterEvent, EncounterModuleState, OrderedEncounterCapture,
+    ParsedCaptureSet, PayloadValue, RawObservation, RawSourceKind, RawValue, RawValueType,
 };
 use super::{
     invalid, EncounterError, MAX_ACTORS, MAX_ESTIMATED_BYTES, MAX_EVENTS, MAX_SESSION_ENCOUNTERS,
     MAX_SESSION_INTERRUPTION_MARKERS,
 };
 use crate::catalog::Channel;
+
+const TERMINAL_EVENT_RESERVE: usize = 2;
+const RAW_TERMINAL_RESERVE: usize = 2;
+const TERMINAL_BYTE_RESERVE: u64 = 4_096;
+const OUTER_FAILURE_BYTE_RESERVE: u64 = 1_024;
 
 const EVENT_KINDS: [&str; 14] = [
     "encounter-start",
@@ -346,6 +351,7 @@ pub(crate) fn validate_state(
             || session.aggregate_estimated_bytes > MAX_ESTIMATED_BYTES
             || session.aggregate_event_count > MAX_EVENTS
             || session.aggregate_raw_observation_count > MAX_EVENTS
+            || (state.current.is_some() && !active_reserves_available(session))
         {
             return invalid("encounter session aggregate counts are inconsistent");
         }
@@ -372,6 +378,13 @@ pub(crate) fn validate_state(
         records,
         state: Some(state),
     })
+}
+
+fn active_reserves_available(session: &CaptureSession) -> bool {
+    session.aggregate_event_count <= MAX_EVENTS - TERMINAL_EVENT_RESERVE
+        && session.aggregate_raw_observation_count <= MAX_EVENTS - RAW_TERMINAL_RESERVE
+        && session.aggregate_estimated_bytes
+            <= MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE - OUTER_FAILURE_BYTE_RESERVE
 }
 
 fn validate_controller_combination(state: &EncounterModuleState) -> Result<(), EncounterError> {
@@ -442,6 +455,18 @@ fn validate_current(
     };
     let string = |name: &str| object.get(name).and_then(serde_json::Value::as_str);
     let number = |name: &str| object.get(name).and_then(serde_json::Value::as_u64);
+    let optional_number = |name: &str| match object.get(name) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value.as_u64().map(Some).ok_or_else(|| {
+            EncounterError::Validation("encounter current pending number is invalid".into())
+        }),
+    };
+    let optional_string = |name: &str| match object.get(name) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value.as_str().map(Some).ok_or_else(|| {
+            EncounterError::Validation("encounter current pending token is invalid".into())
+        }),
+    };
     let encounter_id = string("encounter_id");
     if number("schema_version") != Some(2)
         || number("addon_version") != Some(3)
@@ -456,31 +481,183 @@ fn validate_current(
         encounter_id.expect("validated current identity"),
         "encounter",
     )?;
-    let bytes = number("estimated_bytes")
-        .ok_or_else(|| EncounterError::Validation("encounter current count is invalid".into()))?;
-    let events = number("stored_event_count")
-        .and_then(|value| usize::try_from(value).ok())
-        .ok_or_else(|| EncounterError::Validation("encounter current count is invalid".into()))?;
-    let raw = number("raw_observation_count")
-        .and_then(|value| usize::try_from(value).ok())
-        .ok_or_else(|| EncounterError::Validation("encounter current count is invalid".into()))?;
-    let event_length = object
-        .get("events")
-        .and_then(serde_json::Value::as_array)
-        .map(Vec::len);
-    let raw_length = object
-        .get("raw_observations")
-        .and_then(serde_json::Value::as_array)
-        .map(Vec::len);
-    if bytes > MAX_ESTIMATED_BYTES
-        || events > MAX_EVENTS
-        || raw > MAX_EVENTS
-        || event_length != Some(events)
-        || raw_length != Some(raw)
+    let _pending_reason = object
+        .get("pending_partial_reason")
+        .filter(|value| !value.is_null())
+        .map(|value| serde_json::from_value::<super::model::PartialReason>(value.clone()))
+        .transpose()
+        .map_err(|_| {
+            EncounterError::Validation("encounter current partial reason is invalid".into())
+        })?;
+    let pending_loss_from = optional_number("pending_loss_from")?;
+    let pending_loss_to = optional_number("pending_loss_to")?;
+    let pending_loss_reason = optional_string("pending_loss_reason")?;
+
+    let mut normalized = current.clone();
+    let normalized_object = normalized
+        .as_object_mut()
+        .expect("validated current object");
+    normalized_object.remove("pending_partial_reason");
+    normalized_object.remove("pending_loss_from");
+    normalized_object.remove("pending_loss_to");
+    normalized_object.remove("pending_loss_reason");
+    normalized_object.insert("status".into(), serde_json::json!("partial"));
+    let capture: EncounterCapture = serde_json::from_value(normalized).map_err(|_| {
+        EncounterError::Validation("encounter current record schema is invalid".into())
+    })?;
+
+    if capture.privacy_profile.is_some()
+        || capture.partial_reason.is_some()
+        || capture
+            .normalization_profile
+            .as_ref()
+            .is_none_or(|profile| validate_normalization_profile(&capture, profile).is_err())
+        || capture.source.api_version == 0
+        || capture.source.game_version.is_empty()
+        || capture.source.game_version.len() > 128
+        || !safe_source_token(&capture.source.game_version)
+        || capture.source.locale.is_empty()
+        || capture.source.locale.len() > 16
+        || !safe_source_token(&capture.source.locale)
+        || capture.source.platform.is_empty()
+        || capture.source.platform.len() > 32
+        || !safe_source_token(&capture.source.platform)
+        || !capture.finished_at.is_empty()
+        || capture.stored_event_count != capture.events.len()
+        || !(1..=MAX_EVENTS).contains(&capture.stored_event_count)
+        || capture.estimated_bytes > MAX_ESTIMATED_BYTES
     {
-        return invalid("encounter current structural counts are invalid");
+        return invalid("encounter current envelope is invalid");
     }
-    Ok((bytes, events, raw))
+    validate_opaque_id(&capture.session_id, "session")?;
+    validate_opaque_id(&capture.encounter_id, "encounter")?;
+    validate_decimal_time(&capture.started_at)?;
+    for (name, count) in &capture.warnings {
+        if !matches!(
+            name.as_str(),
+            "actor_limit" | "terminal_reserve_exhausted" | "recovered_interruption"
+        ) || *count == 0
+        {
+            return invalid("encounter current warning is invalid");
+        }
+    }
+
+    let first = capture
+        .events
+        .first()
+        .expect("validated current event minimum");
+    if capture.first_sequence != 1
+        || first.kind != "encounter-start"
+        || first.sequence != 1
+        || first.monotonic_ms != 0
+        || (capture.events.len() as u64).checked_add(capture.omitted_event_count)
+            != Some(capture.last_sequence)
+        || capture.ended_monotonic_ms
+            != capture
+                .events
+                .last()
+                .expect("validated current event minimum")
+                .monotonic_ms
+    {
+        return invalid("encounter current event metadata is invalid");
+    }
+    let mut previous_time = 0;
+    for (index, event) in capture.events.iter().enumerate() {
+        if event.sequence != index as u64 + 1
+            || event.monotonic_ms < previous_time
+            || matches!(event.kind.as_str(), "encounter-end" | "discontinuity")
+        {
+            return invalid("encounter current event ordering is invalid");
+        }
+        validate_event(&capture, event)?;
+        previous_time = event.monotonic_ms;
+    }
+    validate_active_raw_capture(&capture)?;
+    validate_projection_links(&capture)?;
+
+    let pending_loss_valid = match (pending_loss_from, pending_loss_to, pending_loss_reason) {
+        (None, None, None) => capture.omitted_event_count == 0,
+        (Some(from), Some(to), Some("capture-overflow")) => {
+            from == capture.events.len() as u64 + 1
+                && to == capture.last_sequence
+                && to.checked_sub(from).and_then(|span| span.checked_add(1))
+                    == Some(capture.omitted_event_count)
+        }
+        _ => false,
+    };
+    if !pending_loss_valid {
+        return invalid("encounter current pending loss is invalid");
+    }
+
+    Ok((
+        capture.estimated_bytes,
+        capture.stored_event_count,
+        capture
+            .raw_observation_count
+            .expect("validated current raw count"),
+    ))
+}
+
+fn validate_active_raw_capture(capture: &EncounterCapture) -> Result<(), EncounterError> {
+    let (Some(first_sequence), Some(last_sequence), Some(stored_count), Some(omitted_count)) = (
+        capture.raw_first_sequence,
+        capture.raw_last_sequence,
+        capture.raw_observation_count,
+        capture.raw_omitted_observation_count,
+    ) else {
+        return invalid("encounter current raw metadata is incomplete");
+    };
+    if first_sequence != 1
+        || capture.raw_observations.len() != stored_count
+        || !(1..=MAX_EVENTS).contains(&stored_count)
+        || last_sequence
+            .checked_sub(first_sequence)
+            .and_then(|span| span.checked_add(1))
+            .and_then(|span| span.checked_sub(omitted_count))
+            != Some(stored_count as u64)
+    {
+        return invalid("encounter current raw metadata is invalid");
+    }
+    match (&capture.raw_loss, omitted_count) {
+        (None, 0) => {}
+        (Some(loss), count) if count > 0 => {
+            if loss.missing_sequence_from == 0
+                || loss.missing_sequence_to < loss.missing_sequence_from
+                || loss
+                    .missing_sequence_to
+                    .checked_sub(loss.missing_sequence_from)
+                    .and_then(|span| span.checked_add(1))
+                    != Some(count)
+            {
+                return invalid("encounter current raw loss is invalid");
+            }
+        }
+        _ => return invalid("encounter current raw loss does not match omissions"),
+    }
+
+    let mut expected = first_sequence;
+    let mut previous_time = 0;
+    for observation in &capture.raw_observations {
+        if observation.sequence != expected || observation.monotonic_ms < previous_time {
+            return invalid("encounter current raw ordering is invalid");
+        }
+        validate_raw_observation(capture, observation)?;
+        expected = observation
+            .sequence
+            .checked_add(1)
+            .ok_or_else(|| EncounterError::Validation("raw sequence overflow".into()))?;
+        previous_time = observation.monotonic_ms;
+    }
+    match &capture.raw_loss {
+        None if last_sequence.checked_add(1) == Some(expected) => Ok(()),
+        Some(loss)
+            if expected == loss.missing_sequence_from
+                && loss.missing_sequence_to == last_sequence =>
+        {
+            Ok(())
+        }
+        _ => invalid("encounter current raw loss is not a trailing exact range"),
+    }
 }
 
 fn validate_legacy_raw_absence(capture: &EncounterCapture) -> Result<(), EncounterError> {

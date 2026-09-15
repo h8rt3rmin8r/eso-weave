@@ -159,6 +159,22 @@ fn capture_state_for(
     })
 }
 
+fn active_current(session_id: &str, encounter_id: &str) -> serde_json::Value {
+    let mut current = current_terminal(session_id, encounter_id);
+    current["status"] = serde_json::json!("capturing");
+    current["finished_at"] = serde_json::json!("");
+    current["partial_reason"] = serde_json::Value::Null;
+    current["events"].as_array_mut().unwrap().pop();
+    current["stored_event_count"] = serde_json::json!(1);
+    current["last_sequence"] = serde_json::json!(1);
+    current["ended_monotonic_ms"] = serde_json::json!(0);
+    current["raw_observations"].as_array_mut().unwrap().pop();
+    let raw_count = current["raw_observations"].as_array().unwrap().len();
+    current["raw_observation_count"] = serde_json::json!(raw_count);
+    current["raw_last_sequence"] = serde_json::json!(raw_count);
+    current
+}
+
 fn state_lua(state: &serde_json::Value) -> String {
     format!(
         "EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",
@@ -339,6 +355,68 @@ fn state_schema_validation_rejects_unknown_fields_sparse_ordinals_and_unbounded_
     terminal_plus_active["records"] = serde_json::Value::Object(records);
     terminal_plus_active["current"] = serde_json::json!({});
     assert!(parse_capture_set(state_lua(&terminal_plus_active).as_bytes(), Channel::Live).is_err());
+
+    let terminal = current_terminal(session, "encounter-1788912002-1");
+    let current = active_current(session, "encounter-1788912002-2");
+    let mut active = capture_state(vec![terminal], 3);
+    active["state"] = serde_json::json!("capturing");
+    active["current_encounter_id"] = current["encounter_id"].clone();
+    active["session"]["next_encounter_ordinal"] = serde_json::json!(3);
+    active["session"]["aggregate_estimated_bytes"] = serde_json::json!(
+        active["session"]["aggregate_estimated_bytes"]
+            .as_u64()
+            .unwrap()
+            + current["estimated_bytes"].as_u64().unwrap()
+    );
+    active["session"]["aggregate_event_count"] = serde_json::json!(3);
+    active["session"]["aggregate_raw_observation_count"] =
+        serde_json::json!(4 + current["raw_observation_count"].as_u64().unwrap());
+    active["current"] = current;
+    assert_eq!(
+        parse_capture_set(state_lua(&active).as_bytes(), Channel::Live)
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
+
+    let mut unknown_current = active.clone();
+    unknown_current["current"]["hostile_canary"] = serde_json::json!("do not import siblings");
+    assert!(parse_capture_set(state_lua(&unknown_current).as_bytes(), Channel::Live).is_err());
+    let mut invalid_pending = active.clone();
+    invalid_pending["current"]["pending_loss_from"] = serde_json::json!("not-a-number");
+    assert!(parse_capture_set(state_lua(&invalid_pending).as_bytes(), Channel::Live).is_err());
+
+    let mut terminal_reason = active.clone();
+    terminal_reason["current"]["partial_reason"] = serde_json::json!("capture-overflow");
+    assert!(parse_capture_set(state_lua(&terminal_reason).as_bytes(), Channel::Live).is_err());
+
+    let mut reserve_exhausted = active.clone();
+    let terminal_bytes = reserve_exhausted["records"]["0000000001"]["capture"]["estimated_bytes"]
+        .as_u64()
+        .unwrap();
+    let active_byte_ceiling = MAX_ESTIMATED_BYTES - 4_096 - 1_024;
+    reserve_exhausted["current"]["estimated_bytes"] =
+        serde_json::json!(active_byte_ceiling - terminal_bytes + 1);
+    reserve_exhausted["session"]["aggregate_estimated_bytes"] =
+        serde_json::json!(active_byte_ceiling + 1);
+    assert!(parse_capture_set(state_lua(&reserve_exhausted).as_bytes(), Channel::Live).is_err());
+
+    let mut malformed = active;
+    malformed["current"]["events"] = serde_json::json!([]);
+    malformed["current"]["stored_event_count"] = serde_json::json!(0);
+    malformed["current"]["raw_observations"] = serde_json::json!([]);
+    malformed["current"]["raw_observation_count"] = serde_json::json!(0);
+    malformed["current"]["estimated_bytes"] = serde_json::json!(0);
+    malformed["session"]["aggregate_estimated_bytes"] = serde_json::json!(4096);
+    malformed["session"]["aggregate_event_count"] = serde_json::json!(2);
+    malformed["session"]["aggregate_raw_observation_count"] = serde_json::json!(4);
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("malformed-current.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    fs::write(&input, state_lua(&malformed)).unwrap();
+    assert!(import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
+    assert!(!store.exists());
 }
 
 #[test]

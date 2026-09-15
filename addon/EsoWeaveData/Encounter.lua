@@ -2253,6 +2253,12 @@ local function validController(saved)
             or #inner.events ~= inner.stored_event_count
             or type(inner.raw_observations) ~= "table"
             or #inner.raw_observations ~= inner.raw_observation_count
+            or session.aggregate_event_count > MAX_EVENTS - TERMINAL_EVENT_RESERVE
+            or session.aggregate_raw_observation_count
+                > MAX_RAW_OBSERVATIONS - RAW_TERMINAL_RESERVE
+            or session.aggregate_estimated_bytes
+                > MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE
+                    - OUTER_FAILURE_BYTE_RESERVE
             or not validRecoverableCurrent(inner)
             or saved.requested_mode ~= session.mode
             or saved.active_mode ~= saved.requested_mode

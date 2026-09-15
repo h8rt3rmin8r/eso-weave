@@ -1337,6 +1337,7 @@ fn malformed_recovery_arithmetic_is_preserved_inactive_without_crashing_load() {
         "current.raw_observations.extra = current.raw_observations[1]",
         "current.raw_observations[1].values.extra = current.raw_observations[1].values[1]",
         "current.normalization_profile.damage_results.extra = 1",
+        "current.estimated_bytes = 33554432; EsoWeaveDataSaved.encounter.session.aggregate_estimated_bytes = 33554432",
         "current.events[1].session_id = 'session-corrupt-1'",
         "current.raw_omitted_observation_count = 1; current.raw_last_sequence = current.raw_last_sequence + 1; current.raw_loss = { missing_sequence_from = current.raw_last_sequence, missing_sequence_to = current.raw_last_sequence, reason = 'unknown-loss' }",
     ] {
