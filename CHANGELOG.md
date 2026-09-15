@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S097 persists requested Auto Potion enablement in session-state schema 4,
+  restores it through the existing fail-closed controller, makes UI and F3
+  toggles share the coalesced and close-time save authority, defaults legacy and
+  malformed state safely, and updates canonical restart guidance without
+  changing any input eligibility rule (issue #172).
+
 - S096 adds explicit single-encounter and continuous-until-disabled capture
   modes through user-owned in-game controls, a bounded ordered session spool,
   truthful interruption and hard-failure evidence, atomic multi-encounter
@@ -59,6 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Deliberately supersede S039 research decision R7 and S043
+  requirement FR-002. Requested Auto Potion enablement now persists like other
+  operator-intent toggles, while effective state, telemetry, blockers, retry
+  history, and every input authorization gate remain transient and fail closed.
 
 - 2026-09-15: Amend the constitution to 5.0.0. Replace one-shot-only encounter
   authority with exactly single and continuous capture modes while retaining

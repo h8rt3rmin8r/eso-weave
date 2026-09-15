@@ -1466,11 +1466,6 @@ pub enum UiIntent {
     /// Enable or disable the fishing controller.
     SetFishing(bool),
     /// Enable or disable auto-potion.
-    ///
-    /// Deliberately not persisted to the session, unlike suspend and fishing. A
-    /// restored fishing session does nothing until the operator stands at a
-    /// fishing hole; a restored auto-potion waits silently to press a key days
-    /// later. See `specs/039-auto-potion/research.md` R7.
     SetAutoPotion(bool),
     /// Install or update the beacon addon.
     InstallBeacon,
@@ -2234,7 +2229,7 @@ impl AppModel {
             }
             UiIntent::SetAutoPotion(enabled) => {
                 self.potion.lock().unwrap().set_enabled(enabled);
-                // No `mark_session`: the enable is deliberately not persisted.
+                self.scheduler.mark_session(Instant::now());
                 Vec::new()
             }
             UiIntent::InstallBeacon => {
@@ -2617,10 +2612,9 @@ impl AppModel {
         }
     }
 
-    /// Restores the persisted session state (suspend and fishing intents) on
-    /// launch. Restoring a running or fishing-on state performs no input while
-    /// the game window is unfocused, because synthesis and suppression are scoped
-    /// to the focused game window by the input backend.
+    /// Restores persisted operator intents on launch. This never runs a weave,
+    /// ticks auto-potion, or invents focus or telemetry; every existing runtime
+    /// gate remains authoritative.
     pub fn restore_session(&mut self, state: SessionState) {
         self.api_version = state.api_version;
         self.window = state.window;
@@ -2640,6 +2634,7 @@ impl AppModel {
                 .unwrap()
                 .set_enabled(true, now, self.fishing_sink.as_mut());
         }
+        self.potion.lock().unwrap().set_enabled(state.auto_potion);
     }
 
     /// The effective numeric API version for rendering a manifest: the higher of
@@ -2722,14 +2717,16 @@ impl AppModel {
         self.potion.lock().unwrap().enabled()
     }
 
-    /// The current session state to persist (suspend flag and fishing on/off
-    /// intent, never a transient fishing sub-state).
+    /// The current session state to persist (operator intents and durable
+    /// application facts, never transient controller evidence).
     pub fn current_session_state(&self) -> SessionState {
         let fishing_on = self.fishing.lock().unwrap().enabled();
+        let auto_potion_on = self.potion.lock().unwrap().enabled();
         SessionState {
             schema_version: CURRENT_STATE_VERSION,
             suspended: self.input.is_suspended(),
             fishing: fishing_on,
+            auto_potion: auto_potion_on,
             api_version: self.api_version,
             window: self.window,
         }

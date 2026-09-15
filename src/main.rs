@@ -121,10 +121,9 @@ fn main() {
         input.world_travel_gate(),
     )));
 
-    // Auto-potion controller. Always starts switched off, deliberately, even
-    // though suspend and fishing are both restored from the previous session: a
-    // restored auto-potion would wait silently to press a key days later, in a
-    // fight the operator does not associate with this application.
+    // Construct auto-potion switched off so its initial state is fail closed.
+    // Session restoration may subsequently restore requested enablement, but the
+    // controller remains dormant until fresh runtime evidence opens every gate.
     let mut potion_notices = Vec::new();
     let potion_config = AutoPotionConfig::load(&settings.potion, &mut potion_notices);
     for notice in &potion_notices {
@@ -457,7 +456,8 @@ fn main() {
         input.fishing_gates(),
     ));
     // Load persisted session state before the config directory is moved into the
-    // model, so the live suspend and fishing intents can be restored on launch.
+    // model, so the live suspend, fishing, and auto-potion intents can be
+    // restored on launch.
     let session = config_dir
         .as_ref()
         .map(|dir| eso_weave::config::state::load(dir));

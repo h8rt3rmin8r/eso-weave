@@ -1,8 +1,9 @@
 # Configuration and Session State
 
-Session State is the `state.json` record for saved window position and suspend
-persistence. Invalid Configuration may also be described as a corrupt config,
-a reset to defaults, or the preserved `.invalid` file.
+Session State is the `state.json` record for saved window position, application
+suspension, and requested Fishing and Auto Potion enablement. Invalid
+Configuration may also be described as a corrupt config, a reset to defaults,
+or the preserved `.invalid` file.
 
 ESO Weave stores user settings separately from derived runtime state. Both files
 live in `%APPDATA%\eso-weave\` on Windows and
@@ -26,15 +27,16 @@ best-effort loading, not a promise of forward migration. Use the
 
 ## `state.json`
 
-Session state holds derived runtime choices and caches, including suspend and
-fishing intent, API-version observations, and window geometry. Restoring an
-intent never permits input until the focused-game safety conditions are true.
-Loading failures fall back safely rather than panicking. Unlike corrupt
-`config.json`, a rejected session-state file has no `.invalid` preservation
-guarantee.
+Session state holds operator runtime choices and caches, including suspend,
+Fishing intent, Auto Potion intent, API-version observations, and window
+geometry. Restoring an intent never permits input until its current focused-game
+and telemetry safety conditions are true. Loading failures fall back safely
+rather than panicking. Unlike corrupt `config.json`, a rejected session-state
+file has no `.invalid` preservation guarantee.
 
-Auto Potion enablement is not persisted. Its watches, thresholds, key, and retry
-interval are settings, but the feature must be requested again after restart.
+Auto Potion watches, thresholds, key, and retry interval remain settings. Only
+the requested on or off toggle is session state. Effective state, telemetry,
+blockers, and retry history are always rebuilt from the running process.
 
 Writes are coalesced. A change marks the relevant store dirty and one write occurs
 after the configured settling interval.
@@ -49,8 +51,7 @@ geometry to the session store so a final move or resize is not lost.
 | --- | --- | --- |
 | Modal settings, keybindings, Skills configuration | `config.json` | Restored; see Settings for current live versus restart timing |
 | Theme, Always on Top, disclosure, Live Log height | `config.json` | Restored |
-| Window geometry, suspension, Fishing request, API-version cache | `state.json` | Restored, but input still requires fresh safety evidence |
-| Auto Potion request | Neither | Always starts Off |
+| Window geometry, suspension, Fishing request, Auto Potion request, API-version cache | `state.json` | Restored, but input still requires fresh safety evidence |
 | Current game, resource, quickslot, cooldown, and controller observations | Neither | Re-established from current runtime evidence |
 
 ## Recovery

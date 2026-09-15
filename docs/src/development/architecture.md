@@ -90,8 +90,9 @@ Configuration follows:
 `UI intent -> module validation and live application where implemented -> mark store dirty -> settle interval -> JSON write`
 
 The stores are split deliberately. `config.json` contains user settings.
-`state.json` contains suspend and fishing intent, API-version cache, and window
-geometry. Auto Potion request is runtime-only.
+`state.json` contains suspend, Fishing, and Auto Potion intent, API-version
+cache, and window geometry. Auto Potion effective state and evidence remain
+runtime-only.
 
 Logging follows:
 

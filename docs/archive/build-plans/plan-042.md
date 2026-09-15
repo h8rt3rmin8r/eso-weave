@@ -1,6 +1,6 @@
 # Plan 042: Persistent Data Addon Subsystem
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 

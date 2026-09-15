@@ -104,8 +104,9 @@ Enabled, selected weave type, and delay override persist. **Cooldown** is a
 read-only observation. The System and State expanded preference, Live Log panel
 height, and window geometry also persist. System and State defaults expanded.
 
-The Running suspension and Fishing request persist in session state. Auto Potion
-request never persists and always starts off.
+The Running suspension, Fishing request, and Auto Potion request persist in
+session state. Restored requests remain subject to all current runtime and
+telemetry safety gates.
 
 ## Application timing
 

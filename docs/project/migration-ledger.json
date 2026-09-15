@@ -1596,14 +1596,27 @@
     },
     {
       "id": "042",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-042.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-042.md",
       "specs": [
         "specs/092-data-addon-foundation",
-        "specs/093-data-addon-lifecycle-ui"
+        "specs/093-data-addon-lifecycle-ui",
+        "specs/094-lossless-event-envelope",
+        "specs/095-deterministic-encounter-replay",
+        "specs/096-encounter-capture-modes"
       ],
-      "evidence": "Issue #182 coordinates the persistent data-addon subsystem and issue #185 tracks active S093 lifecycle interface delivery."
+      "evidence": "S092 through S096 completed the persistent data-addon subsystem when PR #202 merged and closed issue #183, enabling epic #182 to close; issue #190 remains independent native-log verification."
+    },
+    {
+      "id": "043",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-043.md",
+      "specs": [
+        "specs/097-auto-potion-persistence"
+      ],
+      "evidence": "Issue #172 tracks active S097 Auto Potion request persistence delivery."
     }
   ],
   "safetyCrosswalk": [

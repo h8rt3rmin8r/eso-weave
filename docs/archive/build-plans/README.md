@@ -53,6 +53,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [039](plan-039.md) | Complete, Archived | [S079](../../../specs/079-formal-glossary/spec.md) through [S089](../../../specs/089-responsive-doc-tables/spec.md), completed when [PR #161](https://github.com/h8rt3rmin8r/eso-weave/pull/161) merged, closed issue #127, and enabled epic #119 and its milestone to close |
 | [040](plan-040.md) | Complete, Archived | [S090 evidence-scoped recommendations](../../../specs/090-evidence-scoped-recommendations/spec.md), completed when [PR #162](https://github.com/h8rt3rmin8r/eso-weave/pull/162) merged and closed issue #136 |
 | [041](plan-041.md) | Complete, Archived | [S091 v0.16.0 release preparation](../../../specs/091-v016-release-prep/spec.md), completed when [v0.16.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.16.0) published with all five required assets |
+| [042](plan-042.md) | Complete, Archived | [S092](../../../specs/092-data-addon-foundation/spec.md) through [S096](../../../specs/096-encounter-capture-modes/spec.md), completed when [PR #202](https://github.com/h8rt3rmin8r/eso-weave/pull/202) merged, closed issue #183, and enabled epic #182 to close; native-log verification remains separate in issue #190 |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

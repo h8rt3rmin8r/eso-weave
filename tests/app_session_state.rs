@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use eso_weave::app::{app_toggle_intent, AppModel, SaveScheduler, SkillEdit, UiIntent};
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
-use eso_weave::config::state::{self, SessionState};
+use eso_weave::config::state::{self, SessionState, CURRENT_STATE_VERSION};
 use eso_weave::config::{LoggingPrefs, Settings};
 use eso_weave::fishing::{FishingConfig, FishingController, MockFishingSink};
 use eso_weave::input::bindings::BindingTable;
@@ -21,9 +21,10 @@ use eso_weave::weave::{WeaveConfig, WeaveEngine};
 fn session_state_round_trips() {
     let dir = tempfile::tempdir().unwrap();
     let state = SessionState {
-        schema_version: 1,
+        schema_version: CURRENT_STATE_VERSION,
         suspended: true,
         fishing: true,
+        auto_potion: true,
         api_version: Default::default(),
         window: None,
     };
@@ -40,7 +41,67 @@ fn missing_session_file_yields_defaults_without_notice() {
     assert_eq!(loaded, SessionState::default());
     assert!(!loaded.suspended);
     assert!(!loaded.fishing);
+    assert!(!loaded.auto_potion);
     assert!(notices.is_empty());
+}
+
+#[test]
+fn malformed_auto_potion_request_falls_back_to_complete_defaults_with_notice() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join(state::STATE_FILE_NAME),
+        br#"{"schema_version":4,"suspended":true,"fishing":true,"auto_potion":"true"}"#,
+    )
+    .unwrap();
+
+    let (loaded, notices) = state::load(dir.path());
+    assert_eq!(loaded, SessionState::default());
+    assert!(!loaded.auto_potion);
+    assert!(!notices.is_empty());
+}
+
+#[test]
+fn legacy_state_loads_and_model_round_trips_to_v4_without_losing_intent() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join(state::STATE_FILE_NAME),
+        b"{\"schema_version\":3,\"suspended\":true,\"fishing\":true}\n",
+    )
+    .unwrap();
+
+    let (legacy, notices) = state::load(dir.path());
+    assert!(notices.is_empty());
+    assert!(legacy.suspended);
+    assert!(legacy.fishing);
+    assert!(!legacy.auto_potion);
+
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+    model.restore_session(legacy);
+    let migrated = model.current_session_state();
+    assert_eq!(migrated.schema_version, CURRENT_STATE_VERSION);
+    assert!(migrated.suspended);
+    assert!(migrated.fishing);
+    assert!(!migrated.auto_potion);
+    state::save(dir.path(), &migrated).unwrap();
+    assert_eq!(state::load(dir.path()).0, migrated);
+}
+
+#[test]
+fn saved_session_state_is_v4_utf8_lf_json_with_an_explicit_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = SessionState {
+        auto_potion: true,
+        ..SessionState::default()
+    };
+    state::save(dir.path(), &state).unwrap();
+
+    let bytes = std::fs::read(dir.path().join(state::STATE_FILE_NAME)).unwrap();
+    assert!(!bytes.starts_with(&[0xEF, 0xBB, 0xBF]));
+    assert!(bytes.ends_with(b"\n"));
+    assert!(!bytes.contains(&b'\r'));
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["schema_version"], CURRENT_STATE_VERSION);
+    assert_eq!(value["auto_potion"], true);
 }
 
 #[test]
@@ -130,9 +191,10 @@ fn restore_suspended_keeps_engine_suspended() {
     assert!(!model.view().suspended);
 
     model.restore_session(SessionState {
-        schema_version: 1,
+        schema_version: CURRENT_STATE_VERSION,
         suspended: true,
         fishing: false,
+        auto_potion: false,
         api_version: Default::default(),
         window: None,
     });
@@ -148,9 +210,10 @@ fn restore_fishing_marks_active_and_round_trips() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_dir(None, dir.path());
     model.restore_session(SessionState {
-        schema_version: 1,
+        schema_version: CURRENT_STATE_VERSION,
         suspended: false,
         fishing: true,
+        auto_potion: false,
         api_version: Default::default(),
         window: None,
     });
@@ -159,6 +222,66 @@ fn restore_fishing_marks_active_and_round_trips() {
     let state = model.current_session_state();
     assert!(state.fishing);
     assert!(!state.suspended);
+}
+
+#[test]
+fn restore_auto_potion_applies_both_values_without_scheduling_a_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+
+    model.restore_session(SessionState {
+        auto_potion: true,
+        ..SessionState::default()
+    });
+    let enabled = model.view();
+    assert!(enabled.auto_potion_requested);
+    assert_eq!(enabled.auto_potion.text, "Dormant: game inactive");
+    assert!(model.current_session_state().auto_potion);
+    assert!(
+        !model
+            .maybe_flush(Instant::now() + Duration::from_secs(1))
+            .wrote,
+        "restoration alone must not schedule a write"
+    );
+
+    model.restore_session(SessionState::default());
+    assert!(!model.view().auto_potion_requested);
+    assert_eq!(model.view().auto_potion.text, "Off");
+    assert!(!model.current_session_state().auto_potion);
+}
+
+#[test]
+fn ui_and_hotkey_auto_potion_toggles_persist_one_authoritative_request() {
+    let ui_dir = tempfile::tempdir().unwrap();
+    let mut ui_model = model_with_dir(Some(ui_dir.path().to_path_buf()), ui_dir.path());
+    ui_model.apply_intent(UiIntent::SetAutoPotion(true));
+    let ui_out = ui_model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(ui_out.wrote);
+    assert!(ui_out.notify);
+    assert!(state::load(ui_dir.path()).0.auto_potion);
+
+    let hotkey_dir = tempfile::tempdir().unwrap();
+    let mut hotkey_model = model_with_dir(Some(hotkey_dir.path().to_path_buf()), hotkey_dir.path());
+    press(&mut hotkey_model, Action::ToggleAutoPotion);
+    let hotkey_out = hotkey_model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(hotkey_out.wrote);
+    assert!(hotkey_out.notify);
+    assert!(state::load(hotkey_dir.path()).0.auto_potion);
+
+    press(&mut hotkey_model, Action::ToggleAutoPotion);
+    hotkey_model.maybe_flush(Instant::now() + Duration::from_millis(500));
+    assert!(!state::load(hotkey_dir.path()).0.auto_potion);
+}
+
+#[test]
+fn close_flush_captures_auto_potion_change_before_settle() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut model = model_with_dir(Some(dir.path().to_path_buf()), dir.path());
+    model.apply_intent(UiIntent::SetAutoPotion(true));
+
+    assert!(!model.maybe_flush(Instant::now()).wrote);
+    assert!(model.flush_session_now());
+    assert!(state::load(dir.path()).0.auto_potion);
 }
 
 #[test]

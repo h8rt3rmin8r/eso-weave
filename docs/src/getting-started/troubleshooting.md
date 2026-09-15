@@ -231,8 +231,9 @@ Use the exact suffix:
 
 The Auto Potion line names the first current blocker. Use the
 [Auto Potion state table](../features/auto-potion.md#status-and-recovery) in order.
-The request remains on through ordinary dormant and blocked states, but it always
-starts off after an application restart.
+The request remains on through ordinary dormant and blocked states and across a
+normal application restart. After restart, wait for fresh current evidence;
+remembered enablement does not make a missing or stale gate permissive.
 
 ## Configuration was rejected
 
