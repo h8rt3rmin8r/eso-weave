@@ -16,7 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eso_weave::app::{
-    route_game_observation, route_reader_event, route_reader_safety_gate, ui::EsoWeaveApp, AppModel,
+    route_reader_observation, route_reader_safety_gate, ui::EsoWeaveApp, AppModel,
 };
 use eso_weave::config::state::{sanitize_geometry, RestoreBounds};
 use eso_weave::config::{self, LoadOutcome};
@@ -259,8 +259,9 @@ fn main() {
                             let mut fishing = fishing.lock().unwrap();
                             let mut potion = potion.lock().unwrap();
                             for event in events {
-                                route_reader_event(
+                                route_reader_observation(
                                     event,
+                                    &game,
                                     &mut weave,
                                     &mut fishing,
                                     &mut potion,
@@ -288,8 +289,9 @@ fn main() {
                     let mut weave = weave.lock().unwrap();
                     let mut fishing = fishing.lock().unwrap();
                     let mut potion = potion.lock().unwrap();
-                    route_reader_event(
+                    route_reader_observation(
                         event,
+                        &game,
                         &mut weave,
                         &mut fishing,
                         &mut potion,
@@ -309,8 +311,9 @@ fn main() {
                     let mut fishing = fishing.lock().unwrap();
                     let mut potion = potion.lock().unwrap();
                     for event in events {
-                        route_reader_event(
+                        route_reader_observation(
                             event,
+                            &game,
                             &mut weave,
                             &mut fishing,
                             &mut potion,
@@ -343,7 +346,7 @@ fn main() {
                         );
                     }
                     let processes = eso_weave::game::observe_processes();
-                    let process_changed = game.update_processes(processes);
+                    let process_changed = game.update_processes(processes, now);
                     let after = processes.runtime();
                     let active = after == GameRuntime::Active;
                     let focused = matches!(processes.focus, FocusObservation::Focused);
@@ -417,9 +420,9 @@ fn main() {
                 let mut fishing = fishing.lock().unwrap();
                 let mut potion = potion.lock().unwrap();
                 for event in events {
-                    route_game_observation(event, &game);
-                    route_reader_event(
+                    route_reader_observation(
                         event,
+                        &game,
                         &mut weave,
                         &mut fishing,
                         &mut potion,

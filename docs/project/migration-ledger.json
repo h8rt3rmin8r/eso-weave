@@ -1614,9 +1614,10 @@
       "lifecycle": "Active",
       "destination": "docs/project/build-plans/plan-043.md",
       "specs": [
-        "specs/097-auto-potion-persistence"
+        "specs/097-auto-potion-persistence",
+        "specs/098-stale-hud-retention"
       ],
-      "evidence": "Issue #172 tracks active S097 Auto Potion request persistence delivery."
+      "evidence": "S097 completed issue #172. Issue #171 tracks active S098 stale HUD presentation retention with current-evidence-only action authority."
     }
   ],
   "safetyCrosswalk": [

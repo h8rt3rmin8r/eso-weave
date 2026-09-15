@@ -95,8 +95,8 @@ protocol fields are available. A zero resource is a valid numeric reading;
 <figcaption>Deterministic healthy baseline: the game and world are active, both managed addons are current, and PixelBeacon Signal is detected while data-addon session facts remain separate.</figcaption>
 </figure>
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/pixelbeacon-signal-lost.png" alt="ESO Weave showing PixelBeacon installed but its signal lost" width="1280" height="640">
-<figcaption>Deterministic lost-signal state: the addon remains installed, but current telemetry is unavailable until visibility returns.</figcaption>
+<img src="../assets/screenshots/pixelbeacon-signal-lost.png" alt="ESO Weave showing PixelBeacon installed with a lost signal and stale retained HUD values" width="1280" height="640">
+<figcaption>Deterministic lost-signal state: PixelBeacon remains installed, current input authority is unavailable, and the last coherent HUD is visibly marked stale until recovery or expiry.</figcaption>
 </figure>
 </div>
 

@@ -52,6 +52,7 @@ fn ui_section_round_trips_and_defaults() {
         always_on_top: true,
         log_panel_height: 240,
         system_state_expanded: false,
+        stale_retention_seconds: 999,
     };
     let (loaded, notices) = ui_from_value(&ui_to_value(&custom));
     assert_eq!(loaded, custom);
@@ -68,6 +69,44 @@ fn older_ui_settings_default_the_system_state_disclosure_open() {
     let (prefs, notices) = ui_from_value(&value);
     assert!(notices.is_empty());
     assert!(prefs.system_state_expanded);
+    assert_eq!(prefs.stale_retention_seconds, 120);
+}
+
+#[test]
+fn s098_stale_retention_defaults_and_round_trips_both_bounds() {
+    let (defaults, notices) = ui_from_value(&serde_json::Value::Null);
+    assert!(notices.is_empty());
+    assert_eq!(defaults.stale_retention_seconds, 120);
+
+    for seconds in [0, 999] {
+        let mut prefs = defaults;
+        prefs.stale_retention_seconds = seconds;
+        let value = ui_to_value(&prefs);
+        assert_eq!(value["stale_retention_seconds"], seconds);
+        let (loaded, notices) = ui_from_value(&value);
+        assert!(notices.is_empty());
+        assert_eq!(loaded.stale_retention_seconds, seconds);
+    }
+}
+
+#[test]
+fn s098_stale_retention_rejects_wrong_types_and_out_of_range_values() {
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(1000),
+        serde_json::json!(1.5),
+        serde_json::json!("120"),
+        serde_json::Value::Bool(true),
+        serde_json::Value::Null,
+    ] {
+        let (prefs, notices) = ui_from_value(&serde_json::json!({
+            "stale_retention_seconds": invalid
+        }));
+        assert_eq!(prefs.stale_retention_seconds, 120);
+        assert!(notices.iter().any(|n| {
+            n.kind == NoticeKind::InvalidValue && n.message.contains("stale retention")
+        }));
+    }
 }
 
 #[test]

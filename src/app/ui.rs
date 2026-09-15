@@ -1761,6 +1761,9 @@ impl EsoWeaveApp {
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
                 widgets::heading(ui, strings::LIVE_HUD_TITLE);
+                if let Some(freshness) = &view.hud_freshness {
+                    dashboard_status_row(ui, palette, freshness, 0.0, |_| {});
+                }
                 widgets::resource_group(
                     ui,
                     palette,
@@ -3217,6 +3220,14 @@ fn settings_body(
         });
         setting(ui, palette, &strings::SET_ALWAYS_ON_TOP, |ui| {
             widgets::toggle_switch(ui, &mut draft.ui.always_on_top, palette);
+        });
+        setting(ui, palette, &strings::SET_STALE_RETENTION, |ui| {
+            ui.add(
+                egui::DragValue::new(&mut draft.ui.stale_retention_seconds)
+                    .range(0..=crate::app::settings_form::MAX_STALE_RETENTION_SECONDS)
+                    .speed(1)
+                    .suffix(" s"),
+            );
         });
     });
     ui.add_space(6.0);

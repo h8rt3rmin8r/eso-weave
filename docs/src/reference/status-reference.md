@@ -118,6 +118,7 @@ the application.
 
 | Field and text | Meaning | Automation impact |
 | --- | --- | --- |
+| HUD Freshness: **Stale: cause (Ns)** | Player-state values are the last coherent rendered snapshot; cause names runtime, focus, or signal loss and `N` is whole-second age | Display-only; current evidence has already blocked applicable input-producing paths |
 | Game Context: **Gameplay** | Active, focused game with fresh no-menu observation | Can authorize input with the other gates |
 | Game Context: **Unfocused** | ESO lacks keyboard focus | No focused-game interception or autonomous input |
 | Game Context: **Signal unavailable** or **Unknown** | Surface evidence is missing or inconclusive | Does not authorize generated input |

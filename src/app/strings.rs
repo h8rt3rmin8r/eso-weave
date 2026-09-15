@@ -8,6 +8,9 @@
 
 // Status region titles.
 pub const LIVE_HUD_TITLE: &str = "Live HUD";
+pub const HUD_FRESHNESS_TITLE: &str = "HUD Freshness";
+pub const HUD_FRESHNESS_TOOLTIP: &str =
+    "Retained values are display-only. Automation and synthesized input remain blocked by current game evidence.";
 pub const SYSTEM_STATE_TITLE: &str = "System and State";
 pub const SYSTEM_STATE_TOOLTIP: &str =
     "Expand or collapse application, addon, and automation state. This layout preference is saved.";
@@ -301,6 +304,10 @@ pub const SET_ALWAYS_ON_TOP: Setting = Setting {
     label: "Always on Top",
     help: "Keep the ESO Weave window above other windows.",
 };
+pub const SET_STALE_RETENTION: Setting = Setting {
+    label: "Stale Retention (seconds)",
+    help: "Keep the last coherent HUD visible after game, focus, or signal loss. Set 0 to clear immediately.",
+};
 pub const SET_GLOBAL_COOLDOWN: Setting = Setting {
     label: "Global Cooldown (ms)",
     help: "Minimum interval between weave executions.",
@@ -379,9 +386,10 @@ pub const SET_FILE_LOGGING: Setting = Setting {
 };
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 26] = [
+pub const ALL_SETTINGS: [&Setting; 27] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
+    &SET_STALE_RETENTION,
     &SET_GLOBAL_COOLDOWN,
     &SET_D_WEAVE,
     &SET_D_HEAVY,

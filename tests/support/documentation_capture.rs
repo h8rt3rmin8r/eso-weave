@@ -898,6 +898,13 @@ fn build_scene(
         repository_root().join("assets/catalog/catalog.sqlite"),
     ));
     seed_game_observations(&model, scene);
+    if scene == Scene::PixelBeaconLost || scene == Scene::AutoPotionBlocked {
+        // Retention requires a coherent presentation to have existed before the
+        // loss. Render that baseline exactly as the running UI would, then move
+        // the shared game evidence to the lost state for the captured frame.
+        let _ = model.view();
+        model.game_state().signal_lost(model.now_ms());
+    }
     let view = model.view();
     validate_scene_view(scene, &view)?;
 
@@ -1038,11 +1045,14 @@ fn seed_potion_state(controller: &mut AutoPotionController, scene: Scene) -> Res
 fn seed_game_observations(model: &AppModel, scene: Scene) {
     let game = model.game_state();
     if !scene.active_game() {
-        game.update_processes(ProcessObservation {
-            game: Presence::Absent,
-            launcher: Presence::Absent,
-            focus: FocusObservation::Unknown,
-        });
+        game.update_processes(
+            ProcessObservation {
+                game: Presence::Absent,
+                launcher: Presence::Absent,
+                focus: FocusObservation::Unknown,
+            },
+            model.now_ms(),
+        );
         game.update_installation(InstallationState::NotDetected);
         return;
     }
@@ -1051,17 +1061,20 @@ fn seed_game_observations(model: &AppModel, scene: Scene) {
         root: PathBuf::from("fixture-game-install"),
         source: CandidateSource::SteamManifest,
     }));
-    game.update_processes(ProcessObservation {
-        game: Presence::Present,
-        launcher: Presence::Absent,
-        focus: FocusObservation::Focused,
-    });
-    game.observe_heartbeat();
-    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        model.now_ms(),
+    );
+    game.observe_heartbeat(model.now_ms());
+    game.observe_surface(
+        SurfaceObservation::Observed(MenuSurface::None),
+        model.now_ms(),
+    );
     game.observe_world(WorldState::Active);
-    if scene == Scene::PixelBeaconLost || scene == Scene::AutoPotionBlocked {
-        game.signal_lost();
-    }
 }
 
 fn validate_scene_view(scene: Scene, view: &AppView) -> Result<(), String> {
@@ -1107,6 +1120,12 @@ fn validate_scene_view(scene: Scene, view: &AppView) -> Result<(), String> {
             ensure(
                 view.resources.health.presentation == ResourcePresentation::Observed(82),
                 "lost scene retains the deliberately seeded engine observation",
+            )?;
+            ensure(
+                view.hud_freshness
+                    .as_ref()
+                    .is_some_and(|line| line.state_text.contains("signal unavailable")),
+                "lost scene names retained HUD evidence as stale",
             )?;
         }
         Scene::PixelBeaconUnmanaged => {

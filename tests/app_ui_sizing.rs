@@ -1384,6 +1384,19 @@ fn s062_settings_modal_exposes_fishing_key_and_application_boundaries() {
     harness.get_by_label(eso_weave::app::strings::READER_SETTINGS_APPLICATION_HELP);
 }
 
+#[test]
+fn s098_settings_modal_exposes_the_bounded_stale_retention_control() {
+    let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
+    harness.step();
+    harness.state_mut().set_settings_open(true);
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+
+    harness.get_by_label(eso_weave::app::strings::SET_STALE_RETENTION.label);
+    harness.get_by_value("120 s");
+}
+
 /// C5 (FR-014): the modal's rendered rectangle matches the size its growth rule
 /// calls for, on both axes, at every window size.
 #[test]

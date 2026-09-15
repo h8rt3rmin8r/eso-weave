@@ -21,7 +21,7 @@ fn every_tooltip_and_help_string_is_non_empty() {
 
 #[test]
 fn settings_labels_and_help_are_present() {
-    assert_eq!(strings::ALL_SETTINGS.len(), 26);
+    assert_eq!(strings::ALL_SETTINGS.len(), 27);
     for setting in strings::ALL_SETTINGS {
         assert!(!setting.label.trim().is_empty());
         assert!(!setting.label.contains('_'));
@@ -94,6 +94,7 @@ fn beacon_settings_are_surfaced() {
 
 #[test]
 fn dashboard_field_labels_use_the_required_concise_title_case() {
+    assert_eq!(strings::HUD_FRESHNESS_TITLE, "HUD Freshness");
     assert_eq!(strings::WEAPON_BAR_TITLE, "Weapon Bar");
     assert_eq!(strings::LIFE_TITLE, "Life State");
     assert_eq!(strings::ROLL_DODGE_TITLE, "Roll Dodge");
@@ -134,6 +135,7 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
         "Combat Timing",
         "PixelBeacon and Bus",
         "Always on Top",
+        "Stale Retention (seconds)",
         "Global Cooldown (ms)",
         "Light Attack Delay (ms)",
         "Auto Timing from Weapon",
@@ -151,6 +153,14 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
             "audited title-case label is missing: {expected}"
         );
     }
+}
+
+#[test]
+fn s098_stale_copy_exposes_age_and_preserves_the_safety_boundary() {
+    assert!(strings::SET_STALE_RETENTION.help.contains("Set 0"));
+    assert!(strings::SET_STALE_RETENTION.help.contains("signal loss"));
+    assert!(strings::HUD_FRESHNESS_TOOLTIP.contains("display-only"));
+    assert!(strings::HUD_FRESHNESS_TOOLTIP.contains("remain blocked"));
 }
 
 #[test]

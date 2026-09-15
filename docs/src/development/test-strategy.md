@@ -11,7 +11,7 @@ layer proves and what it does not prove.
 | Pure engines and controllers | `tests/input_engine.rs`, `tests/weave_engine.rs`, `tests/fishing.rs`, `tests/potion.rs` | Decisions, state transitions, ordering, deadlines, cancellation, and no replay without live ESO or device input |
 | Protocol codec and reader | `tests/pixelbus.rs`, `tests/pixelbus_display.rs` | Exact colors, markers, checksums, versions, geometry, freshness, aggregate events, corruption, and display reconciliation |
 | Embedded addon contract | `tests/beacon.rs` parses `addon/PixelBeacon/PixelBeacon.lua` and its manifest | Rust and Lua constants agree, required ESO APIs and events remain present, lifecycle invalidation is represented, embedded files stay managed and versioned |
-| Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, data-addon lifecycle and evidence facts remain separate, settings and state persist, and visible states remain truthful |
+| Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, data-addon lifecycle and evidence facts remain separate, settings and state persist, retained HUD presentation expires and recovers deterministically, and visible states remain truthful |
 | Headless interface geometry | `tests/app_ui_sizing.rs` through `egui_kittest` | Responsive cards, uniquely named addon actions, row ordering, confirmations, meter geometry, disclosure, text allocation, scaling, and layout boundaries without a GPU |
 | Logging and startup | `tests/logging.rs`, `tests/app_log_view.rs`, unit tests in `src/startup/mod.rs` | Runtime filtering, ring eviction, file format, input suppression, log presentation, and pre-GUI notification gating |
 | Packaging and release scripts | `scripts/release-notes.test.sh`, `scripts/validate-debian-package.test.sh`, and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, required Debian control fields, and asset gating |
@@ -56,7 +56,8 @@ These seams make negative properties reviewable:
 - no continuous-session limit that evicts retained encounters, omits terminal
   failure evidence, or retries a failed request automatically;
 - no last-saved encounter controller fact presented as current in-game state; and
-- no partial or corrupt Pixel Bus layout accepted as current.
+- no partial or corrupt Pixel Bus layout accepted as current; and
+- no retained HUD presentation routed back into automation or input authority.
 
 ## Safety evidence map
 
@@ -72,6 +73,7 @@ These seams make negative properties reviewable:
 | Fishing signal loss | `FishingController::on_event` | `signal_lost_from_every_active_state_disables_without_emitting` |
 | Auto Potion first blocker | `potion::evaluate` | [S043](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/043-auto-potion-restoration/spec.md) proves Ready, Triggered, and every runtime blocker family in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |
 | Auto Potion request persistence | `SessionState`, `AppModel::restore_session` | S097 proves legacy default-off migration, enabled and disabled round trips, UI and F3 convergence, close-time flush, and fail-closed startup in the application session-state tests |
+| Stale HUD presentation separation | `GameState::presentation_snapshot`, `AppModel::view_at`, `HudRetentionState` | S098 proves transition-stamped age without repaint, default and bounds, every runtime/focus/signal cause, visible age, recovery, immutable deadline cap, exact expiry, zero retention, and simultaneous authoritative gate closure in game-state and application tests |
 | Auto Potion death retry | `AutoPotionController::tick` | [S067](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/067-death-recovery-safety/spec.md) proves recovery starts a complete new retry episode in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |
 | Managed removal | `beacon::uninstall` | `uninstall_refuses_unmanaged_folder` |
 | Managed lifecycle writes | `beacon::status`, `install_with_options`, `redeploy_for_block_size` | [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) proves unproven targets, unmanaged manifests, and unproven links cannot be mutated in the [PixelBeacon tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/beacon.rs) |

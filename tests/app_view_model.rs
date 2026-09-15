@@ -9,10 +9,10 @@ use eso_weave::app::{
     combat_view, dashboard_layout, data_addon_view, default_delay_for, effective_dashboard_layout,
     fishing_label, life_state_view, menu_view, modal_extent, movement_view, override_edit_for,
     quickslot_view, resource_view, resource_view_with_watch, roll_dodge_view,
-    route_game_observation, route_reader_event, route_reader_safety_gate, skill_rows,
-    status_line_app, status_line_beacon, status_line_fishing, travel_state_view, ultimate_view,
-    ultimate_view_for_world, uninstall_enabled, weapon_bar_view, world_state_view, AppModel,
-    BeaconCondition, BeaconPrimaryAction, DashboardLayout, DataAddonPrimaryAction,
+    route_game_observation, route_reader_event, route_reader_observation, route_reader_safety_gate,
+    skill_rows, status_line_app, status_line_beacon, status_line_fishing, travel_state_view,
+    ultimate_view, ultimate_view_for_world, uninstall_enabled, weapon_bar_view, world_state_view,
+    AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout, DataAddonPrimaryAction,
     ResourcePresentation, SkillEdit, StatusRole, UiIntent, UltimatePresentation,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
@@ -20,6 +20,9 @@ use eso_weave::config::{LevelName, LoggingPrefs, Settings};
 use eso_weave::data_addon::DataAddonStatus;
 use eso_weave::fishing::{
     FishingConfig, FishingController, FishingState, MockFishingSink, StopReason,
+};
+use eso_weave::game::{
+    FocusObservation, GameState, Presence, ProcessObservation, SurfaceObservation,
 };
 use eso_weave::input::bindings::BindingTable;
 use eso_weave::input::InputEngine;
@@ -638,12 +641,51 @@ fn routing_life_state_updates_every_synthesis_consumer() {
 #[test]
 fn routing_world_state_updates_shared_game_observations_and_signal_loss_clears_it() {
     let game = eso_weave::game::GameState::default();
-    route_game_observation(PixelBusEvent::World(WorldState::Transitioning), &game);
+    route_game_observation(PixelBusEvent::World(WorldState::Transitioning), &game, 0);
     assert_eq!(game.snapshot().world, WorldState::Transitioning);
-    route_game_observation(PixelBusEvent::World(WorldState::Active), &game);
+    route_game_observation(PixelBusEvent::World(WorldState::Active), &game, 0);
     assert_eq!(game.snapshot().world, WorldState::Active);
-    route_game_observation(PixelBusEvent::SignalLost, &game);
+    route_game_observation(PixelBusEvent::SignalLost, &game, 0);
     assert_eq!(game.snapshot().world, WorldState::Unknown);
+}
+
+#[test]
+fn combined_worker_routing_invalidates_game_state_and_subsystems_together() {
+    let game = GameState::default();
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
+    game.observe_heartbeat(0);
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 0);
+
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    route_reader_observation(
+        PixelBusEvent::MenuGate(None),
+        &game,
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1_234,
+        &mut sink,
+    );
+
+    let (observations, loss_at_ms) = game.presentation_snapshot();
+    assert_eq!(observations.surface, SurfaceObservation::Unavailable);
+    assert_eq!(loss_at_ms, Some(1_234));
+    assert!(input.is_menu_gated());
 }
 
 #[test]
@@ -1022,6 +1064,362 @@ fn model_with_clock_and_potion(
     (model, potion, reader_update_rx, dispatch)
 }
 
+struct RetentionHarness {
+    model: AppModel,
+    game: GameState,
+    input: Arc<InputEngine>,
+    weave: Arc<Mutex<WeaveEngine>>,
+    fishing: Arc<Mutex<FishingController>>,
+    potion: Arc<Mutex<eso_weave::potion::AutoPotionController>>,
+    _dispatch: tracing::Dispatch,
+}
+
+fn retention_harness(root: &std::path::Path, seconds: u16) -> RetentionHarness {
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+    let input = Arc::new(input);
+    input.set_game_active(true);
+    input.set_focused(true);
+    input.set_life_gated(false);
+    input.set_roll_gated(false);
+    input.set_world_gated(false);
+    input.set_travel_gated(false);
+    input.set_menu_gated(false);
+
+    let mut engine = WeaveEngine::new(WeaveConfig::default());
+    engine.set_weapon_bar(WeaponBarSignal {
+        bar: ActiveBar::Front,
+        front: WeaponClass::DualWield,
+        back: WeaponClass::RestorationStaff,
+    });
+    engine.set_combat(CombatSignal::InCombat);
+    engine.set_movement(MovementSignal::OnFoot);
+    engine.set_life(LifeState::Alive);
+    engine.set_roll_dodge(RollDodgeState::Inactive);
+    engine.set_world(WorldState::Active);
+    engine.set_travel(TravelState::Inactive);
+    engine.set_resources(ResourceSet {
+        health: ResourceLevel::Percent(73),
+        stamina: ResourceLevel::Percent(61),
+        magicka: ResourceLevel::Percent(42),
+    });
+    engine.set_ultimate(UltimateTelemetry {
+        current: UltimateValue::Points(185),
+        maximum: UltimateValue::Points(500),
+        front_cost: UltimateValue::Points(125),
+        back_cost: UltimateValue::Points(250),
+    });
+    let weave = Arc::new(Mutex::new(engine));
+
+    let mut fishing_controller = FishingController::new(FishingConfig::default());
+    let mut init_sink = MockFishingSink::new();
+    fishing_controller.set_game_environment(true, true, 0, &mut init_sink);
+    fishing_controller.set_life_state(LifeState::Alive);
+    fishing_controller.set_world_state(WorldState::Active);
+    fishing_controller.set_travel_state(TravelState::Inactive);
+    fishing_controller.set_gated(false, 0, &mut init_sink);
+    let fishing = Arc::new(Mutex::new(fishing_controller));
+
+    let mut potion_controller = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    potion_controller.set_game_active(true);
+    potion_controller.set_focused(true);
+    potion_controller.set_life_state(LifeState::Alive);
+    potion_controller.set_world_state(WorldState::Active);
+    potion_controller.set_travel_state(TravelState::Inactive);
+    potion_controller.on_heartbeat();
+    potion_controller.set_enabled(true);
+    let potion = Arc::new(Mutex::new(potion_controller));
+
+    let game = GameState::default();
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
+    game.observe_heartbeat(0);
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 0);
+    game.observe_world(WorldState::Active);
+
+    let prefs = BeaconPrefs {
+        path_override: Some(root.to_path_buf()),
+        environment: Environment::Live,
+    };
+    let settings = Settings {
+        beacon: beacon::prefs_to_value(&prefs),
+        ui: serde_json::json!({
+            "stale_retention_seconds": seconds
+        }),
+        ..Settings::default()
+    };
+    let (dispatch, log) = logging::build(&LoggingPrefs::default(), PathBuf::from("."));
+    let (reader_update_tx, _reader_update_rx) = std::sync::mpsc::channel();
+    let model = AppModel::new_with_game(
+        input.clone(),
+        weave.clone(),
+        fishing.clone(),
+        Box::new(MockFishingSink::new()),
+        potion.clone(),
+        game.clone(),
+        log,
+        reader_update_tx,
+        settings,
+        Some(root.to_path_buf()),
+        Instant::now(),
+    );
+    RetentionHarness {
+        model,
+        game,
+        input,
+        weave,
+        fishing,
+        potion,
+        _dispatch: dispatch,
+    }
+}
+
+fn assert_retained_hud(view: &eso_weave::app::AppView, cause: &str, age_seconds: u64) {
+    assert_eq!(view.resources.health.text, "73%");
+    assert_eq!(view.resources.stamina.text, "61%");
+    assert_eq!(view.resources.magicka.text, "42%");
+    assert_eq!(view.ultimate.text, "185/500");
+    assert_eq!(view.combat.state, "In combat");
+    assert_eq!(view.movement.state, "On foot");
+    assert_eq!(view.life.state, "Alive");
+    assert_eq!(view.roll_dodge.state, "Inactive");
+    assert_eq!(view.world.state, "Active");
+    assert_eq!(view.travel.state, "Inactive");
+    assert_eq!(view.menu.state, "Gameplay");
+    assert_eq!(view.weapon_bar.active_bar, "Front");
+    let freshness = view.hud_freshness.as_ref().expect("stale status");
+    assert!(freshness.state_text.contains("Stale"));
+    assert!(freshness.state_text.contains(cause));
+    assert!(freshness.state_text.contains(&format!("{age_seconds}s")));
+}
+
+#[test]
+fn s098_retains_one_coherent_snapshot_for_inactive_focus_and_signal_losses() {
+    let root = tempfile::tempdir().unwrap();
+
+    let inactive = retention_harness(root.path(), 120);
+    assert!(inactive.model.view_at(0).hud_freshness.is_none());
+    inactive.game.update_processes(
+        ProcessObservation {
+            game: Presence::Absent,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unknown,
+        },
+        0,
+    );
+    inactive.input.set_game_active(false);
+    inactive.weave.lock().unwrap().clear_game_observations();
+    inactive.potion.lock().unwrap().set_game_active(false);
+    assert_retained_hud(&inactive.model.view_at(0), "game inactive", 0);
+    assert_retained_hud(&inactive.model.view_at(1_000), "game inactive", 1);
+    assert!(!inactive.input.is_game_active());
+    assert!(matches!(
+        inactive.potion.lock().unwrap().state(),
+        AutoPotionState::Dormant(DormantReason::GameInactive)
+    ));
+
+    let unfocused = retention_harness(root.path(), 120);
+    assert!(unfocused.model.view_at(10).hud_freshness.is_none());
+    unfocused.game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unfocused,
+        },
+        10,
+    );
+    unfocused.input.set_focused(false);
+    unfocused.potion.lock().unwrap().set_focused(false);
+    assert_retained_hud(&unfocused.model.view_at(10), "focus lost", 0);
+    assert_retained_hud(&unfocused.model.view_at(2_010), "focus lost", 2);
+    assert!(matches!(
+        unfocused.potion.lock().unwrap().state(),
+        AutoPotionState::Dormant(DormantReason::Unfocused)
+    ));
+
+    let signal = retention_harness(root.path(), 120);
+    assert!(signal.model.view_at(100).hud_freshness.is_none());
+    route_game_observation(PixelBusEvent::SignalLost, &signal.game, 100);
+    {
+        let mut weave = signal.weave.lock().unwrap();
+        let mut fishing = signal.fishing.lock().unwrap();
+        let mut potion = signal.potion.lock().unwrap();
+        let mut sink = MockFishingSink::new();
+        route_reader_event(
+            PixelBusEvent::SignalLost,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &signal.input,
+            100,
+            &mut sink,
+        );
+        weave.clear_game_observations();
+    }
+    assert_retained_hud(&signal.model.view_at(100), "signal unavailable", 0);
+    assert_retained_hud(&signal.model.view_at(3_100), "signal unavailable", 3);
+    assert!(signal.input.is_life_gated());
+    assert!(signal.input.is_roll_gated());
+    assert!(signal.input.is_world_gated());
+    assert!(signal.input.is_travel_gated());
+    assert!(matches!(
+        signal.potion.lock().unwrap().state(),
+        AutoPotionState::Blocked(BlockReason::BeaconUnavailable)
+    ));
+    assert_eq!(
+        signal.weave.lock().unwrap().resources(),
+        ResourceSet::new_unknown()
+    );
+}
+
+#[test]
+fn s098_unknown_evidence_is_named_truthfully_without_extending_the_interval() {
+    let root = tempfile::tempdir().unwrap();
+    let harness = retention_harness(root.path(), 5);
+    assert!(harness.model.view_at(1_000).hud_freshness.is_none());
+    harness.game.update_processes(
+        ProcessObservation {
+            game: Presence::Unknown,
+            launcher: Presence::Unknown,
+            focus: FocusObservation::Unknown,
+        },
+        2_000,
+    );
+    assert_retained_hud(&harness.model.view_at(2_000), "runtime unavailable", 0);
+    assert_retained_hud(&harness.model.view_at(3_000), "runtime unavailable", 1);
+
+    harness.game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unknown,
+        },
+        4_000,
+    );
+    assert_retained_hud(&harness.model.view_at(4_000), "focus unavailable", 2);
+    assert!(harness.model.view_at(7_000).hud_freshness.is_none());
+}
+
+#[test]
+fn s098_zero_no_snapshot_and_expiry_use_existing_fallback_idempotently() {
+    let root = tempfile::tempdir().unwrap();
+    let zero = retention_harness(root.path(), 0);
+    assert!(zero.model.view_at(0).hud_freshness.is_none());
+    zero.game.signal_lost(1);
+    let cleared = zero.model.view_at(1);
+    assert!(cleared.hud_freshness.is_none());
+    assert_ne!(cleared.resources.health.text, "73%");
+
+    let no_snapshot = retention_harness(root.path(), 3);
+    no_snapshot.game.signal_lost(0);
+    let unavailable = no_snapshot.model.view_at(0);
+    assert!(unavailable.hud_freshness.is_none());
+
+    let expiring = retention_harness(root.path(), 3);
+    assert!(expiring.model.view_at(100).hud_freshness.is_none());
+    expiring.game.signal_lost(100);
+    assert_retained_hud(&expiring.model.view_at(100), "signal unavailable", 0);
+    assert_retained_hud(&expiring.model.view_at(3_099), "signal unavailable", 2);
+    for now in [3_100, 3_101, 9_000] {
+        let expired = expiring.model.view_at(now);
+        assert!(expired.hud_freshness.is_none());
+        assert_ne!(expired.resources.health.text, "73%");
+    }
+}
+
+#[test]
+fn s098_fresh_recovery_replaces_and_cancels_the_stale_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    let harness = retention_harness(root.path(), 5);
+    assert!(harness.model.view_at(0).hud_freshness.is_none());
+    harness.game.signal_lost(1_000);
+    assert_retained_hud(&harness.model.view_at(1_000), "signal unavailable", 0);
+    assert_retained_hud(&harness.model.view_at(2_000), "signal unavailable", 1);
+
+    harness.weave.lock().unwrap().set_resources(ResourceSet {
+        health: ResourceLevel::Percent(88),
+        stamina: ResourceLevel::Percent(77),
+        magicka: ResourceLevel::Percent(66),
+    });
+    harness.game.observe_heartbeat(2_000);
+    harness
+        .game
+        .observe_surface(SurfaceObservation::Observed(MenuSurface::None), 2_000);
+    harness.game.observe_world(WorldState::Active);
+    let recovered = harness.model.view_at(2_000);
+    assert!(recovered.hud_freshness.is_none());
+    assert_eq!(recovered.resources.health.text, "88%");
+    assert_eq!(harness.model.view_at(9_000).resources.health.text, "88%");
+
+    harness.game.signal_lost(10_000);
+    assert_eq!(harness.model.view_at(10_000).resources.health.text, "88%");
+    assert!(harness.model.view_at(14_999).hud_freshness.is_some());
+    assert!(harness.model.view_at(15_000).hud_freshness.is_none());
+}
+
+#[test]
+fn s098_live_interval_edits_reuse_the_original_loss_time() {
+    let root = tempfile::tempdir().unwrap();
+    let mut harness = retention_harness(root.path(), 10);
+    assert!(harness.model.view_at(0).hud_freshness.is_none());
+    harness.game.signal_lost(1_000);
+    assert_retained_hud(&harness.model.view_at(1_000), "signal unavailable", 0);
+
+    let mut form = harness.model.settings_form();
+    form.ui.stale_retention_seconds = 2;
+    assert!(harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(form)))
+        .is_empty());
+    assert_retained_hud(&harness.model.view_at(2_999), "signal unavailable", 1);
+    assert!(harness.model.view_at(3_000).hud_freshness.is_none());
+
+    let mut form = harness.model.settings_form();
+    form.ui.stale_retention_seconds = 999;
+    harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+    assert!(
+        harness.model.view_at(4_000).hud_freshness.is_none(),
+        "an expired snapshot must not be resurrected by a longer setting"
+    );
+
+    let mut extended = retention_harness(root.path(), 10);
+    assert!(extended.model.view_at(0).hud_freshness.is_none());
+    extended.game.signal_lost(1_000);
+    assert_retained_hud(&extended.model.view_at(1_000), "signal unavailable", 0);
+    let mut form = extended.model.settings_form();
+    form.ui.stale_retention_seconds = 999;
+    assert!(extended
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(form)))
+        .is_empty());
+    assert_retained_hud(&extended.model.view_at(10_999), "signal unavailable", 9);
+    assert!(
+        extended.model.view_at(11_000).hud_freshness.is_none(),
+        "a longer setting must not extend the deadline captured at loss"
+    );
+}
+
+#[test]
+fn s098_loss_age_starts_at_the_observation_even_without_an_intervening_view() {
+    let root = tempfile::tempdir().unwrap();
+    let harness = retention_harness(root.path(), 10);
+    assert!(harness.model.view_at(0).hud_freshness.is_none());
+    harness.game.signal_lost(1_000);
+
+    assert_retained_hud(&harness.model.view_at(6_000), "signal unavailable", 5);
+    assert_retained_hud(&harness.model.view_at(10_999), "signal unavailable", 9);
+    assert!(harness.model.view_at(11_000).hud_freshness.is_none());
+}
+
 #[test]
 fn model_uses_the_injected_clock_not_its_own() {
     // The model must stamp fishing time on the shared clock it is given (the same
@@ -1064,11 +1462,14 @@ fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
         .all(|skill| skill.cooldown.text == "Game not active"));
 
     let game = model.game_state();
-    game.update_processes(ProcessObservation {
-        game: Presence::Present,
-        launcher: Presence::Present,
-        focus: FocusObservation::Focused,
-    });
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Present,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
     assert_eq!(game.snapshot().runtime, GameRuntime::Active);
     let unavailable = model.view();
     assert_eq!(unavailable.menu.state, "Signal unavailable");
@@ -1078,8 +1479,8 @@ fn model_projects_runtime_context_and_dormant_live_fields_truthfully() {
     );
     assert_eq!(unavailable.beacon_signal_line.state_text, "Not detected");
     assert_eq!(unavailable.world.state, "Not detected");
-    game.observe_heartbeat();
-    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    game.observe_heartbeat(0);
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 0);
     game.observe_world(WorldState::Active);
     let active = model.view();
     assert_eq!(active.runtime_line.state_text, "Active");
@@ -1291,29 +1692,38 @@ fn s093_stopped_runtime_clears_reload_reminder_across_restart() {
     let root = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(root.path());
     let game = model.game_state();
-    game.update_processes(ProcessObservation {
-        game: Presence::Present,
-        launcher: Presence::Absent,
-        focus: FocusObservation::Focused,
-    });
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
     model.apply_intent(UiIntent::InstallDataAddon);
     assert_eq!(model.view().data_addon.reload_line.state_text, "Required");
 
-    game.update_processes(ProcessObservation {
-        game: Presence::Absent,
-        launcher: Presence::Absent,
-        focus: FocusObservation::Unknown,
-    });
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Absent,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unknown,
+        },
+        0,
+    );
     assert_eq!(
         model.view().data_addon.reload_line.state_text,
         "Not required"
     );
 
-    game.update_processes(ProcessObservation {
-        game: Presence::Present,
-        launcher: Presence::Absent,
-        focus: FocusObservation::Focused,
-    });
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
     assert_eq!(
         model.view().data_addon.reload_line.state_text,
         "Not required"

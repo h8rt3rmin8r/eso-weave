@@ -94,6 +94,17 @@ When ESO is inactive, Live HUD values say **Game not active**. When ESO is activ
 but current telemetry is unavailable, they say **Signal unavailable**. Neither
 condition is presented as numeric zero.
 
+By default, the last coherent Live HUD and player-state values remain visible
+for 120 seconds after ESO becomes inactive, runtime or focus evidence becomes
+unavailable, focus is lost, or the live signal disappears. A visible **HUD
+Freshness** row marks them **Stale**, names the cause, and reports their
+whole-second age without replacing the values. Fresh coherent observations
+replace the snapshot immediately. At expiry, the ordinary **Game not active**
+or **Signal unavailable** presentation returns. **Stale Retention (seconds)** in
+Settings accepts 0 through 999; 0 clears immediately. Retention is display-only:
+weaving, Fishing, Auto Potion, and every synthesized-input gate react to the
+underlying loss immediately.
+
 ## Resource meters
 
 Health, Stamina, and Magicka use red, green, and blue fill. They show exact
@@ -151,6 +162,7 @@ weapon presets; latency adaptation and `k`; Fishing timing and Interact Key;
 Auto Potion watches, quickslot binding, and retry interval; pixel-bus block size,
 tolerance, and sampling intervals; AddOns override and environment; logging;
 theme; and always-on-top behavior.
+Appearance also includes the bounded Stale Retention interval for the Live HUD.
 
 Open **File > Settings** to edit configuration, **View > Live Log** to diagnose
 events, and **File > Exit** to close after pending geometry is flushed. The

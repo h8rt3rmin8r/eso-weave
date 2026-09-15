@@ -9,6 +9,12 @@ period; there is no Save button. Exact labels below match the interface.
 | --- | --- | --- |
 | Theme | Dark (default), Light | Changes the application color scheme immediately |
 | Always on Top | Off by default | Keeps the ESO Weave window above other windows immediately |
+| Stale Retention (seconds) | 120; 0 through 999 | Keeps the last coherent player-state presentation visible after runtime, focus, or signal loss; 0 clears immediately |
+
+Retained values show a **HUD Freshness** row with their stale cause and
+whole-second age. Fresh coherent observations replace them immediately. This
+setting changes presentation only; current game evidence still blocks weaving,
+Fishing, Auto Potion, and every other input-producing path at once.
 
 ## Combat Timing
 
@@ -112,7 +118,7 @@ telemetry safety gates.
 
 | Change | Saved | Current runtime effect |
 | --- | --- | --- |
-| Appearance, bindings, weaving, Auto Potion, logging, AddOns override, environment | Yes | Applied to the relevant current application component |
+| Appearance, stale retention, bindings, weaving, Auto Potion, logging, AddOns override, environment | Yes | Applied to the relevant current application component |
 | Fishing timing or Interact Key | Yes | Applied live; a changed configuration safely turns Fishing off |
 | Color Tolerance or sample intervals | Yes | Applied live at the next reader-worker iteration |
 | Block Size | Yes | Managed addon redeploy is attempted; reload ESO and restart ESO Weave |

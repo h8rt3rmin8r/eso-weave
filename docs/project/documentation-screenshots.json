@@ -76,12 +76,12 @@
       "destination": "docs/src/assets/screenshots/pixelbeacon-signal-lost.png",
       "pages": ["docs/src/getting-started/first-launch.md"],
       "reader_question": "How is a lost signal distinct from an uninstalled addon?",
-      "alt": "ESO Weave showing PixelBeacon installed but its signal lost",
-      "caption": "Deterministic lost-signal state: the addon remains installed, but current telemetry is unavailable until visibility returns.",
+      "alt": "ESO Weave showing PixelBeacon installed with a lost signal and stale retained HUD values",
+      "caption": "Deterministic lost-signal state: PixelBeacon remains installed, current input authority is unavailable, and the last coherent HUD is visibly marked stale until recovery or expiry.",
       "width": 1280,
       "height": 640,
-      "bytes": 101633,
-      "sha256": "9105b0db37e5d74c82893291946b90efc7fad01d3996715262bb73fe8440d121",
+      "bytes": 104089,
+      "sha256": "98660ff0b12d9923001a975ce5358f2b59c2a9fc6f26eadb799ec0d6fda39254",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "pixelbeacon-lost",
@@ -90,7 +90,7 @@
         "file": "pixelbeacon-lost--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "ae1e901a991bd160ae8a8802506b40ebccbf8e67ac96e7087fd9a1f2b279aeda",
+        "sha256": "f8de1afba2970d7b39c73521c58734daf45da17345a6d3b8faa750d959d41f84",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Signal-loss label or recovery guidance changes"
@@ -180,8 +180,8 @@
       "caption": "Deterministic recovery example: the request is retained, but Auto Potion is blocked and sends no input while PixelBeacon Signal is lost.",
       "width": 1280,
       "height": 640,
-      "bytes": 103053,
-      "sha256": "6da5d962553666047ea87ca4ab05f8b7b5e91ee3814dc7bad4af6e3d9bb22080",
+      "bytes": 105536,
+      "sha256": "3100fc860e12851f4f145f1f7edd80621936148ab36d85e0642884f0d8ff5282",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-blocked",
@@ -190,7 +190,7 @@
         "file": "auto-potion-blocked--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "c95b9cecb44ac7f4682d65517a3f0ad1af63bd7407d44054ab926d569b4b4a45",
+        "sha256": "25dc57a8c47c159d84ebeb1d1fcc2f877ae46ff88eed978f77e0296b8e96316f",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Block-reason vocabulary or recovery UI changes"
