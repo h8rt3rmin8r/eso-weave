@@ -24,13 +24,14 @@ pub use metrics::{
 };
 pub use model::{
     BackupReceipt, CaptureStatus, DeleteReceipt, EncounterCapture, EncounterEvent,
-    EncounterSummary, ImportOutcome, ImportReceipt, PartialReason, PayloadValue, SourceProvenance,
+    EncounterSummary, ImportOutcome, ImportReceipt, PartialReason, PayloadValue, RawLoss,
+    RawLossReason, RawObservation, RawSourceKind, RawValue, RawValueType, SourceProvenance,
 };
 pub use store::{backup_store, delete_all, delete_encounter, list_encounters, load_encounter};
 
-pub const CAPTURE_SCHEMA_VERSION: u32 = 1;
-pub const STORE_SCHEMA_VERSION: u32 = 1;
-pub const CANONICAL_FORMAT_VERSION: u32 = 1;
+pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
+pub const STORE_SCHEMA_VERSION: u32 = 2;
+pub const CANONICAL_FORMAT_VERSION: u32 = 2;
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;
 pub const MAX_ESTIMATED_BYTES: u64 = 32 * 1024 * 1024;
@@ -118,11 +119,11 @@ pub fn parse_capture(
         EmptyTable::Object,
     )
     .map_err(|error| EncounterError::Validation(error.to_string()))?;
-    let value = crate::data_addon::take_module(&mut root, "encounter")
+    let mut value = crate::data_addon::take_module(&mut root, "encounter")
         .map_err(EncounterError::Validation)?;
-    let capture: EncounterCapture = serde_json::from_value(value).map_err(|error| {
-        EncounterError::Validation(format!("invalid encounter schema: {error}"))
-    })?;
+    normalize_empty_raw_value_arrays(&mut value);
+    let capture: EncounterCapture = serde_json::from_value(value)
+        .map_err(|_| EncounterError::Validation("invalid encounter schema".into()))?;
     if capture.channel != expected_channel {
         return invalid(format!(
             "capture channel {} does not match expected {}",
@@ -131,6 +132,23 @@ pub fn parse_capture(
     }
     validate::validate(&capture)?;
     Ok(capture)
+}
+
+fn normalize_empty_raw_value_arrays(value: &mut serde_json::Value) {
+    let Some(observations) = value
+        .get_mut("raw_observations")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return;
+    };
+    for observation in observations {
+        let Some(values) = observation.get_mut("values") else {
+            continue;
+        };
+        if values.as_object().is_some_and(serde_json::Map::is_empty) {
+            *values = serde_json::Value::Array(Vec::new());
+        }
+    }
 }
 
 pub fn canonical_bytes(capture: &EncounterCapture) -> Result<Vec<u8>, EncounterError> {

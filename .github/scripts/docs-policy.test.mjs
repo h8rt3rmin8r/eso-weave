@@ -536,6 +536,27 @@ const requiredEncounterKinds = [
 const requiredEncounterMetrics = [
   "observed-dps", "observed-hps", "ability-damage-share", "effect-uptime", "ordered-cast-sequence",
 ];
+const requiredEncounterRawSources = [
+  ["EVENT_PLAYER_COMBAT_STATE", "callback"],
+  ["EVENT_PLAYER_DEACTIVATED", "callback"],
+  ["EVENT_COMBAT_EVENT", "callback"],
+  ["EVENT_EFFECT_CHANGED", "callback"],
+  ["EVENT_POWER_UPDATE", "callback"],
+  ["EVENT_ACTION_SLOT_ABILITY_USED", "callback"],
+  ["EVENT_ACTIVE_WEAPON_PAIR_CHANGED", "callback"],
+  ["EVENT_PLAYER_DEAD", "callback"],
+  ["EVENT_PLAYER_ALIVE", "callback"],
+  ["EVENT_BOSSES_CHANGED", "callback"],
+  ["EVENT_ACTIVE_QUICKSLOT_CHANGED", "callback"],
+  ["GetSlotBoundId", "api-sample"],
+  ["GetCurrentQuickslot", "api-sample"],
+  ["DoesUnitExist", "api-sample"],
+  ["GetUnitPower", "api-sample"],
+  ["GetFramerate", "api-sample"],
+  ["GetLatency", "api-sample"],
+  ["capture-finish", "lifecycle"],
+  ["clock-reset", "lifecycle"],
+];
 
 function validEncounterContract() {
   return {
@@ -585,6 +606,65 @@ function validEncounterContract() {
     follow_up_issues: { capture: 132, import: 133, calculation: 134, ui: 135, recommendations: 136, live_parity_verification: 131 },
     synthetic_fixture: { encounter: "specs/069-encounter-model/fixtures/dummy-encounter.json", projection: "specs/069-encounter-model/fixtures/dummy-projection.json", proves_live_parity: false },
   };
+}
+
+function validLosslessEncounterContract() {
+  const contract = validEncounterContract();
+  contract.schema_version = 2;
+  contract.as_of = "2026-09-15";
+  contract.capture_envelope = {
+    identity: ["session_id", "sequence"],
+    duration_clock: "monotonic_ms",
+    actor_identity: "source-exact",
+    raw_authority: "raw-observations",
+  };
+  contract.raw_authority = {
+    stream: "raw-observations",
+    schema_version: 2,
+    source_sequence_required: true,
+    source_version_required: true,
+    preserve_argument_order: true,
+    preserve_nil_positions: true,
+    retain_unknown_scalar_values: true,
+    retain_future_scalar_arguments: true,
+    max_values_per_observation: 256,
+    normalization_inputs: "callbacks-and-api-samples",
+    tagged_value_types: ["nil", "boolean", "number", "string"],
+    number_encoding: "finite-binary-exact",
+  };
+  contract.selected_sources = requiredEncounterRawSources.map(([id, kind]) => ({
+    id,
+    kind,
+    source_version: 1,
+    retain_all_scalar_values: true,
+  }));
+  contract.loss_policy = {
+    marker: "discontinuity",
+    raw_marker: "raw-loss",
+    degrade_spanning_metrics: true,
+    expose_ranges: true,
+    whole_observation: true,
+    silent_drop: false,
+    terminal_reserve: true,
+    temporal_discontinuity: "clock-reset",
+    reasons: [
+      "record-limit", "byte-limit", "string-limit", "unsupported-value", "callback-failed",
+    ],
+  };
+  contract.privacy_policy = {
+    local_only_default: true,
+    upload_default: false,
+    selected_values: "retain-exactly",
+    diagnostics: "value-free",
+    public_fixtures: "synthetic-only",
+  };
+  contract.actor_policy = {
+    identity: "source-exact",
+    roles: ["player", "pet", "npc", "boss"],
+    pet_owner_relationship: "source-value-or-derived-relationship",
+    ability_aliases: "derived-versioned-catalog-relationship",
+  };
+  return contract;
 }
 
 function validEncounterFixture() {
@@ -2311,6 +2391,57 @@ test("accepts the complete external encounter model contract", () => {
   assert.deepEqual(validateEncounterModelContract(validEncounterContract()), []);
 });
 
+test("S094 requires schema v2 raw observations as encounter authority", () => {
+  assert.deepEqual(validateEncounterModelContract(validLosslessEncounterContract()), []);
+});
+
+test("S094 requires exact ordered retention for every selected source", () => {
+  const contract = validLosslessEncounterContract();
+  contract.raw_authority.preserve_argument_order = false;
+  contract.raw_authority.preserve_nil_positions = false;
+  contract.raw_authority.retain_unknown_scalar_values = false;
+  contract.raw_authority.max_values_per_observation = 257;
+  contract.selected_sources.find(({ id }) => id === "EVENT_COMBAT_EVENT").retain_all_scalar_values = false;
+  contract.selected_sources.pop();
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /argument order/i);
+  assert.match(errors, /nil positions/i);
+  assert.match(errors, /unknown scalar values/i);
+  assert.match(errors, /256 tagged values/i);
+  assert.match(errors, /EVENT_COMBAT_EVENT.*all scalar values/i);
+  assert.match(errors, /missing selected source clock-reset/i);
+});
+
+test("S094 keeps exact raw values local and diagnostics value-free", () => {
+  const contract = validLosslessEncounterContract();
+  contract.privacy_policy.local_only_default = false;
+  contract.privacy_policy.upload_default = true;
+  contract.privacy_policy.selected_values = "redact";
+  contract.privacy_policy.diagnostics = "include-values";
+  contract.privacy_policy.public_fixtures = "captured-user-data";
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /local-only/i);
+  assert.match(errors, /uploaded by default/i);
+  assert.match(errors, /selected values.*retain exactly/i);
+  assert.match(errors, /diagnostics.*value-free/i);
+  assert.match(errors, /public fixtures.*synthetic/i);
+});
+
+test("S094 requires whole-observation loss with explicit ranges and reasons", () => {
+  const contract = validLosslessEncounterContract();
+  contract.loss_policy.whole_observation = false;
+  contract.loss_policy.expose_ranges = false;
+  contract.loss_policy.silent_drop = true;
+  contract.loss_policy.terminal_reserve = false;
+  contract.loss_policy.reasons.pop();
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /whole observation/i);
+  assert.match(errors, /loss ranges/i);
+  assert.match(errors, /silent drop/i);
+  assert.match(errors, /terminal reserve/i);
+  assert.match(errors, /callback-failed/i);
+});
+
 test("rejects unsafe encounter transport, privacy, storage, and derivation policies", () => {
   const contract = validEncounterContract();
   contract.storage_planes.raw = "catalog.sqlite";
@@ -2458,7 +2589,7 @@ test("rejects duplicate sequences, undeclared gaps, and backward monotonic time"
   assert.match(validateEncounterFixture(backwards).join("\n"), /backward monotonic time/i);
 });
 
-test("rejects malformed discontinuities and private fixture fields", () => {
+test("rejects malformed discontinuities", () => {
   const malformed = validEncounterFixture();
   for (const event of malformed.events.filter((event) => event.sequence >= 12)) event.sequence -= 2;
   malformed.envelope.last_sequence -= 2;
@@ -2467,17 +2598,20 @@ test("rejects malformed discontinuities and private fixture fields", () => {
   marker.payload.missing_sequence_to = 60;
   assert.match(validateEncounterFixture(malformed).join("\n"), /discontinuity.*preceding missing range/i);
 
-  const privateFixture = validEncounterFixture();
-  privateFixture.events[2].payload.subject = { account_name: "private" };
-  assert.match(validateEncounterFixture(privateFixture).join("\n"), /prohibited private field account_name/i);
-
-  const privateEnvelope = validEncounterFixture();
-  privateEnvelope.envelope.metadata = { character_name: "private" };
-  assert.match(validateEncounterFixture(privateEnvelope).join("\n"), /prohibited private field character_name/i);
-
   const missingReason = validEncounterFixture();
   missingReason.events.find((event) => event.kind === "discontinuity").payload.reason = "";
   assert.match(validateEncounterFixture(missingReason).join("\n"), /discontinuity.*non-empty reason/i);
+});
+
+test("S094 does not reject retained raw fixture values as prohibited private fields", () => {
+  const fixture = validEncounterFixture();
+  fixture.envelope.schema_version = 2;
+  fixture.events[2].payload.raw_fixture_values = {
+    account_name: "@SyntheticAccount",
+    character_name: "Synthetic Character",
+    location: "Synthetic Location",
+  };
+  assert.doesNotMatch(validateEncounterFixture(fixture).join("\n"), /prohibited private field/i);
 });
 
 test("unions overlapping effect intervals across actor instances", () => {

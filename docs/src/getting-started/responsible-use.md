@@ -33,9 +33,10 @@ The separately managed ESO Weave Data addon contains catalog and encounter
 modules with isolated state and activation rules. Catalog capture runs only
 after an explicit user command and reads documented public addon APIs outside
 combat. Encounter capture remains dormant until the user explicitly arms one
-Live or PTS encounter, records bounded numeric observations with encounter-local
-anonymous actors, declares capture loss, then disarms. Neither module uploads
-data, drives gameplay, or uses Pixel Bus for bulk records.
+Live or PTS encounter, warns that exact local values can include names and
+identifiers, records bounded observations from deliberately selected sources,
+declares capture loss, then disarms. Neither module uploads data, drives
+gameplay, or uses Pixel Bus for bulk records.
 
 ## Privacy and network behavior
 
@@ -50,10 +51,13 @@ user's local SavedVariables. The desktop treats that file as hostile data, never
 executes it, never uploads it, and keeps user-collected localized text local.
 
 The optional encounter module records one bounded local SavedVariables envelope.
-The current desktop importer treats the shared file as hostile data, verifies
-the outer and encounter schemas plus loss declarations, and keeps accepted raw
-history in a user-owned store separate from the shipped catalog. It never
-uploads the capture.
+Every scalar value delivered by a selected callback is retained exactly unless
+a hard bound or unsupported runtime value causes declared whole-observation
+loss. The current desktop importer treats the shared file as hostile data,
+verifies the outer and encounter schemas plus loss declarations, and keeps
+accepted raw history in a user-owned store separate from the shipped catalog.
+It never uploads the capture, and logs, receipts, public fixtures, and default UI
+summaries do not reproduce raw payload values.
 
 The desktop application performs one best-effort background startup check against
 the official `esoui/esoui` live client-version source. That request is used only

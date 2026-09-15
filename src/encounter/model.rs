@@ -28,6 +28,10 @@ pub enum PartialReason {
     UserStopped,
     PlayerDeactivated,
     CallbackFailed,
+    UnsupportedValue,
+    RecordLimit,
+    ByteLimit,
+    StringLimit,
 }
 
 impl PartialReason {
@@ -38,6 +42,10 @@ impl PartialReason {
             Self::UserStopped => "user-stopped",
             Self::PlayerDeactivated => "player-deactivated",
             Self::CallbackFailed => "callback-failed",
+            Self::UnsupportedValue => "unsupported-value",
+            Self::RecordLimit => "record-limit",
+            Self::ByteLimit => "byte-limit",
+            Self::StringLimit => "string-limit",
         }
     }
 }
@@ -68,6 +76,92 @@ pub struct EncounterEvent {
     pub monotonic_ms: u64,
     pub kind: String,
     pub payload: BTreeMap<String, PayloadValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sequence: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_ordinal: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RawSourceKind {
+    Callback,
+    ApiSample,
+    Lifecycle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RawValueType {
+    Nil,
+    Boolean,
+    String,
+    Number,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawValue {
+    pub position: usize,
+    pub value_type: RawValueType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boolean: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub string: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign: Option<i8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub significand: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exponent: Option<i16>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawObservation {
+    pub session_id: String,
+    pub encounter_id: String,
+    pub sequence: u64,
+    pub monotonic_ms: u64,
+    pub api_version: u32,
+    pub source_kind: RawSourceKind,
+    pub source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_code: Option<i64>,
+    pub source_version: u32,
+    pub argument_count: usize,
+    pub return_count: usize,
+    pub values: Vec<RawValue>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RawLossReason {
+    RecordLimit,
+    ByteLimit,
+    StringLimit,
+    UnsupportedValue,
+    CallbackFailed,
+}
+
+impl RawLossReason {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::RecordLimit => "record-limit",
+            Self::ByteLimit => "byte-limit",
+            Self::StringLimit => "string-limit",
+            Self::UnsupportedValue => "unsupported-value",
+            Self::CallbackFailed => "callback-failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawLoss {
+    pub missing_sequence_from: u64,
+    pub missing_sequence_to: u64,
+    pub reason: RawLossReason,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,7 +171,8 @@ pub struct EncounterCapture {
     pub addon_version: u32,
     pub status: CaptureStatus,
     pub channel: Channel,
-    pub privacy_profile: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub privacy_profile: Option<String>,
     pub source: SourceProvenance,
     pub session_id: String,
     pub encounter_id: String,
@@ -94,6 +189,18 @@ pub struct EncounterCapture {
     pub partial_reason: Option<PartialReason>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub warnings: BTreeMap<String, u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_first_sequence: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_last_sequence: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_observation_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_omitted_observation_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_loss: Option<RawLoss>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw_observations: Vec<RawObservation>,
     pub events: Vec<EncounterEvent>,
 }
 

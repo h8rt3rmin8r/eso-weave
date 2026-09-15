@@ -176,7 +176,10 @@ pub fn calculate_projection(
     let mut events = capture.events.iter().collect::<Vec<_>>();
     events.sort_by_key(|event| event.sequence);
     let loss_ranges = collect_loss_ranges(&events)?;
-    let quality = if loss_ranges.is_empty() {
+    let has_raw_loss = capture
+        .raw_omitted_observation_count
+        .is_some_and(|count| count != 0);
+    let quality = if loss_ranges.is_empty() && !has_raw_loss {
         MetricQuality::Complete
     } else {
         MetricQuality::Degraded

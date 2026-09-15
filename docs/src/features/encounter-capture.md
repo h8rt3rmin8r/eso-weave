@@ -1,8 +1,10 @@
 # Encounter Capture
 
 The `EsoWeaveData` encounter module is an explicit local observation tool.
-It records one privacy-minimized encounter into ESO SavedVariables so later work
-can import and analyze the same ordered facts outside the game.
+It records one selectively subscribed encounter into ESO SavedVariables so later
+work can import and analyze the same ordered facts outside the game. Every scalar
+value delivered by a selected source is retained exactly unless a declared hard
+limit or unsupported runtime type prevents the whole observation from fitting.
 
 This capture is not automatic. Loading or installing the addon does not authorize
 recording. It remains dormant until you arm one Live or PTS encounter.
@@ -22,7 +24,9 @@ Outside combat, enter one of:
 
 The channel is always explicit. Arming during combat waits until combat ends,
 then starts at the next clean combat boundary. One arm authorizes at most one
-encounter, and normal combat end disarms automatically.
+encounter, and normal combat end disarms automatically. The arm message warns
+that exact local data can include account, character, unit, ability, effect, and
+other identifiers supplied by ESO.
 
 Use these additional commands:
 
@@ -39,31 +43,45 @@ This makes replacement a deliberate local decision.
 
 ## Captured facts
 
-The addon records encounter boundaries, damage, healing, effects, resources,
-casts, weapon-bar changes, death, resurrection, boss health, performance,
-quickslots, and explicit discontinuities. Every event carries an authoritative
-sequence and nondecreasing elapsed milliseconds.
+Schema v2 keeps two related streams. `raw_observations` is authoritative: each
+selected callback or normalization-dependent API read carries its raw source
+sequence, monotonic time, API and source versions, input and return counts, and
+contiguous tagged values. Tagged nil, boolean, string, and finite-number values
+preserve positions and exact values. Unknown combat results and extra future
+scalar arguments remain raw even when no normalized fact exists.
+One raw observation is limited to 256 tagged values. A larger callback is
+omitted whole and declared as record-limit loss.
 
-Actors receive opaque positive integers that exist only for one encounter.
-Ability and effect references remain numeric so a later catalog can resolve an
-unknown ID without rewriting the raw observation.
+The `events` stream remains a linked compatibility projection for current
+metrics and recommendations. It records encounter boundaries, damage, healing,
+effects, resources, casts, weapon-bar changes, death, resurrection, boss health,
+performance, quickslots, and discontinuities. Each v2 projection identifies its
+primary raw source sequence and projection ordinal. Encounter-local actor numbers
+in this derived stream do not replace or redact source-exact raw names, tags, and
+identifiers.
 
-The capture intentionally omits account names, character names, unit names,
-ability and effect names, chat, guild, and location. Unit IDs and tags are used
-only as in-memory keys for assigning encounter-local actor numbers. The mapping
-is discarded after finalization.
+If the initial combat-state callback itself exceeds a hard raw bound, the
+partial encounter-start boundary references declared-lost raw sequence 1. No raw
+value is fabricated, and the retained loss range explains the missing source.
+
+The selected-source matrix is maintained in the S094 contract. Selective
+subscription controls addon cost; lossless retention controls what happens after
+a selected callback is delivered. S094 adds no new event family.
 
 ## Bounds and incomplete capture
 
-One capture is limited to 100,000 stored events, 4,096 local actor mappings, and
-a conservative 32 MiB estimated SavedVariables budget. Exact serialized size
-depends on ESO and is not claimed by the in-game estimate.
+One capture is limited to 100,000 raw observations, 100,000 compatibility events,
+256 tagged values per observation, 4,096 derived actor mappings, 64 KiB per raw
+string, and a conservative 32 MiB estimated SavedVariables budget. Exact
+serialized size depends on ESO and is not claimed by the in-game estimate.
 
-Capacity is reserved for a discontinuity and encounter-end event. If regular
-capacity is exhausted, source sequencing continues in constant memory and the
-terminal discontinuity declares the exact omitted range. Reload, deactivation,
-backward clock movement, explicit stop, or callback failure also produces a
-partial result instead of a false complete result.
+Capacity is reserved for raw and normalized terminal evidence. A record, byte,
+or string limit and an unsupported value omit the entire raw observation rather
+than truncating it. Raw sequencing then continues in constant memory and one
+`raw_loss` range declares exact missing sequences and the first loss reason.
+Backward clock movement creates a retained temporal-discontinuity observation.
+Reload, deactivation, explicit stop, or callback failure also produces a partial
+result instead of a false complete result.
 
 ## Save and ownership boundary
 
@@ -76,9 +94,11 @@ per-user application data directory.
 
 The importer treats the SavedVariables file as hostile text, validates every
 bound and sequence, computes the canonical hash, and preserves prior history on
-failure. Encounter History labels derived results as observed and exposes partial
-capture loss and unresolved catalog IDs. Deletion remains an explicit confirmed
-local action.
+failure. Store schema v2 accepts legacy capture v1 and raw-authority capture v2.
+Migration copies legacy canonical bytes and hashes unchanged. Encounter History
+labels derived results as observed and exposes partial capture loss and unresolved
+catalog IDs without displaying raw payload values. Deletion remains an explicit
+confirmed local action.
 
 Encounter capture does not use Pixel Bus and has no relationship to input
 authorization, Weaving, Fishing, or Auto Potion. It does not perform protected

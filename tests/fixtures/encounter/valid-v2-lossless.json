@@ -1,0 +1,211 @@
+{
+  "schema_version": 2,
+  "addon_version": 2,
+  "status": "complete",
+  "channel": "live",
+  "source": {
+    "api_version": 101050,
+    "game_version": "12.0.7",
+    "locale": "en",
+    "platform": "pc"
+  },
+  "session_id": "session-1788912002-2000",
+  "encounter_id": "encounter-1788912002-2",
+  "started_at": "1788912002",
+  "finished_at": "1788912003",
+  "started_monotonic_ms": 2000,
+  "ended_monotonic_ms": 1000,
+  "first_sequence": 1,
+  "last_sequence": 2,
+  "stored_event_count": 2,
+  "omitted_event_count": 0,
+  "estimated_bytes": 4096,
+  "warnings": {},
+  "raw_first_sequence": 1,
+  "raw_last_sequence": 4,
+  "raw_observation_count": 4,
+  "raw_omitted_observation_count": 0,
+  "raw_observations": [
+    {
+      "session_id": "session-1788912002-2000",
+      "encounter_id": "encounter-1788912002-2",
+      "sequence": 1,
+      "monotonic_ms": 0,
+      "api_version": 101050,
+      "source_kind": "callback",
+      "source_id": "EVENT_PLAYER_COMBAT_STATE",
+      "source_code": 2,
+      "source_version": 1,
+      "argument_count": 2,
+      "return_count": 0,
+      "values": [
+        {
+          "position": 1,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "1",
+          "exponent": 1
+        },
+        {
+          "position": 2,
+          "value_type": "boolean",
+          "boolean": true
+        }
+      ]
+    },
+    {
+      "session_id": "session-1788912002-2000",
+      "encounter_id": "encounter-1788912002-2",
+      "sequence": 2,
+      "monotonic_ms": 250,
+      "api_version": 101050,
+      "source_kind": "callback",
+      "source_id": "EVENT_POWER_UPDATE",
+      "source_code": 3,
+      "source_version": 1,
+      "argument_count": 9,
+      "return_count": 0,
+      "values": [
+        {
+          "position": 1,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "3",
+          "exponent": 0
+        },
+        {
+          "position": 2,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "987654321",
+          "exponent": 0
+        },
+        {
+          "position": 3,
+          "value_type": "nil"
+        },
+        {
+          "position": 4,
+          "value_type": "boolean",
+          "boolean": false
+        },
+        {
+          "position": 5,
+          "value_type": "string",
+          "string": "Future @Account Ω"
+        },
+        {
+          "position": 6,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "3",
+          "exponent": -1
+        },
+        {
+          "position": 7,
+          "value_type": "number",
+          "sign": -1,
+          "significand": "0",
+          "exponent": 0
+        },
+        {
+          "position": 8,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "1",
+          "exponent": -1074
+        },
+        {
+          "position": 9,
+          "value_type": "nil"
+        }
+      ]
+    },
+    {
+      "session_id": "session-1788912002-2000",
+      "encounter_id": "encounter-1788912002-2",
+      "sequence": 3,
+      "monotonic_ms": 500,
+      "api_version": 101050,
+      "source_kind": "api-sample",
+      "source_id": "GetSlotBoundId",
+      "source_version": 1,
+      "argument_count": 2,
+      "return_count": 1,
+      "values": [
+        {
+          "position": 1,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "4",
+          "exponent": 0
+        },
+        {
+          "position": 2,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "9",
+          "exponent": 0
+        },
+        {
+          "position": 3,
+          "value_type": "number",
+          "sign": 1,
+          "significand": "9007199254740991",
+          "exponent": 971
+        }
+      ]
+    },
+    {
+      "session_id": "session-1788912002-2000",
+      "encounter_id": "encounter-1788912002-2",
+      "sequence": 4,
+      "monotonic_ms": 1000,
+      "api_version": 101050,
+      "source_kind": "lifecycle",
+      "source_id": "capture-finish",
+      "source_version": 1,
+      "argument_count": 2,
+      "return_count": 0,
+      "values": [
+        {
+          "position": 1,
+          "value_type": "string",
+          "string": "combat-ended"
+        },
+        {
+          "position": 2,
+          "value_type": "boolean",
+          "boolean": true
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "session_id": "session-1788912002-2000",
+      "encounter_id": "encounter-1788912002-2",
+      "sequence": 1,
+      "monotonic_ms": 0,
+      "kind": "encounter-start",
+      "payload": {
+        "reason": "combat-started"
+      },
+      "source_sequence": 1,
+      "projection_ordinal": 0
+    },
+    {
+      "session_id": "session-1788912002-2000",
+      "encounter_id": "encounter-1788912002-2",
+      "sequence": 2,
+      "monotonic_ms": 1000,
+      "kind": "encounter-end",
+      "payload": {
+        "complete": true,
+        "reason": "combat-ended"
+      },
+      "source_sequence": 4,
+      "projection_ordinal": 0
+    }
+  ]
+}

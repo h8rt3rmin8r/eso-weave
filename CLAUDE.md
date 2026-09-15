@@ -7,8 +7,9 @@ engine executes combat action sequences, and an optional fishing module reads a
 pixel-bus signal rendered by the embedded PixelBeacon companion addon. A
 separately managed ESO Weave Data addon contains isolated catalog and encounter
 modules. Catalog export is user-initiated and bounded. Encounter capture requires
-one explicit arm and remains privacy-minimized, name-free, local, loss-aware, and
-unable to use Pixel Bus or authorize actions.
+one explicit arm and retains exact values from deliberately selected sources in
+a bounded local, loss-aware record that cannot use Pixel Bus or authorize
+actions. Raw values never enter logs, diagnostics, public evidence, or uploads.
 Canonical shipped behavior and architecture live under `docs/src`; every feature traces
 to an actionable issue and that corpus. Current build plans under
 `docs/project/build-plans/` define ordered work slices, while completed plans
