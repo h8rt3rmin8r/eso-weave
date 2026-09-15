@@ -150,13 +150,13 @@
       "kind": "deterministic-app",
       "destination": "docs/src/assets/screenshots/auto-potion-ready.png",
       "pages": ["docs/src/features/auto-potion.md"],
-      "reader_question": "Where are resource watches, thresholds, and the Quickslot key configured?",
-      "alt": "ESO Weave Auto Potion settings showing resource watches, thresholds, Quickslot key, and retry interval",
-      "caption": "Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the Quickslot key is Q.",
+      "reader_question": "Where are resource watches, thresholds, and the detected Quickslot binding shown?",
+      "alt": "ESO Weave Auto Potion settings showing resource watches, thresholds, detected Quickslot binding, and retry interval",
+      "caption": "Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the detected Quickslot binding is read-only.",
       "width": 1280,
-      "height": 820,
-      "bytes": 119687,
-      "sha256": "1887295b5ad383d9cdd74d2057a075a262b4633b245b37a7430e0a8a6af7a6de",
+      "height": 900,
+      "bytes": 211721,
+      "sha256": "27a17f94152ed588fd85ad0fdee147684fad59536c7e511a12dac8152b4ecf7d",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-ready",
@@ -165,8 +165,8 @@
         "file": "auto-potion-ready--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "c7d76f175bf164f6436fcba20814c52051e2029633edcb95e7a4d63986c2384b",
-        "crop": [0, 0, 1280, 820]
+        "sha256": "27a17f94152ed588fd85ad0fdee147684fad59536c7e511a12dac8152b4ecf7d",
+        "crop": [0, 0, 1280, 900]
       },
       "update_trigger": "Resource-watch, threshold, or ready-state UI changes"
     },

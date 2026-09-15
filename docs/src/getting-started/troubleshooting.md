@@ -90,9 +90,9 @@ under Appearance when immediate clearing is preferred.
 
 ## Native binding evidence is unavailable
 
-PixelBeacon discovers bindings without changing ESO controls. S101 consumes the
-combat subset for weaving, while Interact and Quickslot remain observation-only
-until S102. The evidence distinguishes these states for each native ESO action:
+PixelBeacon discovers bindings without changing ESO controls. Weaving, Fishing,
+and Auto Potion consume their current action subset without a desktop fallback.
+The evidence distinguishes these states for each native ESO action:
 
 | State | Meaning | Safe next action |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ until S102. The evidence distinguishes these states for each native ESO action:
 | Unbound | ESO has no keyboard or mouse assignment for the action | Bind the action in ESO's Controls menu |
 | Conflicting | More than one distinct native assignment exists | Leave one intended keyboard or mouse chord in ESO |
 | Unsupported | The only assignment is gamepad, combined, hold, unknown, or otherwise outside the portable registry | Choose an ordinary keyboard key or supported mouse control in ESO |
-| Valid | One supported primary and normalized modifier set was decoded | Combat actions are usable now; Interact and Quickslot consumption follows in S102 |
+| Valid | One supported primary and normalized modifier set was decoded | The corresponding weave, Fishing, or Auto Potion action is usable now |
 
 Do not install a custom binding addon or edit `Bindings.xml` to repair evidence.
 PixelBeacon uses only ESO's read-only runtime binding APIs and deliberately has no
@@ -110,6 +110,10 @@ If valid combat evidence still passes through, confirm the skill row is enabled
 and required Attack or Block evidence is also valid. Release extra physical
 modifiers that are absent from a target chord. ESO Weave refuses to synthesize a
 release for a modifier you are holding.
+
+If Fishing or Auto Potion reports a binding unavailable state, inspect the
+read-only detected row in Settings, repair the action in ESO, and reload the UI.
+Do not add the obsolete gameplay key back to `config.json` because it is ignored.
 
 ## ESO Weave Data is missing, outdated, unmanaged, or awaiting reload
 

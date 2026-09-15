@@ -40,9 +40,10 @@ adaptation adds its scaled allowance to Light Attack and Bash only, with a
 | Arm Timeout (ms) | 8000; 0 through 60000 | Maximum wait for cast confirmation |
 | Reel Delay (ms) | 100; 0 through 60000 | Wait after a detected bite before reeling |
 | Recast Delay (ms) | 3000; 0 through 60000 | Wait after a catch or timeout before recasting |
-| Interact Key | `E`; supported key list below | Key generated for cast, reel, and recast actions |
+| Detected Interact Binding | Current ESO evidence; read-only | Chord generated for cast, reel, and recast actions; non-valid evidence blocks output |
 
-All four Fishing controls apply live. If a value changes while Fishing is
+The former statement that "All four Fishing controls apply live" now narrows to
+the three timing controls because the fourth row is read-only. If a value changes while Fishing is
 requested or active, ESO Weave stops that session without sending another input.
 Start Fishing explicitly after the edit to use the new configuration. Applying
 an unchanged form does not interrupt a session.
@@ -71,7 +72,7 @@ cached safety evidence until a fresh sample is decoded.
 | Watch Health (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when fresh Health is at or below the threshold |
 | Watch Magicka (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when fresh Magicka is at or below the threshold |
 | Watch Stamina (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when fresh Stamina is at or below the threshold |
-| Quickslot Key | `Q`; supported key list below | Key pressed for one eligible attempt |
+| Detected Quickslot Binding | Current ESO evidence; read-only | Chord pressed for one eligible attempt; non-valid evidence blocks output |
 | Minimum Retry Interval (ms) | 1500; 0 through 600000 | Floor between attempts, independent of observed cooldown |
 
 The enabled watches use OR, not AND. Any one fresh enabled resource at or below
@@ -119,7 +120,8 @@ telemetry safety gates.
 | Change | Saved | Current runtime effect |
 | --- | --- | --- |
 | Appearance, stale retention, bindings, weaving, Auto Potion, logging, AddOns override, environment | Yes | Applied to the relevant current application component |
-| Fishing timing or Interact Key | Yes | Applied live; a changed configuration safely turns Fishing off |
+| Fishing timing | Yes | Applied live; a changed configuration safely turns Fishing off |
+| Detected Interact and Quickslot bindings | No | Read-only current ESO evidence; updates with PixelBeacon observations |
 | Color Tolerance or sample intervals | Yes | Applied live at the next reader-worker iteration |
 | Block Size | Yes | Managed addon redeploy is attempted; reload ESO and restart ESO Weave |
 | Window, disclosure, and log height | Yes | Applied immediately as layout state |

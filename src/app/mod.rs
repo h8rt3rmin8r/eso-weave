@@ -34,7 +34,7 @@ use crate::game::{
     BeaconFreshness, FocusObservation, GameContext, GameObservations, GameRuntime, GameState,
     InstallationProvider, InstallationState, SurfaceObservation,
 };
-use crate::input::InputEngine;
+use crate::input::{InputEngine, NativeBindingSet};
 use crate::logging::LogHandle;
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, LiveReaderConfig, MenuSurface, MovementSignal,
@@ -108,6 +108,7 @@ pub fn fishing_indicator(state: FishingState, reason: Option<StopReason>) -> &'s
             Some(StopReason::WorldUnavailable) => strings::FISHING_IDLE_WORLD_UNAVAILABLE,
             Some(StopReason::TravelPending) => strings::FISHING_IDLE_TRAVEL_PENDING,
             Some(StopReason::SettingsChanged) => strings::FISHING_IDLE_SETTINGS_CHANGED,
+            Some(StopReason::InteractUnavailable) => strings::FISHING_IDLE_INTERACT_UNAVAILABLE,
             None | Some(StopReason::UserStop) => strings::FISHING_IDLE,
         },
     }
@@ -220,7 +221,8 @@ pub fn status_line_fishing(state: FishingState, reason: Option<StopReason>) -> S
             | Some(StopReason::Unfocused)
             | Some(StopReason::Suspended)
             | Some(StopReason::PlayerUnavailable)
-            | Some(StopReason::SettingsChanged) => StatusRole::Warning,
+            | Some(StopReason::SettingsChanged)
+            | Some(StopReason::InteractUnavailable) => StatusRole::Warning,
             Some(StopReason::WorldUnavailable | StopReason::TravelPending) => StatusRole::Warning,
             None | Some(StopReason::UserStop) => StatusRole::Muted,
         },
@@ -544,6 +546,7 @@ pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
         AutoPotionState::Blocked(reason) => {
             let text = match reason {
                 BlockReason::BeaconUnavailable => strings::AUTO_POTION_BLOCKED_BEACON,
+                BlockReason::QuickslotBindingUnavailable => strings::AUTO_POTION_BLOCKED_BINDING,
                 BlockReason::Suspended => strings::AUTO_POTION_BLOCKED_SUSPENDED,
                 BlockReason::GameContext => strings::AUTO_POTION_BLOCKED_CONTEXT,
                 BlockReason::PlayerUnavailable(LifeState::Unknown | LifeState::Alive) => {
@@ -2117,6 +2120,11 @@ impl AppModel {
     /// A fresh settings form seeded from the current configuration.
     pub fn settings_form(&self) -> SettingsForm {
         SettingsForm::load(&self.settings).0
+    }
+
+    /// Current coherent native binding evidence for read-only settings status.
+    pub fn native_bindings(&self) -> NativeBindingSet {
+        self.input.native_bindings()
     }
 
     /// Current runtime pixel-bus geometry for the settings footprint caption.

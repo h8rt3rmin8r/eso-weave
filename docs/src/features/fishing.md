@@ -1,6 +1,8 @@
 # Fishing
 
-The Interact Key is also the use key or action key, and its shipped default is E.
+The setting historically called **Interact Key** is also the use or action
+binding. Fishing reads its current keyboard or mouse chord from ESO and never
+keeps a separate fallback.
 
 Fishing can cast, wait for a bite, reel in, and recast while the player remains
 at a fishing hole. The hotkey performs the first cast. Do not cast manually
@@ -20,8 +22,8 @@ If ESO Weave is suspended, enabling Fishing retains the request but sends no
 cast. Resume also sends nothing. Face the fishing hole and make a fresh manual
 cast, or turn Fishing off and on after resuming, to recover deliberately.
 
-On Linux, the default generated `E` interact key is included in the virtual
-device capability set before interception begins.
+On Linux, the virtual device advertises the complete portable native-control set
+before interception begins.
 
 ## Status meanings
 
@@ -41,6 +43,7 @@ device capability set before interception begins.
 | Idle (world unavailable) | World State is loading or Unknown |
 | Idle (travel pending) | A recall or jump is pending or cannot be ruled out |
 | Idle (settings changed) | Fishing settings changed; start Fishing explicitly to use them |
+| Idle (Interact binding unavailable) | Interact evidence is unavailable, unbound, conflicting, unsupported, or changed after admission; repair the binding in ESO and restore fresh PixelBeacon evidence |
 
 The request is retained through game inactivity, focus loss, and life, world, or
 travel safety cancellation, but no generated input is retained for replay. After
@@ -67,11 +70,11 @@ The controller consumes `Heartbeat`, `FishingStarted`, `BiteDetected`,
 `FishingStopped`, and `SignalLost` events and advances only on events and clock
 ticks. It never blocks a worker and never sends input after losing the beacon.
 
-After start, the controller sends the interact key once and waits up to
+After start, the controller sends the current validated Interact chord once and waits up to
 `arm_timeout_ms` (8000 ms by default) for a cast. A bite schedules the reel after
 `reel_delay_ms` (100 ms), then the next cast after `recast_delay_ms` (3000 ms).
-All three values and the Interact Key are configurable in Settings and apply to
-the running controller. A changed Fishing configuration stops requested or
+All three timing values are configurable in Settings and apply to the running
+controller. The detected Interact row is read-only. A changed Fishing configuration stops requested or
 active work without emitting another interact, clears its pending deadline, and
 shows **Idle (settings changed)**. Start Fishing explicitly to use the new
 configuration. An identical settings application preserves the current state.
@@ -80,6 +83,10 @@ If a native game menu opens, autonomous reel and recast actions are deferred and
 retried. The state cannot advance past an interact that ESO did not receive. The
 operator-initiated first cast is not deferred because it directly follows the
 operator's keypress.
+
+Binding replacement and signal loss invalidate scheduled work before a later
+primary press. Missing or ambiguous authority never falls back to `E`. Generated
+modifiers are balanced without releasing modifiers held by the operator.
 
 PixelBeacon recognizes an active cast from `GetInteractionType()` and recognizes
 the bite only from bait consumption while a cast is active. The standing reel-in

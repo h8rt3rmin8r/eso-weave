@@ -132,9 +132,9 @@ pub struct SettingsForm {
     pub weave: WeaveConfig,
     /// Latency adaptation (enabled and k).
     pub latency: LatencyConfig,
-    /// Fishing timings and interact key.
+    /// Fishing timings.
     pub fishing: FishingConfig,
-    /// Auto-potion watches, quickslot key, and retry interval.
+    /// Auto-potion watches and retry interval.
     pub potion: AutoPotionConfig,
     /// Pixel bus sampling tolerance and intervals.
     pub reader: ReaderConfig,

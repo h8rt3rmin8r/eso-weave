@@ -1,17 +1,116 @@
 //! Safety-critical tests for the Input Engine core via the mock backend.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use eso_weave::config::Settings;
 use eso_weave::input::action::Action;
 use eso_weave::input::key::Key;
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{
-    BindingTable, CombatRequirement, Decision, InputBackend, InputEngine, KeyEvent,
-    KeyboardControl, ModifierSet, ModifierSide, MouseControl, NativeAction, NativeBindingSet,
-    NativeBindingState, NativeChord, NativeControl, NativeInput, NativeInputEvent, NativeModifier,
-    Origin, Transition,
+    BindingTable, CombatRequirement, Decision, InputBackend, InputEngine, InputError, KeyEvent,
+    KeyboardControl, ModifierSet, ModifierSide, MouseButton, MouseControl, NativeAction,
+    NativeActionExecutor, NativeBindingSet, NativeBindingState, NativeChord, NativeControl,
+    NativeInput, NativeInputEvent, NativeModifier, Origin, Transition,
 };
+
+struct FailTwoPrimaryReleasesBackend {
+    inner: MockBackend,
+    remaining_failures: AtomicUsize,
+}
+
+struct ModifierRaceBackend {
+    inner: MockBackend,
+    input: Arc<InputEngine>,
+    event: NativeInputEvent,
+    fired: AtomicBool,
+}
+
+impl InputBackend for ModifierRaceBackend {
+    fn synthesize(&self, key: Key, transition: Transition) -> Result<(), InputError> {
+        self.inner.synthesize(key, transition)
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_mouse(button, transition)
+    }
+
+    fn synthesize_native(
+        &self,
+        control: NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_native(control, transition)
+    }
+
+    fn synthesize_modifier(
+        &self,
+        modifier: NativeModifier,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_modifier(modifier, transition)?;
+        if transition == Transition::Down && !self.fired.swap(true, Ordering::AcqRel) {
+            self.input.classify_native(self.event);
+        }
+        Ok(())
+    }
+
+    fn run(&self, _engine: Arc<InputEngine>) -> Result<(), InputError> {
+        Ok(())
+    }
+}
+
+impl InputBackend for FailTwoPrimaryReleasesBackend {
+    fn synthesize(&self, key: Key, transition: Transition) -> Result<(), InputError> {
+        self.inner.synthesize(key, transition)
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_mouse(button, transition)
+    }
+
+    fn synthesize_native(
+        &self,
+        control: NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_native(control, transition)?;
+        if transition == Transition::Up
+            && self
+                .remaining_failures
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |remaining| {
+                    remaining.checked_sub(1)
+                })
+                .is_ok()
+        {
+            return Err(InputError::Synth(
+                "injected primary release failure".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn synthesize_modifier(
+        &self,
+        modifier: NativeModifier,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_modifier(modifier, transition)
+    }
+
+    fn run(&self, _engine: Arc<InputEngine>) -> Result<(), InputError> {
+        Ok(())
+    }
+}
 
 fn install_native(engine: &InputEngine) {
     let mut bindings = NativeBindingSet::new_unavailable();
@@ -1159,4 +1258,256 @@ fn ungating_restores_the_previous_decision_everywhere() {
             "ungating left residue at {input:?}"
         );
     }
+}
+
+#[test]
+fn s102_autonomous_executor_owns_modified_mouse_chords_and_balances_cleanup() {
+    let (engine, _rx) = engine();
+    engine.set_focused(true);
+    let chord = NativeChord {
+        primary: NativeControl::Mouse(MouseControl::Button4),
+        modifiers: ModifierSet::CONTROL | ModifierSet::SHIFT,
+    };
+    let mut bindings = engine.native_bindings();
+    bindings.set(NativeAction::Quickslot, NativeBindingState::Valid(chord));
+    engine.set_native_bindings(bindings);
+
+    let backend = MockBackend::new();
+    let primaries = backend.synthesized_native.clone();
+    let modifiers = backend.synthesized_modifiers.clone();
+    let mut executor = NativeActionExecutor::new(backend, engine.fishing_gates());
+
+    assert!(executor.execute_current(NativeAction::Quickslot));
+    assert_eq!(
+        *primaries.lock().unwrap(),
+        vec![
+            (chord.primary, Transition::Down),
+            (chord.primary, Transition::Up)
+        ]
+    );
+    assert_eq!(
+        *modifiers.lock().unwrap(),
+        vec![
+            (NativeModifier::Control, Transition::Down),
+            (NativeModifier::Shift, Transition::Down),
+            (NativeModifier::Shift, Transition::Up),
+            (NativeModifier::Control, Transition::Up),
+        ]
+    );
+}
+
+#[test]
+fn s102_autonomous_executor_rejects_every_non_valid_state_and_stale_epoch() {
+    let (engine, _rx) = engine();
+    engine.set_focused(true);
+    let backend = MockBackend::new();
+    let primaries = backend.synthesized_native.clone();
+    let mut executor = NativeActionExecutor::new(backend, engine.fishing_gates());
+
+    for state in [
+        NativeBindingState::Unavailable,
+        NativeBindingState::Unbound,
+        NativeBindingState::Conflicting,
+        NativeBindingState::Unsupported,
+    ] {
+        let mut bindings = engine.native_bindings();
+        bindings.set(NativeAction::Interact, state);
+        engine.set_native_bindings(bindings);
+        assert!(!executor.execute_current(NativeAction::Interact));
+    }
+
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Interact,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::E),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    let stale = executor.current_epoch();
+    bindings.set(
+        NativeAction::Interact,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::R),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    assert!(!executor.execute(NativeAction::Interact, stale));
+    assert!(primaries.lock().unwrap().is_empty());
+}
+
+#[test]
+fn s102_autonomous_executor_rejects_extra_physical_modifiers_and_never_releases_them() {
+    let (engine, _rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Interact,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::E),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    engine.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Alt),
+        Transition::Down,
+    ));
+
+    let backend = MockBackend::new();
+    let primaries = backend.synthesized_native.clone();
+    let modifiers = backend.synthesized_modifiers.clone();
+    let mut executor = NativeActionExecutor::new(backend, engine.fishing_gates());
+    assert!(!executor.execute_current(NativeAction::Interact));
+    assert!(primaries.lock().unwrap().is_empty());
+    assert!(modifiers.lock().unwrap().is_empty());
+}
+
+#[test]
+fn s102_autonomous_executor_emits_wheel_primaries_without_invented_release() {
+    let (engine, _rx) = engine();
+    engine.set_focused(true);
+    let wheel = NativeControl::Mouse(MouseControl::WheelUp);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Quickslot,
+        NativeBindingState::Valid(NativeChord {
+            primary: wheel,
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+
+    let backend = MockBackend::new();
+    let primaries = backend.synthesized_native.clone();
+    let mut executor = NativeActionExecutor::new(backend, engine.fishing_gates());
+    assert!(executor.execute_current(NativeAction::Quickslot));
+    assert_eq!(*primaries.lock().unwrap(), vec![(wheel, Transition::Down)]);
+}
+
+#[test]
+fn s102_autonomous_executor_retries_owned_primary_cleanup_before_new_work() {
+    let (engine, _rx) = engine();
+    engine.set_focused(true);
+    let primary = NativeControl::Keyboard(KeyboardControl::E);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Interact,
+        NativeBindingState::Valid(NativeChord {
+            primary,
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+
+    let backend = FailTwoPrimaryReleasesBackend {
+        inner: MockBackend::new(),
+        remaining_failures: AtomicUsize::new(2),
+    };
+    let primaries = backend.inner.synthesized_native.clone();
+    let mut executor = NativeActionExecutor::new(backend, engine.autonomous_gates());
+
+    assert!(executor.execute_current(NativeAction::Interact));
+    assert!(!executor.execute_current(NativeAction::Interact));
+    assert_eq!(
+        *primaries.lock().unwrap(),
+        vec![
+            (primary, Transition::Down),
+            (primary, Transition::Up),
+            (primary, Transition::Up),
+        ]
+    );
+
+    assert!(executor.execute_current(NativeAction::Interact));
+    assert_eq!(
+        *primaries.lock().unwrap(),
+        vec![
+            (primary, Transition::Down),
+            (primary, Transition::Up),
+            (primary, Transition::Up),
+            (primary, Transition::Up),
+            (primary, Transition::Down),
+            (primary, Transition::Up),
+        ]
+    );
+}
+
+#[test]
+fn s102_autonomous_executor_rejects_an_extra_modifier_pressed_before_primary_down() {
+    let (input, _rx) = engine();
+    let input = Arc::new(input);
+    input.set_focused(true);
+    let mut bindings = input.native_bindings();
+    bindings.set(
+        NativeAction::Interact,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::E),
+            modifiers: ModifierSet::CONTROL,
+        }),
+    );
+    input.set_native_bindings(bindings);
+
+    let backend = ModifierRaceBackend {
+        inner: MockBackend::new(),
+        input: Arc::clone(&input),
+        event: native_event(NativeInput::Modifier(NativeModifier::Alt), Transition::Down),
+        fired: AtomicBool::new(false),
+    };
+    let primaries = backend.inner.synthesized_native.clone();
+    let modifiers = backend.inner.synthesized_modifiers.clone();
+    let mut executor = NativeActionExecutor::new(backend, input.autonomous_gates());
+
+    assert!(!executor.execute_current(NativeAction::Interact));
+    assert!(primaries.lock().unwrap().is_empty());
+    assert_eq!(
+        *modifiers.lock().unwrap(),
+        vec![
+            (NativeModifier::Control, Transition::Down),
+            (NativeModifier::Control, Transition::Up),
+        ]
+    );
+    assert_eq!(input.physical_modifiers(), ModifierSet::ALT);
+}
+
+#[test]
+fn s102_autonomous_executor_rejects_a_required_modifier_released_before_primary_down() {
+    let (input, _rx) = engine();
+    let input = Arc::new(input);
+    input.set_focused(true);
+    input.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Shift),
+        Transition::Down,
+    ));
+    let mut bindings = input.native_bindings();
+    bindings.set(
+        NativeAction::Quickslot,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::Q),
+            modifiers: ModifierSet::SHIFT | ModifierSet::CONTROL,
+        }),
+    );
+    input.set_native_bindings(bindings);
+
+    let backend = ModifierRaceBackend {
+        inner: MockBackend::new(),
+        input: Arc::clone(&input),
+        event: native_event(NativeInput::Modifier(NativeModifier::Shift), Transition::Up),
+        fired: AtomicBool::new(false),
+    };
+    let primaries = backend.inner.synthesized_native.clone();
+    let modifiers = backend.inner.synthesized_modifiers.clone();
+    let mut executor = NativeActionExecutor::new(backend, input.autonomous_gates());
+
+    assert!(!executor.execute_current(NativeAction::Quickslot));
+    assert!(primaries.lock().unwrap().is_empty());
+    assert_eq!(
+        *modifiers.lock().unwrap(),
+        vec![
+            (NativeModifier::Control, Transition::Down),
+            (NativeModifier::Control, Transition::Up),
+        ]
+    );
+    assert_eq!(input.physical_modifiers(), ModifierSet::EMPTY);
 }

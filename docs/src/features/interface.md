@@ -158,8 +158,8 @@ measured from the laid-out heading, separator, and close row rather than assumed
 At maximum size, at least half of the body remains visible without scrolling.
 
 Settings cover keybindings; global and per-slot delays; weapon-aware timing and
-weapon presets; latency adaptation and `k`; Fishing timing and Interact Key;
-Auto Potion watches, quickslot binding, and retry interval; pixel-bus block size,
+weapon presets; latency adaptation and `k`; Fishing timing and detected Interact;
+Auto Potion watches, detected Quickslot, and retry interval; pixel-bus block size,
 tolerance, and sampling intervals; AddOns override and environment; logging;
 theme; and always-on-top behavior.
 Appearance also includes the bounded Stale Retention interval for the Live HUD.
