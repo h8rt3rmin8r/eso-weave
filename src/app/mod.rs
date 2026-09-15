@@ -1440,8 +1440,8 @@ pub fn skill_rows(config: &WeaveConfig, cooldowns: CooldownSet) -> Vec<SkillRow>
 
 fn slot_label(index: u8) -> String {
     match index {
-        6 => "Ultimate (R)".to_string(),
-        7 => "Synergy (X)".to_string(),
+        6 => "Ultimate".to_string(),
+        7 => "Synergy".to_string(),
         n => format!("Skill {n}"),
     }
 }

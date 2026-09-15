@@ -4,8 +4,10 @@
 use eso_weave::config::{self, Settings};
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{
-    Action, BindingTable, Decision, InputBackend, InputEngine, InputError, Key, KeyEvent,
-    MouseButton, Origin, Transition,
+    Action, BindingTable, CombatChordPlan, Decision, InputBackend, InputEngine, InputError, Key,
+    KeyEvent, KeyboardControl, ModifierSet, MouseButton, MouseControl, NativeAction,
+    NativeBindingSet, NativeBindingState, NativeChord, NativeControl, NativeInput,
+    NativeInputEvent, NativeModifier, Origin, Transition,
 };
 use eso_weave::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
@@ -52,6 +54,51 @@ struct GateClosingBackend {
     closed: AtomicBool,
 }
 
+struct FailFirstModifierReleaseBackend {
+    inner: MockBackend,
+    failed: AtomicBool,
+}
+
+impl InputBackend for FailFirstModifierReleaseBackend {
+    fn synthesize(&self, key: Key, transition: Transition) -> Result<(), InputError> {
+        self.inner.synthesize(key, transition)
+    }
+
+    fn synthesize_mouse(
+        &self,
+        button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_mouse(button, transition)
+    }
+
+    fn synthesize_native(
+        &self,
+        control: NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_native(control, transition)
+    }
+
+    fn synthesize_modifier(
+        &self,
+        modifier: NativeModifier,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_modifier(modifier, transition)?;
+        if transition == Transition::Up && !self.failed.swap(true, Ordering::AcqRel) {
+            return Err(InputError::Synth(
+                "injected modifier release failure".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn run(&self, _engine: Arc<InputEngine>) -> Result<(), InputError> {
+        Ok(())
+    }
+}
+
 impl GateClosingBackend {
     fn close_after_first_down(&self, transition: Transition) {
         if transition == Transition::Down && !self.closed.swap(true, Ordering::AcqRel) {
@@ -77,9 +124,196 @@ impl InputBackend for GateClosingBackend {
         Ok(())
     }
 
+    fn synthesize_native(
+        &self,
+        control: NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_native(control, transition)?;
+        self.close_after_first_down(transition);
+        Ok(())
+    }
+
+    fn synthesize_modifier(
+        &self,
+        modifier: NativeModifier,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.inner.synthesize_modifier(modifier, transition)
+    }
+
     fn run(&self, _engine: Arc<InputEngine>) -> Result<(), InputError> {
         Ok(())
     }
+}
+
+fn plan() -> CombatChordPlan {
+    CombatChordPlan {
+        skill: NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::Digit1),
+            modifiers: ModifierSet::EMPTY,
+        },
+        attack: Some(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Left),
+            modifiers: ModifierSet::EMPTY,
+        }),
+        block: Some(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Right),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    }
+}
+
+fn install_native(input: &InputEngine) {
+    let mut bindings = NativeBindingSet::new_unavailable();
+    for (action, key) in [
+        (NativeAction::Skill1, KeyboardControl::Digit1),
+        (NativeAction::Ultimate, KeyboardControl::R),
+    ] {
+        bindings.set(
+            action,
+            NativeBindingState::Valid(NativeChord {
+                primary: NativeControl::Keyboard(key),
+                modifiers: ModifierSet::EMPTY,
+            }),
+        );
+    }
+    bindings.set(
+        NativeAction::Attack,
+        NativeBindingState::Valid(plan().attack.unwrap()),
+    );
+    bindings.set(
+        NativeAction::Block,
+        NativeBindingState::Valid(plan().block.unwrap()),
+    );
+    input.set_native_bindings(bindings);
+}
+
+#[test]
+fn native_chord_sink_owns_only_missing_modifiers_in_canonical_order() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    open_input_safety(&input);
+    let backend = MockBackend::new();
+    let native = Arc::clone(&backend.synthesized_native);
+    let modifiers = Arc::clone(&backend.synthesized_modifiers);
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    sink.begin_sequence();
+    let chord = NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::K),
+        modifiers: ModifierSet::CONTROL | ModifierSet::ALT | ModifierSet::SHIFT,
+    };
+    sink.emit(InputOp::Chord(chord, Transition::Down));
+    sink.emit(InputOp::Chord(chord, Transition::Up));
+    assert_eq!(
+        *modifiers.lock().unwrap(),
+        vec![
+            (NativeModifier::Control, Transition::Down),
+            (NativeModifier::Alt, Transition::Down),
+            (NativeModifier::Shift, Transition::Down),
+            (NativeModifier::Shift, Transition::Up),
+            (NativeModifier::Alt, Transition::Up),
+            (NativeModifier::Control, Transition::Up),
+        ]
+    );
+    assert_eq!(
+        *native.lock().unwrap(),
+        vec![
+            (chord.primary, Transition::Down),
+            (chord.primary, Transition::Up),
+        ]
+    );
+}
+
+#[test]
+fn native_chord_sink_retains_a_failed_modifier_release_for_later_cleanup() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    open_input_safety(&input);
+    let inner = MockBackend::new();
+    let native = Arc::clone(&inner.synthesized_native);
+    let modifiers = Arc::clone(&inner.synthesized_modifiers);
+    let backend = FailFirstModifierReleaseBackend {
+        inner,
+        failed: AtomicBool::new(false),
+    };
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    let chord = NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::K),
+        modifiers: ModifierSet::SHIFT,
+    };
+
+    sink.begin_sequence();
+    sink.emit(InputOp::Chord(chord, Transition::Down));
+    sink.emit(InputOp::Chord(chord, Transition::Up));
+    sink.begin_sequence();
+    sink.emit(InputOp::Chord(chord, Transition::Down));
+    sink.emit(InputOp::Chord(chord, Transition::Up));
+
+    assert_eq!(
+        *modifiers.lock().unwrap(),
+        vec![
+            (NativeModifier::Shift, Transition::Down),
+            (NativeModifier::Shift, Transition::Up),
+            (NativeModifier::Shift, Transition::Up),
+            (NativeModifier::Shift, Transition::Down),
+            (NativeModifier::Shift, Transition::Up),
+        ]
+    );
+    assert_eq!(
+        native
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, transition)| *transition == Transition::Down)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn native_chord_sink_never_releases_a_physical_modifier() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    open_input_safety(&input);
+    input.classify_native(NativeInputEvent {
+        input: NativeInput::Modifier(NativeModifier::Shift),
+        transition: Transition::Down,
+        origin: Origin::Real,
+    });
+    let backend = MockBackend::new();
+    let modifiers = Arc::clone(&backend.synthesized_modifiers);
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    sink.begin_sequence();
+    let chord = NativeChord {
+        primary: NativeControl::Mouse(MouseControl::Button4),
+        modifiers: ModifierSet::SHIFT,
+    };
+    sink.emit(InputOp::Chord(chord, Transition::Down));
+    input.set_menu_gated(true);
+    sink.wait(20);
+    assert!(modifiers.lock().unwrap().is_empty());
+    assert_eq!(input.physical_modifiers(), ModifierSet::SHIFT);
+}
+
+#[test]
+fn binding_replacement_cancels_and_releases_a_held_native_primary() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    open_input_safety(&input);
+    let backend = MockBackend::new();
+    let native = Arc::clone(&backend.synthesized_native);
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    sink.begin_sequence();
+    let attack = plan().attack.unwrap();
+    sink.emit(InputOp::Chord(attack, Transition::Down));
+    let mut changed = NativeBindingSet::new_unavailable();
+    changed.set(NativeAction::Attack, NativeBindingState::Unbound);
+    input.set_native_bindings(changed);
+    sink.wait(20);
+    assert_eq!(
+        *native.lock().unwrap(),
+        vec![
+            (attack.primary, Transition::Down),
+            (attack.primary, Transition::Up),
+        ]
+    );
 }
 
 #[test]
@@ -203,7 +437,7 @@ fn real_sink_observes_roll_gate_closure_during_a_wait() {
 fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
     let backend = MockBackend::new();
-    let captured = backend.synthesized_mouse.clone();
+    let captured = backend.synthesized_native.clone();
     let mut sink = RealSink::new(backend, input.weave_gates());
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     engine.set_life(LifeState::Alive);
@@ -217,11 +451,11 @@ fn a_gate_cancelled_sequence_does_not_consume_global_cooldown() {
     engine.set_world(WorldState::Active);
     engine.set_travel(TravelState::Inactive);
 
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert!(captured.lock().unwrap().is_empty());
 
     input.set_roll_gated(false);
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert!(
         !captured.lock().unwrap().is_empty(),
         "a cancelled no-output sequence must not reject the first recovered action"
@@ -303,6 +537,7 @@ fn s060_gate_closure_cancels_each_weave_shape_and_releases_held_output() {
         let backend = MockBackend::new();
         let captured_keys = backend.synthesized.clone();
         let captured_mouse = backend.synthesized_mouse.clone();
+        let captured_native = backend.synthesized_native.clone();
         let backend = GateClosingBackend {
             inner: backend,
             input: Arc::clone(&input),
@@ -318,10 +553,12 @@ fn s060_gate_closure_cancels_each_weave_shape_and_releases_held_output() {
         config.timing.d_bash = 50;
         let mut engine = WeaveEngine::new(config);
         open_weave_safety(&mut engine);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
 
         let keys = captured_keys.lock().unwrap().clone();
         let mouse = captured_mouse.lock().unwrap().clone();
+        let native = captured_native.lock().unwrap().clone();
+        assert!(mouse.is_empty());
         match weave_type {
             WeaveType::LightAttack | WeaveType::HeavyAttack | WeaveType::BashAttack => {
                 assert!(
@@ -329,10 +566,10 @@ fn s060_gate_closure_cancels_each_weave_shape_and_releases_held_output() {
                     "{weave_type:?} started a key after closure"
                 );
                 assert_eq!(
-                    mouse,
+                    native,
                     vec![
-                        (eso_weave::input::MouseButton::Primary, Transition::Down),
-                        (eso_weave::input::MouseButton::Primary, Transition::Up),
+                        (plan().attack.unwrap().primary, Transition::Down),
+                        (plan().attack.unwrap().primary, Transition::Up),
                     ],
                     "{weave_type:?} must release only output already held"
                 );
@@ -340,10 +577,10 @@ fn s060_gate_closure_cancels_each_weave_shape_and_releases_held_output() {
             WeaveType::BlockCasting => {
                 assert!(keys.is_empty(), "block casting started a key after closure");
                 assert_eq!(
-                    mouse,
+                    native,
                     vec![
-                        (eso_weave::input::MouseButton::Secondary, Transition::Down),
-                        (eso_weave::input::MouseButton::Secondary, Transition::Up),
+                        (plan().block.unwrap().primary, Transition::Down),
+                        (plan().block.unwrap().primary, Transition::Up),
                     ],
                     "block casting must release its pre-closure hold"
                 );
@@ -403,13 +640,13 @@ fn cooldown_gates_repeated_weaves() {
     let mut sink = MockSink::new();
 
     sink.set_now(0);
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     let after_first = sink.log.len();
     assert!(after_first > 0, "first weave should run");
 
     // Within the 500 ms cooldown: dropped.
     sink.set_now(100);
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert_eq!(
         sink.log.len(),
         after_first,
@@ -418,7 +655,7 @@ fn cooldown_gates_repeated_weaves() {
 
     // After the cooldown: runs again.
     sink.set_now(600);
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert!(sink.log.len() > after_first, "request after cooldown runs");
 }
 
@@ -437,7 +674,7 @@ fn queued_weave_requires_alive_and_is_not_replayed_after_recovery() {
         LifeState::Recovering(eso_weave::pixelbus::RecoveryPath::NoLoad),
     ] {
         engine.set_life(state);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
     }
     assert!(sink.log.is_empty());
 
@@ -447,7 +684,7 @@ fn queued_weave_requires_alive_and_is_not_replayed_after_recovery() {
         sink.log.is_empty(),
         "recovery must not replay queued actions"
     );
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert!(!sink.log.is_empty(), "a fresh action may run once alive");
 }
 
@@ -460,12 +697,12 @@ fn queued_weave_requires_inactive_roll_and_is_not_replayed_after_recovery() {
     let mut sink = MockSink::new();
     for state in [RollDodgeState::Unknown, RollDodgeState::Active] {
         engine.set_roll_dodge(state);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
     }
     assert!(sink.log.is_empty());
     engine.set_roll_dodge(RollDodgeState::Inactive);
     assert!(sink.log.is_empty(), "recovery must not replay requests");
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert!(!sink.log.is_empty());
 }
 
@@ -478,12 +715,12 @@ fn queued_weave_requires_safe_world_and_inactive_travel_without_replay() {
     for world in [WorldState::Unknown, WorldState::Transitioning] {
         engine.set_world(world);
         engine.set_travel(TravelState::Inactive);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
     }
     engine.set_world(WorldState::Active);
     for travel in [TravelState::Unknown, TravelState::Pending] {
         engine.set_travel(travel);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
     }
     assert!(sink.log.is_empty());
     engine.set_travel(TravelState::Inactive);
@@ -491,7 +728,7 @@ fn queued_weave_requires_safe_world_and_inactive_travel_without_replay() {
         sink.log.is_empty(),
         "safe recovery must not replay requests"
     );
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     assert!(!sink.log.is_empty());
 }
 
@@ -500,8 +737,8 @@ fn toggle_actions_run_no_weave() {
     let mut engine = WeaveEngine::new(WeaveConfig::default());
     let mut sink = MockSink::new();
 
-    engine.handle(Action::ToggleSuspend, &mut sink);
-    engine.handle(Action::ToggleFishing, &mut sink);
+    engine.handle(Action::ToggleSuspend, plan(), &mut sink);
+    engine.handle(Action::ToggleFishing, plan(), &mut sink);
     assert!(sink.log.is_empty());
 }
 
@@ -531,6 +768,7 @@ fn inactive_slot_key_passes_through() {
     input.set_game_active(true);
     input.set_focused(true);
     open_input_safety(&input);
+    install_native(&input);
 
     // Default config: Ultimate (slot 6, key R) is inactive; Skill1 is active.
     let weave = WeaveEngine::new(WeaveConfig::default());
@@ -546,6 +784,7 @@ fn activating_slot_restores_interception() {
     input.set_game_active(true);
     input.set_focused(true);
     open_input_safety(&input);
+    install_native(&input);
 
     let mut config = WeaveConfig::default();
     config.slots[5].active = true; // slot index 6 (Ultimate)
@@ -807,11 +1046,11 @@ fn combat_state_changes_no_engine_behavior() {
         });
 
         sink.set_now(0);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
         sink.set_now(600);
-        engine.handle(Action::Skill2, &mut sink);
+        engine.handle(Action::Skill2, plan(), &mut sink);
         sink.set_now(1200);
-        engine.handle(Action::Skill3, &mut sink);
+        engine.handle(Action::Skill3, plan(), &mut sink);
 
         sink.log.iter().map(|op| format!("{op:?}")).collect()
     }
@@ -843,9 +1082,9 @@ fn resource_levels_change_no_engine_behavior() {
         engine.set_resources(resources);
 
         sink.set_now(0);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
         sink.set_now(600);
-        engine.handle(Action::Skill2, &mut sink);
+        engine.handle(Action::Skill2, plan(), &mut sink);
 
         sink.log.iter().map(|op| format!("{op:?}")).collect()
     }
@@ -877,7 +1116,7 @@ fn ultimate_values_change_no_engine_behavior() {
         engine.set_ultimate(ultimate);
         let mut sink = MockSink::new();
         sink.set_now(0);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
         sink.log.iter().map(|op| format!("{op:?}")).collect()
     }
     let baseline = run(UltimateTelemetry::new_unknown());
@@ -911,9 +1150,9 @@ fn quickslot_state_changes_no_engine_behavior() {
         engine.set_quickslot(quickslot);
 
         sink.set_now(0);
-        engine.handle(Action::Skill1, &mut sink);
+        engine.handle(Action::Skill1, plan(), &mut sink);
         sink.set_now(600);
-        engine.handle(Action::Skill2, &mut sink);
+        engine.handle(Action::Skill2, plan(), &mut sink);
 
         sink.log.iter().map(|op| format!("{op:?}")).collect()
     }

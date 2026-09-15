@@ -100,12 +100,12 @@ fn main() {
     let input = Arc::new(engine);
     let backend = Arc::new(make_backend());
 
-    // Weave engine, loaded from settings and synced to the bindings.
+    // Weave engine, loaded from settings. Combat controls come only from live
+    // native ESO evidence and are copied into each queued request.
     let mut weave_engine = WeaveEngine::new(WeaveConfig::default());
     for notice in weave_engine.load(&settings) {
         tracing::warn!(target: "eso_weave::config", "{}", notice.message);
     }
-    weave_engine.config_mut().sync_keys(&input.bindings());
     weave_engine.apply_activity(&input);
     let weave = Arc::new(Mutex::new(weave_engine));
 
@@ -194,7 +194,9 @@ fn main() {
                         continue;
                     }
                     sink.set_admitted_epoch(queued.authorization_epoch());
-                    weave.handle(action, &mut sink);
+                    if let Some(plan) = queued.combat_plan() {
+                        weave.handle(action, plan, &mut sink);
+                    }
                 }
             }
         });
@@ -627,6 +629,22 @@ impl<B: InputBackend> InputBackend for SharedBackend<B> {
         transition: Transition,
     ) -> Result<(), InputError> {
         self.0.synthesize_mouse(button, transition)
+    }
+
+    fn synthesize_native(
+        &self,
+        control: eso_weave::input::NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.0.synthesize_native(control, transition)
+    }
+
+    fn synthesize_modifier(
+        &self,
+        modifier: eso_weave::input::NativeModifier,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.0.synthesize_modifier(modifier, transition)
     }
 
     fn run(&self, engine: Arc<InputEngine>) -> Result<(), InputError> {

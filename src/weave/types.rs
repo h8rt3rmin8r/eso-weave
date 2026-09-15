@@ -1,6 +1,6 @@
 //! Weave engine data types: weave sequences, skill slots, and timing.
 
-use crate::input::{Key, MouseButton, Transition};
+use crate::input::{Key, MouseButton, NativeChord, Transition};
 
 /// A weave type, which determines the operation sequence and relevant delays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,9 +42,11 @@ impl WeaveType {
 /// A single synthesized operation in a weave sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputOp {
-    /// A key transition (the slot's bound key).
+    /// A native chord primary transition. Modifiers are owned by the sink.
+    Chord(NativeChord, Transition),
+    /// A desktop-owned legacy key transition used by non-native controllers.
     Key(Key, Transition),
-    /// A mouse button transition.
+    /// A desktop-owned legacy mouse transition.
     Mouse(MouseButton, Transition),
 }
 
@@ -124,8 +126,6 @@ pub struct SlotOverrides {
 pub struct SkillSlot {
     /// The slot index, 1 through 7 (6 is Ultimate, 7 is Synergy).
     pub index: u8,
-    /// The slot's bound key.
-    pub key: Key,
     /// The weave type to run.
     pub weave_type: WeaveType,
     /// Whether the slot is active. An inactive slot's key passes through.

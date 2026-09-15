@@ -6,7 +6,9 @@
 //! sequences) is a required check per FR-008.
 
 use eso_weave::config::{NoticeKind, Settings};
-use eso_weave::input::{Action, Key};
+use eso_weave::input::{
+    Action, CombatChordPlan, KeyboardControl, ModifierSet, MouseControl, NativeChord, NativeControl,
+};
 use eso_weave::pixelbus::{LifeState, RollDodgeState, TravelState, WorldState};
 use eso_weave::weave::types::{
     LatencyConfig, SkillSlot, SlotOverrides, TimingConfig, WeaveStep, WeaveType,
@@ -18,10 +20,26 @@ use eso_weave::weave::{
 fn slot(weave_type: WeaveType) -> SkillSlot {
     SkillSlot {
         index: 1,
-        key: Key::Digit1,
         weave_type,
         active: true,
         overrides: SlotOverrides::default(),
+    }
+}
+
+fn plan() -> CombatChordPlan {
+    CombatChordPlan {
+        skill: NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::Digit1),
+            modifiers: ModifierSet::EMPTY,
+        },
+        attack: Some(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Left),
+            modifiers: ModifierSet::EMPTY,
+        }),
+        block: Some(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Right),
+            modifiers: ModifierSet::EMPTY,
+        }),
     }
 }
 
@@ -54,7 +72,13 @@ fn effective_delay_scales_and_rounds() {
 fn light_attack_scales_d_weave() {
     let timing = TimingConfig::default();
     let cfg = enabled(0.25);
-    let steps = sequence_for_adapted(&slot(WeaveType::LightAttack), &timing, Some(120), &cfg);
+    let steps = sequence_for_adapted(
+        &slot(WeaveType::LightAttack),
+        &timing,
+        plan(),
+        Some(120),
+        &cfg,
+    );
     // base d_weave 50 -> 80.
     assert_eq!(waits(&steps), vec![80]);
 }
@@ -63,11 +87,17 @@ fn light_attack_scales_d_weave() {
 fn bash_attack_scales_d_weave_and_d_bash_only() {
     let timing = TimingConfig::default();
     let cfg = enabled(0.25);
-    let steps = sequence_for_adapted(&slot(WeaveType::BashAttack), &timing, Some(120), &cfg);
+    let steps = sequence_for_adapted(
+        &slot(WeaveType::BashAttack),
+        &timing,
+        plan(),
+        Some(120),
+        &cfg,
+    );
     // d_weave 50 -> 80, d_bash 125 -> 155.
     assert_eq!(waits(&steps), vec![80, 155]);
     // The non-wait steps match the base sequence exactly.
-    let base = sequence_for(&slot(WeaveType::BashAttack), &timing);
+    let base = sequence_for(&slot(WeaveType::BashAttack), &timing, plan());
     let strip = |steps: &[WeaveStep]| -> Vec<WeaveStep> {
         steps
             .iter()
@@ -82,7 +112,13 @@ fn bash_attack_scales_d_weave_and_d_bash_only() {
 fn heavy_attack_d_heavy_is_never_scaled() {
     let timing = TimingConfig::default();
     let cfg = enabled(0.25);
-    let steps = sequence_for_adapted(&slot(WeaveType::HeavyAttack), &timing, Some(1000), &cfg);
+    let steps = sequence_for_adapted(
+        &slot(WeaveType::HeavyAttack),
+        &timing,
+        plan(),
+        Some(1000),
+        &cfg,
+    );
     // d_heavy stays 1000 regardless of latency.
     assert_eq!(waits(&steps), vec![timing.d_heavy]);
 }
@@ -93,7 +129,7 @@ fn per_slot_override_base_is_scaled() {
     let cfg = enabled(0.25);
     let mut s = slot(WeaveType::LightAttack);
     s.overrides.d_weave = Some(200);
-    let steps = sequence_for_adapted(&s, &timing, Some(120), &cfg);
+    let steps = sequence_for_adapted(&s, &timing, plan(), Some(120), &cfg);
     // Override base 200 -> 200 + 30.
     assert_eq!(waits(&steps), vec![230]);
 }
@@ -110,8 +146,8 @@ fn disabled_reproduces_base_sequences_at_any_latency() {
         WeaveType::BashAttack,
         WeaveType::BlockCasting,
     ] {
-        let base = sequence_for(&slot(wt), &timing);
-        let adapted = sequence_for_adapted(&slot(wt), &timing, Some(500), &default_cfg);
+        let base = sequence_for(&slot(wt), &timing, plan());
+        let adapted = sequence_for_adapted(&slot(wt), &timing, plan(), Some(500), &default_cfg);
         assert_eq!(adapted, base, "{wt:?} disabled must equal base");
     }
 }
@@ -126,8 +162,8 @@ fn enabled_without_latency_reproduces_base_sequences() {
         WeaveType::BashAttack,
         WeaveType::BlockCasting,
     ] {
-        let base = sequence_for(&slot(wt), &timing);
-        let adapted = sequence_for_adapted(&slot(wt), &timing, None, &cfg);
+        let base = sequence_for(&slot(wt), &timing, plan());
+        let adapted = sequence_for_adapted(&slot(wt), &timing, plan(), None, &cfg);
         assert_eq!(adapted, base, "{wt:?} without latency must equal base");
     }
 }
@@ -211,7 +247,7 @@ fn set_latency_scales_handled_weave_and_clearing_reverts() {
     // With latency, slot 1 (light attack) d_weave 50 -> 80.
     engine.set_latency(Some(120));
     let mut sink = MockSink::new();
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     let scaled_waits: Vec<u32> = sink
         .log
         .iter()
@@ -226,7 +262,7 @@ fn set_latency_scales_handled_weave_and_clearing_reverts() {
     engine.set_latency(None);
     let mut sink = MockSink::new();
     sink.set_now(10_000);
-    engine.handle(Action::Skill1, &mut sink);
+    engine.handle(Action::Skill1, plan(), &mut sink);
     let base_waits: Vec<u32> = sink
         .log
         .iter()

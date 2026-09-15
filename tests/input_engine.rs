@@ -7,11 +7,60 @@ use eso_weave::input::action::Action;
 use eso_weave::input::key::Key;
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{
-    BindingTable, Decision, InputBackend, InputEngine, KeyEvent, Origin, Transition,
+    BindingTable, CombatRequirement, Decision, InputBackend, InputEngine, KeyEvent,
+    KeyboardControl, ModifierSet, ModifierSide, MouseControl, NativeAction, NativeBindingSet,
+    NativeBindingState, NativeChord, NativeControl, NativeInput, NativeInputEvent, NativeModifier,
+    Origin, Transition,
 };
+
+fn install_native(engine: &InputEngine) {
+    let mut bindings = NativeBindingSet::new_unavailable();
+    let keyboard = [
+        KeyboardControl::Digit1,
+        KeyboardControl::Digit2,
+        KeyboardControl::Digit3,
+        KeyboardControl::Digit4,
+        KeyboardControl::Digit5,
+        KeyboardControl::R,
+        KeyboardControl::X,
+    ];
+    for (action, key) in NativeAction::ALL.into_iter().take(7).zip(keyboard) {
+        bindings.set(
+            action,
+            NativeBindingState::Valid(NativeChord {
+                primary: NativeControl::Keyboard(key),
+                modifiers: ModifierSet::EMPTY,
+            }),
+        );
+    }
+    bindings.set(
+        NativeAction::Attack,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Left),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    bindings.set(
+        NativeAction::Block,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Right),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+}
+
+fn native_event(input: NativeInput, transition: Transition) -> NativeInputEvent {
+    NativeInputEvent {
+        input,
+        transition,
+        origin: Origin::Real,
+    }
+}
 
 fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
     let pair = InputEngine::new(BindingTable::default(), 64);
+    install_native(&pair.0);
     pair.0.set_game_active(true);
     pair.0.set_life_gated(false);
     pair.0.set_roll_gated(false);
@@ -19,6 +68,390 @@ fn engine() -> (InputEngine, eso_weave::input::ActionReceiver) {
     pair.0.set_travel_gated(false);
     pair.0.set_menu_gated(false);
     pair
+}
+
+#[test]
+fn exact_modifier_chord_captures_one_immutable_native_plan() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    let skill = NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::K),
+        modifiers: ModifierSet::SHIFT,
+    };
+    let attack = NativeChord {
+        primary: NativeControl::Mouse(MouseControl::Button4),
+        modifiers: ModifierSet::SHIFT | ModifierSet::CONTROL,
+    };
+    bindings.set(NativeAction::Skill1, NativeBindingState::Valid(skill));
+    bindings.set(NativeAction::Attack, NativeBindingState::Valid(attack));
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::Modifier(NativeModifier::Shift),
+            Transition::Down,
+        )),
+        Decision::Pass
+    );
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::Primary(skill.primary),
+            Transition::Down,
+        )),
+        Decision::Suppress
+    );
+    let queued = rx.try_recv_authorized().unwrap();
+    assert_eq!(queued.action(), Action::Skill1);
+    assert_eq!(queued.combat_plan().unwrap().skill, skill);
+    assert_eq!(queued.combat_plan().unwrap().attack, Some(attack));
+}
+
+#[test]
+fn extra_or_incompatible_physical_modifiers_pass_without_queueing() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Alt),
+        Transition::Down,
+    ));
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::Primary(NativeControl::Keyboard(KeyboardControl::Digit1)),
+            Transition::Down,
+        )),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn physical_modifier_ownership_survives_focus_and_process_transitions() {
+    let (engine, rx) = engine();
+    install_native(&engine);
+    engine.set_focused(false);
+    engine.classify_native(NativeInputEvent {
+        input: NativeInput::Modifier(NativeModifier::Control),
+        transition: Transition::Down,
+        origin: Origin::Real,
+    });
+    engine.set_game_active(false);
+    engine.set_game_active(true);
+    engine.set_focused(true);
+    engine.set_life_gated(false);
+    engine.set_roll_gated(false);
+    engine.set_world_gated(false);
+    engine.set_travel_gated(false);
+    engine.set_menu_gated(false);
+
+    assert_eq!(engine.physical_modifiers(), ModifierSet::CONTROL);
+    assert_eq!(
+        engine.classify_native(NativeInputEvent {
+            input: NativeInput::Primary(NativeControl::Keyboard(KeyboardControl::Digit1)),
+            transition: Transition::Down,
+            origin: Origin::Real,
+        }),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+
+    engine.classify_native(NativeInputEvent {
+        input: NativeInput::Modifier(NativeModifier::Control),
+        transition: Transition::Up,
+        origin: Origin::Real,
+    });
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
+}
+
+#[test]
+fn mouse_bound_skill_is_intercepted_from_native_evidence() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    let mouse_skill = NativeChord {
+        primary: NativeControl::Mouse(MouseControl::Button5),
+        modifiers: ModifierSet::EMPTY,
+    };
+    bindings.set(NativeAction::Skill1, NativeBindingState::Valid(mouse_skill));
+    engine.set_native_bindings(bindings);
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::Primary(mouse_skill.primary),
+            Transition::Down,
+        )),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().unwrap(), Action::Skill1);
+}
+
+#[test]
+fn wheel_bound_skill_treats_each_pulse_as_a_complete_activation() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::WheelUp),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    let event = NativeInputEvent {
+        input: NativeInput::Primary(NativeControl::Mouse(MouseControl::WheelUp)),
+        transition: Transition::Down,
+        origin: Origin::Real,
+    };
+
+    assert_eq!(engine.classify_native(event), Decision::Suppress);
+    assert_eq!(engine.classify_native(event), Decision::Suppress);
+    assert_eq!(rx.try_recv().unwrap(), Action::Skill1);
+    assert_eq!(rx.try_recv().unwrap(), Action::Skill1);
+}
+
+#[test]
+fn duplicate_native_triggers_and_invalid_requirements_fail_closed() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    let duplicate = bindings.get(NativeAction::Skill1);
+    bindings.set(NativeAction::Skill2, duplicate);
+    engine.set_native_bindings(bindings);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+
+    bindings.set(NativeAction::Skill2, NativeBindingState::Unbound);
+    bindings.set(NativeAction::Attack, NativeBindingState::Conflicting);
+    engine.set_native_bindings(bindings);
+    engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real));
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn binding_replacement_invalidates_queued_work_and_retires_old_trigger() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    let queued = rx.try_recv_authorized().unwrap();
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::K),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    assert!(!engine.weave_gates().admits(queued.authorization_epoch()));
+    engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real));
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+}
+
+#[test]
+fn combat_requirement_replacement_invalidates_queued_work() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    let queued = rx.try_recv_authorized().unwrap();
+
+    engine.set_combat_requirement(Action::Skill1, CombatRequirement::BASH);
+
+    assert!(!engine.weave_gates().admits(queued.authorization_epoch()));
+}
+
+#[test]
+fn exact_modified_combat_chord_outranks_unmodified_app_toggle() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    let shifted_f1 = NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::F1),
+        modifiers: ModifierSet::SHIFT,
+    };
+    bindings.set(NativeAction::Skill1, NativeBindingState::Valid(shifted_f1));
+    bindings.set(
+        NativeAction::Attack,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Left),
+            modifiers: ModifierSet::SHIFT,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    engine.classify_native(native_event(
+        NativeInput::SidedModifier {
+            modifier: NativeModifier::Shift,
+            side: ModifierSide::Left,
+        },
+        Transition::Down,
+    ));
+
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::Primary(shifted_f1.primary),
+            Transition::Down,
+        )),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv_authorized().unwrap().action(), Action::Skill1);
+}
+
+#[test]
+fn invalid_native_plan_blocks_toggle_fallback_on_the_same_primary() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::F1),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    bindings.set(NativeAction::Attack, NativeBindingState::Unbound);
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify(ev(Key::F1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn passed_primary_repeats_stay_passed_after_modifier_release() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Alt),
+        Transition::Down,
+    ));
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    engine.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Alt),
+        Transition::Up,
+    ));
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+
+    engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real));
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().unwrap(), Action::Skill1);
+}
+
+#[test]
+fn duplicate_required_combat_chords_reject_the_native_trigger() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(NativeAction::Attack, bindings.get(NativeAction::Skill1));
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn dual_role_windows_primary_does_not_become_its_own_extra_modifier() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Left,
+                primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            },
+            Transition::Down,
+        )),
+        Decision::Suppress
+    );
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
+    assert_eq!(rx.try_recv_authorized().unwrap().action(), Action::Skill1);
+}
+
+#[test]
+fn passed_windows_primary_retains_its_modifier_role_until_release() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let windows = NativeInput::ModifierPrimary {
+        modifier: NativeModifier::Command,
+        side: ModifierSide::Right,
+        primary: NativeControl::Keyboard(KeyboardControl::RightWindows),
+    };
+
+    assert_eq!(
+        engine.classify_native(native_event(windows, Transition::Down)),
+        Decision::Pass
+    );
+    assert_eq!(engine.physical_modifiers(), ModifierSet::COMMAND);
+    assert!(rx.try_recv().is_err());
+
+    assert_eq!(
+        engine.classify_native(native_event(windows, Transition::Up)),
+        Decision::Pass
+    );
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
+}
+
+#[test]
+fn releasing_one_modifier_side_preserves_the_other_side() {
+    let (engine, _) = engine();
+    let modifier = |side, transition| {
+        engine.classify_native(native_event(
+            NativeInput::SidedModifier {
+                modifier: NativeModifier::Shift,
+                side,
+            },
+            transition,
+        ));
+    };
+
+    modifier(ModifierSide::Left, Transition::Down);
+    modifier(ModifierSide::Right, Transition::Down);
+    modifier(ModifierSide::Left, Transition::Up);
+    assert_eq!(engine.physical_modifiers(), ModifierSet::SHIFT);
+
+    modifier(ModifierSide::Right, Transition::Up);
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
 }
 
 fn ev(key: Key, transition: Transition, origin: Origin) -> KeyEvent {
@@ -165,6 +598,7 @@ fn auto_repeat_down_hands_off_only_once() {
 #[test]
 fn full_channel_drops_without_blocking() {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 1);
+    install_native(&engine);
     engine.set_game_active(true);
     engine.set_life_gated(false);
     engine.set_roll_gated(false);
@@ -249,6 +683,7 @@ fn resume_restores_interception() {
 
     engine.set_world_gated(false);
     engine.set_travel_gated(false);
+    engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real));
     let decision = engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
     assert_eq!(decision, Decision::Suppress);
     assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
@@ -262,11 +697,10 @@ fn resume_restores_interception() {
 #[test]
 fn defaults_match_section_6_4() {
     let table = BindingTable::default();
-    assert_eq!(table.key_for(Action::Skill1), Key::Digit1);
-    assert_eq!(table.key_for(Action::Ultimate), Key::R);
-    assert_eq!(table.key_for(Action::Synergy), Key::X);
     assert_eq!(table.key_for(Action::ToggleSuspend), Key::F1);
     assert_eq!(table.key_for(Action::ToggleFishing), Key::F2);
+    assert_eq!(table.key_for(Action::ToggleAutoPotion), Key::F3);
+    assert_eq!(table.to_settings_map().len(), 3);
     assert!(Action::ToggleSuspend.suspend_exempt());
     assert!(Action::ToggleFishing.suspend_exempt());
     assert!(!Action::Skill1.suspend_exempt());
@@ -277,9 +711,8 @@ fn rebind_to_free_key_persists_through_settings() {
     let dir = tempfile::tempdir().unwrap();
     let (first, _rx) = engine();
 
-    // Q is unbound by default, so binding Skill1 to Q is accepted.
-    first.rebind(Action::Skill1, Key::Q).unwrap();
-    assert_eq!(first.bindings().key_for(Action::Skill1), Key::Q);
+    first.rebind(Action::ToggleSuspend, Key::Q).unwrap();
+    assert_eq!(first.bindings().key_for(Action::ToggleSuspend), Key::Q);
 
     let mut settings = Settings::default();
     first.store_bindings(&mut settings);
@@ -289,42 +722,51 @@ fn rebind_to_free_key_persists_through_settings() {
     let (second, _rx2) = engine();
     let notices = second.load_bindings(&loaded.settings);
     assert!(notices.is_empty());
-    assert_eq!(second.bindings().key_for(Action::Skill1), Key::Q);
+    assert_eq!(second.bindings().key_for(Action::ToggleSuspend), Key::Q);
 }
 
 #[test]
 fn colliding_rebind_is_rejected() {
     let (engine, _rx) = engine();
-    // Ultimate is R, Synergy is X. Rebind Ultimate to X (used by Synergy).
-    let result = engine.rebind(Action::Ultimate, Key::X);
+    let result = engine.rebind(Action::ToggleSuspend, Key::F2);
     assert!(result.is_err());
     // Both bindings unchanged.
-    assert_eq!(engine.bindings().key_for(Action::Ultimate), Key::R);
-    assert_eq!(engine.bindings().key_for(Action::Synergy), Key::X);
+    assert_eq!(engine.bindings().key_for(Action::ToggleSuspend), Key::F1);
+    assert_eq!(engine.bindings().key_for(Action::ToggleFishing), Key::F2);
+}
+
+#[test]
+fn combat_rebind_is_rejected_below_the_settings_interface() {
+    let (engine, _rx) = engine();
+    assert!(engine.rebind(Action::Skill1, Key::Q).is_err());
+    assert!(!engine
+        .bindings()
+        .to_settings_map()
+        .contains_key(Action::Skill1.as_str()));
 }
 
 #[test]
 fn persisted_conflict_falls_back_to_defaults_with_notice() {
     // Two actions mapped to the same key.
     let mut raw = BTreeMap::new();
-    raw.insert("ultimate".to_string(), "x".to_string());
-    raw.insert("synergy".to_string(), "x".to_string());
+    raw.insert("toggle_suspend".to_string(), "f2".to_string());
+    raw.insert("toggle_fishing".to_string(), "f2".to_string());
     let (table, notices) = BindingTable::from_settings_map(&raw);
 
     assert!(!notices.is_empty());
     // Affected actions fall back to their defaults.
-    assert_eq!(table.key_for(Action::Ultimate), Key::R);
-    assert_eq!(table.key_for(Action::Synergy), Key::X);
+    assert_eq!(table.key_for(Action::ToggleSuspend), Key::F1);
+    assert_eq!(table.key_for(Action::ToggleFishing), Key::F2);
 }
 
 #[test]
 fn persisted_unknown_key_falls_back_with_notice() {
     let mut raw = BTreeMap::new();
-    raw.insert("ultimate".to_string(), "not_a_key".to_string());
+    raw.insert("toggle_suspend".to_string(), "not_a_key".to_string());
     let (table, notices) = BindingTable::from_settings_map(&raw);
 
     assert!(!notices.is_empty());
-    assert_eq!(table.key_for(Action::Ultimate), Key::R);
+    assert_eq!(table.key_for(Action::ToggleSuspend), Key::F1);
 }
 
 // Slice 032: the menu gate. Constitution principle II surface.
@@ -336,7 +778,7 @@ fn persisted_unknown_key_falls_back_with_notice() {
 /// Every input the interception decision reads, as a closed set.
 fn decision_inputs() -> Vec<(Key, Transition, Origin, bool, bool, bool)> {
     // A weave key (not exempt), an exempt toggle key, and an unbound key.
-    let weave_key = BindingTable::default().key_for(Action::Skill1);
+    let weave_key = Key::Digit1;
     let exempt_key = BindingTable::default().key_for(Action::ToggleSuspend);
     let unbound = Key::Q;
     let keys = [weave_key, exempt_key, unbound];
@@ -472,6 +914,7 @@ fn life_gate_defaults_closed_passes_weaves_and_exempts_toggles() {
 #[test]
 fn roll_gate_defaults_closed_passes_physical_weaves_and_exempts_toggles() {
     let (engine, rx) = InputEngine::new(BindingTable::default(), 4);
+    install_native(&engine);
     engine.set_game_active(true);
     engine.set_focused(true);
     engine.set_life_gated(false);
@@ -480,7 +923,7 @@ fn roll_gate_defaults_closed_passes_physical_weaves_and_exempts_toggles() {
     engine.set_menu_gated(false);
     assert!(engine.is_roll_gated());
 
-    let skill = engine.bindings().key_for(Action::Skill1);
+    let skill = Key::Digit1;
     assert_eq!(
         engine.classify(ev(skill, Transition::Down, Origin::Real)),
         Decision::Pass
@@ -537,7 +980,7 @@ fn travel_gate_passes_physical_skills_exempts_toggles_and_does_not_replay() {
     let (engine, rx) = engine();
     engine.set_focused(true);
     engine.set_travel_gated(true);
-    let skill = engine.bindings().key_for(Action::Skill1);
+    let skill = Key::Digit1;
     assert_eq!(
         engine.classify(ev(skill, Transition::Down, Origin::Real)),
         Decision::Pass
@@ -706,6 +1149,9 @@ fn ungating_restores_the_previous_decision_everywhere() {
         engine.set_menu_gated(true);
         engine.classify(ev(key, transition, origin));
         engine.set_menu_gated(false);
+        if transition == Transition::Down {
+            engine.classify(ev(key, Transition::Up, origin));
+        }
 
         assert_eq!(
             engine.classify(ev(key, transition, origin)),

@@ -16,6 +16,7 @@ use crate::weave::WeaveEngine;
 /// synchronized, so a newly intercepted key cannot race with stale worker state.
 pub fn route_reader_safety_gate(event: PixelBusEvent, input: &InputEngine) {
     match event {
+        PixelBusEvent::Bindings(bindings) => input.set_native_bindings(bindings),
         PixelBusEvent::Life(life) if life.gates() => input.set_life_gated(true),
         PixelBusEvent::RollDodge(roll_dodge) if roll_dodge.gates() => input.set_roll_gated(true),
         PixelBusEvent::World(world) if world.gates() => input.set_world_gated(true),
@@ -26,6 +27,7 @@ pub fn route_reader_safety_gate(event: PixelBusEvent, input: &InputEngine) {
             input.set_menu_gated(true);
         }
         PixelBusEvent::SignalLost => {
+            input.set_native_bindings(crate::input::NativeBindingSet::new_unavailable());
             input.set_menu_gated(true);
             input.set_life_gated(true);
             input.set_roll_gated(true);
@@ -92,6 +94,10 @@ pub fn route_reader_event(
 ) {
     route_reader_safety_gate(event, input);
     match event {
+        PixelBusEvent::Bindings(bindings) => {
+            input.set_native_bindings(bindings);
+            return;
+        }
         PixelBusEvent::Layout(layout) => {
             weave.set_layout(layout);
             return;

@@ -4,9 +4,10 @@ Players may also call these controls a bash weave, interrupt, or block bash; the
 Global Cooldown is commonly shortened to GCD or cooldown window; and Latency
 Adaptation may be described as ping adjustment, latency scaling, or k factor.
 
-While the ESO window is focused, ESO Weave can intercept a configured skill key
-and submit a basic attack and skill sequence in its place. An inactive skill slot
-passes its key through unchanged. Press `F1` to suspend or resume automation.
+While the ESO window is focused, ESO Weave can intercept the exact current native
+ESO chord for an active skill and submit a basic attack and skill sequence in its
+place. An inactive skill slot passes its chord through unchanged. Press `F1` to
+suspend or resume automation.
 Suspension prevents new weave interception and invalidates queued or running
 work. Focus loss and menu-gate closure do the same. Recovery never replays the
 discarded request.
@@ -28,7 +29,9 @@ discarded and any held mouse button is released.
    to edit the delay used by that row's current weave type.
 5. Confirm **Delay (ms)** shows the intended effective value. The field is
    read-only while the override is off.
-6. Focus ESO, enter normal gameplay, and press the bound key once.
+6. In ESO's Controls menu, confirm the skill, Attack, and any required Block
+   bindings are valid keyboard or mouse chords.
+7. Focus ESO, enter normal gameplay, and press the exact skill chord once.
 
 <figure class="docs-screenshot">
 <img src="../assets/screenshots/weaving-configuration.png" alt="ESO Weave Weaving settings with enabled slots, selected weave types, and effective delays" width="1280" height="640">
@@ -46,33 +49,32 @@ weave execution.
 
 ## Skill slots
 
-| Slot | Default key | Default type | Active by default |
+| Slot | Binding authority | Default type | Active by default |
 | --- | --- | --- | --- |
-| Skill 1 through Skill 5 | `1` through `5` | Light Attack | Yes |
-| Ultimate | `R` | Light Attack | No |
-| Synergy | `X` | Light Attack | No |
+| Skill 1 through Skill 5 | Current ESO control | Light Attack | Yes |
+| Ultimate | Current ESO control | Light Attack | No |
+| Synergy | Current ESO control | Light Attack | No |
 
-Every binding can be changed. Conflicting assignments are rejected.
-
-Open **Settings > Keybindings** to select a key for each of the ten actions.
-The application keeps the previous assignment if the selection conflicts. The
-default action hotkeys are `F1` for suspension, `F2` for Fishing, and `F3` for
-Auto Potion. They remain reachable while suspended. F1 changes suspension and
+Change combat bindings in ESO. ESO Weave consumes valid current evidence and
+does not keep a duplicate combat-key setting. Open **Settings > Keybindings** to
+configure only the three application hotkeys: `F1` for suspension, `F2` for
+Fishing, and `F3` for Auto Potion. Conflicting assignments are rejected. They
+remain reachable while suspended. F1 changes suspension and
 F3 does not bypass Auto Potion's suspension check. F2 can retain a Fishing
 request while suspended, but it sends no cast until the operator performs a
 fresh manual cast or turns Fishing off and on after resuming.
 
 ## Weave types
 
-"Primary" means the left mouse button, and "secondary" means the right mouse
-button.
+Attack and Block below mean the current valid native ESO chords. They can be
+keyboard, mouse-button, wheel, or modifier chords within the portable registry.
 
 | Type | Generated sequence |
 | --- | --- |
-| Light Attack | Primary click, wait `d_weave`, send the skill key |
-| Heavy Attack | Primary down, wait `d_heavy`, send the skill key, primary up |
-| Bash Attack | Primary click, wait `d_weave`, send the skill key, wait `d_bash`, secondary down, primary click, secondary up |
-| Block Casting | Secondary down, send the skill key, wait `d_weave`, secondary up |
+| Light Attack | Attack activation, wait `d_weave`, send the skill chord |
+| Heavy Attack | Attack down, wait `d_heavy`, send the skill chord, Attack up |
+| Bash Attack | Attack activation, wait `d_weave`, send the skill chord, wait `d_bash`, Block down, Attack activation, Block up |
+| Block Casting | Block down, send the skill chord, wait `d_weave`, Block up |
 
 ## Timing
 
@@ -142,14 +144,18 @@ configured Global Cooldown is dropped. Dropped work requires a new physical
 press after recovery.
 
 A queued request carries the authorization epoch established at physical
-handoff. Focus loss, suspension, or menu-gate closure invalidates that epoch.
+handoff. It also carries a copy of the native chord plan from that same evidence
+generation. Focus loss, suspension, menu-gate closure, or binding replacement
+invalidates that epoch.
 The worker and sink check it before output and during waits, alongside life,
 roll-dodge, world, and travel. A cancellation still releases any output already
 held by the sink and does not revive when the gate reopens.
 
 ## Troubleshooting
 
-If the physical key passes through, first check Enabled, focus, suspension, Game
-Context, Life State, World State, Travel, and Roll Dodge. If it is suppressed but
+If the physical chord passes through, first check native binding evidence,
+Enabled, focus, suspension, Game Context, Life State, World State, Travel, and
+Roll Dodge. Extra held modifiers also require pass-through when a generated
+target chord does not contain them. If it is suppressed but
 no sequence appears, check the Global Cooldown and Live Log for a queue or worker
 drop. See [A skill passes through or a weave is dropped](../getting-started/troubleshooting.md#a-skill-passes-through-or-a-weave-is-dropped).

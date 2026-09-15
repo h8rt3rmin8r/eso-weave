@@ -20,16 +20,21 @@ pub use linux::LinuxBackend;
 #[cfg(windows)]
 pub use windows::WindowsBackend;
 
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
 
 use crate::config::{Notice, Settings};
 
 pub use action::Action;
-pub use bindings::{BindingTable, Conflict};
+pub use bindings::{BindingTable, Conflict, RebindError};
 pub use key::Key;
+pub use native::{
+    CombatChordPlan, CombatRequirement, KeyboardControl, ModifierSet, ModifierSide, MouseControl,
+    NativeAction, NativeBindingSet, NativeBindingState, NativeChord, NativeControl, NativeInput,
+    NativeModifier,
+};
 
 /// A cheaply cloned, independently updateable life-state synthesis gate.
 ///
@@ -150,6 +155,7 @@ pub struct WeaveGates {
     world: AtomicGate,
     travel: AtomicGate,
     epoch: Arc<AtomicU64>,
+    physical_modifier_bits: Arc<AtomicU8>,
 }
 
 impl WeaveGates {
@@ -173,6 +179,12 @@ impl WeaveGates {
     /// Whether a request admitted in `epoch` remains safe to synthesize.
     pub fn admits(&self, epoch: AuthorizationEpoch) -> bool {
         !self.is_gated() && self.current_epoch() == epoch
+    }
+
+    /// The current real-device modifier set used by chord ownership checks.
+    pub fn physical_modifiers(&self) -> ModifierSet {
+        ModifierSet::from_bits(self.physical_modifier_bits.load(Ordering::Acquire))
+            .unwrap_or(ModifierSet::EMPTY)
     }
 }
 
@@ -258,6 +270,14 @@ pub struct KeyEvent {
     pub origin: Origin,
 }
 
+/// One platform-native physical input transition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeInputEvent {
+    pub input: NativeInput,
+    pub transition: Transition,
+    pub origin: Origin,
+}
+
 /// The classification result for a key event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decision {
@@ -265,6 +285,12 @@ pub enum Decision {
     Suppress,
     /// Let the keystroke pass through untouched.
     Pass,
+}
+
+enum NativeCombatResolution {
+    NoTrigger,
+    RejectedTrigger,
+    Admitted(Action, CombatChordPlan),
 }
 
 /// An error from a platform backend.
@@ -283,6 +309,7 @@ pub enum InputError {
 pub struct QueuedAction {
     action: Action,
     authorization_epoch: AuthorizationEpoch,
+    combat_plan: Option<CombatChordPlan>,
 }
 
 impl QueuedAction {
@@ -294,6 +321,11 @@ impl QueuedAction {
     /// The weave authorization generation captured during interception.
     pub fn authorization_epoch(self) -> AuthorizationEpoch {
         self.authorization_epoch
+    }
+
+    /// The immutable native chord plan captured for a combat request.
+    pub fn combat_plan(self) -> Option<CombatChordPlan> {
+        self.combat_plan
     }
 }
 
@@ -326,6 +358,8 @@ impl ActionReceiver {
 /// safety-critical classification decision for each key event.
 pub struct InputEngine {
     bindings: Mutex<BindingTable>,
+    native_bindings: Mutex<NativeBindingSet>,
+    combat_requirements: Mutex<HashMap<Action, CombatRequirement>>,
     focused: AtomicBool,
     game_active: AtomicBool,
     suspended: AtomicBool,
@@ -342,8 +376,10 @@ pub struct InputEngine {
     fishing_authorization_epoch: Arc<AtomicU64>,
     death_epoch: AtomicU64,
     safety_refresh_generation: AtomicU64,
-    held: Mutex<HashSet<Key>>,
-    passed_through: Mutex<HashSet<Key>>,
+    physical_modifier_bits: Arc<AtomicU8>,
+    physical_modifier_controls: Mutex<HashSet<(NativeModifier, ModifierSide)>>,
+    held: Mutex<HashSet<NativeControl>>,
+    passed_through: Mutex<HashSet<NativeControl>>,
     active: Mutex<HashSet<Action>>,
     tx: SyncSender<QueuedAction>,
 }
@@ -364,6 +400,13 @@ impl InputEngine {
         };
         let engine = InputEngine {
             bindings: Mutex::new(bindings),
+            native_bindings: Mutex::new(NativeBindingSet::new_unavailable()),
+            combat_requirements: Mutex::new(
+                Action::COMBAT
+                    .into_iter()
+                    .map(|action| (action, CombatRequirement::LIGHT_OR_HEAVY))
+                    .collect(),
+            ),
             focused: AtomicBool::new(false),
             game_active: AtomicBool::new(false),
             suspended: AtomicBool::new(false),
@@ -380,6 +423,8 @@ impl InputEngine {
             fishing_authorization_epoch: fishing_epoch,
             death_epoch: AtomicU64::new(0),
             safety_refresh_generation: AtomicU64::new(0),
+            physical_modifier_bits: Arc::new(AtomicU8::new(0)),
+            physical_modifier_controls: Mutex::new(HashSet::new()),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
@@ -575,6 +620,7 @@ impl InputEngine {
             world: self.world_gate.clone(),
             travel: self.travel_gate.clone(),
             epoch: Arc::clone(&self.weave_authorization_epoch),
+            physical_modifier_bits: Arc::clone(&self.physical_modifier_bits),
         }
     }
 
@@ -617,69 +663,157 @@ impl InputEngine {
         }
     }
 
+    /// Sets the native chords required by one combat action's weave type.
+    pub fn set_combat_requirement(&self, action: Action, requirement: CombatRequirement) {
+        if !action.is_app_toggle() {
+            let mut requirements = self.combat_requirements.lock().unwrap();
+            if requirements.get(&action) != Some(&requirement) {
+                self.weave_authorization_epoch
+                    .fetch_add(1, Ordering::AcqRel);
+                requirements.insert(action, requirement);
+            }
+        }
+    }
+
+    /// Replaces the coherent native evidence and invalidates every older combat
+    /// request before the replacement can be observed.
+    pub fn set_native_bindings(&self, bindings: NativeBindingSet) {
+        let mut current = self.native_bindings.lock().unwrap();
+        if *current != bindings {
+            self.weave_authorization_epoch
+                .fetch_add(1, Ordering::AcqRel);
+            *current = bindings;
+        }
+    }
+
+    /// Returns the latest coherent native evidence.
+    pub fn native_bindings(&self) -> NativeBindingSet {
+        *self.native_bindings.lock().unwrap()
+    }
+
+    /// The modifiers currently held on real physical devices.
+    pub fn physical_modifiers(&self) -> ModifierSet {
+        ModifierSet::from_bits(self.physical_modifier_bits.load(Ordering::Acquire))
+            .unwrap_or(ModifierSet::EMPTY)
+    }
+
     /// The single safety-critical decision, synchronous and non-blocking. Only
     /// reads state, looks up the binding, updates held-key state, and performs at
     /// most one non-blocking hand-off. Never sleeps or does timed work.
     pub fn classify(&self, event: KeyEvent) -> Decision {
+        self.classify_native(NativeInputEvent {
+            input: NativeInput::Primary(key_to_native(event.key)),
+            transition: event.transition,
+            origin: event.origin,
+        })
+    }
+
+    /// The synchronous classification boundary used by both platform backends.
+    pub fn classify_native(&self, event: NativeInputEvent) -> Decision {
         if event.origin == Origin::SelfOriginated {
             return Decision::Pass;
         }
+        let primary = match event.input {
+            NativeInput::Primary(primary) => primary,
+            NativeInput::Modifier(modifier) => {
+                self.observe_physical_modifier(
+                    modifier,
+                    ModifierSide::Unspecified,
+                    event.transition,
+                );
+                return Decision::Pass;
+            }
+            NativeInput::SidedModifier { modifier, side } => {
+                self.observe_physical_modifier(modifier, side, event.transition);
+                return Decision::Pass;
+            }
+            NativeInput::ModifierPrimary {
+                modifier,
+                side,
+                primary,
+            } => {
+                if event.transition == Transition::Up {
+                    self.observe_physical_modifier(modifier, side, event.transition);
+                }
+                let decision = self.classify_native(NativeInputEvent {
+                    input: NativeInput::Primary(primary),
+                    transition: event.transition,
+                    origin: event.origin,
+                });
+                if event.transition == Transition::Down && decision == Decision::Pass {
+                    self.observe_physical_modifier(modifier, side, event.transition);
+                }
+                return decision;
+            }
+        };
         let authorization_epoch = self.authorization_epoch();
         // A release must retire physical held-key state even when a lifecycle or
         // focus transition makes the event pass through. Otherwise the first
         // press after ESO returns can be mistaken for auto-repeat and suppressed
         // without handing off its action.
         if event.transition == Transition::Up {
-            self.held.lock().unwrap().remove(&event.key);
-            if self.passed_through.lock().unwrap().remove(&event.key) {
+            self.held.lock().unwrap().remove(&primary);
+            if self.passed_through.lock().unwrap().remove(&primary) {
                 return Decision::Pass;
             }
+        } else if self.passed_through.lock().unwrap().contains(&primary) {
+            return Decision::Pass;
         }
         if !self.game_active.load(Ordering::Relaxed) {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         if !self.focused.load(Ordering::Relaxed) {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
 
-        let bound = self.bindings.lock().unwrap().lookup(event.key);
-        let Some((action, suspend_exempt)) = bound else {
-            return self.pass_physical(event);
+        let toggle =
+            native_to_key(primary).and_then(|key| self.bindings.lock().unwrap().lookup(key));
+        let physical = self.physical_modifiers();
+        let (action, suspend_exempt, combat_plan) = match self.resolve_combat(primary, physical) {
+            NativeCombatResolution::Admitted(action, plan) => (action, false, Some(plan)),
+            NativeCombatResolution::RejectedTrigger => {
+                return self.pass_physical(primary, event.transition);
+            }
+            NativeCombatResolution::NoTrigger => match toggle {
+                Some((action, exempt)) if physical == ModifierSet::EMPTY => (action, exempt, None),
+                Some(_) | None => return self.pass_physical(primary, event.transition),
+            },
         };
         if !self.active.lock().unwrap().contains(&action) {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         if self.suspended.load(Ordering::Acquire) && !suspend_exempt {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         // The menu gate: a native game UI surface is up, so the operator may be
         // typing. Same shape and same exemption as the suspend check above, and
         // like every other check here it can only produce a Pass, which is what
         // makes it impossible for this gate to widen interception.
         if self.menu_gated.load(Ordering::Relaxed) && !suspend_exempt {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         if self.life_gate.is_gated() && !suspend_exempt {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         if self.roll_gate.is_gated() && !suspend_exempt {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         if self.world_gate.is_gated() && !suspend_exempt {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
         if self.travel_gate.is_gated() && !suspend_exempt {
-            return self.pass_physical(event);
+            return self.pass_physical(primary, event.transition);
         }
 
         match event.transition {
             Transition::Down => {
                 if !suspend_exempt && self.authorization_epoch() != authorization_epoch {
-                    return self.pass_physical(event);
+                    return self.pass_physical(primary, event.transition);
                 }
-                let newly_pressed = self.held.lock().unwrap().insert(event.key);
+                let newly_pressed =
+                    primary.is_momentary() || self.held.lock().unwrap().insert(primary);
                 if newly_pressed {
-                    self.hand_off(action, authorization_epoch);
+                    self.hand_off(action, authorization_epoch, combat_plan);
                 }
             }
             Transition::Up => {
@@ -690,17 +824,108 @@ impl InputEngine {
         Decision::Suppress
     }
 
-    fn pass_physical(&self, event: KeyEvent) -> Decision {
-        if event.transition == Transition::Down {
-            self.passed_through.lock().unwrap().insert(event.key);
+    fn observe_physical_modifier(
+        &self,
+        modifier: NativeModifier,
+        side: ModifierSide,
+        transition: Transition,
+    ) {
+        let mut controls = self.physical_modifier_controls.lock().unwrap();
+        match transition {
+            Transition::Down => {
+                controls.insert((modifier, side));
+            }
+            Transition::Up => {
+                controls.remove(&(modifier, side));
+            }
+        }
+        let bits = controls
+            .iter()
+            .fold(ModifierSet::EMPTY, |set, (modifier, _)| set.with(*modifier))
+            .bits();
+        self.physical_modifier_bits.store(bits, Ordering::Release);
+    }
+
+    fn resolve_combat(
+        &self,
+        primary: NativeControl,
+        physical: ModifierSet,
+    ) -> NativeCombatResolution {
+        let bindings = *self.native_bindings.lock().unwrap();
+        let trigger = NativeChord {
+            primary,
+            modifiers: physical,
+        };
+        let mut matched = None;
+        for native in NativeAction::ALL.into_iter().take(Action::COMBAT.len()) {
+            if bindings.get(native) == NativeBindingState::Valid(trigger) {
+                if matched.is_some() {
+                    return NativeCombatResolution::RejectedTrigger;
+                }
+                matched = native.combat_action();
+            }
+        }
+        let Some(action) = matched else {
+            return NativeCombatResolution::NoTrigger;
+        };
+        let requirement = self
+            .combat_requirements
+            .lock()
+            .unwrap()
+            .get(&action)
+            .copied()
+            .unwrap_or(CombatRequirement::LIGHT_OR_HEAVY);
+        let Some(skill) = valid_chord(bindings.get(native_for_action(action))) else {
+            return NativeCombatResolution::RejectedTrigger;
+        };
+        let attack = if requirement.attack {
+            let Some(attack) = valid_chord(bindings.get(NativeAction::Attack)) else {
+                return NativeCombatResolution::RejectedTrigger;
+            };
+            Some(attack)
+        } else {
+            None
+        };
+        let block = if requirement.block {
+            let Some(block) = valid_chord(bindings.get(NativeAction::Block)) else {
+                return NativeCombatResolution::RejectedTrigger;
+            };
+            Some(block)
+        } else {
+            None
+        };
+        if attack == Some(skill) || block == Some(skill) || (attack.is_some() && attack == block) {
+            return NativeCombatResolution::RejectedTrigger;
+        }
+        let plan = CombatChordPlan {
+            skill,
+            attack,
+            block,
+        };
+        if plan.admits_physical(physical) {
+            NativeCombatResolution::Admitted(action, plan)
+        } else {
+            NativeCombatResolution::RejectedTrigger
+        }
+    }
+
+    fn pass_physical(&self, primary: NativeControl, transition: Transition) -> Decision {
+        if transition == Transition::Down && !primary.is_momentary() {
+            self.passed_through.lock().unwrap().insert(primary);
         }
         Decision::Pass
     }
 
-    fn hand_off(&self, action: Action, authorization_epoch: AuthorizationEpoch) {
+    fn hand_off(
+        &self,
+        action: Action,
+        authorization_epoch: AuthorizationEpoch,
+        combat_plan: Option<CombatChordPlan>,
+    ) {
         let queued = QueuedAction {
             action,
             authorization_epoch,
+            combat_plan,
         };
         match self.tx.try_send(queued) {
             Ok(()) => {}
@@ -725,7 +950,7 @@ impl InputEngine {
     }
 
     /// Rebinds an action, rejecting a conflicting key.
-    pub fn rebind(&self, action: Action, key: Key) -> Result<(), Conflict> {
+    pub fn rebind(&self, action: Action, key: Key) -> Result<(), RebindError> {
         self.bindings.lock().unwrap().rebind(action, key)
     }
 
@@ -742,6 +967,71 @@ impl InputEngine {
     }
 }
 
+fn valid_chord(state: NativeBindingState) -> Option<NativeChord> {
+    match state {
+        NativeBindingState::Valid(chord) => Some(chord),
+        NativeBindingState::Unavailable
+        | NativeBindingState::Unbound
+        | NativeBindingState::Conflicting
+        | NativeBindingState::Unsupported => None,
+    }
+}
+
+fn native_for_action(action: Action) -> NativeAction {
+    match action {
+        Action::Skill1 => NativeAction::Skill1,
+        Action::Skill2 => NativeAction::Skill2,
+        Action::Skill3 => NativeAction::Skill3,
+        Action::Skill4 => NativeAction::Skill4,
+        Action::Skill5 => NativeAction::Skill5,
+        Action::Ultimate => NativeAction::Ultimate,
+        Action::Synergy => NativeAction::Synergy,
+        Action::ToggleSuspend | Action::ToggleFishing | Action::ToggleAutoPotion => {
+            unreachable!("application toggle has no native ESO action")
+        }
+    }
+}
+
+fn key_to_native(key: Key) -> NativeControl {
+    NativeControl::Keyboard(match key {
+        Key::Digit1 => KeyboardControl::Digit1,
+        Key::Digit2 => KeyboardControl::Digit2,
+        Key::Digit3 => KeyboardControl::Digit3,
+        Key::Digit4 => KeyboardControl::Digit4,
+        Key::Digit5 => KeyboardControl::Digit5,
+        Key::E => KeyboardControl::E,
+        Key::R => KeyboardControl::R,
+        Key::X => KeyboardControl::X,
+        Key::Q => KeyboardControl::Q,
+        Key::Space => KeyboardControl::Space,
+        Key::F1 => KeyboardControl::F1,
+        Key::F2 => KeyboardControl::F2,
+        Key::F3 => KeyboardControl::F3,
+    })
+}
+
+fn native_to_key(control: NativeControl) -> Option<Key> {
+    let NativeControl::Keyboard(key) = control else {
+        return None;
+    };
+    match key {
+        KeyboardControl::Digit1 => Some(Key::Digit1),
+        KeyboardControl::Digit2 => Some(Key::Digit2),
+        KeyboardControl::Digit3 => Some(Key::Digit3),
+        KeyboardControl::Digit4 => Some(Key::Digit4),
+        KeyboardControl::Digit5 => Some(Key::Digit5),
+        KeyboardControl::E => Some(Key::E),
+        KeyboardControl::R => Some(Key::R),
+        KeyboardControl::X => Some(Key::X),
+        KeyboardControl::Q => Some(Key::Q),
+        KeyboardControl::Space => Some(Key::Space),
+        KeyboardControl::F1 => Some(Key::F1),
+        KeyboardControl::F2 => Some(Key::F2),
+        KeyboardControl::F3 => Some(Key::F3),
+        _ => None,
+    }
+}
+
 /// The OS seam: interception and synthesis. Implemented by the mock and the
 /// platform backends.
 pub trait InputBackend {
@@ -753,6 +1043,20 @@ pub trait InputBackend {
     fn synthesize_mouse(
         &self,
         button: MouseButton,
+        transition: Transition,
+    ) -> Result<(), InputError>;
+
+    /// Synthesizes one portable native keyboard or mouse primary.
+    fn synthesize_native(
+        &self,
+        control: NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError>;
+
+    /// Synthesizes one normalized native modifier.
+    fn synthesize_modifier(
+        &self,
+        modifier: NativeModifier,
         transition: Transition,
     ) -> Result<(), InputError>;
 

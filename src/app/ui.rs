@@ -3436,7 +3436,7 @@ fn settings_body(
 
     widgets::heading(ui, strings::CLUSTER_KEYBINDINGS);
     egui::Frame::group(ui.style()).show(ui, |ui| {
-        for action in Action::ALL {
+        for action in Action::TOGGLES {
             let current = draft.bindings.key_for(action);
             let mut selected = current;
             ui.horizontal(|ui| {
