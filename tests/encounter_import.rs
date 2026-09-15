@@ -112,7 +112,14 @@ fn current_terminal(session_id: &str, encounter_id: &str) -> serde_json::Value {
 }
 
 fn capture_state(records: Vec<serde_json::Value>, revision: u64) -> serde_json::Value {
-    let session_id = "session-1788912002-2000";
+    capture_state_for("session-1788912002-2000", records, revision)
+}
+
+fn capture_state_for(
+    session_id: &str,
+    records: Vec<serde_json::Value>,
+    revision: u64,
+) -> serde_json::Value {
     let record_map = records
         .into_iter()
         .enumerate()
@@ -372,6 +379,41 @@ fn batch_import_is_all_or_nothing_and_growing_reimports_are_idempotent() {
     fs::write(&input, state_lua(&colliding)).unwrap();
     assert!(import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).is_err());
     assert_eq!(list_encounters(&store).unwrap().len(), 2);
+}
+
+#[test]
+fn encounter_listing_keeps_overlapping_sessions_contiguous_and_ordinal() {
+    let first_session = "session-1788912002-2000";
+    let second_session = "session-1788912003-3000";
+    let mut first = current_terminal(first_session, "encounter-1788912002-1");
+    first["started_at"] = serde_json::json!("1788912002");
+    first["finished_at"] = serde_json::json!("1788912003");
+    let mut second = current_terminal(first_session, "encounter-1788912002-2");
+    second["started_at"] = serde_json::json!("1788912006");
+    second["finished_at"] = serde_json::json!("1788912007");
+    let first_state = capture_state_for(first_session, vec![first, second], 3);
+
+    let mut overlapping = current_terminal(second_session, "encounter-1788912003-1");
+    overlapping["started_at"] = serde_json::json!("1788912004");
+    overlapping["finished_at"] = serde_json::json!("1788912005");
+    let second_state = capture_state_for(second_session, vec![overlapping], 2);
+
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("continuous.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    fs::write(&input, state_lua(&first_state)).unwrap();
+    import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    fs::write(&input, state_lua(&second_state)).unwrap();
+    import_capture_set(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+
+    let listed = list_encounters(&store).unwrap();
+    assert_eq!(listed.len(), 3);
+    assert_eq!(listed[0].session_id, first_session);
+    assert_eq!(listed[0].encounter_ordinal, 1);
+    assert_eq!(listed[1].session_id, first_session);
+    assert_eq!(listed[1].encounter_ordinal, 2);
+    assert_eq!(listed[2].session_id, second_session);
+    assert_eq!(listed[2].encounter_ordinal, 1);
 }
 
 #[test]

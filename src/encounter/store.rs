@@ -581,7 +581,7 @@ pub fn list_encounters(
                 finished_at, first_sequence, last_sequence, stored_event_count,
                 omitted_event_count, capture_mode, encounter_ordinal
          FROM raw_encounters
-         ORDER BY length(started_at), started_at, session_id, encounter_ordinal"
+         ORDER BY session_id, encounter_ordinal"
     } else {
         "SELECT content_sha256, session_id, encounter_id, channel, status, started_at,
                 finished_at, first_sequence, last_sequence, stored_event_count,
@@ -590,7 +590,7 @@ pub fn list_encounters(
                     PARTITION BY session_id
                     ORDER BY length(started_at), started_at, encounter_id, content_sha256)
          FROM raw_encounters
-         ORDER BY length(started_at), started_at, session_id, encounter_id"
+         ORDER BY session_id, encounter_ordinal"
     };
     let mut statement = connection.prepare(query)?;
     let rows = statement.query_map([], |row| {
