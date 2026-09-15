@@ -92,7 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fixed RGB cell per action with color-spaced control nibbles and an exact packed
   modifier and action check. It inspects ESO bindings only through read APIs and
   permanently rejects mutation APIs, custom binding declarations, and binding
-  SavedVariables in tests.
+  SavedVariables in tests. The new troubleshooting state table advances the
+  frozen documentation inventory to 60 tables across 27 published pages.
 
 - 2026-09-15: Correct the pinned CI bootstrap notice to describe the actual
   running-workflow fallback without claiming that protected `main` lacks the

@@ -1970,7 +1970,7 @@ const DOCUMENTATION_TABLE_COUNTS = new Map([
   ["features/weaving.md", 3],
   ["getting-started/first-launch.md", 1],
   ["getting-started/installation.md", 1],
-  ["getting-started/troubleshooting.md", 2],
+  ["getting-started/troubleshooting.md", 3],
   ["reference/catalog-sources-and-rights.md", 3],
   ["reference/configuration.md", 1],
   ["reference/encounter-data-and-metrics.md", 3],
@@ -2011,8 +2011,8 @@ export function validateDocumentationTableInventory(pages) {
   for (const [page, expected] of DOCUMENTATION_TABLE_COUNTS) {
     if (!pages.has(page)) errors.push(`S089 table inventory is missing ${page} with ${expected} expected table(s)`);
   }
-  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 59) {
-    errors.push(`documentation table inventory requires 59 tables across 27 pages; found ${total} across ${pages.size} pages`);
+  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 60) {
+    errors.push(`documentation table inventory requires 60 tables across 27 pages; found ${total} across ${pages.size} pages`);
   }
   return [...new Set(errors)];
 }
