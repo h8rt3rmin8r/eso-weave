@@ -287,6 +287,12 @@ pub enum Decision {
     Pass,
 }
 
+enum NativeCombatResolution {
+    NoTrigger,
+    RejectedTrigger,
+    Admitted(Action, CombatChordPlan),
+}
+
 /// An error from a platform backend.
 #[derive(thiserror::Error, Debug)]
 pub enum InputError {
@@ -734,7 +740,7 @@ impl InputEngine {
                     transition: event.transition,
                     origin: event.origin,
                 });
-                if event.transition == Transition::Down {
+                if event.transition == Transition::Down && decision == Decision::Pass {
                     self.observe_physical_modifier(modifier, side, event.transition);
                 }
                 return decision;
@@ -750,6 +756,8 @@ impl InputEngine {
             if self.passed_through.lock().unwrap().remove(&primary) {
                 return Decision::Pass;
             }
+        } else if self.passed_through.lock().unwrap().contains(&primary) {
+            return Decision::Pass;
         }
         if !self.game_active.load(Ordering::Relaxed) {
             return self.pass_physical(primary, event.transition);
@@ -760,14 +768,16 @@ impl InputEngine {
 
         let toggle =
             native_to_key(primary).and_then(|key| self.bindings.lock().unwrap().lookup(key));
-        let combat = self.resolve_combat(primary, self.physical_modifiers());
-        let (action, suspend_exempt, combat_plan) = match (combat, toggle) {
-            (Some((action, plan)), _) => (action, false, Some(plan)),
-            (None, Some((action, exempt))) if self.physical_modifiers() == ModifierSet::EMPTY => {
-                (action, exempt, None)
+        let physical = self.physical_modifiers();
+        let (action, suspend_exempt, combat_plan) = match self.resolve_combat(primary, physical) {
+            NativeCombatResolution::Admitted(action, plan) => (action, false, Some(plan)),
+            NativeCombatResolution::RejectedTrigger => {
+                return self.pass_physical(primary, event.transition);
             }
-            (None, None) => return self.pass_physical(primary, event.transition),
-            (None, Some(_)) => return self.pass_physical(primary, event.transition),
+            NativeCombatResolution::NoTrigger => match toggle {
+                Some((action, exempt)) if physical == ModifierSet::EMPTY => (action, exempt, None),
+                Some(_) | None => return self.pass_physical(primary, event.transition),
+            },
         };
         if !self.active.lock().unwrap().contains(&action) {
             return self.pass_physical(primary, event.transition);
@@ -840,7 +850,7 @@ impl InputEngine {
         &self,
         primary: NativeControl,
         physical: ModifierSet,
-    ) -> Option<(Action, CombatChordPlan)> {
+    ) -> NativeCombatResolution {
         let bindings = *self.native_bindings.lock().unwrap();
         let trigger = NativeChord {
             primary,
@@ -850,12 +860,14 @@ impl InputEngine {
         for native in NativeAction::ALL.into_iter().take(Action::COMBAT.len()) {
             if bindings.get(native) == NativeBindingState::Valid(trigger) {
                 if matched.is_some() {
-                    return None;
+                    return NativeCombatResolution::RejectedTrigger;
                 }
                 matched = native.combat_action();
             }
         }
-        let action = matched?;
+        let Some(action) = matched else {
+            return NativeCombatResolution::NoTrigger;
+        };
         let requirement = self
             .combat_requirements
             .lock()
@@ -863,23 +875,38 @@ impl InputEngine {
             .get(&action)
             .copied()
             .unwrap_or(CombatRequirement::LIGHT_OR_HEAVY);
-        let skill = valid_chord(bindings.get(native_for_action(action)))?;
+        let Some(skill) = valid_chord(bindings.get(native_for_action(action))) else {
+            return NativeCombatResolution::RejectedTrigger;
+        };
         let attack = if requirement.attack {
-            Some(valid_chord(bindings.get(NativeAction::Attack))?)
+            let Some(attack) = valid_chord(bindings.get(NativeAction::Attack)) else {
+                return NativeCombatResolution::RejectedTrigger;
+            };
+            Some(attack)
         } else {
             None
         };
         let block = if requirement.block {
-            Some(valid_chord(bindings.get(NativeAction::Block))?)
+            let Some(block) = valid_chord(bindings.get(NativeAction::Block)) else {
+                return NativeCombatResolution::RejectedTrigger;
+            };
+            Some(block)
         } else {
             None
         };
+        if attack == Some(skill) || block == Some(skill) || (attack.is_some() && attack == block) {
+            return NativeCombatResolution::RejectedTrigger;
+        }
         let plan = CombatChordPlan {
             skill,
             attack,
             block,
         };
-        plan.admits_physical(physical).then_some((action, plan))
+        if plan.admits_physical(physical) {
+            NativeCombatResolution::Admitted(action, plan)
+        } else {
+            NativeCombatResolution::RejectedTrigger
+        }
     }
 
     fn pass_physical(&self, primary: NativeControl, transition: Transition) -> Decision {

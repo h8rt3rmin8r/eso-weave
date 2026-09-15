@@ -312,6 +312,127 @@ fn exact_modified_combat_chord_outranks_unmodified_app_toggle() {
 }
 
 #[test]
+fn invalid_native_plan_blocks_toggle_fallback_on_the_same_primary() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::F1),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    bindings.set(NativeAction::Attack, NativeBindingState::Unbound);
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify(ev(Key::F1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn passed_primary_repeats_stay_passed_after_modifier_release() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    engine.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Alt),
+        Transition::Down,
+    ));
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    engine.classify_native(native_event(
+        NativeInput::Modifier(NativeModifier::Alt),
+        Transition::Up,
+    ));
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+
+    engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real));
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv().unwrap(), Action::Skill1);
+}
+
+#[test]
+fn duplicate_required_combat_chords_reject_the_native_trigger() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(NativeAction::Attack, bindings.get(NativeAction::Skill1));
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Pass
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn dual_role_windows_primary_does_not_become_its_own_extra_modifier() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Left,
+                primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            },
+            Transition::Down,
+        )),
+        Decision::Suppress
+    );
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
+    assert_eq!(rx.try_recv_authorized().unwrap().action(), Action::Skill1);
+}
+
+#[test]
+fn passed_windows_primary_retains_its_modifier_role_until_release() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let windows = NativeInput::ModifierPrimary {
+        modifier: NativeModifier::Command,
+        side: ModifierSide::Right,
+        primary: NativeControl::Keyboard(KeyboardControl::RightWindows),
+    };
+
+    assert_eq!(
+        engine.classify_native(native_event(windows, Transition::Down)),
+        Decision::Pass
+    );
+    assert_eq!(engine.physical_modifiers(), ModifierSet::COMMAND);
+    assert!(rx.try_recv().is_err());
+
+    assert_eq!(
+        engine.classify_native(native_event(windows, Transition::Up)),
+        Decision::Pass
+    );
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
+}
+
+#[test]
 fn releasing_one_modifier_side_preserves_the_other_side() {
     let (engine, _) = engine();
     let modifier = |side, transition| {
@@ -562,6 +683,7 @@ fn resume_restores_interception() {
 
     engine.set_world_gated(false);
     engine.set_travel_gated(false);
+    engine.classify(ev(Key::Digit1, Transition::Up, Origin::Real));
     let decision = engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real));
     assert_eq!(decision, Decision::Suppress);
     assert_eq!(rx.try_recv().ok(), Some(Action::Skill1));
@@ -1027,6 +1149,9 @@ fn ungating_restores_the_previous_decision_everywhere() {
         engine.set_menu_gated(true);
         engine.classify(ev(key, transition, origin));
         engine.set_menu_gated(false);
+        if transition == Transition::Down {
+            engine.classify(ev(key, Transition::Up, origin));
+        }
 
         assert_eq!(
             engine.classify(ev(key, transition, origin)),
