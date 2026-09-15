@@ -259,9 +259,7 @@ impl LinuxBackend {
         for raw in events {
             let mut forward = true;
             let classified = if raw.event_type() == EventType::KEY {
-                transition_of(raw.value()).and_then(|transition| {
-                    ev_to_native_input(EvKey::new(raw.code())).map(|input| (input, transition))
-                })
+                ev_to_native_input(EvKey::new(raw.code())).zip(transition_of(raw.value()))
             } else if raw.event_type() == EventType::RELATIVE
                 && raw.code() == RelativeAxisCode::REL_WHEEL.0
                 && raw.value() != 0
@@ -418,6 +416,7 @@ fn to_ev_key(key: Key) -> EvKey {
     }
 }
 
+#[cfg(test)]
 fn from_ev_code(code: u16) -> Option<Key> {
     match EvKey::new(code) {
         EvKey::KEY_1 => Some(Key::Digit1),
