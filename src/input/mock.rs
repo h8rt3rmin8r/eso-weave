@@ -3,7 +3,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::input::{InputBackend, InputEngine, InputError, Key, MouseButton, Transition};
+use crate::input::{
+    InputBackend, InputEngine, InputError, Key, MouseButton, NativeControl, NativeModifier,
+    Transition,
+};
 
 /// A test double for [`InputBackend`]. Records synthesized key and mouse
 /// transitions so tests can assert on the engine's output; `run` is a no-op
@@ -14,6 +17,10 @@ pub struct MockBackend {
     pub synthesized: Arc<Mutex<Vec<(Key, Transition)>>>,
     /// The mouse transitions synthesized through this backend, in order.
     pub synthesized_mouse: Arc<Mutex<Vec<(MouseButton, Transition)>>>,
+    /// Portable primary transitions synthesized for native combat chords.
+    pub synthesized_native: Arc<Mutex<Vec<(NativeControl, Transition)>>>,
+    /// Native modifier transitions synthesized around combat primaries.
+    pub synthesized_modifiers: Arc<Mutex<Vec<(NativeModifier, Transition)>>>,
 }
 
 impl MockBackend {
@@ -30,6 +37,14 @@ impl MockBackend {
     /// A snapshot of the synthesized mouse transitions so far.
     pub fn synthesized_mouse(&self) -> Vec<(MouseButton, Transition)> {
         self.synthesized_mouse.lock().unwrap().clone()
+    }
+
+    pub fn synthesized_native(&self) -> Vec<(NativeControl, Transition)> {
+        self.synthesized_native.lock().unwrap().clone()
+    }
+
+    pub fn synthesized_modifiers(&self) -> Vec<(NativeModifier, Transition)> {
+        self.synthesized_modifiers.lock().unwrap().clone()
     }
 }
 
@@ -48,6 +63,30 @@ impl InputBackend for MockBackend {
             .lock()
             .unwrap()
             .push((button, transition));
+        Ok(())
+    }
+
+    fn synthesize_native(
+        &self,
+        control: NativeControl,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.synthesized_native
+            .lock()
+            .unwrap()
+            .push((control, transition));
+        Ok(())
+    }
+
+    fn synthesize_modifier(
+        &self,
+        modifier: NativeModifier,
+        transition: Transition,
+    ) -> Result<(), InputError> {
+        self.synthesized_modifiers
+            .lock()
+            .unwrap()
+            .push((modifier, transition));
         Ok(())
     }
 

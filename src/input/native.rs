@@ -1,8 +1,7 @@
 //! Portable, read-only ESO action-binding evidence.
 //!
-//! These types describe what PixelBeacon observed. They deliberately do not
-//! participate in interception or synthesis yet; controller adoption belongs to
-//! the follow-up slices of issue #188.
+//! These types describe what PixelBeacon observed and the bounded combat plans
+//! admitted from that evidence. ESO bindings remain read-only throughout.
 
 use std::ops::{BitOr, BitOrAssign};
 
@@ -69,6 +68,21 @@ impl NativeAction {
             Self::Block => "SPECIAL_MOVE_BLOCK",
             Self::Interact => "GAME_CAMERA_INTERACT",
             Self::Quickslot => "ACTION_BUTTON_9",
+        }
+    }
+
+    /// The corresponding application combat action, when this native action is
+    /// one of the seven weave triggers.
+    pub const fn combat_action(self) -> Option<super::Action> {
+        match self {
+            Self::Skill1 => Some(super::Action::Skill1),
+            Self::Skill2 => Some(super::Action::Skill2),
+            Self::Skill3 => Some(super::Action::Skill3),
+            Self::Skill4 => Some(super::Action::Skill4),
+            Self::Skill5 => Some(super::Action::Skill5),
+            Self::Ultimate => Some(super::Action::Ultimate),
+            Self::Synergy => Some(super::Action::Synergy),
+            Self::Attack | Self::Block | Self::Interact | Self::Quickslot => None,
         }
     }
 }
@@ -379,6 +393,14 @@ impl NativeControl {
             },
         }
     }
+
+    /// Wheel directions are relative pulses and have no held release state.
+    pub const fn is_momentary(self) -> bool {
+        matches!(
+            self,
+            Self::Mouse(MouseControl::WheelUp | MouseControl::WheelDown)
+        )
+    }
 }
 
 /// Normalized native modifier bits.
@@ -407,6 +429,21 @@ impl ModifierSet {
     pub const fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
+
+    /// Whether every modifier in this set is also present in `other`.
+    pub const fn is_subset_of(self, other: Self) -> bool {
+        other.contains(self)
+    }
+
+    /// Returns this set with one modifier included.
+    pub const fn with(self, modifier: NativeModifier) -> Self {
+        Self(self.0 | modifier.flag().0)
+    }
+
+    /// Returns this set with one modifier removed.
+    pub const fn without(self, modifier: NativeModifier) -> Self {
+        Self(self.0 & !modifier.flag().0)
+    }
 }
 
 impl BitOr for ModifierSet {
@@ -423,11 +460,92 @@ impl BitOrAssign for ModifierSet {
     }
 }
 
+/// A normalized physical or generated modifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum NativeModifier {
+    Control,
+    Alt,
+    Shift,
+    Command,
+}
+
+impl NativeModifier {
+    /// Canonical generated press order. Cleanup uses the reverse order.
+    pub const ORDERED: [Self; 4] = [Self::Control, Self::Alt, Self::Shift, Self::Command];
+
+    pub const fn flag(self) -> ModifierSet {
+        match self {
+            Self::Shift => ModifierSet::SHIFT,
+            Self::Control => ModifierSet::CONTROL,
+            Self::Alt => ModifierSet::ALT,
+            Self::Command => ModifierSet::COMMAND,
+        }
+    }
+}
+
 /// One supported primary plus its normalized native modifiers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NativeChord {
     pub primary: NativeControl,
     pub modifiers: ModifierSet,
+}
+
+/// One physical input identity seen by the platform interception layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NativeInput {
+    Primary(NativeControl),
+    Modifier(NativeModifier),
+}
+
+/// The native controls copied into one admitted combat request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CombatChordPlan {
+    pub skill: NativeChord,
+    pub attack: Option<NativeChord>,
+    pub block: Option<NativeChord>,
+}
+
+impl CombatChordPlan {
+    /// Whether every target chord can execute without releasing a physically
+    /// held modifier.
+    pub const fn admits_physical(self, physical: ModifierSet) -> bool {
+        if !physical.is_subset_of(self.skill.modifiers) {
+            return false;
+        }
+        if let Some(attack) = self.attack {
+            if !physical.is_subset_of(attack.modifiers) {
+                return false;
+            }
+        }
+        if let Some(block) = self.block {
+            if !physical.is_subset_of(block.modifiers) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// The controls a configured weave type needs from one binding snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CombatRequirement {
+    pub attack: bool,
+    pub block: bool,
+}
+
+impl CombatRequirement {
+    pub const LIGHT_OR_HEAVY: Self = Self {
+        attack: true,
+        block: false,
+    };
+    pub const BASH: Self = Self {
+        attack: true,
+        block: true,
+    };
+    pub const BLOCK_CAST: Self = Self {
+        attack: false,
+        block: true,
+    };
 }
 
 /// The bounded result of native discovery or desktop evidence decoding.

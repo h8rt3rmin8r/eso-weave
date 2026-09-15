@@ -91,17 +91,17 @@ for both the in-memory ring and optional file logging.
 
 | Action | Default |
 | --- | --- |
-| Skill 1 through Skill 5 | `1` through `5` |
-| Ultimate | `R` |
-| Synergy | `X` |
 | Toggle Suspend | `F1` |
 | Toggle Fishing | `F2` |
 | Toggle Auto Potion | `F3` |
 
 Supported choices are `1` through `5`, `E`, `R`, `X`, `Q`, Space, `F1`, `F2`,
 and `F3`. A binding conflict is rejected and the previous assignment remains.
-All bindings remain scoped to the focused ESO window. Linux advertises every
-supported binding and preserves the selected physical keyboard's other keys.
+All bindings remain scoped to the focused ESO window. Combat bindings are
+configured only in ESO and consumed from current PixelBeacon evidence. Legacy
+combat entries in desktop settings are discarded and never become fallbacks.
+Linux advertises every supported application binding and preserves unrelated
+events from the selected physical devices.
 
 ## Main-window controls
 

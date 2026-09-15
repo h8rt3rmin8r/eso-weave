@@ -8,15 +8,15 @@
 pub mod sequence;
 pub mod types;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Notice, NoticeKind, Settings};
-use crate::input::bindings::BindingTable;
 use crate::input::{
-    Action, AuthorizationEpoch, InputBackend, InputEngine, Key, MouseButton, Transition, WeaveGates,
+    Action, AuthorizationEpoch, CombatChordPlan, CombatRequirement, InputBackend, InputEngine, Key,
+    MouseButton, NativeControl, NativeModifier, Transition, WeaveGates,
 };
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LayoutState, LifeState, MenuSurface, MovementSignal,
@@ -48,22 +48,21 @@ pub struct WeaveConfig {
 
 impl Default for WeaveConfig {
     fn default() -> Self {
-        let slot = |index: u8, key: Key, active: bool| SkillSlot {
+        let slot = |index: u8, active: bool| SkillSlot {
             index,
-            key,
             weave_type: WeaveType::LightAttack,
             active,
             overrides: SlotOverrides::default(),
         };
         WeaveConfig {
             slots: [
-                slot(1, Key::Digit1, true),
-                slot(2, Key::Digit2, true),
-                slot(3, Key::Digit3, true),
-                slot(4, Key::Digit4, true),
-                slot(5, Key::Digit5, true),
-                slot(6, Key::R, false),
-                slot(7, Key::X, false),
+                slot(1, true),
+                slot(2, true),
+                slot(3, true),
+                slot(4, true),
+                slot(5, true),
+                slot(6, false),
+                slot(7, false),
             ],
             timing: TimingConfig::default(),
             timing_back: TimingConfig::default(),
@@ -111,18 +110,6 @@ pub fn effective_timing(
         }
     }
     timing
-}
-
-impl WeaveConfig {
-    /// Updates each slot's key from the binding table so slot keys stay
-    /// consistent with the S002 bindings section.
-    pub fn sync_keys(&mut self, bindings: &BindingTable) {
-        for slot in &mut self.slots {
-            if let Some(action) = action_for_index(slot.index) {
-                slot.key = bindings.key_for(action);
-            }
-        }
-    }
 }
 
 /// The execution seam: synthesized operations, waits, and a monotonic clock.
@@ -176,7 +163,9 @@ impl WeaveSink for MockSink {
     fn emit(&mut self, op: InputOp) {
         if matches!(
             op,
-            InputOp::Key(_, Transition::Down) | InputOp::Mouse(_, Transition::Down)
+            InputOp::Chord(_, Transition::Down)
+                | InputOp::Key(_, Transition::Down)
+                | InputOp::Mouse(_, Transition::Down)
         ) {
             self.sequence_emitted = true;
         }
@@ -198,7 +187,7 @@ impl WeaveSink for MockSink {
 }
 
 /// A real sink: drives Input Engine synthesis and sleeps the worker thread.
-pub struct RealSink<B> {
+pub struct RealSink<B: InputBackend> {
     backend: B,
     origin: Instant,
     gates: WeaveGates,
@@ -206,8 +195,10 @@ pub struct RealSink<B> {
     active_epoch: AuthorizationEpoch,
     sequence_cancelled: bool,
     sequence_emitted: bool,
-    pressed_keys: HashSet<Key>,
-    pressed_mouse: HashSet<MouseButton>,
+    pressed_modifiers: Vec<NativeModifier>,
+    pressed_primaries: Vec<NativeControl>,
+    pressed_keys: Vec<Key>,
+    pressed_mouse: Vec<MouseButton>,
 }
 
 impl<B: InputBackend> RealSink<B> {
@@ -222,8 +213,10 @@ impl<B: InputBackend> RealSink<B> {
             active_epoch: admitted_epoch,
             sequence_cancelled: false,
             sequence_emitted: false,
-            pressed_keys: HashSet::new(),
-            pressed_mouse: HashSet::new(),
+            pressed_modifiers: Vec::new(),
+            pressed_primaries: Vec::new(),
+            pressed_keys: Vec::new(),
+            pressed_mouse: Vec::new(),
         }
     }
 
@@ -231,10 +224,66 @@ impl<B: InputBackend> RealSink<B> {
     pub fn set_admitted_epoch(&mut self, epoch: AuthorizationEpoch) {
         self.admitted_epoch = Some(epoch);
     }
+
+    fn cleanup_modifiers(&mut self) {
+        let mut position = self.pressed_modifiers.len();
+        while position > 0 {
+            position -= 1;
+            let modifier = self.pressed_modifiers[position];
+            if self.gates.physical_modifiers().contains(modifier.flag()) {
+                continue;
+            }
+            if let Err(error) = self.backend.synthesize_modifier(modifier, Transition::Up) {
+                tracing::warn!(target: "eso_weave::weave", "modifier cleanup failed: {error}");
+            } else {
+                self.pressed_modifiers.remove(position);
+            }
+        }
+    }
+
+    fn cleanup_primaries(&mut self) {
+        let mut position = self.pressed_primaries.len();
+        while position > 0 {
+            position -= 1;
+            let primary = self.pressed_primaries[position];
+            if let Err(error) = self.backend.synthesize_native(primary, Transition::Up) {
+                tracing::warn!(target: "eso_weave::weave", "primary cleanup failed: {error}");
+            } else {
+                self.pressed_primaries.remove(position);
+            }
+        }
+        let mut position = self.pressed_mouse.len();
+        while position > 0 {
+            position -= 1;
+            let button = self.pressed_mouse[position];
+            if self
+                .backend
+                .synthesize_mouse(button, Transition::Up)
+                .is_ok()
+            {
+                self.pressed_mouse.remove(position);
+            }
+        }
+        let mut position = self.pressed_keys.len();
+        while position > 0 {
+            position -= 1;
+            let key = self.pressed_keys[position];
+            if self.backend.synthesize(key, Transition::Up).is_ok() {
+                self.pressed_keys.remove(position);
+            }
+        }
+        self.cleanup_modifiers();
+    }
+
+    fn cancel(&mut self) {
+        self.sequence_cancelled = true;
+        self.cleanup_primaries();
+    }
 }
 
 impl<B: InputBackend> WeaveSink for RealSink<B> {
     fn begin_sequence(&mut self) {
+        self.cleanup_primaries();
         self.active_epoch = self
             .admitted_epoch
             .take()
@@ -244,47 +293,125 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
     }
 
     fn emit(&mut self, op: InputOp) {
-        let (transition, was_pressed) = match op {
-            InputOp::Key(key, transition) => (transition, self.pressed_keys.contains(&key)),
-            InputOp::Mouse(button, transition) => {
-                (transition, self.pressed_mouse.contains(&button))
-            }
-        };
-        // Once life or roll-dodge evidence closes the gate, start no new input. Releases still
-        // run so a key or mouse button pressed before the transition cannot be
-        // stranded logically down.
         if !self.gates.admits(self.active_epoch) {
-            self.sequence_cancelled = true;
+            self.cancel();
         }
-        if self.sequence_cancelled && transition == Transition::Down {
+        if let InputOp::Key(key, transition) = op {
+            if transition == Transition::Down && self.sequence_cancelled {
+                return;
+            }
+            if transition == Transition::Up && !self.pressed_keys.contains(&key) {
+                return;
+            }
+            if self.backend.synthesize(key, transition).is_ok() {
+                match transition {
+                    Transition::Down => {
+                        self.pressed_keys.push(key);
+                        self.sequence_emitted = true;
+                    }
+                    Transition::Up => {
+                        if let Some(position) = self
+                            .pressed_keys
+                            .iter()
+                            .rposition(|pressed| *pressed == key)
+                        {
+                            self.pressed_keys.remove(position);
+                        }
+                    }
+                }
+            }
             return;
         }
-        if self.sequence_cancelled && transition == Transition::Up && !was_pressed {
+        if let InputOp::Mouse(button, transition) = op {
+            if transition == Transition::Down && self.sequence_cancelled {
+                return;
+            }
+            if transition == Transition::Up && !self.pressed_mouse.contains(&button) {
+                return;
+            }
+            if self.backend.synthesize_mouse(button, transition).is_ok() {
+                match transition {
+                    Transition::Down => {
+                        self.pressed_mouse.push(button);
+                        self.sequence_emitted = true;
+                    }
+                    Transition::Up => {
+                        if let Some(position) = self
+                            .pressed_mouse
+                            .iter()
+                            .rposition(|pressed| *pressed == button)
+                        {
+                            self.pressed_mouse.remove(position);
+                        }
+                    }
+                }
+            }
             return;
         }
-        let result = match op {
-            InputOp::Key(key, transition) => self.backend.synthesize(key, transition),
-            InputOp::Mouse(button, transition) => self.backend.synthesize_mouse(button, transition),
+        let InputOp::Chord(chord, transition) = op else {
+            unreachable!()
         };
-        match result {
-            Ok(()) => match op {
-                InputOp::Key(key, Transition::Down) => {
-                    self.pressed_keys.insert(key);
+        match transition {
+            Transition::Down => {
+                if self.sequence_cancelled {
+                    return;
+                }
+                self.cleanup_modifiers();
+                if !self.pressed_modifiers.is_empty() {
+                    self.cancel();
+                    return;
+                }
+                let physical = self.gates.physical_modifiers();
+                if !physical.is_subset_of(chord.modifiers) {
+                    self.cancel();
+                    return;
+                }
+                for modifier in NativeModifier::ORDERED {
+                    if chord.modifiers.contains(modifier.flag())
+                        && !physical.contains(modifier.flag())
+                    {
+                        match self.backend.synthesize_modifier(modifier, Transition::Down) {
+                            Ok(()) => self.pressed_modifiers.push(modifier),
+                            Err(error) => {
+                                tracing::warn!(target: "eso_weave::weave", "modifier synthesis failed: {error}");
+                                self.cleanup_modifiers();
+                                self.cancel();
+                                return;
+                            }
+                        }
+                    }
+                }
+                let result = self
+                    .backend
+                    .synthesize_native(chord.primary, Transition::Down);
+                if result.is_ok() {
+                    if !chord.primary.is_momentary() {
+                        self.pressed_primaries.push(chord.primary);
+                    }
                     self.sequence_emitted = true;
                 }
-                InputOp::Key(key, Transition::Up) => {
-                    self.pressed_keys.remove(&key);
+                self.cleanup_modifiers();
+                if let Err(error) = result {
+                    tracing::warn!(target: "eso_weave::weave", "primary synthesis failed: {error}");
+                    self.cancel();
                 }
-                InputOp::Mouse(button, Transition::Down) => {
-                    self.pressed_mouse.insert(button);
-                    self.sequence_emitted = true;
+            }
+            Transition::Up => {
+                let Some(position) = self
+                    .pressed_primaries
+                    .iter()
+                    .rposition(|primary| *primary == chord.primary)
+                else {
+                    return;
+                };
+                if let Err(error) = self
+                    .backend
+                    .synthesize_native(chord.primary, Transition::Up)
+                {
+                    tracing::warn!(target: "eso_weave::weave", "primary release failed: {error}");
+                } else {
+                    self.pressed_primaries.remove(position);
                 }
-                InputOp::Mouse(button, Transition::Up) => {
-                    self.pressed_mouse.remove(&button);
-                }
-            },
-            Err(err) => {
-                tracing::warn!(target: "eso_weave::weave", "synthesis failed: {err}");
             }
         }
     }
@@ -293,7 +420,7 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
         let deadline = Instant::now() + Duration::from_millis(u64::from(ms));
         while !self.sequence_cancelled {
             if !self.gates.admits(self.active_epoch) {
-                self.sequence_cancelled = true;
+                self.cancel();
                 break;
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -310,6 +437,12 @@ impl<B: InputBackend> WeaveSink for RealSink<B> {
 
     fn sequence_emitted(&self) -> bool {
         self.sequence_emitted
+    }
+}
+
+impl<B: InputBackend> Drop for RealSink<B> {
+    fn drop(&mut self) {
+        self.cleanup_primaries();
     }
 }
 
@@ -613,7 +746,7 @@ impl WeaveEngine {
     /// Handles a handed-off action: if it maps to an active slot and the global
     /// cooldown has elapsed, runs the slot's sequence through the sink. A request
     /// inside the cooldown window is dropped without running a sequence.
-    pub fn handle<S: WeaveSink>(&mut self, action: Action, sink: &mut S) {
+    pub fn handle<S: WeaveSink>(&mut self, action: Action, plan: CombatChordPlan, sink: &mut S) {
         let Some(slot) = self.slot_for_action(action).copied() else {
             return;
         };
@@ -641,7 +774,8 @@ impl WeaveEngine {
         }
         sink.begin_sequence();
 
-        for step in sequence_for_adapted(&slot, &timing, self.current_latency, &self.latency) {
+        for step in sequence_for_adapted(&slot, &timing, plan, self.current_latency, &self.latency)
+        {
             match step {
                 WeaveStep::Emit(op) => sink.emit(op),
                 WeaveStep::Wait(ms) => sink.wait(ms),
@@ -658,6 +792,7 @@ impl WeaveEngine {
         for slot in &self.config.slots {
             if let Some(action) = action_for_index(slot.index) {
                 engine.set_action_active(action, slot.active);
+                engine.set_combat_requirement(action, requirement_for(slot.weave_type));
             }
         }
     }
@@ -727,6 +862,14 @@ fn action_for_index(index: u8) -> Option<Action> {
         6 => Some(Action::Ultimate),
         7 => Some(Action::Synergy),
         _ => None,
+    }
+}
+
+fn requirement_for(weave_type: WeaveType) -> CombatRequirement {
+    match weave_type {
+        WeaveType::LightAttack | WeaveType::HeavyAttack => CombatRequirement::LIGHT_OR_HEAVY,
+        WeaveType::BashAttack => CombatRequirement::BASH,
+        WeaveType::BlockCasting => CombatRequirement::BLOCK_CAST,
     }
 }
 

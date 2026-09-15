@@ -2,7 +2,7 @@
 //! ordered list of steps, with optional latency-adaptive scaling of the
 //! `d_weave` and `d_bash` delays.
 
-use crate::input::{MouseButton, Transition};
+use crate::input::{CombatChordPlan, Transition};
 use crate::weave::types::{
     InputOp, LatencyConfig, SkillSlot, TimingConfig, WeaveStep, WeaveType, MAX_LATENCY_BONUS_MS,
 };
@@ -32,8 +32,12 @@ pub fn effective_delay(base: u32, latency_ms: Option<u16>, cfg: &LatencyConfig) 
 ///
 /// This is [`sequence_for_adapted`] with latency adaptation disabled, so it is
 /// byte-for-byte the pre-latency-feature behavior.
-pub fn sequence_for(slot: &SkillSlot, timing: &TimingConfig) -> Vec<WeaveStep> {
-    sequence_for_adapted(slot, timing, None, &LatencyConfig::default())
+pub fn sequence_for(
+    slot: &SkillSlot,
+    timing: &TimingConfig,
+    plan: CombatChordPlan,
+) -> Vec<WeaveStep> {
+    sequence_for_adapted(slot, timing, plan, None, &LatencyConfig::default())
 }
 
 /// Builds the ordered weave step sequence for a slot, scaling the `d_weave` and
@@ -45,54 +49,68 @@ pub fn sequence_for(slot: &SkillSlot, timing: &TimingConfig) -> Vec<WeaveStep> {
 pub fn sequence_for_adapted(
     slot: &SkillSlot,
     timing: &TimingConfig,
+    plan: CombatChordPlan,
     latency_ms: Option<u16>,
     latency: &LatencyConfig,
 ) -> Vec<WeaveStep> {
-    let key = slot.key;
     let d_weave = effective_delay(slot.d_weave(timing), latency_ms, latency);
     let d_heavy = slot.d_heavy(timing);
     let d_bash = effective_delay(slot.d_bash(timing), latency_ms, latency);
 
-    let key_down = WeaveStep::Emit(InputOp::Key(key, Transition::Down));
-    let key_up = WeaveStep::Emit(InputOp::Key(key, Transition::Up));
-    let primary_down = WeaveStep::Emit(InputOp::Mouse(MouseButton::Primary, Transition::Down));
-    let primary_up = WeaveStep::Emit(InputOp::Mouse(MouseButton::Primary, Transition::Up));
-    let secondary_down = WeaveStep::Emit(InputOp::Mouse(MouseButton::Secondary, Transition::Down));
-    let secondary_up = WeaveStep::Emit(InputOp::Mouse(MouseButton::Secondary, Transition::Up));
+    let skill_down = WeaveStep::Emit(InputOp::Chord(plan.skill, Transition::Down));
+    let skill_up = WeaveStep::Emit(InputOp::Chord(plan.skill, Transition::Up));
+    let attack_down = plan
+        .attack
+        .map(|attack| WeaveStep::Emit(InputOp::Chord(attack, Transition::Down)));
+    let attack_up = plan
+        .attack
+        .map(|attack| WeaveStep::Emit(InputOp::Chord(attack, Transition::Up)));
 
     match slot.weave_type {
         WeaveType::LightAttack => vec![
-            primary_down,
-            primary_up,
+            attack_down.expect("attack chord required by light attack"),
+            attack_up.expect("attack chord required by light attack"),
             WeaveStep::Wait(d_weave),
-            key_down,
-            key_up,
+            skill_down,
+            skill_up,
         ],
         WeaveType::HeavyAttack => vec![
-            primary_down,
+            attack_down.expect("attack chord required by heavy attack"),
             WeaveStep::Wait(d_heavy),
-            key_down,
-            key_up,
-            primary_up,
+            skill_down,
+            skill_up,
+            attack_up.expect("attack chord required by heavy attack"),
         ],
         WeaveType::BashAttack => vec![
-            primary_down,
-            primary_up,
+            attack_down.expect("attack chord required by bash"),
+            attack_up.expect("attack chord required by bash"),
             WeaveStep::Wait(d_weave),
-            key_down,
-            key_up,
+            skill_down,
+            skill_up,
             WeaveStep::Wait(d_bash),
-            secondary_down,
-            primary_down,
-            primary_up,
-            secondary_up,
+            WeaveStep::Emit(InputOp::Chord(
+                plan.block.expect("block chord required by bash"),
+                Transition::Down,
+            )),
+            attack_down.expect("attack chord required by bash"),
+            attack_up.expect("attack chord required by bash"),
+            WeaveStep::Emit(InputOp::Chord(
+                plan.block.expect("block chord required by bash"),
+                Transition::Up,
+            )),
         ],
         WeaveType::BlockCasting => vec![
-            secondary_down,
-            key_down,
-            key_up,
+            WeaveStep::Emit(InputOp::Chord(
+                plan.block.expect("block chord required by block casting"),
+                Transition::Down,
+            )),
+            skill_down,
+            skill_up,
             WeaveStep::Wait(d_weave),
-            secondary_up,
+            WeaveStep::Emit(InputOp::Chord(
+                plan.block.expect("block chord required by block casting"),
+                Transition::Up,
+            )),
         ],
     }
 }

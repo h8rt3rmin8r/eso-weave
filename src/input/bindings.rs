@@ -16,7 +16,16 @@ pub struct Conflict {
     pub existing: Action,
 }
 
-/// The full set of action-to-key bindings.
+/// A rejected desktop binding change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RebindError {
+    /// The requested key already belongs to another desktop toggle.
+    Conflict(Conflict),
+    /// Combat controls are owned exclusively by current native ESO evidence.
+    NativeCombatAction(Action),
+}
+
+/// The desktop-owned application toggle bindings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingTable {
     map: BTreeMap<Action, Key>,
@@ -24,7 +33,7 @@ pub struct BindingTable {
 
 impl Default for BindingTable {
     fn default() -> Self {
-        let map = Action::ALL
+        let map = Action::TOGGLES
             .into_iter()
             .map(|action| (action, action.default_key()))
             .collect();
@@ -51,14 +60,17 @@ impl BindingTable {
 
     /// Rebinds `action` to `key`, rejecting the change if another action already
     /// uses that key and leaving the table unchanged in that case.
-    pub fn rebind(&mut self, action: Action, key: Key) -> Result<(), Conflict> {
+    pub fn rebind(&mut self, action: Action, key: Key) -> Result<(), RebindError> {
+        if !action.is_app_toggle() {
+            return Err(RebindError::NativeCombatAction(action));
+        }
         if let Some(existing) = self
             .map
             .iter()
             .find(|(bound_action, bound_key)| **bound_action != action && **bound_key == key)
             .map(|(bound_action, _)| *bound_action)
         {
-            return Err(Conflict { key, existing });
+            return Err(RebindError::Conflict(Conflict { key, existing }));
         }
         self.map.insert(action, key);
         Ok(())
@@ -72,9 +84,8 @@ impl BindingTable {
             .collect()
     }
 
-    /// Builds a table from the settings string map. Unknown actions or keys and
-    /// conflicting entries fall back to defaults for the affected actions, each
-    /// reported as a notice.
+    /// Builds the toggle table from settings. Legacy combat entries are
+    /// discarded because current ESO evidence is their sole authority.
     pub fn from_settings_map(raw: &BTreeMap<String, String>) -> (BindingTable, Vec<Notice>) {
         let mut notices = Vec::new();
         let mut custom: BTreeMap<Action, Key> = BTreeMap::new();
@@ -87,6 +98,9 @@ impl BindingTable {
                 });
                 continue;
             };
+            if !action.is_app_toggle() {
+                continue;
+            }
             let Some(key) = Key::parse(key_name) else {
                 notices.push(Notice {
                     kind: NoticeKind::InvalidValue,

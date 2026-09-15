@@ -25,7 +25,10 @@ use eso_weave::game::{
     FocusObservation, GameState, Presence, ProcessObservation, SurfaceObservation,
 };
 use eso_weave::input::bindings::BindingTable;
-use eso_weave::input::InputEngine;
+use eso_weave::input::{
+    InputEngine, KeyboardControl, ModifierSet, NativeAction, NativeBindingSet, NativeBindingState,
+    NativeChord, NativeControl,
+};
 use eso_weave::logging;
 use eso_weave::pixelbus::{
     ActiveBar, BlockSamples, BusLayout, CombatSignal, LayoutState, LifeState, LiveReaderConfig,
@@ -335,8 +338,8 @@ fn skill_rows_label_ultimate_and_synergy() {
     );
     assert_eq!(rows.len(), 7);
     assert_eq!(rows[0].label, "Skill 1");
-    assert_eq!(rows[5].label, "Ultimate (R)");
-    assert_eq!(rows[6].label, "Synergy (X)");
+    assert_eq!(rows[5].label, "Ultimate");
+    assert_eq!(rows[6].label, "Synergy");
 }
 
 // Status-line derivations (US1).
@@ -702,6 +705,29 @@ fn safety_preroute_closes_input_without_waiting_for_controller_access() {
     route_reader_safety_gate(PixelBusEvent::SignalLost, &input);
     assert!(input.is_life_gated());
     assert!(input.is_menu_gated());
+}
+
+#[test]
+fn s101_safety_preroute_replaces_and_revokes_native_bindings_before_controller_access() {
+    let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
+    let mut bindings = NativeBindingSet::new_unavailable();
+    bindings.set(
+        NativeAction::Skill1,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::K),
+            modifiers: ModifierSet::CONTROL,
+        }),
+    );
+
+    let before_update = input.authorization_epoch();
+    route_reader_safety_gate(PixelBusEvent::Bindings(bindings), &input);
+    assert_ne!(input.authorization_epoch(), before_update);
+    assert_eq!(input.native_bindings(), bindings);
+
+    let before_loss = input.authorization_epoch();
+    route_reader_safety_gate(PixelBusEvent::SignalLost, &input);
+    assert_ne!(input.authorization_epoch(), before_loss);
+    assert_eq!(input.native_bindings(), NativeBindingSet::new_unavailable());
 }
 
 #[test]

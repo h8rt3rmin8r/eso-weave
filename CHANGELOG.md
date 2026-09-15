@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S101 makes current PixelBeacon binding evidence authoritative for Skill 1
+  through 5, Ultimate, Synergy, Attack, and Block. Exact keyboard, mouse, wheel,
+  and modifier chords now drive interception and all four weave sequences on
+  Windows and Linux. Missing, conflicting, stale, duplicated, or physically
+  incompatible evidence passes through, binding replacement cancels queued and
+  running work, and generated-control ownership performs reverse-order cleanup.
+  Desktop keybinding settings now retain only the independent F1, F2, and F3
+  application toggles (issue #207).
+
 - S100 adds fixed-size, read-only PixelBeacon evidence for the native ESO
   bindings of Skill 1 through 5, Ultimate, Synergy, Attack, Block, Interact, and
   Quickslot. A portable keyboard-and-mouse chord model and protocol-6 decoder
@@ -86,6 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Make the coherent native binding snapshot the sole authority for
+  combat interception and synthesis. Trigger matching is exact, generated
+  modifiers use Control, Alt, Shift, Command order, application-owned releases
+  run in reverse, and any user-held modifier absent from a target chord makes
+  the original action pass through. Interact and Quickslot consumption remains
+  deferred to S102.
 
 - 2026-09-15: Decompose native binding authority into evidence, combat
   consumption, and Fishing plus Auto Potion migration. S100 publishes one

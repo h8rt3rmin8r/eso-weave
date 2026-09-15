@@ -48,6 +48,24 @@ impl Action {
         Action::ToggleAutoPotion,
     ];
 
+    /// The seven combat triggers whose controls come from native ESO evidence.
+    pub const COMBAT: [Action; 7] = [
+        Action::Skill1,
+        Action::Skill2,
+        Action::Skill3,
+        Action::Skill4,
+        Action::Skill5,
+        Action::Ultimate,
+        Action::Synergy,
+    ];
+
+    /// The three desktop-owned application controls.
+    pub const TOGGLES: [Action; 3] = [
+        Action::ToggleSuspend,
+        Action::ToggleFishing,
+        Action::ToggleAutoPotion,
+    ];
+
     /// The canonical string used as the settings key for this action.
     pub fn as_str(self) -> &'static str {
         match self {
