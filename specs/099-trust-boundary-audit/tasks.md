@@ -91,7 +91,7 @@
 - [x] T041 Move issue and PR project items to S099 PR review when project tracking is available.
 - [x] T042 Wait for CI, CodeQL, dependency, Codex, and security results; address every comment and resolve every thread.
 - [x] T043 Trigger exactly one authorized second `@Codex review` round and address its results.
-- [ ] T044 Confirm all required checks green, zero unresolved threads, and ask the operator for final review and merge.
+- [x] T044 Confirm all required checks green, zero unresolved threads, and ask the operator for final review and merge.
 
 ## Dependencies
 
