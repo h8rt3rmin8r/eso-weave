@@ -16,7 +16,7 @@ dirs = "7"
 time = { version = "0.3", features = ["formatting"] }
 thiserror = "2"
 rusqlite = { version = "0.40.2", default-features = false, features = ["backup", "bundled"] }
-sha2 = "0.10"
+sha2 = "0.11"
 tempfile = "3"
 eframe = { version = "0.36", default-features = false, features = [
     "glow",
@@ -64,9 +64,8 @@ winresource = "0.1"
 # test build; the version tracks the eframe/egui release. Recorded as a dated
 # decision in CHANGELOG.md.
 egui_kittest = { version = "0.36.1", default-features = false }
-# Headless documentation capture uses egui's own renderer directly because the
-# matching egui_kittest WGPU feature currently declares an unavailable pollster
-# 1.x range. These dependencies remain test-only and never enter release builds.
+# Headless documentation capture uses egui's own renderer directly so GPU setup
+# remains explicit. These dependencies remain test-only and never enter release builds.
 egui-wgpu = { version = "0.36.1", default-features = false }
 wgpu = { version = "30", default-features = false, features = ["std", "dx12", "vulkan", "gles"] }
 pollster = "1.0"

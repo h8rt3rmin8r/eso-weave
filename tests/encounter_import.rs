@@ -1009,7 +1009,10 @@ fn populated_v2_store_migrates_to_v4_without_rewriting_canonical_evidence() {
     let source = lossless_v2_lua();
     let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
     let canonical = canonical_bytes(&capture).unwrap();
-    let content_sha256 = format!("{:x}", Sha256::digest(&canonical));
+    let content_sha256: String = Sha256::digest(&canonical)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let connection = rusqlite::Connection::open(&store).unwrap();
     connection
         .execute_batch(
@@ -1101,11 +1104,17 @@ fn populated_v3_store_migrates_to_v4_without_rewriting_canonical_evidence() {
     fs::write(&input, &source).unwrap();
     let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
     let canonical = canonical_bytes(&capture).unwrap();
-    let content_sha256 = format!("{:x}", Sha256::digest(&canonical));
+    let content_sha256: String = Sha256::digest(&canonical)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let second_value = current_terminal("session-1788912002-2000", "encounter-1788912002-2");
     let second = parse_capture(capture_lua(&second_value).as_bytes(), Channel::Live).unwrap();
     let second_canonical = canonical_bytes(&second).unwrap();
-    let second_content_sha256 = format!("{:x}", Sha256::digest(&second_canonical));
+    let second_content_sha256: String = Sha256::digest(&second_canonical)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let original_source_sha256 = "ab".repeat(32);
 
     let connection = rusqlite::Connection::open(&store).unwrap();

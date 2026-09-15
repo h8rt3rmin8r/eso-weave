@@ -447,7 +447,10 @@ fn generation_loading_rejects_noncanonical_manifest_and_object_tampering() {
     let mut manifest = fs::read(&manifest_path).unwrap();
     manifest.extend_from_slice(b" \n");
     fs::write(&manifest_path, &manifest).unwrap();
-    let noncanonical_hash = format!("{:x}", Sha256::digest(&manifest));
+    let noncanonical_hash: String = Sha256::digest(&manifest)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let generation_root = sandbox.cache().join("generations");
     fs::rename(
         generation_root.join(&receipt.generation_sha256),
