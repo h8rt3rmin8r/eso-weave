@@ -73,10 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Decisions
 
 - 2026-09-15: Keep stale HUD values only as rendered, process-local App Model
-  output governed by one injected monotonic interval. Reader routing, Game State,
-  controllers, and input gates continue to consume current evidence and fail
-  closed immediately, so presentation retention has no reverse path into action
-  authority.
+  output governed by one injected monotonic interval. Game State records only the
+  coherent-to-incoherent transition time from the existing Pixel Bus clock, so a
+  delayed repaint cannot reset age, and the original deadline caps later setting
+  increases. Reader routing, controllers, and input gates continue to consume
+  current evidence and fail closed immediately, so presentation retention has no
+  reverse path into action authority.
 
 - 2026-09-15: Deliberately supersede S039 research decision R7 and S043
   requirement FR-002. Requested Auto Potion enablement now persists like other

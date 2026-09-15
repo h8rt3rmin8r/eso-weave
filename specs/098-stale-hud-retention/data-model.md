@@ -41,9 +41,10 @@ The entity contains rendered strings, palette roles, and meter presentation only
 `StaleInterval` owns:
 
 - `lost_at_ms: u64`
+- `original_deadline_ms: u64`
 - `cause: StaleHudCause`
 
-The deadline is derived with saturating arithmetic from `lost_at_ms + stale_retention_seconds * 1000`. It is not stored independently.
+The shared Game State records `presentation_loss_at_ms` at the first coherent-to-incoherent observation transition. It stores no rendered values and does not change action authority. When App Model first projects that loss, the stale interval copies the transition time and stores the saturating original deadline. Later projections use the lesser of that deadline and `lost_at_ms + current stale_retention_seconds * 1000`, so a smaller value can shorten retention but a larger value cannot extend it.
 
 ## Loss causes
 
@@ -66,7 +67,7 @@ Cause priority follows the observation dependency order: runtime, then focus, th
 | Stale | Coherent before expiry | Replace snapshot, cancel interval |
 | Stale | At or after derived deadline | Drop snapshot and interval, show existing fallback |
 | Any | Covered loss, zero interval | Drop retention and show existing fallback |
-| Stale | Interval changed | Recompute from original loss time, never restart |
+| Stale | Interval changed | Recompute from original loss time, capped at original deadline |
 
 ## Invariants
 

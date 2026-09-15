@@ -29,8 +29,8 @@ Every functional requirement maps to implementation or validation work. Every us
 ### Resolved findings
 
 1. **Authority leakage risk**: The design caches rendered views in `AppModel`, not decoded signals in an engine or controller. No reverse path exists.
-2. **Clock duplication risk**: `view_at` uses the same injected monotonic origin as the model. No widget timer or background worker is introduced.
-3. **Indefinite extension risk**: Cause changes and settings edits retain the original `lost_at_ms`; the current preference can shorten but never restart the elapsed interval.
+2. **Clock duplication risk**: Observation transitions and `view_at` use the same injected monotonic origin as the model. No widget timer or background worker is introduced.
+3. **Indefinite extension risk**: Cause changes retain the original `lost_at_ms`; settings edits are capped at `original_deadline_ms`, so the current preference can shorten but never restart or extend the interval.
 4. **Mixed snapshot risk**: Coherence is evaluated once for the complete rendered player-state presentation instead of per field.
 5. **Misleading cause risk**: Unknown runtime and focus have distinct unavailable causes rather than being asserted inactive or unfocused.
 6. **Accessibility risk**: A visible labeled text row states stale status, cause, and age before the values. Color is supplementary.

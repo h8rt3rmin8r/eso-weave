@@ -3,7 +3,7 @@
 ## Inputs
 
 - current rendered HUD projection
-- current game runtime, focus, heartbeat freshness, and surface evidence
+- current game runtime, focus, heartbeat freshness, and surface evidence with the transition-stamped presentation loss time
 - current whole-second retention preference
 - current millisecond value from the existing injected monotonic clock
 
@@ -17,9 +17,9 @@ Current fields become the retained candidate only when runtime is Active, focus 
 
 ## Retention
 
-The first covered loss stamps `lost_at_ms`. Before `lost_at_ms + retention_seconds * 1000`, the last coherent fields are returned. The stale line names the current cause and reports `floor((now_ms - lost_at_ms) / 1000)` seconds of age.
+The first covered loss stamps `lost_at_ms` in the observation transition, independent of repaint timing. App Model captures `original_deadline_ms` from the setting active when it first projects that loss. Before the lesser of `original_deadline_ms` and `lost_at_ms + current retention_seconds * 1000`, the last coherent fields are returned. The stale line names the current cause and reports `floor((now_ms - lost_at_ms) / 1000)` seconds of age.
 
-A later loss cause can update the cause text but cannot change `lost_at_ms`. A settings edit re-evaluates the same loss time and therefore cannot restart retention.
+A later loss cause can update the cause text but cannot change `lost_at_ms`. A settings edit re-evaluates the same loss time and is capped at `original_deadline_ms`, so it can shorten or clear but cannot restart or extend retention.
 
 ## Recovery and expiry
 

@@ -195,15 +195,18 @@ pub fn route_reader_event(
 }
 
 /// Routes the observation axes that contribute to the truthful Game Context.
-pub fn route_game_observation(event: PixelBusEvent, game: &GameState) {
+pub fn route_game_observation(event: PixelBusEvent, game: &GameState, now_ms: u64) {
     match event {
-        PixelBusEvent::Heartbeat => game.observe_heartbeat(),
-        PixelBusEvent::SignalLost => game.signal_lost(),
+        PixelBusEvent::Heartbeat => game.observe_heartbeat(now_ms),
+        PixelBusEvent::SignalLost => game.signal_lost(now_ms),
         PixelBusEvent::World(world) => game.observe_world(world),
-        PixelBusEvent::MenuGate(surface) => game.observe_surface(match surface {
-            Some(surface) => SurfaceObservation::Observed(surface),
-            None => SurfaceObservation::Unavailable,
-        }),
+        PixelBusEvent::MenuGate(surface) => game.observe_surface(
+            match surface {
+                Some(surface) => SurfaceObservation::Observed(surface),
+                None => SurfaceObservation::Unavailable,
+            },
+            now_ms,
+        ),
         _ => {}
     }
 }

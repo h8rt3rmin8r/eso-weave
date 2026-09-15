@@ -22,11 +22,11 @@
 
 ## R3. Expiry follows the original loss
 
-**Decision**: Store `lost_at_ms`, update a changing loss cause without resetting it, and derive the deadline from `lost_at_ms + configured_seconds` on each projection.
+**Decision**: Stamp `lost_at_ms` on the shared Game State observation transition, store the original configured deadline when App Model first projects that loss, and cap each later recalculation at that deadline. A changing loss cause does not reset either value.
 
-**Rationale**: This lets a live settings edit shorten the remaining interval or clear immediately while preventing a cause transition or form auto-submit from extending stale data.
+**Rationale**: Transition-time stamping keeps age and expiry correct while the window is minimized or occluded. The original deadline cap lets a live settings edit shorten the remaining interval or clear immediately while preventing a larger value, cause transition, or form auto-submit from extending stale data.
 
-**Rejected alternative**: Store only a fixed deadline. It would ignore a settings change until the next loss. Resetting on a cause change could retain values indefinitely through alternating failures.
+**Rejected alternative**: Stamp loss on the next view projection. That would restart the full interval after a delayed repaint. Using only the current setting would let an increase extend the original interval. Resetting on a cause change could retain values indefinitely through alternating failures.
 
 ## R4. Numeric control matches repository conventions
 

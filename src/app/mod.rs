@@ -1846,6 +1846,7 @@ fn stale_hud_cause(game: &GameObservations) -> Option<StaleHudCause> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StaleInterval {
     lost_at_ms: u64,
+    original_deadline_ms: u64,
     cause: StaleHudCause,
 }
 
@@ -2180,7 +2181,7 @@ impl AppModel {
             )
         };
         let suspended = self.input.is_suspended();
-        let game = self.game.snapshot();
+        let (game, presentation_loss_at_ms) = self.game.presentation_snapshot();
         let active = game.runtime == GameRuntime::Active;
         let mut weapon_bar = weapon_bar_view(active_bar, classes.0, classes.1);
         let mut combat = combat_view(combat);
@@ -2324,11 +2325,17 @@ impl AppModel {
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
         };
-        self.apply_hud_retention(&mut view, &game, now_ms);
+        self.apply_hud_retention(&mut view, &game, presentation_loss_at_ms, now_ms);
         view
     }
 
-    fn apply_hud_retention(&self, view: &mut AppView, game: &GameObservations, now_ms: u64) {
+    fn apply_hud_retention(
+        &self,
+        view: &mut AppView,
+        game: &GameObservations,
+        presentation_loss_at_ms: Option<u64>,
+        now_ms: u64,
+    ) {
         let current = HudPresentation::capture(view);
         let Some(cause) = stale_hud_cause(game) else {
             let mut retention = self.hud_retention.borrow_mut();
@@ -2348,20 +2355,28 @@ impl AppModel {
             retention.stale = None;
             return;
         }
+        let Some(observed_loss_at_ms) = presentation_loss_at_ms else {
+            retention.stale = None;
+            return;
+        };
         match &mut retention.stale {
             Some(interval) => interval.cause = cause,
             None => {
+                let original_deadline_ms =
+                    observed_loss_at_ms.saturating_add(u64::from(seconds).saturating_mul(1_000));
                 retention.stale = Some(StaleInterval {
-                    lost_at_ms: now_ms,
+                    lost_at_ms: observed_loss_at_ms,
+                    original_deadline_ms,
                     cause,
                 });
             }
         }
 
         let interval = retention.stale.expect("stale interval was initialized");
-        let deadline_ms = interval
+        let configured_deadline_ms = interval
             .lost_at_ms
             .saturating_add(u64::from(seconds).saturating_mul(1_000));
+        let deadline_ms = interval.original_deadline_ms.min(configured_deadline_ms);
         if now_ms >= deadline_ms {
             *retention = HudRetentionState::default();
             return;

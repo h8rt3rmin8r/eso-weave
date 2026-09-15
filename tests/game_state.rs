@@ -191,19 +191,25 @@ fn named_surface_and_unknown_axes_project_truthfully() {
 #[test]
 fn leaving_active_clears_focus_freshness_and_surface() {
     let state = GameState::default();
-    state.update_processes(ProcessObservation {
-        game: Presence::Present,
-        launcher: Presence::Present,
-        focus: FocusObservation::Focused,
-    });
-    state.observe_heartbeat();
-    state.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    state.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Present,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
+    state.observe_heartbeat(0);
+    state.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 0);
     state.observe_world(WorldState::Active);
-    state.update_processes(ProcessObservation {
-        game: Presence::Absent,
-        launcher: Presence::Absent,
-        focus: FocusObservation::Unfocused,
-    });
+    state.update_processes(
+        ProcessObservation {
+            game: Presence::Absent,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unfocused,
+        },
+        1,
+    );
     let snapshot = state.snapshot();
     assert_eq!(snapshot.runtime, GameRuntime::Inactive);
     assert_eq!(snapshot.focus, FocusObservation::Unknown);
@@ -220,7 +226,7 @@ fn world_state_is_runtime_only_and_signal_loss_clears_it() {
     assert_eq!(state.snapshot().world, WorldState::Transitioning);
     state.observe_world(WorldState::Active);
     assert_eq!(state.snapshot().world, WorldState::Active);
-    state.signal_lost();
+    state.signal_lost(0);
     assert_eq!(state.snapshot().world, WorldState::Unknown);
 }
 
@@ -232,10 +238,50 @@ fn repeated_observations_are_change_detected() {
         launcher: Presence::Present,
         focus: FocusObservation::Unknown,
     };
-    assert!(state.update_processes(processes));
-    assert!(!state.update_processes(processes));
+    assert!(state.update_processes(processes, 0));
+    assert!(!state.update_processes(processes, 1));
     assert!(state.update_installation(InstallationState::NotDetected));
     assert!(!state.update_installation(InstallationState::NotDetected));
+}
+
+#[test]
+fn presentation_loss_time_is_stamped_at_transition_and_survives_cause_changes() {
+    let state = GameState::default();
+    state.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        10,
+    );
+    state.observe_heartbeat(20);
+    state.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 30);
+    assert_eq!(state.presentation_snapshot().1, None);
+
+    state.signal_lost(1_000);
+    assert_eq!(state.presentation_snapshot().1, Some(1_000));
+    state.update_processes(
+        ProcessObservation {
+            game: Presence::Unknown,
+            launcher: Presence::Unknown,
+            focus: FocusObservation::Unknown,
+        },
+        2_000,
+    );
+    assert_eq!(state.presentation_snapshot().1, Some(1_000));
+
+    state.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        3_000,
+    );
+    state.observe_heartbeat(3_000);
+    state.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 3_000);
+    assert_eq!(state.presentation_snapshot().1, None);
 }
 
 #[test]

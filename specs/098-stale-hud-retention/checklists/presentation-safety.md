@@ -10,7 +10,7 @@
 
 - [x] Retention is owned only by `AppModel` presentation state.
 - [x] Retained values are rendered types, not decoded controller inputs.
-- [x] Reader and process loss routing remains unchanged.
+- [x] Reader and process loss routing changes only to propagate the existing monotonic timestamp; action and clearing semantics remain unchanged.
 - [x] Game, focus, signal, life, world, travel, roll, menu, Fishing, Auto Potion, and input gates remain current-evidence-only.
 - [x] No retained data is persisted, logged, uploaded, or sent to an addon.
 

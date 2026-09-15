@@ -95,12 +95,12 @@ As an operator, I can trust stale display values never to keep weaving, Fishing,
 - **FR-007**: The retained snapshot MUST cover resource, Ultimate, combat, movement, roll-dodge, life, weapon-bar, quickslot, menu, world, travel, and skill-cooldown presentation values.
 - **FR-008**: A coherent snapshot MUST be eligible only when runtime is active, focus is positively focused, beacon freshness is fresh, and surface evidence is available.
 - **FR-009**: Covered loss causes MUST distinguish game inactive, runtime unavailable, focus lost, focus unavailable, and signal unavailable without inventing evidence.
-- **FR-010**: Retention MUST use the `AppModel` injected monotonic clock and one snapshot-level loss timestamp and deadline, not wall time or widget timers.
+- **FR-010**: Retention MUST use the existing shared monotonic clock, stamp one loss timestamp at the first covered observation transition, and preserve one original snapshot-level deadline, not wall time, repaint time, or widget timers.
 - **FR-011**: Stale presentation MUST visibly and accessibly state that the values are stale, the current loss cause, and whole-second age while leaving the retained values readable.
 - **FR-012**: Fresh coherent observations before expiry MUST replace the snapshot, clear stale status, and cancel the old deadline.
 - **FR-013**: At or after expiry, the retained snapshot MUST be discarded once and the existing dormant or unavailable projection MUST be returned.
 - **FR-014**: A zero interval MUST bypass retention and return existing dormant or unavailable presentation immediately.
-- **FR-015**: Changing a stale interval MUST compute expiry from the original loss timestamp and MUST NOT extend retention by restarting the timer.
+- **FR-015**: Changing a stale interval MUST compute expiry from the original loss timestamp, remain capped at the deadline established for that loss, and MUST NOT extend retention by increasing or restarting the timer.
 - **FR-016**: The retained snapshot and deadline MUST remain process-local and MUST NOT be stored in configuration, session state, logs, or other durable data.
 - **FR-017**: Reader routing, `GameState`, `WeaveEngine`, `FishingController`, `AutoPotionController`, `InputEngine`, and every input authorization gate MUST continue to consume only current evidence.
 - **FR-018**: Retained presentation types MUST NOT expose decoded telemetry back to controllers or input paths.
@@ -111,7 +111,7 @@ As an operator, I can trust stale display values never to keep weaving, Fishing,
 ### Key Entities
 
 - **HUD presentation snapshot**: A process-local clone of already-derived display types. It carries no controller reference and no action-authorizing telemetry API.
-- **Stale interval**: The period beginning at the first covered loss and ending at the original loss time plus the current configured duration.
+- **Stale interval**: The period beginning at the first covered observation transition and ending at the lesser of the original deadline or the original loss time plus the current configured duration.
 - **Stale cause**: The truthful current reason the live presentation is unavailable.
 - **Coherent presentation**: A projection made while runtime, focus, freshness, and surface availability all positively support live display.
 
@@ -130,7 +130,7 @@ As an operator, I can trust stale display values never to keep weaving, Fishing,
 
 - Use the existing numeric `DragValue` pattern with an explicit inclusive range and unit suffix. It supports direct keyboard entry plus bounded increment/decrement controls without adding a custom widget.
 - Cache rendered presentation types at the `AppModel` boundary, after all authoritative subsystems have already handled an event. This makes the safety separation structural rather than conditional.
-- The first covered loss owns the loss timestamp. A later cause may update the explanation but cannot prolong the interval.
+- The first covered observation transition owns the loss timestamp even when no view is projected. A later cause may update the explanation but cannot prolong the interval.
 - Age means elapsed stale duration, not time since the most recent cause change.
 - Freshness requires available surface evidence as well as heartbeat freshness because an unavailable surface cannot yield a coherent Game Context.
 

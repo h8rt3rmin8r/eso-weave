@@ -157,16 +157,46 @@ impl GameObservations {
     }
 }
 
+#[derive(Debug, Default)]
+struct GameStateData {
+    observations: GameObservations,
+    presentation_loss_at_ms: Option<u64>,
+}
+
+fn presentation_is_coherent(observations: &GameObservations) -> bool {
+    observations.runtime == GameRuntime::Active
+        && observations.focus == FocusObservation::Focused
+        && observations.freshness == BeaconFreshness::Fresh
+        && observations.surface != SurfaceObservation::Unavailable
+}
+
+fn record_presentation_transition(data: &mut GameStateData, was_coherent: bool, now_ms: u64) {
+    if presentation_is_coherent(&data.observations) {
+        data.presentation_loss_at_ms = None;
+    } else if was_coherent {
+        data.presentation_loss_at_ms = Some(now_ms);
+    }
+}
+
 #[derive(Clone, Default)]
-pub struct GameState(Arc<RwLock<GameObservations>>);
+pub struct GameState(Arc<RwLock<GameStateData>>);
 
 impl GameState {
     pub fn snapshot(&self) -> GameObservations {
-        self.0.read().unwrap().clone()
+        self.0.read().unwrap().observations.clone()
     }
 
-    pub fn update_processes(&self, observation: ProcessObservation) -> bool {
-        let mut state = self.0.write().unwrap();
+    /// Returns current observations and the first monotonic time at which their
+    /// coherent presentation axes became unavailable, as one atomic snapshot.
+    pub fn presentation_snapshot(&self) -> (GameObservations, Option<u64>) {
+        let data = self.0.read().unwrap();
+        (data.observations.clone(), data.presentation_loss_at_ms)
+    }
+
+    pub fn update_processes(&self, observation: ProcessObservation, now_ms: u64) -> bool {
+        let mut data = self.0.write().unwrap();
+        let was_coherent = presentation_is_coherent(&data.observations);
+        let state = &mut data.observations;
         let runtime = observation.runtime();
         let focus = if runtime == GameRuntime::Active {
             observation.focus
@@ -181,33 +211,44 @@ impl GameState {
             state.surface = SurfaceObservation::Unavailable;
             state.world = WorldState::Unknown;
         }
+        record_presentation_transition(&mut data, was_coherent, now_ms);
         changed
     }
 
     pub fn update_installation(&self, installation: InstallationState) -> bool {
-        let mut state = self.0.write().unwrap();
+        let mut data = self.0.write().unwrap();
+        let state = &mut data.observations;
         let changed = state.installation != installation;
         state.installation = installation;
         changed
     }
 
-    pub fn observe_heartbeat(&self) {
-        self.0.write().unwrap().freshness = BeaconFreshness::Fresh;
+    pub fn observe_heartbeat(&self, now_ms: u64) {
+        let mut data = self.0.write().unwrap();
+        let was_coherent = presentation_is_coherent(&data.observations);
+        data.observations.freshness = BeaconFreshness::Fresh;
+        record_presentation_transition(&mut data, was_coherent, now_ms);
     }
 
-    pub fn observe_surface(&self, surface: SurfaceObservation) {
-        self.0.write().unwrap().surface = surface;
+    pub fn observe_surface(&self, surface: SurfaceObservation, now_ms: u64) {
+        let mut data = self.0.write().unwrap();
+        let was_coherent = presentation_is_coherent(&data.observations);
+        data.observations.surface = surface;
+        record_presentation_transition(&mut data, was_coherent, now_ms);
     }
 
     pub fn observe_world(&self, world: WorldState) {
-        self.0.write().unwrap().world = world;
+        self.0.write().unwrap().observations.world = world;
     }
 
-    pub fn signal_lost(&self) {
-        let mut state = self.0.write().unwrap();
+    pub fn signal_lost(&self, now_ms: u64) {
+        let mut data = self.0.write().unwrap();
+        let was_coherent = presentation_is_coherent(&data.observations);
+        let state = &mut data.observations;
         state.freshness = BeaconFreshness::Lost;
         state.surface = SurfaceObservation::Unavailable;
         state.world = WorldState::Unknown;
+        record_presentation_transition(&mut data, was_coherent, now_ms);
     }
 }
 

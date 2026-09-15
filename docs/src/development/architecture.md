@@ -87,10 +87,13 @@ Game observation follows a separate sequence:
 
 `process and focus probe + displayed pixels -> Pixel Bus Reader -> close unsafe atomic gates -> lock engines and controllers -> route observations -> feature ticks -> view model`
 
-The view model may retain one coherent rendered player-state snapshot against
-its existing monotonic clock. This happens after the current loss has reached
-the safety path. The snapshot has no reverse edge into Game State, the Weave
-Engine, Fishing, Auto Potion, or the Input Engine, and process exit discards it.
+Game State stamps the first coherent-to-incoherent presentation transition with
+the Pixel Bus worker's existing monotonic clock, including while the window is
+not repainting. The view model may retain one coherent rendered player-state
+snapshot against that timestamp and an original deadline cap. This happens after
+the current loss has reached the safety path. The snapshot has no reverse edge
+into Game State, the Weave Engine, Fishing, Auto Potion, or the Input Engine, and
+process exit discards it.
 
 Configuration follows:
 

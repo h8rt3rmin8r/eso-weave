@@ -903,7 +903,7 @@ fn build_scene(
         // loss. Render that baseline exactly as the running UI would, then move
         // the shared game evidence to the lost state for the captured frame.
         let _ = model.view();
-        model.game_state().signal_lost();
+        model.game_state().signal_lost(model.now_ms());
     }
     let view = model.view();
     validate_scene_view(scene, &view)?;
@@ -1045,11 +1045,14 @@ fn seed_potion_state(controller: &mut AutoPotionController, scene: Scene) -> Res
 fn seed_game_observations(model: &AppModel, scene: Scene) {
     let game = model.game_state();
     if !scene.active_game() {
-        game.update_processes(ProcessObservation {
-            game: Presence::Absent,
-            launcher: Presence::Absent,
-            focus: FocusObservation::Unknown,
-        });
+        game.update_processes(
+            ProcessObservation {
+                game: Presence::Absent,
+                launcher: Presence::Absent,
+                focus: FocusObservation::Unknown,
+            },
+            model.now_ms(),
+        );
         game.update_installation(InstallationState::NotDetected);
         return;
     }
@@ -1058,13 +1061,19 @@ fn seed_game_observations(model: &AppModel, scene: Scene) {
         root: PathBuf::from("fixture-game-install"),
         source: CandidateSource::SteamManifest,
     }));
-    game.update_processes(ProcessObservation {
-        game: Presence::Present,
-        launcher: Presence::Absent,
-        focus: FocusObservation::Focused,
-    });
-    game.observe_heartbeat();
-    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None));
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        model.now_ms(),
+    );
+    game.observe_heartbeat(model.now_ms());
+    game.observe_surface(
+        SurfaceObservation::Observed(MenuSurface::None),
+        model.now_ms(),
+    );
     game.observe_world(WorldState::Active);
 }
 
