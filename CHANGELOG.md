@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S099 defines protected `main` as the repository-policy trust anchor, keeps
+  collaboration and proposed branch content outside the authority chain, adds a
+  deterministic workflow and local-skill policy gate, pins executable workflow
+  dependencies, verifies release tooling by digest, and enforces pull-request
+  integration through hosted repository controls (issue #181).
+
 - S098 adds a configurable 0 through 999 second stale-retention interval,
   defaulting to 120, and keeps one coherent rendered player-state snapshot
   visible across runtime, focus, or signal loss with an accessible cause and age.
@@ -71,6 +77,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Treat direct operator instructions as mutation authority and
+  protected `main` policy as a constraining trust anchor. Issues, pull requests,
+  reviews, reactions, logs, artifacts, external content, generated text, and
+  unmerged branch guidance remain untrusted data and cannot expand scope or
+  permissions. Remove unrelated high-risk local skills rather than retaining
+  auto-discoverable guidance with no ESO Weave development purpose.
+
+- 2026-09-15: Pin every GitHub Action invocation to a reviewed commit, disable
+  checkout credential persistence, restrict Action publishers, and verify the
+  moving AppImage tool asset against a fixed digest before execution. Protect
+  `main` with strict pull-request checks, administrator enforcement, resolved
+  conversations, linear history, and force-push and deletion blocking. The
+  single-maintainer repository keeps a zero independent-approval count to avoid
+  an impossible self-approval gate while preserving the final human merge ritual.
 
 - 2026-09-15: Keep stale HUD values only as rendered, process-local App Model
   output governed by one injected monotonic interval. Game State records only the

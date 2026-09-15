@@ -1,0 +1,11 @@
+# Repository policy and executable automation require maintainer review.
+/.github/ @h8rt3rmin8r
+/.specify/ @h8rt3rmin8r
+/.claude/ @h8rt3rmin8r
+/CLAUDE.md @h8rt3rmin8r
+/CONTRIBUTING.md @h8rt3rmin8r
+/docs/project/ @h8rt3rmin8r
+/scripts/ @h8rt3rmin8r
+/packaging/ @h8rt3rmin8r
+/release.toml @h8rt3rmin8r
+/rust-toolchain.toml @h8rt3rmin8r
