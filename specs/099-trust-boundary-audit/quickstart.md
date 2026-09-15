@@ -31,7 +31,12 @@ gh api repos/h8rt3rmin8r/eso-weave/actions/permissions/workflow
 gh api repos/h8rt3rmin8r/eso-weave/actions/permissions/selected-actions
 ```
 
-Confirm that the protected branch requires the six always-on pull-request checks named in [workflow-integrity.md](contracts/workflow-integrity.md), enforces administrators, blocks deletion and force-push, and requires linear history plus conversation resolution.
+Confirm that the protected branch requires the six bootstrap pull-request checks
+named in [workflow-integrity.md](contracts/workflow-integrity.md), enforces
+administrators, blocks deletion and force-push, and requires linear history plus
+conversation resolution. After S099 merges, require `Enforce protected trust
+policy` as the seventh check; GitHub cannot emit that base-owned check until the
+workflow exists on protected `main`.
 
 ## Disclosure and text checks
 

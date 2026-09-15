@@ -65,6 +65,12 @@ test("rejects privileged untrusted-content triggers", () => {
 
   const flowMap = workflow("").replace("on:\n  pull_request:", 'on: {"pull_request_target": {}, push: {}}');
   assert.match(validateWorkflow(".github/workflows/example.yml", flowMap).join("\n"), /prohibited trigger/);
+
+  const incompleteControl = workflow("").replace("pull_request", "pull_request_target");
+  assert.match(
+    validateWorkflow(".github/workflows/trust-boundary.yml", incompleteControl).join("\n"),
+    /protected base SHA/,
+  );
 });
 
 test("rejects missing read-only defaults and unexpected writes", () => {
@@ -122,6 +128,12 @@ test("rejects allowlisted writes outside their exact job", () => {
 test("rejects unexpected secret references", () => {
   const candidate = workflow("        env:\n          TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n");
   assert.match(validateWorkflow(".github/workflows/ci.yml", candidate).join("\n"), /secret reference/);
+
+  const bracketed = workflow("        env:\n          TOKEN: ${{ secrets['DEPLOY_TOKEN'] }}\n");
+  assert.match(validateWorkflow(".github/workflows/example.yml", bracketed).join("\n"), /secret reference/);
+
+  const computed = workflow("        env:\n          TOKEN: ${{ secrets[env.SECRET_NAME] }}\n");
+  assert.match(validateWorkflow(".github/workflows/example.yml", computed).join("\n"), /computed secrets context/);
 
   const wrongReleaseJob = workflow("        env:\n          TOKEN: ${{ secrets.GITHUB_TOKEN }}\n");
   assert.match(validateWorkflow(".github/workflows/release.yml", wrongReleaseJob).join("\n"), /secret reference/);

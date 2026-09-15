@@ -26,7 +26,7 @@ Establish protected `main` as the repository-policy trust anchor, define how aut
 
 **Constraints**: Public evidence remains high-level; no secret values; no untrusted checkout as authority; exact Action SHAs; read-only default tokens; solo-maintainer merge remains possible
 
-**Scale/Scope**: Six workflows, one release download, repository-local guidance and skills, one policy checker and test suite, hosted branch and Actions settings, canonical contributor documentation
+**Scale/Scope**: Seven workflows, one release download, repository-local guidance and skills, one policy checker and test suite, hosted branch and Actions settings, canonical contributor documentation
 
 ## Constitution Check
 
@@ -49,7 +49,7 @@ The root agent guidance and autopilot procedure will state this boundary before 
 
 ### Workflow integrity policy
 
-Add a zero-dependency Node.js checker with pure validation functions and a repository entry point. It inspects every workflow and local skill metadata. The workflow rules require exact Action SHAs, readable version comments, explicit `persist-credentials: false`, read-only top-level contents permission, a small write-permission allowlist, safe triggers, and no unexpected secret references.
+Add a zero-dependency Node.js checker with pure validation functions and a repository entry point. It inspects every workflow and local skill metadata. The workflow rules require exact Action SHAs, readable version comments, explicit `persist-credentials: false`, read-only top-level contents permission, a small write-permission allowlist, safe triggers, and no unexpected secret references. A dedicated base-owned Trust boundary workflow is the sole restricted `pull_request_target` exception; it scans the proposed immutable checkout with protected-base policy and never executes proposed files.
 
 The checker also verifies the release download contract and exact packaging-tool versions. Unit tests construct representative invalid inputs for every rule, including instruction-shaped text that must remain inert test data.
 
@@ -61,7 +61,7 @@ The AppImage builder remains sourced from the upstream `continuous` release beca
 
 ### Hosted enforcement
 
-Configure classic branch protection for `main` with strict required checks, pull-request-only updates, administrator enforcement, linear history, resolved review conversations, and deletion and force-push disabled. Required checks are limited to jobs emitted by every pull request: Linux CI, Windows CI, dependency review, CodeQL, and both issue-link jobs.
+Configure classic branch protection for `main` with strict required checks, pull-request-only updates, administrator enforcement, linear history, resolved review conversations, and deletion and force-push disabled. Bootstrap checks are limited to jobs emitted by every pull request: Linux CI, Windows CI, dependency review, CodeQL, and both issue-link jobs. Once S099 is present on protected `main`, the base-owned `Enforce protected trust policy` job becomes the seventh required check so proposed workflow edits cannot skip enforcement.
 
 Keep default workflow tokens read-only and unable to approve reviews. Restrict allowed actions to GitHub-owned actions plus `Swatinem/rust-cache`, and enable immutable SHA enforcement. Because the repository has one collaborator, no independent approval count is required; the documented operator final-review ritual remains mandatory without making self-authored work impossible to merge.
 

@@ -140,6 +140,37 @@ function validateCiWorkflow(text, errors) {
   }
 }
 
+function validateTrustBoundaryWorkflow(text, errors) {
+  const requirements = [
+    [
+      /ref:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/u,
+      "trust-boundary workflow requires the protected base SHA",
+    ],
+    [
+      /repository:\s*\$\{\{\s*github\.event\.pull_request\.head\.repo\.full_name\s*\}\}/u,
+      "trust-boundary workflow requires the proposed repository",
+    ],
+    [
+      /ref:\s*\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/u,
+      "trust-boundary workflow requires the immutable proposed SHA",
+    ],
+    [
+      /node --test trusted\/\.github\/scripts\/trust-policy\.test\.mjs/u,
+      "trust-boundary workflow requires protected policy tests",
+    ],
+    [
+      /node trusted\/\.github\/scripts\/trust-policy\.mjs\s+candidate/u,
+      "trust-boundary workflow requires protected policy execution against the candidate checkout",
+    ],
+  ];
+
+  for (const [pattern, message] of requirements) {
+    if (!pattern.test(text)) {
+      errors.push(`.github/workflows/trust-boundary.yml: ${message}`);
+    }
+  }
+}
+
 function validateReleaseWorkflow(text, errors) {
   const digestMatch = text.match(/^\s*APPIMAGETOOL_SHA256:\s*([0-9a-f]+)\s*$/mu);
   if (!digestMatch || digestMatch[1].length !== 64) {
@@ -182,7 +213,9 @@ export function validateWorkflow(filePath, text) {
   const onSection = topLevelSection(lines, "on");
   for (const trigger of PROHIBITED_TRIGGERS) {
     const triggerPattern = new RegExp(`(?:^|[\\s\\[,{])["']?${trigger}["']?(?=\\s*[:,}\\]]|\\s*$)`, "mu");
-    if (triggerPattern.test(onSection)) {
+    const protectedTrustTrigger = normalized === ".github/workflows/trust-boundary.yml"
+      && trigger === "pull_request_target";
+    if (triggerPattern.test(onSection) && !protectedTrustTrigger) {
       errors.push(`${normalized}: prohibited trigger ${trigger}`);
     }
   }
@@ -222,13 +255,15 @@ export function validateWorkflow(filePath, text) {
     }
   }
 
-  for (const [index, line] of lines.entries()) {
-    for (const match of line.matchAll(/secrets\.([A-Za-z0-9_]+)/gu)) {
+  for (const expression of text.matchAll(/\$\{\{([\s\S]*?)\}\}/gu)) {
+    const index = text.slice(0, expression.index).split(/\r?\n/u).length - 1;
+    for (const match of expression[1].matchAll(/\bsecrets\b(?:\s*\.\s*([A-Za-z0-9_]+)|\s*\[\s*(?:(['"])([^'"]+)\2|([^\]]+))\s*\])?/gu)) {
+      const secretName = match[1] ?? match[3] ?? null;
       const allowedReleaseToken = normalized === ".github/workflows/release.yml"
-        && match[1] === "GITHUB_TOKEN"
+        && secretName === "GITHUB_TOKEN"
         && owningJob(lines, index) === "release";
       if (!allowedReleaseToken) {
-        errors.push(`${normalized}:${index + 1}: unexpected secret reference ${match[1]}`);
+        errors.push(`${normalized}:${index + 1}: unexpected secret reference ${secretName ?? "computed secrets context"}`);
       }
     }
   }
@@ -238,6 +273,9 @@ export function validateWorkflow(filePath, text) {
   }
   if (normalized === ".github/workflows/ci.yml") {
     validateCiWorkflow(text, errors);
+  }
+  if (normalized === ".github/workflows/trust-boundary.yml") {
+    validateTrustBoundaryWorkflow(text, errors);
   }
 
   return errors;

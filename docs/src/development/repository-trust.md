@@ -42,12 +42,19 @@ skill metadata. From the repository root, run
 `node --test .github/scripts/trust-policy.test.mjs`, followed by
 `node .github/scripts/trust-policy.mjs .`.
 
+Pull requests also run `Enforce protected trust policy` from the dedicated Trust
+boundary workflow. This is the sole `pull_request_target` exception. GitHub loads
+that workflow and its policy from protected `main`; it uses a read-only token,
+checks out the proposed immutable SHA without credentials, and scans but never
+executes proposed files. The check becomes a required `main` control immediately
+after its bootstrap merge makes the protected workflow available.
+
 ## Integration controls
 
 Protected `main` requires pull-request integration, current Linux and Windows CI,
-dependency review, CodeQL, issue-link policy, resolved review conversations, and
-linear history. Administrator enforcement is enabled, and branch deletion and
-force-push are blocked.
+dependency review, CodeQL, issue-link policy, the protected trust-policy check,
+resolved review conversations, and linear history. Administrator enforcement is
+enabled, and branch deletion and force-push are blocked.
 
 The repository currently has one maintainer. GitHub therefore requires no
 independent approval count because the author cannot approve their own pull

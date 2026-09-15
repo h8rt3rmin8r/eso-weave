@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collaboration and proposed branch content outside the authority chain, adds a
   deterministic workflow and local-skill policy gate, pins executable workflow
   dependencies, verifies release tooling by digest, and enforces pull-request
-  integration through hosted repository controls (issue #181).
+  integration through hosted repository controls. A dedicated base-owned,
+  read-only workflow scans proposed files without executing them (issue #181).
 
 - S098 adds a configurable 0 through 999 second stale-retention interval,
   defaulting to 120, and keeps one coherent rendered player-state snapshot
@@ -92,6 +93,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conversations, linear history, and force-push and deletion blocking. The
   single-maintainer repository keeps a zero independent-approval count to avoid
   an impossible self-approval gate while preserving the final human merge ritual.
+
+- 2026-09-15: Deliberately permit `pull_request_target` only for the dedicated
+  Trust boundary workflow. A normal pull-request workflow can be changed by the
+  proposal it evaluates, so the protected-base workflow uses read-only authority,
+  fetches the proposed immutable SHA without retained credentials, and scans but
+  never executes proposed files.
 
 - 2026-09-15: Keep stale HUD values only as rendered, process-local App Model
   output governed by one injected monotonic interval. Game State records only the
