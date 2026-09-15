@@ -38,7 +38,7 @@
 - [x] T017 Update input safety, Fishing, Auto Potion, settings, troubleshooting, Plan 043 chronology/index, and `CHANGELOG.md`
 - [x] T018 Run focused tests, formatting, strict linting, complete locked tests, release build, docs, trust, spelling, links, encoding, and dash scans
 - [x] T019 Review the complete diff for issue #208 scope, safety regression, migration integrity, and parent #188 completion
-- [ ] T020 Commit, push, publish the official PR, and move project status to PR review
+- [x] T020 Commit, push, publish the official PR, and move project status to PR review
 - [ ] T021 Address every review item, request exactly one second `@Codex review` round, and reach green CI with no unresolved thread
 
 ## Dependencies and execution order
