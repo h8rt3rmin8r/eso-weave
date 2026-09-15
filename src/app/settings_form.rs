@@ -12,6 +12,12 @@ use crate::weave::{LatencyConfig, WeaveConfig, WeaveEngine};
 /// The default live-log panel height in points.
 pub const DEFAULT_LOG_HEIGHT: u32 = 160;
 
+/// Default time to retain a coherent HUD presentation after live evidence is lost.
+pub const DEFAULT_STALE_RETENTION_SECONDS: u16 = 120;
+
+/// Greatest supported stale-presentation retention interval.
+pub const MAX_STALE_RETENTION_SECONDS: u16 = 999;
+
 /// GUI preferences (the `ui` settings section).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UiPrefs {
@@ -23,6 +29,8 @@ pub struct UiPrefs {
     pub log_panel_height: u32,
     /// Whether the System and State dashboard disclosure is expanded.
     pub system_state_expanded: bool,
+    /// Whole seconds to retain the last coherent HUD presentation after loss.
+    pub stale_retention_seconds: u16,
 }
 
 impl Default for UiPrefs {
@@ -32,6 +40,7 @@ impl Default for UiPrefs {
             always_on_top: false,
             log_panel_height: DEFAULT_LOG_HEIGHT,
             system_state_expanded: true,
+            stale_retention_seconds: DEFAULT_STALE_RETENTION_SECONDS,
         }
     }
 }
@@ -69,12 +78,31 @@ pub fn ui_from_value(value: &serde_json::Value) -> (UiPrefs, Vec<Notice>) {
         .get("system_state_expanded")
         .and_then(|v| v.as_bool())
         .unwrap_or(defaults.system_state_expanded);
+    let stale_retention_seconds = match value.get("stale_retention_seconds") {
+        None => defaults.stale_retention_seconds,
+        Some(raw) => match raw
+            .as_u64()
+            .filter(|seconds| *seconds <= u64::from(MAX_STALE_RETENTION_SECONDS))
+        {
+            Some(seconds) => seconds as u16,
+            None => {
+                notices.push(Notice {
+                    kind: NoticeKind::InvalidValue,
+                    message: format!(
+                        "invalid stale retention; using default ({DEFAULT_STALE_RETENTION_SECONDS} seconds)"
+                    ),
+                });
+                defaults.stale_retention_seconds
+            }
+        },
+    };
     (
         UiPrefs {
             theme,
             always_on_top,
             log_panel_height,
             system_state_expanded,
+            stale_retention_seconds,
         },
         notices,
     )
@@ -91,6 +119,7 @@ pub fn ui_to_value(prefs: &UiPrefs) -> serde_json::Value {
         "always_on_top": prefs.always_on_top,
         "log_panel_height": prefs.log_panel_height,
         "system_state_expanded": prefs.system_state_expanded,
+        "stale_retention_seconds": prefs.stale_retention_seconds,
     })
 }
 

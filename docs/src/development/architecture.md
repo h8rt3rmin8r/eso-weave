@@ -17,7 +17,7 @@ test seams. Platform modules contain operating-system calls.
 | Beacon Manager | AddOns discovery, ownership classification, embedded install files, managed in-place update and removal, block-size redeploy, and API-version upkeep | ESO runtime loading of the addon |
 | Config and Session State | Separate user settings and derived runtime stores, notices, and serialization | Module-specific validation semantics |
 | Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | UI presentation |
-| Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, and view projection | Platform input and screen capture |
+| Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, view projection, and one process-local stale HUD presentation snapshot | Platform input, screen capture, and action authorization from retained values |
 | Documentation Service | Immutable embedded-site lookup, bounded loopback GET and HEAD responses, browser handoff, and worker lifetime | Filesystem serving, application state, remote content, and mutation |
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
 | Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active selection, authenticated origin, releases, or source redistribution |
@@ -54,6 +54,8 @@ Five ownership contracts are load-bearing:
 6. Closing focus, suspension, or menu authorization advances an epoch observed by
    queued and running weave work; a stale epoch cannot resume after recovery.
 7. Every PixelBeacon writer rechecks managed ownership at its write boundary.
+8. Stale HUD retention clones rendered output only; controllers and input gates
+   continue to consume current evidence and react to loss immediately.
 
 Platform and hardware boundaries are represented by traits so engine, controller,
 and decoder behavior can be tested with deterministic mocks.
@@ -84,6 +86,11 @@ Physical input follows this text sequence:
 Game observation follows a separate sequence:
 
 `process and focus probe + displayed pixels -> Pixel Bus Reader -> close unsafe atomic gates -> lock engines and controllers -> route observations -> feature ticks -> view model`
+
+The view model may retain one coherent rendered player-state snapshot against
+its existing monotonic clock. This happens after the current loss has reached
+the safety path. The snapshot has no reverse edge into Game State, the Weave
+Engine, Fishing, Auto Potion, or the Input Engine, and process exit discards it.
 
 Configuration follows:
 

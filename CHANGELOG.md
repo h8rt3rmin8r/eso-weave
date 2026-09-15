@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S098 adds a configurable 0 through 999 second stale-retention interval,
+  defaulting to 120, and keeps one coherent rendered player-state snapshot
+  visible across runtime, focus, or signal loss with an accessible cause and age.
+  Fresh evidence replaces it immediately, expiry restores the existing fallback,
+  zero clears immediately, and no retained value can authorize input (issue #171).
+
 - S097 persists requested Auto Potion enablement in session-state schema 4,
   restores it through the existing fail-closed controller, makes UI and F3
   toggles share the coalesced and close-time save authority, defaults legacy and
@@ -65,6 +71,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Keep stale HUD values only as rendered, process-local App Model
+  output governed by one injected monotonic interval. Reader routing, Game State,
+  controllers, and input gates continue to consume current evidence and fail
+  closed immediately, so presentation retention has no reverse path into action
+  authority.
 
 - 2026-09-15: Deliberately supersede S039 research decision R7 and S043
   requirement FR-002. Requested Auto Potion enablement now persists like other

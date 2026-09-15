@@ -81,6 +81,13 @@ exact target manually; do not disable the ownership guard.
 Missing, invalid, stale, or corrupt telemetry becomes unavailable and does not
 authorize automated input.
 
+The Live HUD may continue showing the last coherent values after a loss. Check
+the **HUD Freshness** row: **Stale** names the cause and age. These values are
+display-only and do not keep weaving, Fishing, or Auto Potion authorized. Fresh
+observations replace them immediately; the configured **Stale Retention
+(seconds)** interval then expires to the ordinary unavailable view. Set it to 0
+under Appearance when immediate clearing is preferred.
+
 ## ESO Weave Data is missing, outdated, unmanaged, or awaiting reload
 
 - **Not installed**: choose **Install Data**, then obey any reload guidance.

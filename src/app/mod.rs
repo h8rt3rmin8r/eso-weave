@@ -18,7 +18,7 @@ pub mod theme;
 pub mod ui;
 pub mod widgets;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -31,7 +31,8 @@ use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURREN
 use crate::config::{self, LevelName, Notice, Settings};
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::game::{
-    BeaconFreshness, GameContext, GameRuntime, GameState, InstallationProvider, InstallationState,
+    BeaconFreshness, FocusObservation, GameContext, GameObservations, GameRuntime, GameState,
+    InstallationProvider, InstallationState, SurfaceObservation,
 };
 use crate::input::InputEngine;
 use crate::logging::LogHandle;
@@ -1726,6 +1727,8 @@ pub struct AppView {
     pub menu: MenuView,
     /// The detected resource levels.
     pub resources: ResourcesView,
+    /// Display-only stale status when the HUD is showing a retained snapshot.
+    pub hud_freshness: Option<StatusLine>,
     /// Exact Ultimate charge and active-bar cost presentation.
     pub ultimate: UltimateView,
     /// The detected quickslot state.
@@ -1738,6 +1741,118 @@ pub struct AppView {
     pub log_panel_open: bool,
     /// The global captured log level shared by the ring and optional file sink.
     pub log_filter: LevelName,
+}
+
+/// A display-only snapshot of the player-state fields shown by the dashboard.
+///
+/// It intentionally contains rendered view types rather than decoded telemetry,
+/// so no controller or input path can consume retained values as current evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HudPresentation {
+    cooldowns: Vec<CooldownView>,
+    weapon_bar: WeaponBarView,
+    combat: CombatView,
+    movement: MovementView,
+    life: LifeStateView,
+    roll_dodge: RollDodgeView,
+    world: WorldStateView,
+    travel: TravelStateView,
+    menu: MenuView,
+    resources: ResourcesView,
+    ultimate: UltimateView,
+    quickslot: QuickslotView,
+}
+
+impl HudPresentation {
+    fn capture(view: &AppView) -> Self {
+        Self {
+            cooldowns: view
+                .skills
+                .iter()
+                .map(|skill| skill.cooldown.clone())
+                .collect(),
+            weapon_bar: view.weapon_bar,
+            combat: view.combat,
+            movement: view.movement,
+            life: view.life,
+            roll_dodge: view.roll_dodge,
+            world: view.world,
+            travel: view.travel,
+            menu: view.menu,
+            resources: view.resources.clone(),
+            ultimate: view.ultimate.clone(),
+            quickslot: view.quickslot.clone(),
+        }
+    }
+
+    fn apply(&self, view: &mut AppView) {
+        for (skill, cooldown) in view.skills.iter_mut().zip(&self.cooldowns) {
+            skill.cooldown = cooldown.clone();
+        }
+        view.weapon_bar = self.weapon_bar;
+        view.combat = self.combat;
+        view.movement = self.movement;
+        view.life = self.life;
+        view.roll_dodge = self.roll_dodge;
+        view.world = self.world;
+        view.travel = self.travel;
+        view.menu = self.menu;
+        view.resources = self.resources.clone();
+        view.ultimate = self.ultimate.clone();
+        view.quickslot = self.quickslot.clone();
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StaleHudCause {
+    GameInactive,
+    RuntimeUnavailable,
+    FocusLost,
+    FocusUnavailable,
+    SignalUnavailable,
+}
+
+impl StaleHudCause {
+    fn text(self) -> &'static str {
+        match self {
+            Self::GameInactive => "game inactive",
+            Self::RuntimeUnavailable => "runtime unavailable",
+            Self::FocusLost => "focus lost",
+            Self::FocusUnavailable => "focus unavailable",
+            Self::SignalUnavailable => "signal unavailable",
+        }
+    }
+}
+
+fn stale_hud_cause(game: &GameObservations) -> Option<StaleHudCause> {
+    match game.runtime {
+        GameRuntime::Inactive | GameRuntime::LauncherOpen => {
+            return Some(StaleHudCause::GameInactive);
+        }
+        GameRuntime::Unknown => return Some(StaleHudCause::RuntimeUnavailable),
+        GameRuntime::Active => {}
+    }
+    match game.focus {
+        FocusObservation::Unfocused => return Some(StaleHudCause::FocusLost),
+        FocusObservation::Unknown => return Some(StaleHudCause::FocusUnavailable),
+        FocusObservation::Focused => {}
+    }
+    if game.freshness != BeaconFreshness::Fresh || game.surface == SurfaceObservation::Unavailable {
+        return Some(StaleHudCause::SignalUnavailable);
+    }
+    None
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StaleInterval {
+    lost_at_ms: u64,
+    cause: StaleHudCause,
+}
+
+#[derive(Debug, Default)]
+struct HudRetentionState {
+    last_coherent: Option<HudPresentation>,
+    stale: Option<StaleInterval>,
 }
 
 /// Coalesces persistence so a continuous edit results in a single settle-write.
@@ -1882,6 +1997,7 @@ pub struct AppModel {
     api_version: ApiVersionCache,
     catalog: CatalogAccess,
     window: Option<WindowGeometry>,
+    hud_retention: RefCell<HudRetentionState>,
 }
 
 impl AppModel {
@@ -1977,6 +2093,7 @@ impl AppModel {
                 "Catalog has not been checked",
             ),
             window: None,
+            hud_retention: RefCell::new(HudRetentionState::default()),
         }
     }
 
@@ -2017,6 +2134,13 @@ impl AppModel {
 
     /// The current derived display state.
     pub fn view(&self) -> AppView {
+        self.view_at(self.now_ms())
+    }
+
+    /// Derives the display state at a caller-supplied point on the model's
+    /// monotonic clock. Production uses [`Self::view`]; the explicit seam keeps
+    /// retention, recovery, and exact expiry deterministic in tests.
+    pub fn view_at(&self, now_ms: u64) -> AppView {
         let condition = self.beacon_condition();
         let (fishing_state, fishing_reason, fishing_requested) = {
             let fishing = self.fishing.lock().unwrap();
@@ -2122,12 +2246,34 @@ impl AppModel {
                 skill.cooldown.text = "Game not active".to_string();
                 skill.cooldown.role = StatusRole::Muted;
             }
+        } else if stale_hud_cause(&game).is_some() {
+            // Current evidence is not coherent. The ordinary projection clears
+            // every player-state field now; retention may replace it below with
+            // the last display-only snapshot, but action authority has already
+            // consumed the underlying loss independently.
+            weapon_bar = weapon_bar_view(
+                ActiveBar::Unknown,
+                WeaponClass::Unknown,
+                WeaponClass::Unknown,
+            );
+            combat = combat_view(CombatSignal::Unknown);
+            movement = movement_view(MovementSignal::Unknown);
+            life = life_state_view(LifeState::Unknown);
+            roll_dodge = roll_dodge_view(RollDodgeState::Unknown);
+            world = world_state_view(WorldState::Unknown);
+            travel = travel_state_view(TravelState::Unknown);
+            resources = resources_view_with_config(ResourceSet::new_unknown(), auto_potion_config);
+            ultimate = ultimate_view(UltimateTelemetry::new_unknown(), ActiveBar::Unknown);
+            quickslot = quickslot_view(QuickslotState::new_unknown());
+            for skill in &mut skills {
+                skill.cooldown = cooldown_view(SlotCooldown::Unknown);
+            }
         }
         let mut fishing_label = fishing_label(fishing_state, fishing_reason);
         if fishing_requested {
             fishing_label.button = "Stop Fishing";
         }
-        AppView {
+        let mut view = AppView {
             app_state: app_state_label(suspended),
             fishing: fishing_label,
             status_line: status_line_app(suspended),
@@ -2170,13 +2316,69 @@ impl AppModel {
             travel,
             menu: game_context_view(game.context()),
             resources,
+            hud_freshness: None,
             ultimate,
             quickslot,
             auto_potion_requested,
             auto_potion: auto_potion_view(auto_potion_state),
             log_panel_open: self.log_panel_open,
             log_filter: self.log_filter,
+        };
+        self.apply_hud_retention(&mut view, &game, now_ms);
+        view
+    }
+
+    fn apply_hud_retention(&self, view: &mut AppView, game: &GameObservations, now_ms: u64) {
+        let current = HudPresentation::capture(view);
+        let Some(cause) = stale_hud_cause(game) else {
+            let mut retention = self.hud_retention.borrow_mut();
+            retention.last_coherent = Some(current);
+            retention.stale = None;
+            return;
+        };
+
+        let seconds = self.ui_prefs().stale_retention_seconds;
+        let mut retention = self.hud_retention.borrow_mut();
+        if seconds == 0 {
+            *retention = HudRetentionState::default();
+            return;
         }
+
+        if retention.last_coherent.is_none() {
+            retention.stale = None;
+            return;
+        }
+        match &mut retention.stale {
+            Some(interval) => interval.cause = cause,
+            None => {
+                retention.stale = Some(StaleInterval {
+                    lost_at_ms: now_ms,
+                    cause,
+                });
+            }
+        }
+
+        let interval = retention.stale.expect("stale interval was initialized");
+        let deadline_ms = interval
+            .lost_at_ms
+            .saturating_add(u64::from(seconds).saturating_mul(1_000));
+        if now_ms >= deadline_ms {
+            *retention = HudRetentionState::default();
+            return;
+        }
+
+        retention
+            .last_coherent
+            .as_ref()
+            .expect("retained presentation exists")
+            .apply(view);
+        let age_seconds = now_ms.saturating_sub(interval.lost_at_ms) / 1_000;
+        view.hud_freshness = Some(StatusLine {
+            title: strings::HUD_FRESHNESS_TITLE,
+            state_text: format!("Stale: {} ({age_seconds}s)", interval.cause.text()),
+            role: StatusRole::Warning,
+            tooltip: strings::HUD_FRESHNESS_TOOLTIP,
+        });
     }
 
     /// Installs the version-bound read-only catalog service selected at startup.

@@ -16,6 +16,8 @@ line endings, and end with a newline.
 
 The configuration contains user settings only. Module-owned sections include
 timing, skills, beacon, fishing, potion, latency, pixelbus, and interface options.
+A bounded `ui.stale_retention_seconds` preference controls display-only HUD
+retention and defaults to 120 when absent.
 A top-level `schema_version` supports forward migration. Invalid configuration
 falls back to safe defaults, preserves the rejected file with an `.invalid`
 suffix, and surfaces a notice.
@@ -50,9 +52,14 @@ geometry to the session store so a final move or resize is not lost.
 | Value | Store | Restart behavior |
 | --- | --- | --- |
 | Modal settings, keybindings, Skills configuration | `config.json` | Restored; see Settings for current live versus restart timing |
-| Theme, Always on Top, disclosure, Live Log height | `config.json` | Restored |
+| Theme, Always on Top, stale-retention interval, disclosure, Live Log height | `config.json` | Restored |
 | Window geometry, suspension, Fishing request, Auto Potion request, API-version cache | `state.json` | Restored, but input still requires fresh safety evidence |
-| Current game, resource, quickslot, cooldown, and controller observations | Neither | Re-established from current runtime evidence |
+| Current game and controller observations | Neither | Re-established from current runtime evidence |
+| Retained HUD snapshot, stale cause, age, and deadline | Neither | Process-local only; never restored after ESO Weave exits |
+
+The retained HUD snapshot contains rendered presentation only. It is never
+written to either store and never becomes input to a controller or authorization
+gate.
 
 ## Recovery
 

@@ -4,13 +4,13 @@ Status: Active
 
 Sequence:
 
-1. S097 implements issue #172 by persisting the requested Auto Potion toggle in
+1. S097 completed issue #172 by persisting the requested Auto Potion toggle in
    session-state schema 4, restoring it through the existing fail-closed
    controller, converging UI and F3 persistence, and replacing obsolete
    session-only documentation without changing action eligibility.
-2. Issue #171 remains the next cohesive presentation-reliability candidate. It
-   may retain stale HUD values only after its design proves complete separation
-   from automation authorization.
+2. S098 implements issue #171 with one bounded, process-local stale HUD
+   presentation snapshot. Rendered values may be retained, while current game
+   evidence remains the only authority for automation and synthesized input.
 3. Issue #181 remains the required trust-boundary audit before materially
    expanding repository mutation or AI workflow authority. Its mandatory
    operator halt protocol remains part of that independent slice.
