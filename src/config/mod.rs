@@ -124,8 +124,8 @@ pub struct Settings {
     /// the potion module. Null or absent means the defaults are used, which
     /// includes every resource watch being off. Additive and backward compatible.
     ///
-    /// Note what is deliberately absent: whether auto-potion is switched on. That
-    /// is runtime state and always starts off, so it is never written here.
+    /// Requested auto-potion enablement is deliberately absent because it is
+    /// operator session state stored in `state.json`, not reusable configuration.
     #[serde(default)]
     pub potion: serde_json::Value,
     /// Latency-adaptive weave delay configuration (enabled flag and scale factor

@@ -457,7 +457,8 @@ fn main() {
         input.fishing_gates(),
     ));
     // Load persisted session state before the config directory is moved into the
-    // model, so the live suspend and fishing intents can be restored on launch.
+    // model, so the live suspend, fishing, and auto-potion intents can be
+    // restored on launch.
     let session = config_dir
         .as_ref()
         .map(|dir| eso_weave::config::state::load(dir));

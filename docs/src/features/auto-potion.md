@@ -7,10 +7,12 @@ Auto Potion presses the active quickslot binding when an enabled resource reache
 its configured threshold. It is the only feature that turns resource telemetry
 into generated input, so unavailable evidence always blocks it.
 
-The feature starts off after every application launch. Configure at least one
-Health, Magicka, or Stamina watch, then press `F3` or use the Auto Potion toggle.
-Each watch has its own threshold. The rule is an OR: any enabled, fresh resource
-at or below its threshold can qualify.
+Configure at least one Health, Magicka, or Stamina watch, then press `F3` or use
+the Auto Potion toggle. ESO Weave remembers that requested toggle across normal
+restarts. A restored request remains dormant or blocked until current runtime
+and telemetry evidence satisfies every safety check. Each watch has its own
+threshold. The rule is an OR: any enabled, fresh resource at or below its
+threshold can qualify.
 
 Every resource watch is off by default. Requiring all three resources to be low
 would wait until a potion no longer helps, so the OR rule is not configurable.
@@ -46,7 +48,7 @@ not participate. A current usable potion and ready cooldown are still required.
 
 Every condition must hold in this order:
 
-1. Auto Potion is requested for the current session.
+1. Auto Potion is requested.
 2. ESO is active and focused.
 3. A fresh PixelBeacon heartbeat is available.
 4. ESO Weave is not suspended.
@@ -150,10 +152,11 @@ Roll Dodge is not an Auto Potion prerequisite.
 It gates weaving and physical-input interception, not the controller's quickslot
 attempt. Losing the game, focus, or
 beacon blocks action without clearing the requested setting. Requested
-enablement is not restored across application restarts, unlike suspend and
-fishing intent. The controller ticks on the pixel-bus worker, adds no thread or
-timer, and never reaches the hook thread. Normal logging records categorical
-effective-state changes rather than every evaluation.
+enablement is restored across application restarts, but effective state,
+telemetry, blockers, and retry history are not. The controller ticks on the
+pixel-bus worker, adds no thread or timer, and never reaches the hook thread.
+Normal logging records categorical effective-state changes rather than every
+evaluation.
 
 See the [Status Reference](../reference/status-reference.md#auto-potion) for exact
 state vocabulary and [Troubleshooting](../getting-started/troubleshooting.md#auto-potion-is-dormant-or-blocked)

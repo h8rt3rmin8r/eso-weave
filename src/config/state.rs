@@ -1,12 +1,13 @@
-//! Session state store: the live suspend and fishing intents, persisted to a
-//! file separate from `config.json`.
+//! Session state store: the live suspend, fishing, and auto-potion intents,
+//! persisted to a file separate from `config.json`.
 //!
 //! The constitution requires the configuration file to hold user settings only,
 //! with no session, runtime, or derived state. Session state therefore lives
-//! here, in `state.json`, and is restored on launch under the focus-scoped input
-//! invariant (a restored running or fishing intent performs no input until the
-//! game window is focused). Like the config store, loading never panics and
-//! degrades to safe defaults (not suspended, not fishing) on any problem.
+//! here, in `state.json`, and is restored on launch under the existing fail-closed
+//! input invariants. Restored requests cannot act until their current focus,
+//! lifecycle, telemetry, and feature-specific gates permit it. Like the config
+//! store, loading never panics and degrades to safe defaults (not suspended, not
+//! fishing, not auto-potion) on any problem.
 
 use std::path::Path;
 
@@ -16,7 +17,7 @@ use crate::beacon::api_check::GameVersion;
 use crate::config::{ConfigError, Notice, NoticeKind};
 
 /// Current session-state schema version.
-pub const CURRENT_STATE_VERSION: u32 = 3;
+pub const CURRENT_STATE_VERSION: u32 = 4;
 
 /// The recorded window geometry: automatically captured runtime state (where and
 /// how large the window last was), stored here in `state.json` rather than the
@@ -142,6 +143,9 @@ pub struct SessionState {
     /// The fishing on/off intent (never a transient sub-state).
     #[serde(default)]
     pub fishing: bool,
+    /// The auto-potion on/off request (never effective state or evidence).
+    #[serde(default)]
+    pub auto_potion: bool,
     /// The derived API-version cache maintained by the startup version check.
     #[serde(default)]
     pub api_version: ApiVersionCache,
@@ -162,6 +166,7 @@ impl Default for SessionState {
             schema_version: CURRENT_STATE_VERSION,
             suspended: false,
             fishing: false,
+            auto_potion: false,
             api_version: ApiVersionCache::default(),
             window: None,
         }
@@ -170,7 +175,7 @@ impl Default for SessionState {
 
 /// Loads the session state from `<config_dir>/state.json`. A missing file yields
 /// defaults with no notice; an unreadable or invalid file yields defaults with a
-/// notice (the safe fallback is not suspended, not fishing).
+/// notice (the safe fallback is not suspended, not fishing, not auto-potion).
 pub fn load(config_dir: &Path) -> (SessionState, Vec<Notice>) {
     let path = config_dir.join(STATE_FILE_NAME);
     let raw = match std::fs::read_to_string(&path) {
@@ -234,8 +239,33 @@ mod tests {
     }
 
     #[test]
-    fn current_state_version_is_three() {
-        assert_eq!(CURRENT_STATE_VERSION, 3);
+    fn current_state_version_is_four() {
+        assert_eq!(CURRENT_STATE_VERSION, 4);
+    }
+
+    #[test]
+    fn legacy_states_default_auto_potion_off_without_losing_other_intent() {
+        for version in 1..=3 {
+            let json = format!(r#"{{"schema_version":{version},"suspended":true,"fishing":true}}"#);
+            let state: SessionState = serde_json::from_str(&json).unwrap();
+            assert!(state.suspended);
+            assert!(state.fishing);
+            assert!(!state.auto_potion);
+        }
+    }
+
+    #[test]
+    fn auto_potion_request_round_trips_both_values() {
+        for auto_potion in [false, true] {
+            let state = SessionState {
+                auto_potion,
+                ..SessionState::default()
+            };
+            let json = serde_json::to_string(&state).unwrap();
+            let back: SessionState = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.auto_potion, auto_potion);
+            assert_eq!(back, state);
+        }
     }
 
     #[test]

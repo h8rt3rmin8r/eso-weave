@@ -13,17 +13,15 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [042](plan-042.md) | Active | S096 encounter capture modes, issue #183 |
+| [043](plan-043.md) | Active | S097 Auto Potion request persistence, issue #172 |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five
-required assets. Those plans are archived. Plan 042 now sequences the persistent
-data-addon subsystem: S092 established the permanent foundation, S093 added the
-first-class lifecycle and status interface, S094 established the lossless
-raw-event authority, S095 verifies its normalized projections independently,
-and S096 adds the two approved capture modes with bounded session ordering.
+required assets. Plan 042 completed the persistent data-addon subsystem through
+S096 and closed epic #182. Those plans are archived. Plan 043 begins the focused
+operator-intent reliability sequence with S097 persistence for issue #172.
 
 Installed v0.15.1 verification in issue #110, catalog-field verification in
 issue #129, live Combat Metrics verification in issue #131, and native-log
 verification in issue #190 remain independent Release verification work. Issue
-#190 gates native-log platform claims but does not block S096.
+#190 gates native-log platform claims but does not block S097.

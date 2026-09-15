@@ -116,6 +116,10 @@ Start with only one feature:
 - [Prepare and start Fishing](../features/fishing.md#before-starting).
 - [Configure Auto Potion](../features/auto-potion.md#configure-auto-potion).
 
+Fishing and Auto Potion requests are remembered across normal restarts. A
+restored request cannot generate input until current runtime and feature-specific
+safety evidence is available.
+
 Use the [Status Reference](../reference/status-reference.md) for exact meanings.
 If the expected baseline does not appear, continue to
 [Troubleshooting](troubleshooting.md) before enabling input generation.
