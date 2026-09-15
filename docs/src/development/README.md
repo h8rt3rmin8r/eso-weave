@@ -16,6 +16,7 @@ Published developer references include:
 - [Brand Standard](brand-standard.md)
 - [Repository Conventions](repository-conventions.md)
 - [GitHub Project Management](github-project-management.md)
+- [Repository Trust Boundaries](repository-trust.md)
 
 The stable release and GitHub delivery models are published here.
 Maintainer-only command rituals, detailed audits, autopilot records, and

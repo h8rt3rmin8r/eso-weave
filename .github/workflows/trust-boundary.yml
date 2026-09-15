@@ -1,0 +1,43 @@
+name: Trust boundary
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trust-boundary-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enforce:
+    name: Enforce protected trust policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out protected policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/trust-policy.mjs
+            .github/scripts/trust-policy.test.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Check out proposed repository without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Enforce protected policy against proposed files
+        run: |
+          node --test trusted/.github/scripts/trust-policy.test.mjs
+          node trusted/.github/scripts/trust-policy.mjs candidate

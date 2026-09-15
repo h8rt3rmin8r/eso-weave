@@ -28,7 +28,33 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout protected-base trust policy
+        if: runner.os == 'Linux' && github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-policy
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/trust-policy.mjs
+            .github/scripts/trust-policy.test.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Test repository trust policy
+        if: runner.os == 'Linux'
+        run: |
+          if [ -f trusted-policy/.github/scripts/trust-policy.mjs ]; then
+            node --test trusted-policy/.github/scripts/trust-policy.test.mjs
+            node trusted-policy/.github/scripts/trust-policy.mjs .
+          else
+            echo "::notice::Protected main does not yet contain the trust policy; using the bootstrap policy from this pull request."
+            node --test .github/scripts/trust-policy.test.mjs
+            node .github/scripts/trust-policy.mjs .
+          fi
 
       - name: Test release-note generator
         if: runner.os == 'Linux'
@@ -43,7 +69,7 @@ jobs:
         run: sudo scripts/linux-build-deps.sh
 
       - name: Cache Rust build data
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: ci-${{ matrix.os }}
 
@@ -78,9 +104,11 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Review dependency changes
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
