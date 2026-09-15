@@ -474,11 +474,10 @@ pub struct AutoPotionController {
 impl AutoPotionController {
     /// Creates a controller that is switched off.
     ///
-    /// Off is the only correct starting state, and it is not restored from the
-    /// previous session either. A restored fishing session does nothing until the
-    /// operator stands at a fishing hole; a restored auto-potion waits silently to
-    /// press a key days later in a fight the operator does not associate with this
-    /// application.
+    /// Construction starts off. Session restoration, when requested by the
+    /// application, is applied separately through [`Self::set_enabled`]. All
+    /// runtime evidence defaults fail closed, so restoring a request alone cannot
+    /// synthesize input.
     pub fn new(config: AutoPotionConfig) -> Self {
         Self {
             config,
