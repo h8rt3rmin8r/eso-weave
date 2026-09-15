@@ -64,9 +64,26 @@ If the initial combat-state callback itself exceeds a hard raw bound, the
 partial encounter-start boundary references declared-lost raw sequence 1. No raw
 value is fabricated, and the retained loss range explains the missing source.
 
-The selected-source matrix is maintained in the S094 contract. Selective
+The complete include and exclude matrix is maintained in the S095 contract.
+Selective
 subscription controls addon cost; lossless retention controls what happens after
-a selected callback is delivered. S094 adds no new event family.
+a selected callback is delivered. S095 adds no new event family.
+
+## Deterministic replay
+
+Addon version 3 keeps capture schema v2 and records a bounded normalization
+profile containing the ESO runtime enum values used by the normalizer. On desktop
+import, a pure Rust reprocessor derives normalized events only from that profile
+and the raw observation stream. Compatibility events are comparison input, not
+replay input. A complete current capture is accepted only when source links,
+projection ordinals, times, kinds, and payloads match exactly.
+
+Declared raw loss or clock discontinuity makes replay indeterminate because an
+omitted observation can change later actor numbering or capacity decisions. Such
+captures retain the existing partial, degraded-evidence behavior. Schema-v1 and
+pre-profile schema-v2 history remains importable with replay explicitly
+unavailable. No legacy evidence is fabricated or rewritten. Errors identify a
+controlled failure class but never display compared values.
 
 ## Bounds and incomplete capture
 
@@ -94,7 +111,8 @@ per-user application data directory.
 
 The importer treats the SavedVariables file as hostile text, validates every
 bound and sequence, computes the canonical hash, and preserves prior history on
-failure. Store schema v2 accepts legacy capture v1 and raw-authority capture v2.
+failure. Store schema v3 accepts legacy capture v1 and raw-authority capture v2,
+including addon versions 2 and 3.
 Migration copies legacy canonical bytes and hashes unchanged. Encounter History
 labels derived results as observed and exposes partial capture loss and unresolved
 catalog IDs without displaying raw payload values. Deletion remains an explicit

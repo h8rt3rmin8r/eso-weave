@@ -3,11 +3,12 @@ use std::fs;
 
 use eso_weave::catalog::Channel;
 use eso_weave::encounter::{
-    backup_store, canonical_bytes, delete_all, delete_encounter, import_encounter, list_encounters,
-    load_encounter, parse_capture, EncounterEvent, ImportOutcome, ImportRequest, PayloadValue,
-    RawObservation, RawSourceKind, RawValue, RawValueType, MAX_CAPTURE_BYTES, MAX_ESTIMATED_BYTES,
-    MAX_EVENTS,
+    assess_replay, backup_store, canonical_bytes, delete_all, delete_encounter, import_encounter,
+    list_encounters, load_encounter, parse_capture, EncounterEvent, ImportOutcome, ImportRequest,
+    PayloadValue, RawObservation, RawSourceKind, RawValue, RawValueType, ReplayAssessment,
+    MAX_CAPTURE_BYTES, MAX_ESTIMATED_BYTES, MAX_EVENTS, STORE_SCHEMA_VERSION,
 };
+use sha2::{Digest, Sha256};
 
 const COMPLETE: &str = include_str!("fixtures/encounter/valid-complete.lua");
 const LOSSLESS_V2_JSON: &str = include_str!("fixtures/encounter/valid-v2-lossless.json");
@@ -106,6 +107,10 @@ fn lossless_v2_raw_values_canonicalize_import_and_reload_exactly() {
     let fixture = lossless_v2();
     let source = capture_lua(&fixture);
     let parsed = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    assert_eq!(
+        assess_replay(&parsed).unwrap(),
+        ReplayAssessment::Unavailable
+    );
     let parsed_json = serde_json::to_value(&parsed).unwrap();
 
     assert_eq!(parsed_json["schema_version"], 2);
@@ -149,7 +154,7 @@ fn lossless_v2_raw_values_canonicalize_import_and_reload_exactly() {
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        2
+        STORE_SCHEMA_VERSION
     );
     let stored: (i64, i64, Vec<u8>) = connection
         .query_row(
@@ -347,7 +352,7 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        2
+        STORE_SCHEMA_VERSION
     );
     let legacy_after: (String, Vec<u8>, i64) = connection
         .query_row(
@@ -403,6 +408,96 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
     let backup = sandbox.path().join("mixed-backup.sqlite");
     backup_store(&store, &backup).unwrap();
     assert_eq!(list_encounters(&backup).unwrap().len(), 2);
+}
+
+#[test]
+fn populated_v2_store_migrates_to_v3_without_rewriting_canonical_evidence() {
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("capture-v2.lua");
+    let store = sandbox.path().join("encounters-v2.sqlite");
+    let source = lossless_v2_lua();
+    let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    let canonical = canonical_bytes(&capture).unwrap();
+    let content_sha256 = format!("{:x}", Sha256::digest(&canonical));
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE encounter_store_meta (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+                canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+            );
+            INSERT INTO encounter_store_meta VALUES (1, 2, 2);
+            CREATE TABLE raw_encounters (
+                content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
+                source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+                session_id TEXT NOT NULL,
+                encounter_id TEXT NOT NULL,
+                channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+                capture_schema_version INTEGER NOT NULL CHECK (capture_schema_version IN (1, 2)),
+                addon_version INTEGER NOT NULL CHECK (addon_version IN (1, 2)),
+                canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version IN (1, 2)),
+                status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+                started_at TEXT NOT NULL,
+                finished_at TEXT NOT NULL,
+                first_sequence INTEGER NOT NULL,
+                last_sequence INTEGER NOT NULL,
+                stored_event_count INTEGER NOT NULL,
+                omitted_event_count INTEGER NOT NULL,
+                canonical_json BLOB NOT NULL,
+                UNIQUE (session_id, encounter_id),
+                CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
+                       (capture_schema_version = 2 AND canonical_format_version = 2))
+            );
+            CREATE TRIGGER raw_encounters_no_update
+            BEFORE UPDATE ON raw_encounters
+            BEGIN
+                SELECT RAISE(ABORT, 'raw encounter records are immutable');
+            END;
+            PRAGMA user_version = 2;
+            "#,
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO raw_encounters VALUES (?1, ?2, ?3, ?4, 'live', 2, 2, 2,
+             'complete', ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params![
+                content_sha256,
+                "0".repeat(64),
+                capture.session_id,
+                capture.encounter_id,
+                capture.started_at,
+                capture.finished_at,
+                i64::try_from(capture.first_sequence).unwrap(),
+                i64::try_from(capture.last_sequence).unwrap(),
+                i64::try_from(capture.stored_event_count).unwrap(),
+                i64::try_from(capture.omitted_event_count).unwrap(),
+                canonical,
+            ],
+        )
+        .unwrap();
+    drop(connection);
+
+    fs::write(&input, source).unwrap();
+    let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
+    assert_eq!(receipt.outcome, ImportOutcome::AlreadyPresent);
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        STORE_SCHEMA_VERSION
+    );
+    let preserved: Vec<u8> = connection
+        .query_row(
+            "SELECT canonical_json FROM raw_encounters WHERE content_sha256 = ?1",
+            [&receipt.content_sha256],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(preserved, canonical_bytes(&capture).unwrap());
 }
 
 #[test]

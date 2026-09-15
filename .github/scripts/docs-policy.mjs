@@ -2787,9 +2787,13 @@ export function validateEncounterModelContract(contract) {
 
   const snapshots = Array.isArray(contract.source_snapshots) ? contract.source_snapshots : [];
   const snapshotIds = new Set();
+  const snapshotsById = new Map();
   for (const snapshot of snapshots) {
     if (!snapshot?.id || snapshotIds.has(snapshot.id)) errors.push("encounter source IDs must be present and unique");
-    else snapshotIds.add(snapshot.id);
+    else {
+      snapshotIds.add(snapshot.id);
+      snapshotsById.set(snapshot.id, snapshot);
+    }
     if (!/^[0-9a-f]{40}$/u.test(snapshot?.revision ?? "")) errors.push(`encounter source ${snapshot?.id ?? "<missing>"} requires an immutable revision`);
     for (const field of ["channel", "license", "uri"]) {
       if (typeof snapshot?.[field] !== "string" || snapshot[field].trim() === "") errors.push(`encounter source ${snapshot?.id ?? "<missing>"} requires ${field}`);
@@ -2810,6 +2814,15 @@ export function validateEncounterModelContract(contract) {
   if (envelope.duration_clock !== "monotonic_ms") errors.push("encounter durations require monotonic_ms");
   const lossless = contract.schema_version === 2;
   if (lossless) {
+    if (!snapshotIds.has("eso-api-pts")) errors.push("lossless encounter model is missing required source eso-api-pts");
+    const liveSnapshot = snapshotsById.get("eso-api-live");
+    const ptsSnapshot = snapshotsById.get("eso-api-pts");
+    if (liveSnapshot?.api_version !== 101050 || liveSnapshot?.revision !== "f76cf16c4e5be7b234d15dc7f676febffa64c5bb") errors.push("lossless encounter model requires the pinned Live 101050 source snapshot");
+    if (ptsSnapshot?.api_version !== 101051 || ptsSnapshot?.revision !== "1baf1131560c2bcd38ffd2bd070728273b25f934") errors.push("lossless encounter model requires the pinned PTS 101051 source snapshot");
+    const duelDelta = (Array.isArray(contract.signature_deltas) ? contract.signature_deltas : []).find(({ source_id: sourceId }) => sourceId === "EVENT_DUEL_FINISHED");
+    if (duelDelta?.live_snapshot !== "eso-api-live" || duelDelta?.pts_snapshot !== "eso-api-pts" || duelDelta?.live_argument_count !== 8 || duelDelta?.pts_argument_count !== 9 || duelDelta?.selected !== false) errors.push("lossless encounter model requires the reviewed EVENT_DUEL_FINISHED Live/PTS signature delta");
+    const duelChanges = Array.isArray(duelDelta?.changes) ? duelDelta.changes.join(" ") : "";
+    if (!duelChanges.includes("opponentCrossplayDisplayName") || !duelChanges.includes("opponentPlatformDisplayName")) errors.push("EVENT_DUEL_FINISHED signature delta must preserve the crossplay rename and platform argument");
     if (envelope.actor_identity !== "source-exact" || envelope.raw_authority !== "raw-observations") errors.push("lossless encounter actors and authority must use source-exact raw observations");
   } else if (envelope.actor_identity !== "encounter-local-opaque") errors.push("encounter actors must use encounter-local opaque identity");
 
@@ -2835,6 +2848,18 @@ export function validateEncounterModelContract(contract) {
       const source = selected.get(id);
       if (!source) errors.push(`encounter model is missing selected source ${id}`);
       else if (source.kind !== kind || source.source_version !== 1 || source.retain_all_scalar_values !== true) errors.push(`${id} must retain all scalar values with its reviewed source kind and version`);
+      else for (const field of ["trigger", "filter", "cost", "fanout", "projection", "value", "rationale", "evidence", "test"]) {
+        if (typeof source[field] !== "string" || source[field].trim() === "") errors.push(`${id} subscription decision requires ${field}`);
+      }
+    }
+    const replay = contract.replay_policy ?? {};
+    if (replay.algorithm_version !== 1 || replay.current_addon_version !== 3 || replay.profile_required !== true) errors.push("encounter replay requires addon 3 normalization profile version 1");
+    if (replay.complete_requires !== "verified" || replay.divergence !== "reject-import" || replay.raw_loss !== "indeterminate" || replay.legacy !== "unavailable") errors.push("encounter replay outcomes must fail closed without fabricating legacy or lost evidence");
+    if (replay.derivation_input !== "raw-observations-and-profile" || replay.comparison_input !== "compatibility-events" || replay.pure !== true || replay.diagnostics !== "value-free") errors.push("encounter replay must be pure, raw-derived, and value-free");
+    const excluded = Array.isArray(contract.excluded_source_families) ? contract.excluded_source_families : [];
+    if (excluded.length !== 7) errors.push("encounter subscription decisions require seven reviewed excluded families");
+    for (const family of excluded) for (const field of ["id", "sources", "rationale", "reconsider_when"]) {
+      if (!(field in (family ?? {})) || (typeof family[field] === "string" && family[field].trim() === "") || (Array.isArray(family[field]) && family[field].length === 0)) errors.push(`excluded encounter family requires ${field}`);
     }
     const loss = contract.loss_policy ?? {};
     if (loss.raw_marker !== "raw-loss" || loss.whole_observation !== true) errors.push("raw loss must omit and declare the whole observation");
@@ -2868,6 +2893,7 @@ export function validateEncounterModelContract(contract) {
   if (transport.future_transport !== "bounded-saved-variables-import") errors.push("future encounter transport must use a bounded SavedVariables import");
   const actorIdentity = lossless ? "source-exact" : "encounter-local-opaque";
   if (contract.actor_policy?.identity !== actorIdentity || !contract.actor_policy?.roles?.includes("pet") || !contract.actor_policy?.pet_owner_relationship || !contract.actor_policy?.ability_aliases) errors.push("encounter actor policy must model the selected identity, pets, owners, and aliases");
+  if (lossless && contract.actor_policy?.numeric_unit_id !== "positive-exact-integer-decimal-key-or-anonymous") errors.push("lossless encounter actor policy must constrain numeric unit IDs to exact decimal keys before interning");
   if (contract.build_snapshot_policy?.retention !== "derived-versioned" || contract.build_snapshot_policy?.catalog_version_required !== true || contract.build_snapshot_policy?.consent_required_for_personal_identity !== true) errors.push("build snapshots must be versioned, catalog-bound, and consent personal identity");
   const retention = contract.retention_policy ?? {};
   for (const field of ["export", "delete", "backup", "corruption_recovery", "compression"]) if (!retention[field]) errors.push(`encounter retention policy requires ${field}`);

@@ -618,6 +618,20 @@ function validLosslessEncounterContract() {
     actor_identity: "source-exact",
     raw_authority: "raw-observations",
   };
+  contract.source_snapshots[0].api_version = 101050;
+  contract.source_snapshots.push({ id: "eso-api-pts", channel: "pts", api_version: 101051, revision: "1baf1131560c2bcd38ffd2bd070728273b25f934", license: "technical-reference-only", uri: "https://github.com/esoui/esoui" });
+  contract.signature_deltas = [{
+    source_id: "EVENT_DUEL_FINISHED",
+    live_snapshot: "eso-api-live",
+    pts_snapshot: "eso-api-pts",
+    live_argument_count: 8,
+    pts_argument_count: 9,
+    changes: [
+      "opponentDisplayName renamed opponentCrossplayDisplayName",
+      "opponentPlatformDisplayName appended",
+    ],
+    selected: false,
+  }];
   contract.raw_authority = {
     stream: "raw-observations",
     schema_version: 2,
@@ -637,6 +651,26 @@ function validLosslessEncounterContract() {
     kind,
     source_version: 1,
     retain_all_scalar_values: true,
+    trigger: "reviewed trigger",
+    filter: "reviewed filter",
+    cost: "bounded cost",
+    fanout: "bounded fanout",
+    projection: "reviewed projection",
+    value: "reviewed value",
+    rationale: "reviewed inclusion",
+    evidence: "eso-api-live and eso-api-pts",
+    test: "tests/encounter_addon.rs",
+  }));
+  contract.replay_policy = {
+    algorithm_version: 1, current_addon_version: 3, profile_required: true,
+    complete_requires: "verified", divergence: "reject-import",
+    raw_loss: "indeterminate", legacy: "unavailable",
+    derivation_input: "raw-observations-and-profile",
+    comparison_input: "compatibility-events", pure: true, diagnostics: "value-free",
+  };
+  contract.excluded_source_families = Array.from({ length: 7 }, (_, index) => ({
+    id: `excluded-${index + 1}`, sources: ["EVENT_EXCLUDED"],
+    rationale: "not required by current metrics", reconsider_when: "a measured use case exists",
   }));
   contract.loss_policy = {
     marker: "discontinuity",
@@ -660,6 +694,7 @@ function validLosslessEncounterContract() {
   };
   contract.actor_policy = {
     identity: "source-exact",
+    numeric_unit_id: "positive-exact-integer-decimal-key-or-anonymous",
     roles: ["player", "pet", "npc", "boss"],
     pet_owner_relationship: "source-value-or-derived-relationship",
     ability_aliases: "derived-versioned-catalog-relationship",
@@ -2440,6 +2475,23 @@ test("S094 requires whole-observation loss with explicit ranges and reasons", ()
   assert.match(errors, /silent drop/i);
   assert.match(errors, /terminal reserve/i);
   assert.match(errors, /callback-failed/i);
+});
+
+test("S095 requires deterministic replay and complete subscription decisions", () => {
+  const contract = validLosslessEncounterContract();
+  contract.replay_policy.divergence = "accept";
+  contract.replay_policy.diagnostics = "include-values";
+  contract.selected_sources[0].cost = "";
+  contract.excluded_source_families.pop();
+  contract.source_snapshots = contract.source_snapshots.filter(({ id }) => id !== "eso-api-pts");
+  contract.signature_deltas = [];
+  const errors = validateEncounterModelContract(contract).join("\n");
+  assert.match(errors, /eso-api-pts/i);
+  assert.match(errors, /EVENT_DUEL_FINISHED.*signature delta/i);
+  assert.match(errors, /subscription decision requires cost/i);
+  assert.match(errors, /replay outcomes/i);
+  assert.match(errors, /value-free/i);
+  assert.match(errors, /seven reviewed excluded families/i);
 });
 
 test("rejects unsafe encounter transport, privacy, storage, and derivation policies", () => {

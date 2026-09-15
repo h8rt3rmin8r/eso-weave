@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S095 adds deterministic raw-to-normalized encounter replay for current
+  addon-v3 schema-v2 captures, rejects divergent compatibility projections before
+  storage, preserves partial and legacy evidence with explicit replay outcomes,
+  migrates the immutable encounter store to schema v3 without changing canonical
+  record formats, and completes the Live/PTS include and exclude decision matrix
+  (issue #200, parent #186).
+
 - S094 establishes a versioned lossless raw-source envelope for the encounter
   callbacks and normalization-dependent API observations already selected by
   ESO Weave Data. Exact local scalar values, source order, versions, declared
@@ -45,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Keep encounter capture schema v2 while advancing the producer to
+  addon version 3 with normalization profile version 1. This avoids undocumented
+  hard-coded ESO enum numbers and preserves pre-profile history. Complete current
+  captures must replay exactly, raw loss is indeterminate, and legacy replay is
+  unavailable rather than fabricated (issue #200).
 
 - 2026-09-15: Amend the constitution to 4.0.0. Deliberately selected encounter
   sources retain their exact scalar values locally, including names and

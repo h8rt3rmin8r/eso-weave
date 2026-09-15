@@ -2,7 +2,8 @@ use std::collections::BTreeSet;
 
 use eso_weave::catalog::Channel;
 use eso_weave::encounter::{
-    canonical_bytes, import_encounter, load_encounter, parse_capture, ImportRequest,
+    assess_replay, canonical_bytes, import_encounter, load_encounter, parse_capture, ImportRequest,
+    ReplayAssessment, MAX_ESTIMATED_BYTES, MAX_EVENTS,
 };
 use mlua::{Lua, Table, Value as LuaValue};
 use serde_json::Value;
@@ -284,6 +285,11 @@ fn serialized_saved_variables(lua: &Lua) -> String {
 fn assert_selected_sources_round_trip_through_sqlite(lua: &Lua) {
     let source = serialized_saved_variables(lua);
     let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    assert_eq!(capture.addon_version, 3);
+    assert_eq!(
+        assess_replay(&capture).unwrap(),
+        ReplayAssessment::Indeterminate
+    );
     let source_ids = capture
         .raw_observations
         .iter()
@@ -321,6 +327,429 @@ fn assert_selected_sources_round_trip_through_sqlite(lua: &Lua) {
         .unwrap()
         .unwrap();
     assert_eq!(canonical_bytes(&loaded).unwrap(), expected);
+}
+
+#[test]
+fn complete_current_capture_is_verified_from_raw_observations() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let source = serialized_saved_variables(&lua);
+    let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    assert_eq!(capture.addon_version, 3);
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
+}
+
+#[test]
+fn complete_current_capture_differentially_replays_selected_projection_families() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __advance(10)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "DamageCanary",
+            0, 0, "SourceCanary", 1, "TargetCanary", 2, 1200, 3, 4,
+            true, 9001, 9002, 7001, 50)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_HEAL, false, "HealCanary",
+            0, 0, "SourceCanary", 1, "TargetCanary", 2, 300, 3, 0,
+            true, 9001, 9001, 7002, 25)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DIED, false, "DeathCanary",
+            0, 0, "SourceCanary", 1, "TargetCanary", 2, 0, 0, 0,
+            true, 9001, 9002, 7003, 0)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_RESURRECT, false, "RezCanary",
+            0, 0, "SourceCanary", 1, "TargetCanary", 2, 0, 0, 0,
+            true, 9001, 9002, 7004, 0)
+        __fire(EVENT_EFFECT_CHANGED, 1, 2, "EffectCanary", "group1", 1.1,
+            2.2, 3, "icon", "deprecated", 4, 5, 6, "UnitCanary",
+            9001, 7100, 1)
+        __fire(EVENT_POWER_UPDATE, "group1", 1, 3, 800, 1000, 1000)
+        __fire(EVENT_ACTION_SLOT_ABILITY_USED, 3)
+        __fire(EVENT_ACTIVE_WEAPON_PAIR_CHANGED, 2, false)
+        __fire(EVENT_PLAYER_DEAD)
+        __fire(EVENT_PLAYER_ALIVE)
+        __fire(EVENT_BOSSES_CHANGED, false)
+        __fire(EVENT_ACTIVE_QUICKSLOT_CHANGED, 4)
+        __advance(1000)
+        __run_updates()
+        __fire(EVENT_ACTION_SLOT_ABILITY_USED, 4)
+        __boss_value = 4000
+        __advance(1000)
+        __run_updates()
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        assert(EsoWeaveDataSaved.encounter.status == "complete")
+        "#,
+    );
+    let source = serialized_saved_variables(&lua);
+    let capture = parse_capture(source.as_bytes(), Channel::Live).unwrap();
+    let profile = capture.normalization_profile.as_ref().unwrap();
+    assert_eq!(profile.version, 1);
+    assert_eq!(profile.api_version, capture.source.api_version);
+    assert_eq!(profile.damage_results, [100, 101, 102, 103, 104, 105]);
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
+
+    let mut unsupported_profile = capture.clone();
+    unsupported_profile
+        .normalization_profile
+        .as_mut()
+        .unwrap()
+        .version = 2;
+    assert!(assess_replay(&unsupported_profile).is_err());
+
+    let mut overlapping_profile = capture.clone();
+    overlapping_profile
+        .normalization_profile
+        .as_mut()
+        .unwrap()
+        .healing_results[0] = 100;
+    assert!(assess_replay(&overlapping_profile).is_err());
+
+    let mut missing_profile = capture.clone();
+    missing_profile.normalization_profile = None;
+    assert!(assess_replay(&missing_profile).is_err());
+
+    let mut malformed_batch = capture.clone();
+    malformed_batch
+        .raw_observations
+        .iter_mut()
+        .find(|observation| observation.source_id == "GetLatency")
+        .unwrap()
+        .source_id = "GetFramerate".into();
+    assert_eq!(
+        assess_replay(&malformed_batch).unwrap(),
+        ReplayAssessment::Indeterminate
+    );
+    assert!(canonical_bytes(&malformed_batch)
+        .unwrap_err()
+        .to_string()
+        .contains("indeterminate"));
+
+    let assert_validation_rejected = |name: &str, candidate| {
+        assert!(assess_replay(&candidate).is_err(), "{name}");
+        assert!(canonical_bytes(&candidate).is_err(), "{name}");
+    };
+    let assert_divergent = |name: &str, candidate| {
+        let assessment =
+            assess_replay(&candidate).unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert_eq!(assessment, ReplayAssessment::Divergent, "{name}");
+        assert!(canonical_bytes(&candidate).is_err(), "{name}");
+    };
+    let assert_indeterminate = |name: &str, candidate| {
+        assert_eq!(
+            assess_replay(&candidate).unwrap(),
+            ReplayAssessment::Indeterminate,
+            "{name}"
+        );
+        assert!(canonical_bytes(&candidate).is_err(), "{name}");
+    };
+
+    let damage_index = capture
+        .events
+        .iter()
+        .position(|event| event.kind == "damage")
+        .unwrap();
+    let mut changed_source = capture.clone();
+    changed_source.events[damage_index].source_sequence = Some(999_999);
+    assert_validation_rejected("source sequence", changed_source);
+
+    let mut changed_ordinal = capture.clone();
+    changed_ordinal.events[damage_index].projection_ordinal = Some(1);
+    assert_validation_rejected("projection ordinal", changed_ordinal);
+
+    let mut changed_time = capture.clone();
+    changed_time.events[damage_index].monotonic_ms += 1;
+    assert_validation_rejected("monotonic time", changed_time);
+
+    let mut changed_kind = capture.clone();
+    changed_kind.events[damage_index].kind = "healing".into();
+    assert_divergent("kind", changed_kind);
+
+    let mut changed_payload = capture.clone();
+    changed_payload.events[damage_index].payload.insert(
+        "amount".into(),
+        eso_weave::encounter::PayloadValue::Integer(991_337),
+    );
+    assert_divergent("payload", changed_payload);
+
+    let mut omitted = capture.clone();
+    omitted.events.remove(damage_index);
+    omitted.stored_event_count -= 1;
+    omitted.last_sequence -= 1;
+    for (index, event) in omitted.events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    assert_divergent("omitted projection", omitted);
+
+    let mut inserted = capture.clone();
+    let mut extra = inserted.events[damage_index].clone();
+    extra.projection_ordinal = Some(1);
+    inserted.events.insert(damage_index + 1, extra);
+    inserted.stored_event_count += 1;
+    inserted.last_sequence += 1;
+    for (index, event) in inserted.events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    assert_divergent("extra projection", inserted);
+
+    let mut reordered = capture.clone();
+    let reorder_index = reordered
+        .events
+        .windows(2)
+        .position(|events| {
+            events[0].source_sequence == events[1].source_sequence
+                && events[0].projection_ordinal == Some(0)
+                && events[1].projection_ordinal == Some(1)
+                && events[0].kind != events[1].kind
+        })
+        .unwrap();
+    reordered.events.swap(reorder_index, reorder_index + 1);
+    reordered.events[reorder_index].projection_ordinal = Some(0);
+    reordered.events[reorder_index + 1].projection_ordinal = Some(1);
+    for (index, event) in reordered.events.iter_mut().enumerate() {
+        event.sequence = index as u64 + 1;
+    }
+    assert_divergent("projection order", reordered);
+
+    let stop_index = capture
+        .raw_observations
+        .iter()
+        .rposition(|observation| observation.source_id == "EVENT_PLAYER_COMBAT_STATE")
+        .unwrap();
+    let mut deactivated_complete = capture.clone();
+    deactivated_complete.raw_observations[stop_index].source_id = "EVENT_PLAYER_DEACTIVATED".into();
+    deactivated_complete.raw_observations[stop_index].argument_count = 1;
+    deactivated_complete.raw_observations[stop_index]
+        .values
+        .truncate(1);
+    assert_indeterminate("complete capture after deactivation", deactivated_complete);
+
+    let mut continued_after_stop = capture.clone();
+    continued_after_stop.raw_observations[stop_index].values[1].boolean = Some(true);
+    assert_indeterminate("finish without a stopping transition", continued_after_stop);
+
+    let mut duplicate_finish = capture.clone();
+    let mut extra_finish = duplicate_finish.raw_observations.last().unwrap().clone();
+    extra_finish.sequence += 1;
+    duplicate_finish.raw_last_sequence = Some(extra_finish.sequence);
+    duplicate_finish.raw_observation_count = duplicate_finish
+        .raw_observation_count
+        .map(|count| count + 1);
+    duplicate_finish.raw_observations.push(extra_finish);
+    assert_indeterminate("duplicate finish", duplicate_finish);
+
+    let mut divergent = capture;
+    let damage = divergent
+        .events
+        .iter_mut()
+        .find(|event| event.kind == "damage")
+        .unwrap();
+    damage.payload.insert(
+        "amount".into(),
+        eso_weave::encounter::PayloadValue::Integer(991_337),
+    );
+    assert_eq!(
+        assess_replay(&divergent).unwrap(),
+        ReplayAssessment::Divergent
+    );
+    let error = canonical_bytes(&divergent).unwrap_err().to_string();
+    assert!(error.contains("replay diverged"));
+    for canary in ["991337", "DamageCanary", "SourceCanary", "TargetCanary"] {
+        assert!(!error.contains(canary));
+    }
+
+    run(
+        &lua,
+        r#"
+        for _, event in ipairs(EsoWeaveDataSaved.encounter.events) do
+            if event.kind == "damage" then event.payload.amount = 991337 break end
+        end
+        "#,
+    );
+    let sandbox = tempfile::tempdir().unwrap();
+    let input = sandbox.path().join("divergent.lua");
+    let store = sandbox.path().join("encounters.sqlite");
+    std::fs::write(&input, serialized_saved_variables(&lua)).unwrap();
+    let error = import_encounter(&ImportRequest::new(&input, &store, Channel::Live))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("replay diverged"));
+    assert!(!store.exists());
+}
+
+#[test]
+fn replay_matches_lua_actor_type_guards_for_nil_and_non_numeric_ids() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "DamageCanary",
+            0, 0, "SourceCanary", 0, "TargetCanary", 0, 100, 0, 0,
+            false, nil, "not-a-number", 7001, 0)
+        __fire(EVENT_EFFECT_CHANGED, 1, 2, "EffectCanary", false, 1.1,
+            2.2, 3, "icon", "deprecated", 4, 5, 6, "UnitCanary",
+            nil, 7100, 1)
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let capture =
+        parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
+    let damage = capture
+        .events
+        .iter()
+        .find(|event| event.kind == "damage")
+        .unwrap();
+    assert_eq!(
+        damage.payload["source_actor"],
+        eso_weave::encounter::PayloadValue::Integer(0)
+    );
+    assert_eq!(
+        damage.payload["target_actor"],
+        eso_weave::encounter::PayloadValue::Integer(0)
+    );
+    let effect = capture
+        .events
+        .iter()
+        .find(|event| event.kind == "effect")
+        .unwrap();
+    assert_eq!(
+        effect.payload["target_actor"],
+        eso_weave::encounter::PayloadValue::Integer(0)
+    );
+}
+
+#[test]
+fn replay_constrains_nonintegral_unit_ids_before_actor_keying() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "First",
+            0, 0, "Source", 0, "Target", 0, 100, 0, 0,
+            false, 1.0000000000000002, nil, 7001, 0)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "Second",
+            0, 0, "Source", 0, "Target", 0, 100, 0, 0,
+            false, 1.0000000000000004, nil, 7002, 0)
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let capture =
+        parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
+    let actors = capture
+        .events
+        .iter()
+        .filter(|event| event.kind == "damage")
+        .map(|event| event.payload["source_actor"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actors,
+        vec![eso_weave::encounter::PayloadValue::Integer(0); 2]
+    );
+}
+
+#[test]
+fn replay_uses_exact_decimal_keys_for_adjacent_large_unit_ids() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "First",
+            0, 0, "Source", 0, "Target", 0, 100, 0, 0,
+            false, 1000000000000000, nil, 7001, 0)
+        __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, "Second",
+            0, 0, "Source", 0, "Target", 0, 100, 0, 0,
+            false, 1000000000000001, nil, 7002, 0)
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let capture =
+        parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
+    let actors = capture
+        .events
+        .iter()
+        .filter(|event| event.kind == "damage")
+        .map(|event| event.payload["source_actor"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actors,
+        vec![
+            eso_weave::encounter::PayloadValue::Integer(1),
+            eso_weave::encounter::PayloadValue::Integer(2),
+        ]
+    );
+}
+
+#[test]
+fn replay_matches_nil_quickslot_and_boss_power_defaults() {
+    let lua = harness(
+        r#"
+        GetCurrentQuickslot = function() return nil end
+        GetUnitPower = function() return nil, nil, nil end
+        "#,
+    );
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_ACTION_SLOT_ABILITY_USED, 3)
+        __fire(EVENT_BOSSES_CHANGED, false)
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let capture =
+        parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
+}
+
+#[test]
+fn replay_is_bounded_at_the_raw_observation_ceiling() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS["/ewencounter"]("arm live")
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        "#,
+    );
+    let mut capture =
+        parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    let start = capture.raw_observations[0].clone();
+    let mut intermediate = start.clone();
+    let mut stop = capture.raw_observations[1].clone();
+    let mut finish = capture.raw_observations[2].clone();
+    capture.raw_observations.clear();
+    capture.raw_observations.push(start);
+    for sequence in 2..=(MAX_EVENTS as u64 - 2) {
+        intermediate.sequence = sequence;
+        capture.raw_observations.push(intermediate.clone());
+    }
+    stop.sequence = MAX_EVENTS as u64 - 1;
+    finish.sequence = MAX_EVENTS as u64;
+    capture.raw_observations.push(stop);
+    capture.raw_observations.push(finish);
+    capture.raw_last_sequence = Some(MAX_EVENTS as u64);
+    capture.raw_observation_count = Some(MAX_EVENTS);
+    capture.estimated_bytes = MAX_ESTIMATED_BYTES;
+    capture.events[1].source_sequence = Some(MAX_EVENTS as u64);
+
+    assert_eq!(assess_replay(&capture).unwrap(), ReplayAssessment::Verified);
 }
 
 fn assert_saved_variables_round_trip_through_sqlite(lua: &Lua, name: &str) {
@@ -445,6 +874,39 @@ fn schema_v1_terminal_capture_is_preserved_without_fabricated_raw_evidence() {
         assert(EsoWeaveDataSaved.encounter.events[2].payload.complete == true)
         SLASH_COMMANDS["/ewencounter"]("arm live")
         assert(EsoWeaveDataSaved.encounter == __legacy_encounter)
+        "#,
+    );
+}
+
+#[test]
+fn pre_profile_v2_terminal_is_preserved_and_idle_state_advances_safely() {
+    let terminal = harness(
+        r#"
+        __legacy_v2 = { schema_version = 2, addon_version = 2, status = "complete" }
+        EsoWeaveDataSaved.encounter = __legacy_v2
+        "#,
+    );
+    run(
+        &terminal,
+        r#"
+        assert(EsoWeaveDataSaved.encounter == __legacy_v2)
+        assert(EsoWeaveDataSaved.encounter.addon_version == 2)
+        "#,
+    );
+
+    let idle = harness(
+        r#"
+        EsoWeaveDataSaved.encounter = {
+            schema_version = 2, addon_version = 2, status = "idle"
+        }
+        "#,
+    );
+    run(
+        &idle,
+        r#"
+        assert(EsoWeaveDataSaved.encounter.status == "idle")
+        assert(EsoWeaveDataSaved.encounter.addon_version == 3)
+        assert(EsoWeaveDataSaved.encounter.schema_version == 2)
         "#,
     );
 }

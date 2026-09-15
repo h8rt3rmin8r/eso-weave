@@ -123,7 +123,7 @@ User-local API discovery precedes that path when explicitly requested:
 
 Encounter observation and import follow the isolated encounter-module path:
 
-`explicit one-shot arm -> clean combat boundary -> bounded exact selected-source observations -> linked compatibility events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> canonical hash -> immutable encounters.sqlite record`
+`explicit one-shot arm -> clean combat boundary -> bounded exact selected-source observations -> linked compatibility events -> declared loss and terminal boundary -> SavedVariables flush -> explicit stable read -> restricted parser -> terminal validation -> deterministic replay -> canonical hash -> immutable encounters.sqlite record`
 
 The desktop importer consumes terminal schema-v1 legacy and schema-v2 lossless
 handoffs and requires the caller to name both the file and its expected Live or
@@ -134,6 +134,12 @@ transactions make migration, append, and explicit deletion atomic; an
 update-blocking trigger keeps raw records immutable. Consistent snapshot backup
 is separate from derived metric projection. Logs, receipts, diagnostics, and
 default UI summaries do not reproduce raw payload values.
+
+Current addon-v3 schema-v2 captures include normalization profile version 1.
+The pure replay verifier derives only from that bounded profile and raw
+observations. Compatibility events cannot seed replay. A complete mismatch
+fails before canonicalization or storage, partial loss is indeterminate, and
+schema-v1 or addon-v2 replay is unavailable without changing legacy import.
 
 Derived encounter calculation continues through an explicit local path:
 

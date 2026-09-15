@@ -5,9 +5,18 @@
     {
       "id": "eso-api-live",
       "channel": "live",
+      "api_version": 101050,
       "revision": "f76cf16c4e5be7b234d15dc7f676febffa64c5bb",
       "license": "technical-reference-only",
       "uri": "https://github.com/esoui/esoui/blob/f76cf16c4e5be7b234d15dc7f676febffa64c5bb/ESOUIDocumentation.txt"
+    },
+    {
+      "id": "eso-api-pts",
+      "channel": "pts",
+      "api_version": 101051,
+      "revision": "1baf1131560c2bcd38ffd2bd070728273b25f934",
+      "license": "technical-reference-only",
+      "uri": "https://github.com/esoui/esoui/blob/1baf1131560c2bcd38ffd2bd070728273b25f934/ESOUIDocumentation.txt"
     },
     {
       "id": "libcombat",
@@ -22,6 +31,20 @@
       "revision": "6ec1deea4ef8801800dfe88ec79b1f94d0d6303b",
       "license": "Artistic-2.0",
       "uri": "https://github.com/Solinur/CombatMetrics/tree/6ec1deea4ef8801800dfe88ec79b1f94d0d6303b"
+    }
+  ],
+  "signature_deltas": [
+    {
+      "source_id": "EVENT_DUEL_FINISHED",
+      "live_snapshot": "eso-api-live",
+      "pts_snapshot": "eso-api-pts",
+      "live_argument_count": 8,
+      "pts_argument_count": 9,
+      "changes": [
+        "opponentDisplayName renamed opponentCrossplayDisplayName",
+        "opponentPlatformDisplayName appended"
+      ],
+      "selected": false
     }
   ],
   "storage_planes": {
@@ -91,6 +114,7 @@
   },
   "actor_policy": {
     "identity": "source-exact",
+    "numeric_unit_id": "positive-exact-integer-decimal-key-or-anonymous",
     "roles": ["player", "pet", "npc", "boss"],
     "pet_owner_relationship": "source-value-or-derived-relationship",
     "ability_aliases": "derived-versioned-catalog-relationship"
@@ -158,8 +182,9 @@
   },
   "capture_implementation": {
     "state": "repository-implemented-live-verification-required",
-    "slice": "S094",
+    "slice": "S095",
     "addon": "EsoWeaveData",
+    "addon_version": 3,
     "schema_version": 2,
     "authority": "explicit-one-encounter-arm",
     "channels": ["live", "pts"],
@@ -173,26 +198,52 @@
     "desktop_import_issue": 133,
     "live_verification_issue": 131
   },
+  "replay_policy": {
+    "algorithm_version": 1,
+    "current_addon_version": 3,
+    "profile_required": true,
+    "complete_requires": "verified",
+    "divergence": "reject-import",
+    "raw_loss": "indeterminate",
+    "legacy": "unavailable",
+    "derivation_input": "raw-observations-and-profile",
+    "comparison_input": "compatibility-events",
+    "comparison_fields": ["source_sequence", "projection_ordinal", "monotonic_ms", "kind", "payload"],
+    "pure": true,
+    "diagnostics": "value-free",
+    "max_raw_observations": 100000,
+    "max_events": 100000,
+    "max_actors": 4096
+  },
+  "excluded_source_families": [
+    {"id": "activation-zone-duel", "sources": ["EVENT_PLAYER_ACTIVATED", "EVENT_ZONE_CHANGED", "EVENT_DUEL_STARTED", "EVENT_DUEL_FINISHED"], "rationale": "clean combat-state boundaries already scope one encounter; these widen location and identity exposure", "reconsider_when": "a measured encounter segmentation failure cannot be resolved from current sources"},
+    {"id": "group-roster", "sources": ["EVENT_GROUP_UPDATE"], "rationale": "current metrics do not require roster snapshots and fanout increases identity retention", "reconsider_when": "an approved group-composition metric has a bounded identity design"},
+    {"id": "hotbar-loadout", "sources": ["EVENT_HOTBAR_SLOT_CHANGE_REQUESTED", "EVENT_ACTION_SLOT_UPDATED", "EVENT_ACTION_SLOTS_FULL_UPDATE"], "rationale": "cast and active-bar observations satisfy current analysis without full loadout capture", "reconsider_when": "an approved build snapshot requires an explicit consent and versioning contract"},
+    {"id": "inventory-quickslot", "sources": ["EVENT_INVENTORY_ITEM_USED"], "rationale": "selected and used quickslot projections do not need inventory mutation events", "reconsider_when": "a measured quickslot attribution gap remains after catalog joins"},
+    {"id": "alternate-life-cycle", "sources": ["EVENT_UNIT_DEATH_STATE_CHANGED", "EVENT_PLAYER_REINCARNATED", "EVENT_RESURRECT_REQUEST", "EVENT_RESURRECT_RESULT"], "rationale": "combat results plus player dead and alive callbacks cover the current life-state facts", "reconsider_when": "live verification demonstrates a material missed transition"},
+    {"id": "periodic-player-group-stats", "sources": ["GetPlayerStat", "group GetUnitPower fanout"], "rationale": "periodic fanout has high cost and no current metric consumer", "reconsider_when": "a bounded metric proves value and sampling cost in a representative encounter"},
+    {"id": "unit-buff-polling", "sources": ["GetUnitBuffInfo fanout"], "rationale": "EVENT_EFFECT_CHANGED supplies current effect facts without polling every unit", "reconsider_when": "live comparison identifies an effect gap with a bounded polling remedy"}
+  ],
   "selected_sources": [
-    {"id": "EVENT_PLAYER_COMBAT_STATE", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_PLAYER_DEACTIVATED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_COMBAT_EVENT", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_EFFECT_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_POWER_UPDATE", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_ACTION_SLOT_ABILITY_USED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_ACTIVE_WEAPON_PAIR_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_PLAYER_DEAD", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_PLAYER_ALIVE", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_BOSSES_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "EVENT_ACTIVE_QUICKSLOT_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "GetSlotBoundId", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "GetCurrentQuickslot", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "DoesUnitExist", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "GetUnitPower", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "GetFramerate", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "GetLatency", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "capture-finish", "kind": "lifecycle", "source_version": 1, "retain_all_scalar_values": true},
-    {"id": "clock-reset", "kind": "lifecycle", "source_version": 1, "retain_all_scalar_values": true}
+    {"id": "EVENT_PLAYER_COMBAT_STATE", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "combat boundary change", "filter": "arm plus clean start boundary", "cost": "one callback per boundary", "fanout": "one start or terminal decision", "projection": "encounter-start", "value": "encounter scope", "rationale": "authoritative one-shot boundary", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_PLAYER_DEACTIVATED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "player deactivation", "filter": "active capture only", "cost": "one callback on deactivation", "fanout": "partial terminal", "projection": "capture-finish", "value": "truthful interruption", "rationale": "prevents false complete captures", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_COMBAT_EVENT", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "combat event burst", "filter": "capture all, project recognized results", "cost": "high burst callback rate", "fanout": "zero or one projection", "projection": "damage, healing, death, resurrection", "value": "core combat facts", "rationale": "required by baseline metrics", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_EFFECT_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "effect transition burst", "filter": "capture all selected deliveries", "cost": "high burst callback rate", "fanout": "one effect projection", "projection": "effect", "value": "effect uptime", "rationale": "avoids buff polling", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_POWER_UPDATE", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "power value change", "filter": "capture selected delivery", "cost": "moderate to high callback rate", "fanout": "one resource projection", "projection": "resource", "value": "resource timeline", "rationale": "event-driven resource evidence", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_ACTION_SLOT_ABILITY_USED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "action slot used", "filter": "active capture", "cost": "action-driven plus up to three API reads", "fanout": "cast plus optional quickslot", "projection": "cast, quickslot used", "value": "ordered cast evidence", "rationale": "required by cast metrics", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_ACTIVE_WEAPON_PAIR_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "active pair change", "filter": "active capture", "cost": "low action-driven rate", "fanout": "one bar change", "projection": "bar-change", "value": "bar context", "rationale": "binds casts to bar state", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_PLAYER_DEAD", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "player death", "filter": "active capture", "cost": "rare", "fanout": "one death", "projection": "death", "value": "life-state continuity", "rationale": "covers player transition when combat result is absent", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_PLAYER_ALIVE", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "player alive", "filter": "active capture", "cost": "rare", "fanout": "one resurrection", "projection": "resurrection", "value": "life-state continuity", "rationale": "pairs with player death", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_BOSSES_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "boss roster change", "filter": "active capture", "cost": "up to 12 API reads", "fanout": "zero to six changed boss samples", "projection": "boss-health", "value": "boss phase context", "rationale": "immediate roster refresh", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "EVENT_ACTIVE_QUICKSLOT_CHANGED", "kind": "callback", "source_version": 1, "retain_all_scalar_values": true, "trigger": "quickslot selection change", "filter": "active capture", "cost": "one API read", "fanout": "one quickslot selection", "projection": "quickslot selected", "value": "quickslot context", "rationale": "event-driven selected item identity", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "GetSlotBoundId", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true, "trigger": "slot use or quickslot change", "filter": "normalization dependency only", "cost": "one per slot use plus optional quickslot read", "fanout": "cast or quickslot identity", "projection": "cast, quickslot", "value": "stable ability ID", "rationale": "callback supplies slot but not bound ID", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "GetCurrentQuickslot", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true, "trigger": "each action slot use", "filter": "normalization dependency only", "cost": "one API read per slot use", "fanout": "quickslot used decision", "projection": "optional quickslot used", "value": "disambiguates quickslot action", "rationale": "needed for deterministic decision", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "DoesUnitExist", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true, "trigger": "500 ms boss sweep or roster callback", "filter": "boss1 through boss6", "cost": "12 calls per second in periodic sweeps", "fanout": "gates GetUnitPower", "projection": "boss-health decision", "value": "bounded roster presence", "rationale": "avoids invalid power reads", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "GetUnitPower", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true, "trigger": "each existing boss in 500 ms sweep", "filter": "health power for boss1 through boss6", "cost": "up to 12 calls per second", "fanout": "projection only when three-value signature changes", "projection": "boss-health", "value": "boss health timeline", "rationale": "bounded polling supplies unavailable callback values", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "GetFramerate", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true, "trigger": "one-second sample", "filter": "active capture", "cost": "one call per second", "fanout": "one performance projection with latency", "projection": "performance", "value": "client performance context", "rationale": "bounded low-rate context", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "GetLatency", "kind": "api-sample", "source_version": 1, "retain_all_scalar_values": true, "trigger": "after one-second frame sample", "filter": "active capture", "cost": "one call per second", "fanout": "paired with frame sample", "projection": "performance", "value": "network context", "rationale": "separates network and frame conditions", "evidence": "eso-api-live and eso-api-pts", "test": "tests/encounter_addon.rs"},
+    {"id": "capture-finish", "kind": "lifecycle", "source_version": 1, "retain_all_scalar_values": true, "trigger": "exactly once on terminal capture", "filter": "terminal reserve", "cost": "one observation", "fanout": "encounter-end and optional discontinuity", "projection": "encounter-end", "value": "terminal truth", "rationale": "preserves reason and requested completeness", "evidence": "repository lifecycle contract", "test": "tests/encounter_addon.rs"},
+    {"id": "clock-reset", "kind": "lifecycle", "source_version": 1, "retain_all_scalar_values": true, "trigger": "raw clock rollback", "filter": "active capture", "cost": "at most one terminal observation", "fanout": "discontinuity and partial terminal", "projection": "discontinuity", "value": "temporal integrity", "rationale": "prevents fabricated monotonic duration", "evidence": "repository lifecycle contract", "test": "tests/encounter_addon.rs"}
   ],
   "event_kinds": [
     {"id": "encounter-start", "raw": true},
