@@ -1,12 +1,13 @@
 local ADDON_NAME = "EsoWeaveData"
 local MODULE_NAMESPACE = ADDON_NAME .. "Encounter"
-local ADDON_VERSION = 2
+local ADDON_VERSION = 3
 local SCHEMA_VERSION = 2
 
 local MAX_EVENTS = 100000
 local MAX_RAW_OBSERVATIONS = 100000
 local MAX_ESTIMATED_BYTES = 33554432
 local MAX_ACTORS = 4096
+local MAX_EXACT_INTEGER = 9007199254740991
 local TERMINAL_EVENT_RESERVE = 2
 local RAW_TERMINAL_RESERVE = 2
 local TERMINAL_BYTE_RESERVE = 4096
@@ -68,6 +69,32 @@ local HEAL_RESULTS = resultSet(
     ACTION_RESULT_HOT_TICK_CRITICAL)
 
 local DEATH_RESULTS = resultSet(ACTION_RESULT_DIED, ACTION_RESULT_DIED_XP)
+
+local function normalizationProfile(apiVersion)
+    return {
+        version = 1,
+        api_version = apiVersion,
+        player_combat_unit_type = COMBAT_UNIT_TYPE_PLAYER,
+        health_power_type = POWERTYPE_HEALTH,
+        quickslot_category = HOTBAR_CATEGORY_QUICKSLOT_WHEEL,
+        damage_results = {
+            ACTION_RESULT_DAMAGE,
+            ACTION_RESULT_CRITICAL_DAMAGE,
+            ACTION_RESULT_DOT_TICK,
+            ACTION_RESULT_DOT_TICK_CRITICAL,
+            ACTION_RESULT_BLOCKED_DAMAGE,
+            ACTION_RESULT_DAMAGE_SHIELDED,
+        },
+        healing_results = {
+            ACTION_RESULT_HEAL,
+            ACTION_RESULT_CRITICAL_HEAL,
+            ACTION_RESULT_HOT_TICK,
+            ACTION_RESULT_HOT_TICK_CRITICAL,
+        },
+        death_results = { ACTION_RESULT_DIED, ACTION_RESULT_DIED_XP },
+        resurrect_result = ACTION_RESULT_RESURRECT,
+    }
+end
 
 local function message(text)
     d("[ESO Weave Encounter] " .. text)
@@ -431,8 +458,11 @@ local function actorForKey(key)
 end
 
 local function actorForUnitId(unitId)
-    if type(unitId) ~= "number" or unitId <= 0 then return 0 end
-    return actorForKey("unit:" .. tostring(unitId))
+    if type(unitId) ~= "number" or unitId <= 0
+        or unitId > MAX_EXACT_INTEGER or unitId ~= math.floor(unitId) then
+        return 0
+    end
+    return actorForKey("unit:" .. string.format("%.0f", unitId))
 end
 
 local function actorForUnitTag(unitTag)
@@ -781,6 +811,7 @@ local function beginCapture(...)
                 32,
                 "pc"),
         },
+        normalization_profile = normalizationProfile(apiVersion),
         session_id = sessionId,
         encounter_id = encounterId,
         started_at = stamp,
@@ -994,6 +1025,23 @@ local function onLoaded(_, addonName)
         EsoWeaveDataSaved.encounter.channel = channel
         EsoWeaveDataSaved.encounter.wait_for_clean_boundary = waitForCleanBoundary
     elseif saved.schema_version == 1 and saved.addon_version == 1
+        and saved.status == "idle" then
+        EsoWeaveDataSaved.encounter = emptySaved()
+    elseif saved.schema_version == 2 and saved.addon_version == 2
+        and (saved.status == "complete" or saved.status == "partial") then
+        -- Terminal pre-profile v2 evidence remains byte-for-byte user-owned.
+    elseif saved.schema_version == 2 and saved.addon_version == 2
+        and saved.status == "capturing" then
+        recoverInterruptedSavedCapture()
+    elseif saved.schema_version == 2 and saved.addon_version == 2
+        and saved.status == "armed" then
+        local channel = saved.channel
+        local waitForCleanBoundary = saved.wait_for_clean_boundary == true
+        EsoWeaveDataSaved.encounter = emptySaved()
+        EsoWeaveDataSaved.encounter.status = "armed"
+        EsoWeaveDataSaved.encounter.channel = channel
+        EsoWeaveDataSaved.encounter.wait_for_clean_boundary = waitForCleanBoundary
+    elseif saved.schema_version == 2 and saved.addon_version == 2
         and saved.status == "idle" then
         EsoWeaveDataSaved.encounter = emptySaved()
     elseif saved.schema_version ~= SCHEMA_VERSION

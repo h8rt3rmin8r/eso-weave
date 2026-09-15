@@ -10,6 +10,8 @@ review prompts.
 S094 replaces privacy-minimized raw capture with a lossless authority for the
 sources already selected by ESO Weave Data while retaining the normalized metric
 surface as a compatibility projection.
+S095 completes the source decision audit and independently replays complete
+addon-v3 schema-v2 captures before their compatibility projection can be stored.
 
 The machine-readable authority is
 [`docs/project/encounter-model.json`](https://github.com/h8rt3rmin8r/eso-weave/blob/main/docs/project/encounter-model.json).
@@ -36,7 +38,7 @@ terminal contract, and never executes Lua.
 Accepted observations become deterministic compact JSON and receive separate
 source-byte and canonical-content SHA-256 hashes. The canonical bytes enter a
 caller-selected `encounters.sqlite`, not `catalog.sqlite` or the settings file.
-Store schema v2 holds capture schemas 1 and 2 with a per-row canonical format.
+Store schema v3 holds capture schemas 1 and 2 with a per-row canonical format.
 Transactional migration copies legacy schema-v1 blobs and hashes byte-for-byte.
 Raw records cannot be updated, exact canonical reimports are idempotent, and
 changed content under an existing session and encounter identity is rejected.
@@ -106,6 +108,21 @@ Every callback scalar and future scalar argument is retained in positional tagge
 form. API reads retain ordered inputs and outputs. Executed Lua 5.1 tests prove
 this repository contract. Live event completeness and same-parse parity remain
 issues #129 and #131.
+
+Current addon-v3 captures carry normalization profile version 1. It supplies the
+runtime numeric constants needed to classify combat results and validate boss and
+quickslot API inputs without hard-coding undocumented engine values. Pure Rust
+replay uses only the validated profile and raw observations. It reconstructs
+actor interning, rounding, state changes, API batches, source links, and
+projection ordinals, then compares the complete ordered compatibility stream.
+A mismatch rejects import before immutable storage. Raw loss is indeterminate;
+schema-v1 and addon-v2 history is replay-unavailable but remains compatible.
+
+The S095 decision matrix retains the S094 source set. It explicitly excludes
+zone and duel boundaries, group roster snapshots, full hotbar/loadout events,
+inventory-use events, alternate resurrection families, periodic player/group
+stat fanout, and unit-buff polling until a measured bounded use case justifies
+their cost and additional retained identity.
 
 ## Raw events and catalog knowledge
 

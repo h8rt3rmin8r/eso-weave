@@ -3,6 +3,7 @@
 mod history;
 mod metrics;
 mod model;
+mod replay;
 mod store;
 mod validate;
 
@@ -24,13 +25,15 @@ pub use metrics::{
 };
 pub use model::{
     BackupReceipt, CaptureStatus, DeleteReceipt, EncounterCapture, EncounterEvent,
-    EncounterSummary, ImportOutcome, ImportReceipt, PartialReason, PayloadValue, RawLoss,
-    RawLossReason, RawObservation, RawSourceKind, RawValue, RawValueType, SourceProvenance,
+    EncounterSummary, ImportOutcome, ImportReceipt, NormalizationProfile, PartialReason,
+    PayloadValue, RawLoss, RawLossReason, RawObservation, RawSourceKind, RawValue, RawValueType,
+    SourceProvenance,
 };
+pub use replay::{assess_replay, ReplayAssessment};
 pub use store::{backup_store, delete_all, delete_encounter, list_encounters, load_encounter};
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
-pub const STORE_SCHEMA_VERSION: u32 = 2;
+pub const STORE_SCHEMA_VERSION: u32 = 3;
 pub const CANONICAL_FORMAT_VERSION: u32 = 2;
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;
@@ -131,6 +134,7 @@ pub fn parse_capture(
         ));
     }
     validate::validate(&capture)?;
+    replay::enforce(&capture)?;
     Ok(capture)
 }
 
@@ -153,6 +157,7 @@ fn normalize_empty_raw_value_arrays(value: &mut serde_json::Value) {
 
 pub fn canonical_bytes(capture: &EncounterCapture) -> Result<Vec<u8>, EncounterError> {
     validate::validate(capture)?;
+    replay::enforce(capture)?;
     serde_json::to_vec(capture)
         .map_err(|error| EncounterError::Validation(format!("canonicalization failed: {error}")))
 }

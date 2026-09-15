@@ -166,6 +166,20 @@ pub struct RawLoss {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct NormalizationProfile {
+    pub version: u32,
+    pub api_version: u32,
+    pub player_combat_unit_type: i64,
+    pub health_power_type: i64,
+    pub quickslot_category: i64,
+    pub damage_results: Vec<i64>,
+    pub healing_results: Vec<i64>,
+    pub death_results: Vec<i64>,
+    pub resurrect_result: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EncounterCapture {
     pub schema_version: u32,
     pub addon_version: u32,
@@ -174,6 +188,8 @@ pub struct EncounterCapture {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub privacy_profile: Option<String>,
     pub source: SourceProvenance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalization_profile: Option<NormalizationProfile>,
     pub session_id: String,
     pub encounter_id: String,
     pub started_at: String,

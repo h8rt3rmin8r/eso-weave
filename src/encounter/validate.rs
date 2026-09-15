@@ -31,9 +31,16 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
             }
             validate_legacy_raw_absence(capture)?;
         }
-        2 if capture.addon_version == 2 => {
+        2 if matches!(capture.addon_version, 2 | 3) => {
             if capture.privacy_profile.is_some() {
                 return invalid("lossless encounter capture cannot declare a privacy profile");
+            }
+            match (capture.addon_version, &capture.normalization_profile) {
+                (2, None) => {}
+                (3, Some(profile)) => validate_normalization_profile(capture, profile)?,
+                _ => {
+                    return invalid("encounter normalization profile does not match addon version")
+                }
             }
             validate_raw_capture(capture)?;
         }
@@ -186,7 +193,8 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
 }
 
 fn validate_legacy_raw_absence(capture: &EncounterCapture) -> Result<(), EncounterError> {
-    if capture.raw_first_sequence.is_some()
+    if capture.normalization_profile.is_some()
+        || capture.raw_first_sequence.is_some()
         || capture.raw_last_sequence.is_some()
         || capture.raw_observation_count.is_some()
         || capture.raw_omitted_observation_count.is_some()
@@ -198,6 +206,44 @@ fn validate_legacy_raw_absence(capture: &EncounterCapture) -> Result<(), Encount
             .any(|event| event.source_sequence.is_some() || event.projection_ordinal.is_some())
     {
         return invalid("legacy encounter capture contains v2 raw fields");
+    }
+    Ok(())
+}
+
+fn validate_normalization_profile(
+    capture: &EncounterCapture,
+    profile: &super::model::NormalizationProfile,
+) -> Result<(), EncounterError> {
+    const MAX_EXACT_INTEGER: i64 = 9_007_199_254_740_991;
+    if profile.version != 1
+        || profile.api_version != capture.source.api_version
+        || profile.damage_results.len() != 6
+        || profile.healing_results.len() != 4
+        || profile.death_results.len() != 2
+        || [
+            profile.player_combat_unit_type,
+            profile.health_power_type,
+            profile.quickslot_category,
+        ]
+        .iter()
+        .any(|value| value.unsigned_abs() > MAX_EXACT_INTEGER as u64)
+    {
+        return invalid("encounter normalization profile is unsupported");
+    }
+    let mut classified = BTreeSet::new();
+    for value in profile
+        .damage_results
+        .iter()
+        .chain(&profile.healing_results)
+        .chain(&profile.death_results)
+        .chain(std::iter::once(&profile.resurrect_result))
+    {
+        if value.unsigned_abs() > MAX_EXACT_INTEGER as u64 {
+            return invalid("encounter normalization profile value is out of range");
+        }
+        if !classified.insert(*value) {
+            return invalid("encounter normalization profile classifications overlap");
+        }
     }
     Ok(())
 }
