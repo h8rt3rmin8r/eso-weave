@@ -1,28 +1,234 @@
 //! Decoder and state-machine tests for the Pixel Bus Reader.
 
 use eso_weave::config::NoticeKind;
+use eso_weave::input::native::{
+    KeyboardControl, ModifierSet, MouseControl, NativeAction, NativeBindingSet, NativeBindingState,
+    NativeChord, NativeControl,
+};
 use eso_weave::pixelbus::{
     apply_live_reader_update, block_center, capture_dims, decode_combat, decode_cooldown,
     decode_latency, decode_layout_header, decode_life_state, decode_menu, decode_movement,
-    decode_quickslot, decode_resource, decode_resources, decode_roll_dodge, decode_travel_state,
-    decode_ultimate, decode_weapon_bar, decode_world_state, fishing_signal, grid_extent,
-    grid_position, grid_rows, layout_header_colors, load_reader_config, poll_interval,
-    sanitize_block_px, status_present, store_reader_config, strip_pixel, wait_for_live_config,
-    ActiveBar, BlockSamples, BusLayout, CombatSignal, CooldownSet, FishingSignal, LayoutFailure,
+    decode_native_binding_cell, decode_native_bindings, decode_quickslot, decode_resource,
+    decode_resources, decode_roll_dodge, decode_travel_state, decode_ultimate, decode_weapon_bar,
+    decode_world_state, encode_native_binding_cell, fishing_signal, grid_extent, grid_position,
+    grid_rows, layout_header_colors, load_reader_config, poll_interval, sanitize_block_px,
+    status_present, store_reader_config, strip_pixel, wait_for_live_config, ActiveBar,
+    BlockSamples, BusLayout, CombatSignal, CooldownSet, FishingSignal, LayoutFailure,
     LayoutHeaderSamples, LayoutMode, LayoutState, LifeState, LiveReaderConfig,
     LiveReaderConfigWait, MenuSurface, MockSampler, MovementSignal, PixelBusEvent, PixelBusReader,
     QuickslotClassification, QuickslotNonPotionKind, QuickslotPotionAvailability, QuickslotState,
     QuickslotUnavailableReason, ReaderConfig, RecoveryPath, ResourceLevel, ResourceSet, Rgb,
     RollDodgeState, Size, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue,
     WeaponBarSignal, WeaponClass, WorldState, BLOCK_CENTER_GREENS, COLUMNS, DEFAULT_BLOCK_PX,
-    LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE, LAYOUT_VERSION_FOUR_BLOCKS,
-    LAYOUT_VERSION_FOUR_CODE, LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE,
-    LAYOUT_VERSION_THREE_BLOCKS, LAYOUT_VERSION_THREE_CODE, LAYOUT_VERSION_TWO_BLOCKS,
-    LAYOUT_VERSION_TWO_CODE, MAX_BLOCK_PX, MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS,
-    ULTIMATE_BACK_HIGH_MARKER, ULTIMATE_BACK_LOW_MARKER, ULTIMATE_CURRENT_HIGH_MARKER,
-    ULTIMATE_CURRENT_LOW_MARKER, ULTIMATE_FRONT_HIGH_MARKER, ULTIMATE_FRONT_LOW_MARKER,
-    ULTIMATE_MAX_HIGH_MARKER, ULTIMATE_MAX_LOW_MARKER,
+    LAYOUT_HEADER_BLOCKS, LAYOUT_PROTOCOL_VERSION, LAYOUT_VERSION_CODE, LAYOUT_VERSION_FIVE_BLOCKS,
+    LAYOUT_VERSION_FIVE_CODE, LAYOUT_VERSION_FOUR_BLOCKS, LAYOUT_VERSION_FOUR_CODE,
+    LAYOUT_VERSION_ONE_BLOCKS, LAYOUT_VERSION_ONE_CODE, LAYOUT_VERSION_THREE_BLOCKS,
+    LAYOUT_VERSION_THREE_CODE, LAYOUT_VERSION_TWO_BLOCKS, LAYOUT_VERSION_TWO_CODE, MAX_BLOCK_PX,
+    MAX_LAYOUT_TOLERANCE, MIN_BLOCK_PX, NUM_BLOCKS, ULTIMATE_BACK_HIGH_MARKER,
+    ULTIMATE_BACK_LOW_MARKER, ULTIMATE_CURRENT_HIGH_MARKER, ULTIMATE_CURRENT_LOW_MARKER,
+    ULTIMATE_FRONT_HIGH_MARKER, ULTIMATE_FRONT_LOW_MARKER, ULTIMATE_MAX_HIGH_MARKER,
+    ULTIMATE_MAX_LOW_MARKER,
 };
+
+#[test]
+fn native_binding_cells_round_trip_every_control_and_modifier_mask() {
+    let controls = KeyboardControl::ALL
+        .into_iter()
+        .map(NativeControl::Keyboard)
+        .chain(MouseControl::ALL.into_iter().map(NativeControl::Mouse));
+    for (action, control, bits) in NativeAction::ALL
+        .into_iter()
+        .flat_map(|action| controls.clone().map(move |control| (action, control)))
+        .flat_map(|(action, control)| (0..=0x0F).map(move |bits| (action, control, bits)))
+    {
+        let state = NativeBindingState::Valid(NativeChord {
+            primary: control,
+            modifiers: ModifierSet::from_bits(bits).unwrap(),
+        });
+        let cell = encode_native_binding_cell(action, state);
+        assert_eq!(decode_native_binding_cell(action, cell, 2), state);
+    }
+}
+
+#[test]
+fn native_binding_reserved_states_round_trip_without_modifiers() {
+    for action in NativeAction::ALL {
+        for state in [
+            NativeBindingState::Unavailable,
+            NativeBindingState::Unbound,
+            NativeBindingState::Conflicting,
+            NativeBindingState::Unsupported,
+        ] {
+            let cell = encode_native_binding_cell(action, state);
+            assert_eq!(decode_native_binding_cell(action, cell, 2), state);
+            assert_eq!(cell.b >> 4, 0);
+        }
+    }
+}
+
+#[test]
+fn native_binding_cells_fail_closed_on_malformed_or_transposed_evidence() {
+    let state = NativeBindingState::Valid(NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::Q),
+        modifiers: ModifierSet::ALT,
+    });
+    let cell = encode_native_binding_cell(NativeAction::Skill1, state);
+    assert_eq!(
+        decode_native_binding_cell(NativeAction::Skill2, cell, 2),
+        NativeBindingState::Unavailable
+    );
+    for malformed in [
+        Rgb::new(cell.r.saturating_add(8), cell.g, cell.b),
+        Rgb::new(cell.r, cell.g.saturating_add(8), cell.b),
+        Rgb::new(cell.r, cell.g, cell.b.wrapping_add(1)),
+        Rgb::new(0x00, 0x44, 0x00),
+    ] {
+        assert_eq!(
+            decode_native_binding_cell(NativeAction::Skill1, malformed, 2),
+            NativeBindingState::Unavailable
+        );
+    }
+}
+
+#[test]
+fn native_binding_set_decodes_independently() {
+    let mut samples = [None; NativeAction::COUNT];
+    samples[NativeAction::Attack.index()] = Some(encode_native_binding_cell(
+        NativeAction::Attack,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Left),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    ));
+    samples[NativeAction::Block.index()] = Some(Rgb::new(1, 2, 3));
+    let set = decode_native_bindings(samples, 2);
+    assert!(matches!(
+        set.get(NativeAction::Attack),
+        NativeBindingState::Valid(_)
+    ));
+    assert_eq!(
+        set.get(NativeAction::Block),
+        NativeBindingState::Unavailable
+    );
+    assert_eq!(
+        set.get(NativeAction::Interact),
+        NativeBindingState::Unavailable
+    );
+}
+
+#[test]
+fn negotiated_version_five_stays_frozen_without_binding_support() {
+    let columns = 120;
+    let mut colors = layout_header_colors(columns).unwrap();
+    colors[0].b = LAYOUT_VERSION_FIVE_CODE;
+    let LayoutState::Ready(layout) = decode_layout_header(
+        LayoutHeaderSamples::from(colors),
+        ReaderConfig::default().tolerance,
+        DEFAULT_BLOCK_PX,
+        None,
+    ) else {
+        panic!("version 5 layout should remain readable");
+    };
+    assert_eq!(layout.payload_blocks(), LAYOUT_VERSION_FIVE_BLOCKS);
+    assert!(layout.supports_ultimate());
+    assert!(!layout.supports_native_bindings());
+    assert!(BusLayout::negotiated(columns)
+        .unwrap()
+        .supports_native_bindings());
+}
+
+#[test]
+fn version_five_never_samples_a_screen_pixel_as_native_binding_evidence() {
+    let config = ReaderConfig::default();
+    let columns = 120;
+    let current = BusLayout::negotiated(columns).unwrap();
+    let mut sampler = MockSampler::new();
+    let mut header = layout_header_colors(columns).unwrap();
+    header[0].b = LAYOUT_VERSION_FIVE_CODE;
+    for (index, color) in header.into_iter().enumerate() {
+        let point = current.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = current.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, Rgb::new(0xFF, 0x00, 0xFF));
+    let binding = current.payload_point(config.block_px, 29);
+    sampler.set(
+        binding.0,
+        binding.1,
+        encode_native_binding_cell(
+            NativeAction::Skill1,
+            NativeBindingState::Valid(NativeChord {
+                primary: NativeControl::Keyboard(KeyboardControl::Digit1),
+                modifiers: ModifierSet::EMPTY,
+            }),
+        ),
+    );
+
+    let mut reader = PixelBusReader::new(config);
+    reader.sample_and_observe(&sampler, 0);
+    assert_eq!(
+        reader.native_bindings(),
+        NativeBindingSet::new_unavailable()
+    );
+}
+
+#[test]
+fn version_six_samples_native_binding_cells() {
+    let config = ReaderConfig::default();
+    let columns = 120;
+    let layout = BusLayout::negotiated(columns).unwrap();
+    let mut sampler = MockSampler::new();
+    for (index, color) in layout_header_colors(columns)
+        .unwrap()
+        .into_iter()
+        .enumerate()
+    {
+        let point = layout.cell_point(config.block_px, index as u32);
+        sampler.set(point.0, point.1, color);
+    }
+    let status = layout.payload_point(config.block_px, 0);
+    sampler.set(status.0, status.1, Rgb::new(0xFF, 0x00, 0xFF));
+    let expected = NativeBindingState::Valid(NativeChord {
+        primary: NativeControl::Mouse(MouseControl::Left),
+        modifiers: ModifierSet::ALT,
+    });
+    let binding = layout.payload_point(config.block_px, 29);
+    sampler.set(
+        binding.0,
+        binding.1,
+        encode_native_binding_cell(NativeAction::Skill1, expected),
+    );
+
+    let mut reader = PixelBusReader::new(config);
+    let events = reader.sample_and_observe(&sampler, 0);
+    assert_eq!(reader.native_bindings().get(NativeAction::Skill1), expected);
+    assert!(events.contains(&PixelBusEvent::Bindings(reader.native_bindings())));
+}
+
+#[test]
+fn reader_publishes_and_clears_one_native_binding_snapshot() {
+    let mut reader = PixelBusReader::new(ReaderConfig::default());
+    let expected = NativeBindingState::Valid(NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::Digit1),
+        modifiers: ModifierSet::SHIFT,
+    });
+    let mut bindings = [None; NativeAction::COUNT];
+    bindings[0] = Some(encode_native_binding_cell(NativeAction::Skill1, expected));
+    let first = reader.observe(
+        BlockSamples {
+            status: Some(Rgb::new(0xFF, 0x00, 0xFF)),
+            native_bindings: bindings,
+            ..Default::default()
+        },
+        0,
+    );
+    assert_eq!(reader.native_bindings().get(NativeAction::Skill1), expected);
+    assert!(first.contains(&PixelBusEvent::Bindings(reader.native_bindings())));
+
+    let lost = reader.observe(BlockSamples::default(), 5_001);
+    assert!(lost.contains(&PixelBusEvent::SignalLost));
+    assert!(lost.contains(&PixelBusEvent::Bindings(NativeBindingSet::new_unavailable())));
+}
 
 #[test]
 fn negotiated_header_round_trips_boundaries_and_checksums() {
@@ -116,7 +322,7 @@ fn negotiated_version_four_geometry_stays_frozen_without_ultimate_support() {
     };
     assert_eq!(layout.payload_blocks(), LAYOUT_VERSION_FOUR_BLOCKS);
     assert!(!layout.supports_ultimate());
-    assert_eq!(BusLayout::negotiated(columns).unwrap().payload_blocks(), 29);
+    assert_eq!(BusLayout::negotiated(columns).unwrap().payload_blocks(), 40);
     assert!(BusLayout::negotiated(columns).unwrap().supports_ultimate());
 }
 
@@ -260,12 +466,12 @@ fn negotiated_payload_points_are_unique_and_inside_every_tested_extent() {
 }
 
 #[test]
-fn every_supported_size_keeps_current_payload_on_one_row_at_minimum_width() {
+fn every_supported_size_keeps_current_payload_within_two_rows_at_minimum_width() {
     for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 24, MAX_BLOCK_PX] {
         let columns = NARROWEST_CLIENT_WIDTH / block_px;
         let layout = BusLayout::negotiated(columns).unwrap();
-        assert!(columns >= LAYOUT_HEADER_BLOCKS + NUM_BLOCKS);
-        assert_eq!(layout.rows(), 1);
+        assert!(layout.extent(block_px).width <= NARROWEST_CLIENT_WIDTH);
+        assert!(layout.rows() <= 2);
     }
 }
 
@@ -301,7 +507,7 @@ fn invalid_block_size_and_short_surface_are_rejected() {
             Some(Size::new(48, 127))
         ),
         LayoutState::Unavailable(LayoutFailure::ExtentExceedsSurface {
-            extent: Size::new(48, 176),
+            extent: Size::new(48, 240),
             surface: Size::new(48, 127),
         })
     );
@@ -632,6 +838,7 @@ fn tolerance_update_invalidates_every_cached_safety_observation_before_resamplin
             PixelBusEvent::RollDodge(RollDodgeState::Unknown),
             PixelBusEvent::Travel(TravelState::Unknown),
             PixelBusEvent::FishingStopped,
+            PixelBusEvent::Bindings(NativeBindingSet::new_unavailable()),
         ])
     );
 
@@ -1129,7 +1336,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (11, 3),
                 (13, 3),
             ],
-            (32u32, 4u32),
+            (32u32, 6u32),
         ),
         (
             4,
@@ -1159,7 +1366,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (22, 6),
                 (26, 6),
             ],
-            (64, 8),
+            (64, 12),
         ),
         (
             8,
@@ -1189,7 +1396,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (44, 12),
                 (52, 12),
             ],
-            (128, 16),
+            (128, 24),
         ),
         (
             16,
@@ -1219,7 +1426,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (88, 24),
                 (104, 24),
             ],
-            (256, 32),
+            (256, 48),
         ),
         (
             32,
@@ -1249,7 +1456,7 @@ fn block_center_and_capture_dims_match_contract_table() {
                 (176, 48),
                 (208, 48),
             ],
-            (512, 64),
+            (512, 96),
         ),
     ];
     for (block_px, centers, cap) in cases {
@@ -1266,7 +1473,7 @@ fn block_center_and_capture_dims_match_contract_table() {
             "capture dims block_px {block_px}"
         );
     }
-    assert_eq!(NUM_BLOCKS, 29);
+    assert_eq!(NUM_BLOCKS, 40);
     assert_eq!(DEFAULT_BLOCK_PX, 16);
 }
 
@@ -2110,14 +2317,15 @@ fn grid_position_wraps_column_then_row() {
     assert_eq!(grid_position(3, 4), (3, 0));
     assert_eq!(grid_position(4, 4), (0, 1));
     assert_eq!(grid_position(9, 4), (1, 2));
-    // The shipped count, which since slice 038 spans two rows. Row 0 holds the
-    // first COLUMNS blocks at their own index; row 1 holds the rest, restarting
-    // the column at zero.
+    // The shipped count now spans three rows in the frozen public helper.
     for index in 0..COLUMNS {
         assert_eq!(grid_position(index, COLUMNS), (index, 0));
     }
     for index in COLUMNS..NUM_BLOCKS {
-        assert_eq!(grid_position(index, COLUMNS), (index - COLUMNS, 1));
+        assert_eq!(
+            grid_position(index, COLUMNS),
+            (index % COLUMNS, index / COLUMNS)
+        );
     }
     // A single column degenerates to one block per row.
     for index in 0..5 {
@@ -2265,28 +2473,28 @@ fn every_legacy_row_zero_block_sits_exactly_where_the_strip_put_it() {
         }
         for index in COLUMNS..NUM_BLOCKS {
             let wrapped = (
-                block_px * (index - COLUMNS) + block_px / 2,
-                block_px + block_px / 2,
+                block_px * (index % COLUMNS) + block_px / 2,
+                block_px * (index / COLUMNS) + block_px / 2,
             );
             assert_eq!(
                 block_center(block_px, index),
                 wrapped,
-                "block_px {block_px} index {index} is not on row 1 where it belongs"
+                "block_px {block_px} index {index} is not on its wrapped row"
             );
         }
     }
 }
 
 #[test]
-fn the_legacy_captured_region_is_one_full_row_wide_and_two_rows_tall() {
+fn the_legacy_captured_region_is_one_full_row_wide_and_three_rows_tall() {
     // Slice 038 crossed the boundary, so the region is no longer the strip's.
     // Spelled out as arithmetic rather than as a call to capture_dims's own
     // helper, so the test and the code cannot drift together.
     for block_px in [MIN_BLOCK_PX, 4, 8, DEFAULT_BLOCK_PX, 30, MAX_BLOCK_PX] {
-        let two_rows = (block_px * COLUMNS, block_px * 2);
+        let three_rows = (block_px * COLUMNS, block_px * 3);
         assert_eq!(
             capture_dims(block_px),
-            two_rows,
+            three_rows,
             "capture region wrong at block_px {block_px}"
         );
     }
@@ -2357,22 +2565,22 @@ fn legacy_block_center_wraps_past_the_first_row() {
 // It is replaced rather than relaxed. A looser bound would be a guard that no
 // longer states anything true about what ships, and deleting it would discard the
 // only automatic warning that the grid's shape has changed. What follows is just
-// as specific about two rows as its predecessor was about one, and calls
+// as specific about three rows as its predecessor was about one, and calls
 // grid_rows rather than open-coding the arithmetic, so the assertion and the
 // function cannot drift into agreeing on something wrong.
 //
-// The slice that adds the twenty-first block will be told by the third one.
+// S100 crosses onto a third row in the frozen public legacy helper geometry.
 const _: () = assert!(
-    grid_rows(NUM_BLOCKS, COLUMNS) == 2,
-    "the capture region is exactly two rows tall at the shipped block count"
+    grid_rows(NUM_BLOCKS, COLUMNS) == 3,
+    "the capture region is exactly three rows tall at the shipped block count"
 );
 const _: () = assert!(
-    NUM_BLOCKS > COLUMNS,
-    "the grid has crossed onto a second row, so the first row is full"
+    NUM_BLOCKS > COLUMNS * 2,
+    "the grid has crossed onto a third row, so the first two rows are full"
 );
 const _: () = assert!(
-    NUM_BLOCKS < COLUMNS * 2,
-    "the last row is partially filled; a third row needs these assertions rewritten"
+    NUM_BLOCKS < COLUMNS * 3,
+    "the last row is partially filled; a fourth row needs these assertions rewritten"
 );
 
 /// The movement block color for a code, mirroring the addon encoder: the code in
@@ -3171,7 +3379,7 @@ fn negotiated_version_four_keeps_25_blocks_and_never_samples_ultimate() {
 }
 
 #[test]
-fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
+fn the_legacy_capture_region_is_three_rows_after_s100() {
     // The parametric half is unchanged and still true: the region is one row for
     // any count up to COLUMNS, and the first block past it starts a second row.
     // That was the general statement before any count reached it.
@@ -3194,14 +3402,14 @@ fn the_legacy_capture_region_is_two_rows_after_the_count_crossed() {
     // statement above and the shipped grid are describing the same thing. That the
     // count exceeds the column count is asserted at compile time further up rather
     // than here, where every operand is a constant.
-    assert_eq!(grid_rows(NUM_BLOCKS, COLUMNS), 2);
-    assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 2));
+    assert_eq!(grid_rows(NUM_BLOCKS, COLUMNS), 3);
+    assert_eq!(capture_dims(block_px), (block_px * COLUMNS, block_px * 3));
 
-    // The shape in full: a full first row, thirteen blocks on the second.
+    // The shape in full: two full rows and eight blocks on the third.
     assert_eq!(
-        NUM_BLOCKS - COLUMNS,
-        13,
-        "row 1 should hold thirteen blocks"
+        NUM_BLOCKS - COLUMNS * 2,
+        8,
+        "row 2 should hold eight blocks"
     );
 }
 

@@ -29,6 +29,9 @@ use std::time::Duration;
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
+use crate::input::native::{
+    ModifierSet, NativeAction, NativeBindingSet, NativeBindingState, NativeChord, NativeControl,
+};
 
 /// A red-green-blue color triple sampled from a beacon point.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -810,6 +813,8 @@ pub enum PixelBusEvent {
     /// swap moves the identity and the cooldown in the same sample and four
     /// events for one swap would be four log entries for one thing happening.
     Quickslot(QuickslotState),
+    /// A change in the complete read-only native ESO binding snapshot.
+    Bindings(NativeBindingSet),
     /// A change in authoritative player life state. Unknown covers unavailable
     /// and invalid evidence and therefore keeps every synthesis path closed.
     Life(LifeState),
@@ -892,6 +897,8 @@ pub struct BlockSamples {
     pub ultimate_front_cost: Option<Rgb>,
     /// B28, exact back-bar Ultimate cost.
     pub ultimate_back_cost: Option<Rgb>,
+    /// B29 through B39, native binding evidence in [`NativeAction`] order.
+    pub native_bindings: [Option<Rgb>; NativeAction::COUNT],
 }
 
 /// The surface sampling seam: reads one client-area pixel.
@@ -1012,11 +1019,10 @@ impl SurfaceSampler for MockSampler {
 /// a matter of raising this value, adding a sample point, and adding a field to
 /// [`BlockSamples`].
 ///
-/// In the version-21 addon, the 29 blocks follow three negotiated header cells
-/// and remain on one row at every supported client width and block size. In the
-/// explicit legacy layout they retain the two-row 16-column shape introduced by
-/// slices 038 and 042.
-pub const NUM_BLOCKS: u32 = 29;
+/// In the version-22 addon, 40 blocks follow three negotiated header cells and
+/// wrap according to the published live column count. Frozen negotiated versions
+/// retain their historical payload counts.
+pub const NUM_BLOCKS: u32 = 40;
 /// The default block edge length in physical pixels (the historical value; a
 /// fresh or unchanged install behaves exactly as before).
 pub const DEFAULT_BLOCK_PX: u32 = 16;
@@ -1036,10 +1042,10 @@ pub const COLUMNS: u32 = 16;
 /// identified by its legacy heartbeat at cell zero.
 pub const LEGACY_COLUMNS: u32 = COLUMNS;
 
-/// Current negotiated geometry header version. Version 5 identifies B25-B28.
-pub const LAYOUT_PROTOCOL_VERSION: u8 = 5;
-/// Spaced blue-channel wire code representing current protocol version 5.
-pub const LAYOUT_VERSION_CODE: u8 = 0xA0;
+/// Current negotiated geometry header version. Version 6 identifies B29-B39.
+pub const LAYOUT_PROTOCOL_VERSION: u8 = 6;
+/// Spaced blue-channel wire code representing current protocol version 6.
+pub const LAYOUT_VERSION_CODE: u8 = 0xC0;
 /// Frozen blue-channel wire code for negotiated protocol version 1.
 pub const LAYOUT_VERSION_ONE_CODE: u8 = 0x20;
 /// Payload count of negotiated protocol version 1 (addon versions 14 and 15).
@@ -1056,6 +1062,10 @@ pub const LAYOUT_VERSION_THREE_BLOCKS: u32 = 24;
 pub const LAYOUT_VERSION_FOUR_CODE: u8 = 0x80;
 /// Payload count of negotiated protocol version 4 (addon version 18 and 19).
 pub const LAYOUT_VERSION_FOUR_BLOCKS: u32 = 25;
+/// Frozen blue-channel wire code for negotiated protocol version 5.
+pub const LAYOUT_VERSION_FIVE_CODE: u8 = 0xA0;
+/// Payload count of negotiated protocol version 5 (addon versions 20 and 21).
+pub const LAYOUT_VERSION_FIVE_BLOCKS: u32 = 29;
 /// Maximum tolerance accepted for geometry metadata.
 ///
 /// This remains below half the 0x20 version-code spacing so a caller's broad
@@ -1129,7 +1139,9 @@ impl BusLayout {
             LayoutMode::Negotiated { version: 2 } => LAYOUT_VERSION_TWO_BLOCKS,
             LayoutMode::Negotiated { version: 3 } => LAYOUT_VERSION_THREE_BLOCKS,
             LayoutMode::Negotiated { version: 4 } => LAYOUT_VERSION_FOUR_BLOCKS,
-            LayoutMode::Legacy | LayoutMode::Negotiated { .. } => NUM_BLOCKS,
+            LayoutMode::Negotiated { version: 5 } => LAYOUT_VERSION_FIVE_BLOCKS,
+            LayoutMode::Legacy => LAYOUT_VERSION_ONE_BLOCKS,
+            LayoutMode::Negotiated { .. } => NUM_BLOCKS,
         }
     }
 
@@ -1151,6 +1163,11 @@ impl BusLayout {
     /// Whether this geometry generation positively identifies B25 through B28.
     pub const fn supports_ultimate(self) -> bool {
         matches!(self.mode, LayoutMode::Negotiated { version } if version >= 5)
+    }
+
+    /// Whether this geometry generation positively identifies B29 through B39.
+    pub const fn supports_native_bindings(self) -> bool {
+        matches!(self.mode, LayoutMode::Negotiated { version } if version >= 6)
     }
 
     /// Total occupied cells, including the negotiated header when present.
@@ -1637,6 +1654,99 @@ fn within(a: u8, b: u8, tolerance: u8) -> bool {
     a.abs_diff(b) <= tolerance
 }
 
+const BINDING_UNAVAILABLE: u8 = 0x00;
+const BINDING_UNBOUND: u8 = 0x01;
+const BINDING_CONFLICTING: u8 = 0x02;
+const BINDING_UNSUPPORTED: u8 = 0x03;
+const BINDING_FIRST_CONTROL: u8 = 0x10;
+const BINDING_NIBBLE_STEP: u8 = 17;
+const BINDING_MAX_CHANNEL_TOLERANCE: u8 = 7;
+
+const fn native_binding_check(action: NativeAction, code: u8) -> u8 {
+    ((action.index() as u8)
+        .wrapping_mul(5)
+        .wrapping_add(code.wrapping_mul(3))
+        .wrapping_add(7))
+        & 0x0F
+}
+
+/// Builds one exact protocol-6 native binding cell for tests and tooling.
+pub fn encode_native_binding_cell(action: NativeAction, state: NativeBindingState) -> Rgb {
+    let (code, modifiers) = match state {
+        NativeBindingState::Unavailable => (BINDING_UNAVAILABLE, ModifierSet::EMPTY),
+        NativeBindingState::Unbound => (BINDING_UNBOUND, ModifierSet::EMPTY),
+        NativeBindingState::Conflicting => (BINDING_CONFLICTING, ModifierSet::EMPTY),
+        NativeBindingState::Unsupported => (BINDING_UNSUPPORTED, ModifierSet::EMPTY),
+        NativeBindingState::Valid(chord) => (chord.primary.wire_code(), chord.modifiers),
+    };
+    Rgb::new(
+        (code >> 4) * BINDING_NIBBLE_STEP,
+        (code & 0x0F) * BINDING_NIBBLE_STEP,
+        (modifiers.bits() << 4) | native_binding_check(action, code),
+    )
+}
+
+fn decode_binding_nibble(channel: u8, tolerance: u8) -> Option<u8> {
+    let tolerance = tolerance.min(BINDING_MAX_CHANNEL_TOLERANCE);
+    let rounded = ((u16::from(channel) + u16::from(BINDING_NIBBLE_STEP / 2))
+        / u16::from(BINDING_NIBBLE_STEP)) as u8;
+    if rounded <= 0x0F && within(channel, rounded * BINDING_NIBBLE_STEP, tolerance) {
+        Some(rounded)
+    } else {
+        None
+    }
+}
+
+/// Decodes one action-bound protocol-6 RGB cell, failing closed on any mismatch.
+pub fn decode_native_binding_cell(
+    action: NativeAction,
+    sample: Rgb,
+    tolerance: u8,
+) -> NativeBindingState {
+    let Some(high) = decode_binding_nibble(sample.r, tolerance) else {
+        return NativeBindingState::Unavailable;
+    };
+    let Some(low) = decode_binding_nibble(sample.g, tolerance) else {
+        return NativeBindingState::Unavailable;
+    };
+    let code = (high << 4) | low;
+    if sample.b & 0x0F != native_binding_check(action, code) {
+        return NativeBindingState::Unavailable;
+    }
+    let modifier_bits = sample.b >> 4;
+    match code {
+        BINDING_UNAVAILABLE if modifier_bits == 0 => NativeBindingState::Unavailable,
+        BINDING_UNBOUND if modifier_bits == 0 => NativeBindingState::Unbound,
+        BINDING_CONFLICTING if modifier_bits == 0 => NativeBindingState::Conflicting,
+        BINDING_UNSUPPORTED if modifier_bits == 0 => NativeBindingState::Unsupported,
+        BINDING_FIRST_CONTROL..=u8::MAX => {
+            let Some(primary) = NativeControl::from_wire_code(code) else {
+                return NativeBindingState::Unavailable;
+            };
+            let Some(modifiers) = ModifierSet::from_bits(modifier_bits) else {
+                return NativeBindingState::Unavailable;
+            };
+            NativeBindingState::Valid(NativeChord { primary, modifiers })
+        }
+        _ => NativeBindingState::Unavailable,
+    }
+}
+
+/// Decodes the complete fixed-order native binding snapshot independently.
+pub fn decode_native_bindings(
+    samples: [Option<Rgb>; NativeAction::COUNT],
+    tolerance: u8,
+) -> NativeBindingSet {
+    let mut set = NativeBindingSet::new_unavailable();
+    for action in NativeAction::ALL {
+        let state = samples[action.index()].map_or(NativeBindingState::Unavailable, |sample| {
+            decode_native_binding_cell(action, sample, tolerance)
+        });
+        set.set(action, state);
+    }
+    set
+}
+
 /// Whether a sample matches the status block magenta within tolerance.
 pub fn status_present(sample: Rgb, tolerance: u8) -> bool {
     within(sample.r, 0xFF, tolerance)
@@ -1675,6 +1785,8 @@ pub fn decode_layout_header(
     }
     let version = if within(h0.b, LAYOUT_VERSION_CODE, layout_tolerance) {
         LAYOUT_PROTOCOL_VERSION
+    } else if within(h0.b, LAYOUT_VERSION_FIVE_CODE, layout_tolerance) {
+        5
     } else if within(h0.b, LAYOUT_VERSION_FOUR_CODE, layout_tolerance) {
         4
     } else if within(h0.b, LAYOUT_VERSION_TWO_CODE, layout_tolerance) {
@@ -2306,6 +2418,7 @@ pub struct PixelBusReader {
     movement: MovementSignal,
     cooldowns: CooldownSet,
     quickslot: QuickslotState,
+    native_bindings: NativeBindingSet,
     life: LifeState,
     world: WorldState,
     roll_dodge: RollDodgeState,
@@ -2322,7 +2435,7 @@ pub fn apply_live_reader_update(
     poll_config: &mut ReaderConfig,
     reader: &mut PixelBusReader,
     update: LiveReaderConfig,
-) -> Option<[PixelBusEvent; 6]> {
+) -> Option<[PixelBusEvent; 7]> {
     poll_config.apply_live(update);
     reader.apply_live_config(update)
 }
@@ -2344,6 +2457,7 @@ impl PixelBusReader {
             movement: MovementSignal::Unknown,
             cooldowns: CooldownSet::new_unknown(),
             quickslot: QuickslotState::new_unknown(),
+            native_bindings: NativeBindingSet::new_unavailable(),
             life: LifeState::Unknown,
             world: WorldState::Unknown,
             roll_dodge: RollDodgeState::Unknown,
@@ -2364,7 +2478,7 @@ impl PixelBusReader {
     /// every cached observation that can authorize generated input and returns the
     /// fail-closed events the worker must route before taking a fresh sample.
     /// Interval-only and identical updates preserve all observations.
-    pub fn apply_live_config(&mut self, update: LiveReaderConfig) -> Option<[PixelBusEvent; 6]> {
+    pub fn apply_live_config(&mut self, update: LiveReaderConfig) -> Option<[PixelBusEvent; 7]> {
         if !self.config.apply_live(update) {
             return None;
         }
@@ -2375,6 +2489,7 @@ impl PixelBusReader {
         self.roll_dodge = RollDodgeState::Unknown;
         self.travel = TravelState::Unknown;
         self.fishing = FishingSignal::None;
+        self.native_bindings = NativeBindingSet::new_unavailable();
         Some([
             PixelBusEvent::MenuGate(None),
             PixelBusEvent::Life(LifeState::Unknown),
@@ -2382,6 +2497,7 @@ impl PixelBusReader {
             PixelBusEvent::RollDodge(RollDodgeState::Unknown),
             PixelBusEvent::Travel(TravelState::Unknown),
             PixelBusEvent::FishingStopped,
+            PixelBusEvent::Bindings(NativeBindingSet::new_unavailable()),
         ])
     }
 
@@ -2398,6 +2514,11 @@ impl PixelBusReader {
     /// Monotonic count of coherent heartbeat-bearing payload captures.
     pub fn sample_generation(&self) -> u64 {
         self.sample_generation
+    }
+
+    /// The most recent coherent native ESO binding snapshot.
+    pub fn native_bindings(&self) -> NativeBindingSet {
+        self.native_bindings
     }
 
     /// Clears all history so a restarted game republishes even unchanged values.
@@ -2497,6 +2618,11 @@ impl PixelBusReader {
             self.quickslot = cleared_quickslot;
             events.push(PixelBusEvent::Quickslot(cleared_quickslot));
         }
+        let cleared_bindings = NativeBindingSet::new_unavailable();
+        if self.native_bindings != cleared_bindings {
+            self.native_bindings = cleared_bindings;
+            events.push(PixelBusEvent::Bindings(cleared_bindings));
+        }
         if self.life != LifeState::Unknown {
             self.life = LifeState::Unknown;
             events.push(PixelBusEvent::Life(LifeState::Unknown));
@@ -2549,6 +2675,7 @@ impl PixelBusReader {
             ultimate_max: b26,
             ultimate_front_cost: b27,
             ultimate_back_cost: b28,
+            native_bindings: b29_to_b39,
         } = samples;
         let mut events = Vec::new();
         let tolerance = self.config.tolerance;
@@ -2600,6 +2727,17 @@ impl PixelBusReader {
             self.last_heartbeat_ms = Some(now_ms);
             self.signal_lost = false;
             events.push(PixelBusEvent::Heartbeat);
+
+            let native_bindings = decode_native_bindings(b29_to_b39, tolerance);
+            if native_bindings != self.native_bindings {
+                self.native_bindings = native_bindings;
+                tracing::debug!(
+                    target: "eso_weave::pixelbus",
+                    ?native_bindings,
+                    "native ESO bindings changed"
+                );
+                events.push(PixelBusEvent::Bindings(native_bindings));
+            }
 
             // Unsafe life transitions close authorization before any observation
             // from this capture can drive work. A recovered Alive transition is
@@ -2963,6 +3101,11 @@ impl PixelBusReader {
                 sample(28)
             } else {
                 None
+            },
+            native_bindings: if layout.supports_native_bindings() {
+                std::array::from_fn(|index| sample(29 + index as u32))
+            } else {
+                [None; NativeAction::COUNT]
             },
         };
         events.extend(self.observe(samples, now_ms));

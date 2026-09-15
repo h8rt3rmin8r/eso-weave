@@ -8,6 +8,7 @@ pub mod action;
 pub mod bindings;
 pub mod key;
 pub mod mock;
+pub mod native;
 
 #[cfg(target_os = "linux")]
 mod linux;

@@ -7,6 +7,8 @@
 use std::fs;
 use std::path::Path;
 
+use mlua::Lua;
+
 use eso_weave::beacon::api_check::{self, ApiCheckError, GameVersion, GameVersionSource};
 use eso_weave::beacon::{
     self, addons_dir_under_documents, embedded_version, eso_addons_subpath, has_managed_marker,
@@ -65,16 +67,16 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_twenty_one() {
-    // Slice 067 adds the death-episode arbiter while retaining every block.
-    assert_eq!(embedded_version(), 21);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(21));
+fn embedded_manifest_version_is_twenty_two() {
+    // S100 appends eleven native binding evidence blocks.
+    assert_eq!(embedded_version(), 22);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(22));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 21);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(21));
+    assert_eq!(embedded_version(), 22);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(22));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -775,7 +777,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
-    assert_eq!(NUM_BLOCKS, 29, "S055 appends four exact Ultimate blocks");
+    assert_eq!(NUM_BLOCKS, 40, "S100 appends eleven native binding blocks");
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
         beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
@@ -954,6 +956,204 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
             "the addon and companion disagree on {name}"
         );
     }
+}
+
+fn binding_authority_violations(lua: &str, manifest: &str, files: &[&str]) -> Vec<String> {
+    let mut violations = Vec::new();
+    for api in [
+        "CreateDefaultActionBind",
+        "BindKeyToAction",
+        "UnbindKeyFromAction",
+        "UnbindAllKeysFromAction",
+        "ResetAllBindsToDefault",
+        "ResetKeyboardBindsToDefault",
+    ] {
+        if lua.contains(api) {
+            violations.push(format!("mutation API: {api}"));
+        }
+    }
+    if files
+        .iter()
+        .any(|path| path.eq_ignore_ascii_case("Bindings.xml"))
+    {
+        violations.push("custom binding file: Bindings.xml".to_owned());
+    }
+    if lua.contains("<Bindings") || lua.contains("<Action ") {
+        violations.push("custom binding declaration".to_owned());
+    }
+    if manifest.lines().any(|line| {
+        line.trim_start()
+            .to_ascii_lowercase()
+            .starts_with("## savedvariables")
+    }) {
+        violations.push("SavedVariables declaration".to_owned());
+    }
+    violations
+}
+
+#[test]
+fn pixelbeacon_native_binding_surface_is_strictly_read_only() {
+    let addon = Path::new(env!("CARGO_MANIFEST_DIR")).join("addon/PixelBeacon");
+    let files = fs::read_dir(addon)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let file_refs = files.iter().map(String::as_str).collect::<Vec<_>>();
+    assert_eq!(
+        binding_authority_violations(beacon::LUA, MANIFEST, &file_refs),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn binding_authority_guard_rejects_every_prohibited_surface() {
+    for api in [
+        "CreateDefaultActionBind",
+        "BindKeyToAction",
+        "UnbindKeyFromAction",
+        "UnbindAllKeysFromAction",
+        "ResetAllBindsToDefault",
+        "ResetKeyboardBindsToDefault",
+    ] {
+        let violations = binding_authority_violations(api, MANIFEST, &["PixelBeacon.lua"]);
+        assert_eq!(violations, [format!("mutation API: {api}")]);
+    }
+    assert_eq!(
+        binding_authority_violations("", MANIFEST, &["Bindings.xml"]),
+        ["custom binding file: Bindings.xml"]
+    );
+    assert_eq!(
+        binding_authority_violations("<Bindings><Action name='X'>", MANIFEST, &[]),
+        ["custom binding declaration"]
+    );
+    assert_eq!(
+        binding_authority_violations("", "## SavedVariables: bindings", &[]),
+        ["SavedVariables declaration"]
+    );
+}
+
+#[test]
+fn native_binding_publisher_declares_fixed_actions_and_refresh_paths() {
+    for action in [
+        "ACTION_BUTTON_3",
+        "ACTION_BUTTON_4",
+        "ACTION_BUTTON_5",
+        "ACTION_BUTTON_6",
+        "ACTION_BUTTON_7",
+        "ACTION_BUTTON_8",
+        "USE_SYNERGY",
+        "SPECIAL_MOVE_ATTACK",
+        "SPECIAL_MOVE_BLOCK",
+        "GAME_CAMERA_INTERACT",
+        "ACTION_BUTTON_9",
+    ] {
+        assert!(beacon::LUA.contains(action), "missing action {action}");
+    }
+    for event in [
+        "EVENT_KEYBINDINGS_LOADED",
+        "EVENT_KEYBINDING_SET",
+        "EVENT_KEYBINDING_CLEARED",
+    ] {
+        assert!(beacon::LUA.contains(event), "missing refresh path {event}");
+    }
+    assert!(beacon::LUA.contains("GetActionIndicesFromName"));
+    assert!(beacon::LUA.contains("GetMaxBindingsPerAction"));
+    assert!(beacon::LUA.contains("GetActionBindingInfo"));
+}
+
+#[test]
+fn native_binding_discovery_executes_under_lua_51_semantics() {
+    let lua = Lua::new();
+    let globals = lua.globals();
+    let mut key_names = std::collections::BTreeSet::new();
+    for token in beacon::LUA
+        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+    {
+        if token.starts_with("KEY_") {
+            key_names.insert(token);
+        }
+    }
+    for (index, name) in key_names.into_iter().enumerate() {
+        globals.set(name, index as i64 + 1).unwrap();
+    }
+    lua.load(
+        r#"
+        EVENT_ADD_ON_LOADED = 1
+        ESO_WEAVE_TEST_EXPORTS = {}
+        blocks = {}
+        function channel(value) return value / 255 end
+        EVENT_MANAGER = {}
+        function EVENT_MANAGER:RegisterForEvent() end
+        function IsKeyCodeGamepadKey() return false end
+        function IsKeyCodeChordKey() return false end
+        function IsKeyCodeHoldKey() return false end
+        "#,
+    )
+    .exec()
+    .unwrap();
+    let module_start = beacon::LUA
+        .find("blocks.nativeModel = (function()")
+        .unwrap();
+    let module_end = beacon::LUA[module_start..]
+        .find("-- Converts a physical-pixel measurement")
+        .map(|offset| module_start + offset)
+        .unwrap();
+    lua.load(&beacon::LUA[module_start..module_end])
+        .exec()
+        .unwrap();
+    lua.load(
+        r#"
+        __slots = {}
+        function GetActionIndicesFromName(name)
+            if name == "ACTION_BUTTON_3" then return 1, 2, 3 end
+            return nil, nil, nil
+        end
+        function GetMaxBindingsPerAction() return 2 end
+        function GetActionBindingInfo(_, _, _, index)
+            local slot = __slots[index]
+            if slot == nil then
+                return KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID
+            end
+            return unpack(slot)
+        end
+
+        __slots = { { KEY_Q, KEY_SHIFT, KEY_CTRL, KEY_INVALID, KEY_INVALID } }
+        local valid = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(valid.code == 42 and valid.modifiers == 3)
+
+        __slots = {
+            { KEY_Q, KEY_SHIFT, KEY_CTRL, KEY_INVALID, KEY_INVALID },
+            { KEY_Q, KEY_CTRL, KEY_SHIFT, KEY_INVALID, KEY_INVALID },
+        }
+        local duplicate = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(duplicate.code == 42 and duplicate.modifiers == 3)
+
+        __slots = {
+            { KEY_Q, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID },
+            { KEY_E, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID },
+        }
+        local conflict = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(conflict.code == 2 and conflict.modifiers == 0)
+
+        __slots = {}
+        local unbound = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(unbound.code == 1 and unbound.modifiers == 0)
+
+        __slots = { { 9999, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID } }
+        function IsKeyCodeGamepadKey(key) return key == 9999 end
+        local unsupported = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(unsupported.code == 3 and unsupported.modifiers == 0)
+
+        local red, green, blue = ESO_WEAVE_TEST_EXPORTS.bindingCell(1, valid)
+        assert(red == 34 and green == 170 and blue == 53)
+
+        GetActionIndicesFromName = nil
+        local unavailable = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(unavailable.code == 0 and unavailable.modifiers == 0)
+        "#,
+    )
+    .exec()
+    .unwrap();
 }
 
 #[test]
@@ -1218,7 +1418,7 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 21);
+    assert_eq!(beacon::embedded_version(), 22);
 }
 
 #[test]
@@ -1254,7 +1454,7 @@ fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
         baseline < active,
         "recall must be rebaselined before world activation"
     );
-    assert_eq!(beacon::embedded_version(), 21);
+    assert_eq!(beacon::embedded_version(), 22);
 }
 
 #[test]
@@ -1388,7 +1588,7 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
         "the addon references a sprint API that does not exist"
     );
-    assert_eq!(beacon::embedded_version(), 21);
+    assert_eq!(beacon::embedded_version(), 22);
 
     let detector = lua
         .split("local function allActiveSlotsHaveNonCostFailure()")

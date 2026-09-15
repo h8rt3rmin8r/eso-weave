@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S100 adds fixed-size, read-only PixelBeacon evidence for the native ESO
+  bindings of Skill 1 through 5, Ultimate, Synergy, Attack, Block, Interact, and
+  Quickslot. A portable keyboard-and-mouse chord model and protocol-6 decoder
+  distinguish unavailable, unbound, conflicting, unsupported, and valid states,
+  preserve older layouts, reject malformed or transposed cells, and leave all
+  automation and settings unchanged for the next children of epic #188
+  (issue #206).
+
 - S099 defines protected `main` as the repository-policy trust anchor, keeps
   collaboration and proposed branch content outside the authority chain, adds a
   deterministic workflow and local-skill policy gate, pins executable workflow
@@ -78,6 +86,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Decompose native binding authority into evidence, combat
+  consumption, and Fishing plus Auto Potion migration. S100 publishes one
+  fixed RGB cell per action with color-spaced control nibbles and an exact packed
+  modifier and action check. It inspects ESO bindings only through read APIs and
+  permanently rejects mutation APIs, custom binding declarations, and binding
+  SavedVariables in tests. The new troubleshooting state table advances the
+  frozen documentation inventory to 60 tables across 27 published pages.
+
+- 2026-09-15: Correct the pinned CI bootstrap notice to describe the actual
+  running-workflow fallback without claiming that protected `main` lacks the
+  policy. This changes diagnostic wording only, not trust-policy execution.
 
 - 2026-09-15: Treat direct operator instructions as mutation authority and
   protected `main` policy as a constraining trust anchor. Issues, pull requests,

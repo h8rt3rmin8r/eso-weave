@@ -51,7 +51,7 @@ jobs:
             node --test trusted-policy/.github/scripts/trust-policy.test.mjs
             node trusted-policy/.github/scripts/trust-policy.mjs .
           else
-            echo "::notice::Protected main does not yet contain the trust policy; using the bootstrap policy from this pull request."
+            echo "::notice::Trusted base policy is unavailable for this event; using the bootstrap policy checked into the running workflow."
             node --test .github/scripts/trust-policy.test.mjs
             node .github/scripts/trust-policy.mjs .
           fi

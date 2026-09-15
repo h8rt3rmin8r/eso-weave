@@ -88,6 +88,23 @@ observations replace them immediately; the configured **Stale Retention
 (seconds)** interval then expires to the ordinary unavailable view. Set it to 0
 under Appearance when immediate clearing is preferred.
 
+## Native binding evidence is unavailable
+
+S100 discovers bindings without changing automation or the current Settings
+selectors. The evidence distinguishes these states for each native ESO action:
+
+| State | Meaning | Safe next action |
+| --- | --- | --- |
+| Unavailable | PixelBeacon is old, the signal is stale or malformed, or ESO has not loaded binding data | Update PixelBeacon, reload ESO, and restore the shared signal first |
+| Unbound | ESO has no keyboard or mouse assignment for the action | Bind the action in ESO's Controls menu |
+| Conflicting | More than one distinct native assignment exists | Leave one intended keyboard or mouse chord in ESO |
+| Unsupported | The only assignment is gamepad, combined, hold, unknown, or otherwise outside the portable registry | Choose an ordinary keyboard key or supported mouse control in ESO |
+| Valid | One supported primary and normalized modifier set was decoded | No S100 action is required; controller migration follows in issues #207 and #208 |
+
+Do not install a custom binding addon or edit `Bindings.xml` to repair evidence.
+PixelBeacon uses only ESO's read-only runtime binding APIs and deliberately has no
+binding mutation or persistence path.
+
 ## ESO Weave Data is missing, outdated, unmanaged, or awaiting reload
 
 - **Not installed**: choose **Install Data**, then obey any reload guidance.

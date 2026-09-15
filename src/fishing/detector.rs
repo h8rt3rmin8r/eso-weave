@@ -30,6 +30,7 @@ pub fn map_event(event: PixelBusEvent) -> Option<DetectorEvent> {
         PixelBusEvent::Travel(_) => None,
         PixelBusEvent::Cooldowns(_) => None,
         PixelBusEvent::Quickslot(_) => None,
+        PixelBusEvent::Bindings(_) => None,
     }
 }
 
