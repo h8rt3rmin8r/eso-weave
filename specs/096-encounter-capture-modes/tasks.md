@@ -96,9 +96,9 @@
 ## Phase 10: Independent and Hosted Review
 
 - [x] T063 Run independent code, security, and domain/UX reviews and fix every high-confidence finding.
-- [ ] T064 Commit with the required S096 subject, changelog evidence, and Codex co-author trailer.
-- [ ] T065 Push the authorized feature branch and publish an official PR linked to #183.
-- [ ] T066 Move issue and PR project items to S096 PR review.
+- [x] T064 Commit with the required S096 subject, changelog evidence, and Codex co-author trailer.
+- [x] T065 Push the authorized feature branch and publish an official PR linked to #183.
+- [x] T066 Move issue and PR project items to S096 PR review.
 - [ ] T067 Wait for all CI, CodeQL, dependency, Codex, and security results; address every comment and resolve every thread.
 - [ ] T068 Trigger at most one authorized second `@Codex review` round and address its results.
 - [ ] T069 Confirm all required checks green, zero unresolved review threads, and ask the operator for final review and merge.

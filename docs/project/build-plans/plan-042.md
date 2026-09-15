@@ -21,7 +21,8 @@ Sequence:
    and continuous-until-disabled encounter modes, a bounded ordered session
    spool, atomic terminal-record import, and historical desktop status. Capture
    control remains user-initiated inside ESO because S092 approved no desktop
-   command ingress.
+   command ingress. The official review surface is
+   [pull request #202](https://github.com/h8rt3rmin8r/eso-weave/pull/202).
 6. Issue #190 remains independent Release verification and gates native-log
    platform claims or implementation until Windows and Linux or Proton receipts
    exist.
