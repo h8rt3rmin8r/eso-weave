@@ -76,7 +76,7 @@ pub fn verify_png(bytes: &[u8], expected: (u32, u32)) -> Result<(), FallbackReas
 }
 
 pub fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    crate::hash::hex_lower(Sha256::digest(bytes))
 }
 
 fn decode_png(bytes: &[u8]) -> Result<RgbaImage, FallbackReason> {

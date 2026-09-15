@@ -20,6 +20,7 @@ pub mod documentation;
 pub mod encounter;
 pub mod fishing;
 pub mod game;
+mod hash;
 pub mod icon_cache;
 pub mod input;
 pub mod logging;

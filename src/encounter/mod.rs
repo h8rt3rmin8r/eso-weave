@@ -244,7 +244,7 @@ pub fn canonical_bytes(capture: &EncounterCapture) -> Result<Vec<u8>, EncounterE
 }
 
 pub(crate) fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    crate::hash::hex_lower(Sha256::digest(bytes))
 }
 
 pub(crate) fn invalid<T>(message: impl Into<String>) -> Result<T, EncounterError> {

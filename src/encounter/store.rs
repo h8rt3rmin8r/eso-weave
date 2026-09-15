@@ -1360,7 +1360,7 @@ fn hash_file(path: &Path) -> Result<(u64, String), EncounterError> {
             .ok_or_else(|| EncounterError::Validation("backup length overflow".into()))?;
         hasher.update(&buffer[..read]);
     }
-    Ok((length, format!("{:x}", hasher.finalize())))
+    Ok((length, crate::hash::hex_lower(hasher.finalize())))
 }
 
 fn reject_link_like_file(path: &Path) -> Result<(), EncounterError> {

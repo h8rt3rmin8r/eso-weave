@@ -1100,7 +1100,7 @@ fn valid_locale(value: &str) -> bool {
 }
 
 fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    crate::hash::hex_lower(Sha256::digest(bytes))
 }
 
 fn validation<T>(message: impl Into<String>) -> Result<T, PipelineError> {

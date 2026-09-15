@@ -1237,7 +1237,10 @@ fn variant_filename(scene: Scene, theme: CaptureTheme, viewport: CaptureViewport
 }
 
 fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn publish_png(destination: &Path, image: &RgbaImage) -> Result<(), String> {
