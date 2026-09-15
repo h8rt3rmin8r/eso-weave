@@ -85,7 +85,7 @@ Physical input follows this text sequence:
 
 Game observation follows a separate sequence:
 
-`process and focus probe + displayed pixels -> Pixel Bus Reader -> close unsafe atomic gates -> lock engines and controllers -> route observations -> feature ticks -> view model`
+`process and focus probe + displayed pixels -> Pixel Bus Reader -> close unsafe atomic gates -> lock engines and controllers -> route current observations and subsystem consumers together -> feature ticks -> view model`
 
 Game State stamps the first coherent-to-incoherent presentation transition with
 the Pixel Bus worker's existing monotonic clock, including while the window is
@@ -237,6 +237,11 @@ Safety-closing Pixel Bus events update shared atomic gates before the worker wai
 for controller locks. Safe recovery updates the owning engine or controller
 before reopening interception. This asymmetric ordering prevents a recovered
 physical key from being suppressed against stale worker state.
+
+After the safety pre-route, every Pixel Bus worker branch sends each event through
+one combined routing seam for current Game State and subsystem consumers. Live
+configuration invalidations, safety-refresh invalidations, and sampled events
+therefore cannot disagree about whether the current observation is coherent.
 
 The input callback uses `try_send`, so overload never shifts work onto the hook
 thread. The tradeoff is explicit: a full or disconnected queue drops the handed

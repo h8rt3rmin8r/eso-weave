@@ -211,6 +211,24 @@ pub fn route_game_observation(event: PixelBusEvent, game: &GameState, now_ms: u6
     }
 }
 
+/// Routes one worker event through both current game observations and subsystem
+/// consumers. Every worker branch uses this after publishing lock-free safety
+/// closures so invalidation events cannot leave Game State falsely coherent.
+#[allow(clippy::too_many_arguments)]
+pub fn route_reader_observation(
+    event: PixelBusEvent,
+    game: &GameState,
+    weave: &mut WeaveEngine,
+    fishing: &mut FishingController,
+    potion: &mut AutoPotionController,
+    input: &InputEngine,
+    now_ms: u64,
+    sink: &mut dyn FishingSink,
+) {
+    route_game_observation(event, game, now_ms);
+    route_reader_event(event, weave, fishing, potion, input, now_ms, sink);
+}
+
 #[cfg(test)]
 mod tests {
     use super::app_toggle_intent;

@@ -52,7 +52,8 @@ use crate::weave::{WeaveConfig, WeaveEngine, WeaveType};
 pub use beacon_light::{beacon_light, uninstall_enabled, BeaconCondition, BeaconLight};
 pub use log_view::{build_log_view, level_color, LogColor, LogRow};
 pub use routing::{
-    app_toggle_intent, route_game_observation, route_reader_event, route_reader_safety_gate,
+    app_toggle_intent, route_game_observation, route_reader_event, route_reader_observation,
+    route_reader_safety_gate,
 };
 pub use settings_form::{SettingsForm, UiPrefs};
 

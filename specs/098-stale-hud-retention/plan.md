@@ -55,7 +55,7 @@ Add a private interior-mutable retention state to `AppModel` because `view` is i
 
 Add an optional `StatusLine` to `AppView` titled `HUD Freshness`. Its visible state includes `Stale`, a truthful cause, and whole-second age; the static tooltip explains retention and states that automation remains blocked. The Live HUD displays this row before retained values.
 
-Reader and process loops continue to close gates and clear authoritative observations exactly as they do today. They also pass their existing monotonic `now_ms` into Game State so it can expose the loss transition time atomically with current observations. No presentation cache is passed into `GameState`, `WeaveEngine`, Fishing, Auto Potion, `InputEngine`, routing, persistence, or logs.
+Reader and process loops continue to close gates and clear authoritative observations exactly as they do today. Every Pixel Bus worker branch routes each event through one combined observation and subsystem seam, passing its existing monotonic `now_ms` into Game State so invalidations cannot leave the shared observation falsely coherent. No presentation cache is passed into `GameState`, `WeaveEngine`, Fishing, Auto Potion, `InputEngine`, routing, persistence, or logs.
 
 ## Project Structure
 

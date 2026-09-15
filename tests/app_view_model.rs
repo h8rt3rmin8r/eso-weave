@@ -9,10 +9,10 @@ use eso_weave::app::{
     combat_view, dashboard_layout, data_addon_view, default_delay_for, effective_dashboard_layout,
     fishing_label, life_state_view, menu_view, modal_extent, movement_view, override_edit_for,
     quickslot_view, resource_view, resource_view_with_watch, roll_dodge_view,
-    route_game_observation, route_reader_event, route_reader_safety_gate, skill_rows,
-    status_line_app, status_line_beacon, status_line_fishing, travel_state_view, ultimate_view,
-    ultimate_view_for_world, uninstall_enabled, weapon_bar_view, world_state_view, AppModel,
-    BeaconCondition, BeaconPrimaryAction, DashboardLayout, DataAddonPrimaryAction,
+    route_game_observation, route_reader_event, route_reader_observation, route_reader_safety_gate,
+    skill_rows, status_line_app, status_line_beacon, status_line_fishing, travel_state_view,
+    ultimate_view, ultimate_view_for_world, uninstall_enabled, weapon_bar_view, world_state_view,
+    AppModel, BeaconCondition, BeaconPrimaryAction, DashboardLayout, DataAddonPrimaryAction,
     ResourcePresentation, SkillEdit, StatusRole, UiIntent, UltimatePresentation,
 };
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
@@ -647,6 +647,45 @@ fn routing_world_state_updates_shared_game_observations_and_signal_loss_clears_i
     assert_eq!(game.snapshot().world, WorldState::Active);
     route_game_observation(PixelBusEvent::SignalLost, &game, 0);
     assert_eq!(game.snapshot().world, WorldState::Unknown);
+}
+
+#[test]
+fn combined_worker_routing_invalidates_game_state_and_subsystems_together() {
+    let game = GameState::default();
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
+    game.observe_heartbeat(0);
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 0);
+
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing = active_fishing_controller();
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut sink = MockFishingSink::new();
+    let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
+
+    route_reader_observation(
+        PixelBusEvent::MenuGate(None),
+        &game,
+        &mut weave,
+        &mut fishing,
+        &mut potion,
+        &input,
+        1_234,
+        &mut sink,
+    );
+
+    let (observations, loss_at_ms) = game.presentation_snapshot();
+    assert_eq!(observations.surface, SurfaceObservation::Unavailable);
+    assert_eq!(loss_at_ms, Some(1_234));
+    assert!(input.is_menu_gated());
 }
 
 #[test]

@@ -72,7 +72,7 @@
 
 - [x] T029 [US4] Add failing integration assertions for retained display plus cleared authoritative engine fields in `tests/app_view_model.rs`.
 - [x] T030 [US4] Add immediate input and controller gate assertions for runtime, focus, and signal losses in `tests/app_view_model.rs`.
-- [x] T031 [US4] Keep controller, input, addon, protocol, and persistence semantics unchanged; limit routing changes to shared loss-timestamp propagation.
+- [x] T031 [US4] Keep controller, input, addon, protocol, and persistence semantics unchanged; pair shared loss-timestamp propagation with subsystem routing in every worker branch.
 - [x] T032 [US4] Re-run weave, input, Fishing, Auto Potion, game-state, and Pixel Bus safety suites.
 
 ## Phase 8: Canonical Documentation and Planning
