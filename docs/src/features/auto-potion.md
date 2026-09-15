@@ -19,8 +19,9 @@ would wait until a potion no longer helps, so the OR rule is not configurable.
 Independent enables and thresholds keep that rule visible in the interface and
 allow different limits for each resource.
 
-The Quickslot key defaults to `Q`, ESO's default quickslot binding, and remains
-configurable.
+The Quickslot chord is read from ESO. ESO Weave has no separate key or fallback.
+Older documentation said, "The Quickslot key defaults to `Q`." That statement is
+retained here only as migration context; the legacy field is now ignored.
 
 ## Configure Auto Potion
 
@@ -29,15 +30,16 @@ configurable.
 2. Open **Settings > Auto Potion**.
 3. Enable at least one of Watch Health, Watch Magicka, or Watch Stamina. Each
    threshold defaults to 35 percent and accepts 0 through 100 percent.
-4. Confirm **Quickslot Key** matches the in-game binding. It defaults to `Q`.
+4. Confirm **Detected Quickslot Binding** reports a valid current chord. Change it
+   in ESO and reload the UI if remediation is shown.
 5. Leave **Minimum Retry Interval** at its 1500 ms default unless diagnosis shows
    the screen observation lags long enough to permit repeat attempts.
 6. Close Settings, verify PixelBeacon and Quickslot status, then use `F3` or the
    **Auto Potion** toggle.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/auto-potion-ready.png" alt="ESO Weave Auto Potion settings showing resource watches, thresholds, Quickslot key, and retry interval" width="1280" height="820">
-<figcaption>Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the Quickslot key is Q.</figcaption>
+<img src="../assets/screenshots/auto-potion-ready.png" alt="ESO Weave Auto Potion settings showing resource watches, thresholds, detected Quickslot binding, and retry interval" width="1280" height="900">
+<figcaption>Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the detected Quickslot binding is read-only.</figcaption>
 </figure>
 
 The enabled checks form an OR rule. In this fixture, either Health at or below
@@ -63,6 +65,8 @@ Every condition must hold in this order:
 12. Its cooldown is ready.
 13. The minimum retry interval since the last attempt has elapsed.
 14. At least one fresh watched resource is at or below its threshold.
+15. The current native Quickslot binding is valid and remains authorized through
+    primary synthesis.
 
 An unreadable resource is not low, an unreadable quickslot is not a potion, and
 an unreadable cooldown is not ready. Loading, addon reload, or signal loss
@@ -111,6 +115,7 @@ The interface displays the first current blocker in evaluation order.
 | **Blocked: no watched resource** | Enable at least one resource watch |
 | **Blocked: resources unavailable** | Restore fresh telemetry for an enabled watch |
 | **Blocked: quickslot unavailable** | Restore current quickslot classification telemetry |
+| **Blocked: Quickslot binding unavailable** | Repair Quickslot in ESO and restore fresh PixelBeacon binding evidence |
 | **Blocked: no potion selected** | Select a potion in the active ESO quickslot |
 | **Blocked: potion unavailable** | Refill a depleted potion or resolve ESO's unusable state |
 | **Blocked: potion cooldown** | Wait for an explicit ready cooldown observation |
@@ -135,7 +140,7 @@ skill interception, while explicit Sprinting defers Auto Potion.
 With Watch Health enabled at 35 percent, fresh Health at 34 percent qualifies
 because the comparison is at or below. If the active Quickslot is a usable
 potion, its cooldown is ready, and every earlier gate is safe, one press and one
-release of the configured Quickslot Key are submitted. The 1500 ms retry floor
+release of the validated Quickslot chord are submitted. The 1500 ms retry floor
 then blocks another attempt while the displayed cooldown catches up. After any
 failure recovers, the controller evaluates current readings; it does not replay a
 previous request. After a death episode specifically, the coherent Alive tick
@@ -145,6 +150,8 @@ or later observations.
 
 Generated input uses the established platform input backend, including
 injected-input recursion tagging.
+Binding changes invalidate admitted work, extra physical modifiers reject the
+attempt, and only a successful native primary press consumes retry time.
 The controller checks menu and suspension directly. It also checks focus, life,
 world, travel, and explicit Sprinting because its timers do not pass through the
 interception decision.

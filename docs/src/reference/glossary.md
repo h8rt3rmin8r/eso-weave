@@ -128,7 +128,8 @@ rotation. Input contents remain subject to the project's logging privacy rules.
 **Aliases:** auto fishing, cast, bite, reel, recast
 
 The opt-in state machine that casts, waits for a valid PixelBeacon bite signal,
-reels, and recasts through the configured Interact Key and timing boundaries.
+reels, and recasts through ESO's current validated Interact chord and configured
+timing boundaries.
 
 **Related:** [Fishing setup and states](../features/fishing.md)
 
@@ -188,8 +189,8 @@ or safety gate does not own it.
 
 **Aliases:** use key, action key, E key
 
-The ESO binding used for world interactions, E by default. Fishing uses this
-configured action for casting, reeling, and recasting.
+The ESO binding used for world interactions. Fishing reads the current validated
+keyboard or mouse chord from PixelBeacon for casting, reeling, and recasting.
 
 **Related:** [Fishing controls](../features/fishing.md)
 

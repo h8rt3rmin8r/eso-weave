@@ -686,7 +686,7 @@ mod tests {
             );
         }
 
-        let fishing_key = crate::fishing::FishingConfig::default().interact_key;
+        let fishing_key = Key::E;
         assert_eq!(fishing_key, Key::E);
         assert!(capabilities.contains(to_ev_key(fishing_key)));
         assert_eq!(

@@ -2842,6 +2842,7 @@ impl EsoWeaveApp {
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
         let layout = self.model.layout_state();
         let runtime_block_px = self.model.runtime_block_px();
+        let native_bindings = self.model.native_bindings();
         let mut draft = match self.settings_draft.take() {
             Some(draft) => draft,
             None => {
@@ -2917,7 +2918,14 @@ impl EsoWeaveApp {
                     .min_scrolled_height(body_max_h)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        settings_body(ui, &palette, &mut draft, layout, runtime_block_px);
+                        settings_body(
+                            ui,
+                            &palette,
+                            &mut draft,
+                            layout,
+                            runtime_block_px,
+                            native_bindings,
+                        );
                     });
                 (body.content_size.y, body_max_h)
             });
@@ -3206,6 +3214,7 @@ fn settings_body(
     draft: &mut SettingsForm,
     layout: crate::pixelbus::LayoutState,
     runtime_block_px: u32,
+    native_bindings: crate::input::NativeBindingSet,
 ) {
     widgets::heading(ui, strings::CLUSTER_APPEARANCE);
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -3288,29 +3297,11 @@ fn settings_body(
         setting(ui, palette, &strings::SET_RECAST_DELAY, |ui| {
             ui.add(egui::DragValue::new(&mut draft.fishing.recast_delay_ms).range(0..=60_000));
         });
-        labelled_setting(
-            ui,
-            palette,
-            &strings::SET_FISHING_INTERACT_KEY,
-            |ui, label_id| {
-                combo(
-                    "set_fishing_interact_key",
-                    draft.fishing.interact_key.display_name(),
-                )
-                .show_ui(ui, |ui| {
-                    for key in Key::ALL {
-                        ui.selectable_value(
-                            &mut draft.fishing.interact_key,
-                            key,
-                            key.display_name(),
-                        );
-                    }
-                })
-                .response
-                .labelled_by(label_id)
-                .clickable();
-            },
-        );
+        setting(ui, palette, &strings::SET_FISHING_INTERACT_KEY, |ui| {
+            ui.monospace(native_binding_text(
+                native_bindings.get(crate::input::NativeAction::Interact),
+            ));
+        });
         widgets::muted_help(ui, palette, strings::FISHING_SETTINGS_APPLICATION_HELP);
     });
     ui.add_space(6.0);
@@ -3397,18 +3388,9 @@ fn settings_body(
             });
         }
         setting(ui, palette, &strings::SET_POTION_KEY, |ui| {
-            combo("set_potion_key", draft.potion.quickslot_key.display_name())
-                .show_ui(ui, |ui| {
-                    for key in KEYS {
-                        ui.selectable_value(
-                            &mut draft.potion.quickslot_key,
-                            key,
-                            key.display_name(),
-                        );
-                    }
-                })
-                .response
-                .clickable();
+            ui.monospace(native_binding_text(
+                native_bindings.get(crate::input::NativeAction::Quickslot),
+            ));
         });
         setting(ui, palette, &strings::SET_POTION_RETRY, |ui| {
             ui.add(egui::DragValue::new(&mut draft.potion.retry_interval_ms));
@@ -3457,6 +3439,32 @@ fn settings_body(
     });
 }
 
+fn native_binding_text(state: crate::input::NativeBindingState) -> String {
+    use crate::input::{NativeBindingState, NativeControl, NativeModifier};
+
+    let NativeBindingState::Valid(chord) = state else {
+        return match state {
+            NativeBindingState::Unavailable => "Unavailable",
+            NativeBindingState::Unbound => "Unbound",
+            NativeBindingState::Conflicting => "Conflicting",
+            NativeBindingState::Unsupported => "Unsupported",
+            NativeBindingState::Valid(_) => unreachable!(),
+        }
+        .to_string();
+    };
+    let mut parts = Vec::new();
+    for modifier in NativeModifier::ORDERED {
+        if chord.modifiers.contains(modifier.flag()) {
+            parts.push(format!("{modifier:?}"));
+        }
+    }
+    parts.push(match chord.primary {
+        NativeControl::Keyboard(key) => format!("{key:?}"),
+        NativeControl::Mouse(button) => format!("Mouse {button:?}"),
+    });
+    parts.join(" + ")
+}
+
 /// Renders one settings option: a label with a tooltip, the control, and a small
 /// muted inline help line beneath it.
 fn setting(
@@ -3468,21 +3476,6 @@ fn setting(
     ui.horizontal(|ui| {
         ui.label(s.label).on_hover_text(s.help);
         add(ui);
-    });
-    widgets::muted_help(ui, palette, s.help);
-}
-
-/// Renders a setting and associates its visible label with the interactive
-/// control for assistive technology.
-fn labelled_setting(
-    ui: &mut egui::Ui,
-    palette: &crate::app::theme::Palette,
-    s: &strings::Setting,
-    add: impl FnOnce(&mut egui::Ui, egui::Id),
-) {
-    ui.horizontal(|ui| {
-        let label = ui.label(s.label).on_hover_text(s.help);
-        add(ui, label.id);
     });
     widgets::muted_help(ui, palette, s.help);
 }

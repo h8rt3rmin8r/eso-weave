@@ -192,9 +192,9 @@ impl WeaveGates {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthorizationEpoch(u64);
 
-/// The applicable runtime gates for Fishing synthesis.
+/// The applicable runtime gates for autonomous controller synthesis.
 #[derive(Debug, Clone)]
-pub struct FishingGates {
+pub struct AutonomousGates {
     game: AtomicGate,
     focus: AtomicGate,
     suspension: AtomicGate,
@@ -203,10 +203,12 @@ pub struct FishingGates {
     world: AtomicGate,
     travel: AtomicGate,
     epoch: Arc<AtomicU64>,
+    native_bindings: Arc<Mutex<NativeBindingSet>>,
+    physical_modifier_bits: Arc<AtomicU8>,
 }
 
-impl FishingGates {
-    /// Whether an applicable authority currently blocks Fishing synthesis.
+impl AutonomousGates {
+    /// Whether an applicable authority currently blocks autonomous synthesis.
     pub fn is_gated(&self) -> bool {
         self.game.is_gated()
             || self.focus.is_gated()
@@ -217,20 +219,172 @@ impl FishingGates {
             || self.travel.is_gated()
     }
 
-    /// Captures the current Fishing authorization generation.
-    pub fn current_epoch(&self) -> FishingAuthorizationEpoch {
-        FishingAuthorizationEpoch(self.epoch.load(Ordering::Acquire))
+    /// Captures the current autonomous authorization generation.
+    pub fn current_epoch(&self) -> AutonomousAuthorizationEpoch {
+        AutonomousAuthorizationEpoch(self.epoch.load(Ordering::Acquire))
     }
 
-    /// Whether Fishing work admitted in `epoch` remains safe to synthesize.
-    pub fn admits(&self, epoch: FishingAuthorizationEpoch) -> bool {
+    /// Whether autonomous work admitted in `epoch` remains safe to synthesize.
+    pub fn admits(&self, epoch: AutonomousAuthorizationEpoch) -> bool {
         !self.is_gated() && self.current_epoch() == epoch
+    }
+
+    /// Returns one action's current native evidence for read-only presentation.
+    pub fn binding_state(&self, action: NativeAction) -> NativeBindingState {
+        self.native_bindings.lock().unwrap().get(action)
+    }
+
+    fn chord(
+        &self,
+        action: NativeAction,
+        epoch: AutonomousAuthorizationEpoch,
+    ) -> Option<NativeChord> {
+        if !self.admits(epoch) {
+            return None;
+        }
+        let chord = valid_chord(self.binding_state(action))?;
+        self.admits(epoch).then_some(chord)
+    }
+
+    /// The current real-device modifier set used by chord ownership checks.
+    pub fn physical_modifiers(&self) -> ModifierSet {
+        ModifierSet::from_bits(self.physical_modifier_bits.load(Ordering::Acquire))
+            .unwrap_or(ModifierSet::EMPTY)
     }
 }
 
-/// An opaque generation captured when Fishing work is admitted.
+/// An opaque generation captured when autonomous work is admitted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FishingAuthorizationEpoch(u64);
+pub struct AutonomousAuthorizationEpoch(u64);
+
+/// Compatibility name for Fishing's shared autonomous safety gates.
+pub type FishingGates = AutonomousGates;
+
+/// Compatibility name for Fishing's shared autonomous authorization generation.
+pub type FishingAuthorizationEpoch = AutonomousAuthorizationEpoch;
+
+/// Executes complete native action chords for autonomous controllers.
+///
+/// The executor owns only the modifiers it presses. It resolves the requested
+/// action from one admitted binding generation and never supplies a fallback.
+pub struct NativeActionExecutor<B: InputBackend> {
+    backend: B,
+    gates: AutonomousGates,
+    pressed_modifiers: Vec<NativeModifier>,
+    pressed_primaries: Vec<NativeControl>,
+}
+
+impl<B: InputBackend> NativeActionExecutor<B> {
+    /// Creates an executor over the shared controller authorization boundary.
+    pub fn new(backend: B, gates: AutonomousGates) -> Self {
+        Self {
+            backend,
+            gates,
+            pressed_modifiers: Vec::new(),
+            pressed_primaries: Vec::new(),
+        }
+    }
+
+    /// Captures the current authorization generation for scheduled work.
+    pub fn current_epoch(&self) -> AutonomousAuthorizationEpoch {
+        self.gates.current_epoch()
+    }
+
+    /// Returns one action's latest native evidence.
+    pub fn binding_state(&self, action: NativeAction) -> NativeBindingState {
+        self.gates.binding_state(action)
+    }
+
+    /// Executes one action using the current authorization generation.
+    pub fn execute_current(&mut self, action: NativeAction) -> bool {
+        self.execute(action, self.gates.current_epoch())
+    }
+
+    /// Executes one action only if the admitted generation remains current.
+    pub fn execute(&mut self, action: NativeAction, epoch: AutonomousAuthorizationEpoch) -> bool {
+        self.cleanup_owned();
+        if !self.pressed_modifiers.is_empty() || !self.pressed_primaries.is_empty() {
+            return false;
+        }
+        let Some(chord) = self.gates.chord(action, epoch) else {
+            return false;
+        };
+        let physical = self.gates.physical_modifiers();
+        if !physical.is_subset_of(chord.modifiers) {
+            return false;
+        }
+
+        for modifier in NativeModifier::ORDERED {
+            if chord.modifiers.contains(modifier.flag()) && !physical.contains(modifier.flag()) {
+                if !self.gates.admits(epoch) {
+                    self.cleanup_owned();
+                    return false;
+                }
+                match self.backend.synthesize_modifier(modifier, Transition::Down) {
+                    Ok(()) => self.pressed_modifiers.push(modifier),
+                    Err(error) => {
+                        tracing::warn!(target: "eso_weave::input", "controller modifier synthesis failed: {error}");
+                        self.cleanup_owned();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if !self.gates.admits(epoch) {
+            self.cleanup_owned();
+            return false;
+        }
+        if let Err(error) = self
+            .backend
+            .synthesize_native(chord.primary, Transition::Down)
+        {
+            tracing::warn!(target: "eso_weave::input", "controller primary synthesis failed: {error}");
+            self.cleanup_owned();
+            return false;
+        }
+
+        if !chord.primary.is_momentary() {
+            self.pressed_primaries.push(chord.primary);
+        }
+        self.cleanup_owned();
+        true
+    }
+
+    fn cleanup_owned(&mut self) {
+        let mut position = self.pressed_primaries.len();
+        while position > 0 {
+            position -= 1;
+            let primary = self.pressed_primaries[position];
+            if let Err(error) = self.backend.synthesize_native(primary, Transition::Up) {
+                tracing::warn!(target: "eso_weave::input", "controller primary cleanup failed: {error}");
+            } else {
+                self.pressed_primaries.remove(position);
+            }
+        }
+
+        let mut position = self.pressed_modifiers.len();
+        while position > 0 {
+            position -= 1;
+            let modifier = self.pressed_modifiers[position];
+            if self.gates.physical_modifiers().contains(modifier.flag()) {
+                self.pressed_modifiers.remove(position);
+                continue;
+            }
+            if let Err(error) = self.backend.synthesize_modifier(modifier, Transition::Up) {
+                tracing::warn!(target: "eso_weave::input", "controller modifier cleanup failed: {error}");
+            } else {
+                self.pressed_modifiers.remove(position);
+            }
+        }
+    }
+}
+
+impl<B: InputBackend> Drop for NativeActionExecutor<B> {
+    fn drop(&mut self) {
+        self.cleanup_owned();
+    }
+}
 
 /// Whether a key event is a press or a release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,7 +512,7 @@ impl ActionReceiver {
 /// safety-critical classification decision for each key event.
 pub struct InputEngine {
     bindings: Mutex<BindingTable>,
-    native_bindings: Mutex<NativeBindingSet>,
+    native_bindings: Arc<Mutex<NativeBindingSet>>,
     combat_requirements: Mutex<HashMap<Action, CombatRequirement>>,
     focused: AtomicBool,
     game_active: AtomicBool,
@@ -373,7 +527,7 @@ pub struct InputEngine {
     world_gate: AtomicGate,
     travel_gate: AtomicGate,
     weave_authorization_epoch: Arc<AtomicU64>,
-    fishing_authorization_epoch: Arc<AtomicU64>,
+    autonomous_authorization_epoch: Arc<AtomicU64>,
     death_epoch: AtomicU64,
     safety_refresh_generation: AtomicU64,
     physical_modifier_bits: Arc<AtomicU8>,
@@ -390,17 +544,17 @@ impl InputEngine {
     pub fn new(bindings: BindingTable, channel_capacity: usize) -> (InputEngine, ActionReceiver) {
         let (tx, rx) = sync_channel(channel_capacity);
         let weave_epoch = Arc::new(AtomicU64::new(0));
-        let fishing_epoch = Arc::new(AtomicU64::new(0));
+        let autonomous_epoch = Arc::new(AtomicU64::new(0));
         let shared_gate = |gated| {
             AtomicGate::new(
                 gated,
                 Some(Arc::clone(&weave_epoch)),
-                Some(Arc::clone(&fishing_epoch)),
+                Some(Arc::clone(&autonomous_epoch)),
             )
         };
         let engine = InputEngine {
             bindings: Mutex::new(bindings),
-            native_bindings: Mutex::new(NativeBindingSet::new_unavailable()),
+            native_bindings: Arc::new(Mutex::new(NativeBindingSet::new_unavailable())),
             combat_requirements: Mutex::new(
                 Action::COMBAT
                     .into_iter()
@@ -420,7 +574,7 @@ impl InputEngine {
             world_gate: shared_gate(true),
             travel_gate: shared_gate(true),
             weave_authorization_epoch: weave_epoch,
-            fishing_authorization_epoch: fishing_epoch,
+            autonomous_authorization_epoch: autonomous_epoch,
             death_epoch: AtomicU64::new(0),
             safety_refresh_generation: AtomicU64::new(0),
             physical_modifier_bits: Arc::new(AtomicU8::new(0)),
@@ -624,9 +778,9 @@ impl InputEngine {
         }
     }
 
-    /// Shared runtime authorization for Fishing synthesis.
-    pub fn fishing_gates(&self) -> FishingGates {
-        FishingGates {
+    /// Shared runtime authorization for autonomous controller synthesis.
+    pub fn autonomous_gates(&self) -> AutonomousGates {
+        AutonomousGates {
             game: self.game_gate.clone(),
             focus: self.focus_gate.clone(),
             suspension: self.suspension_gate.clone(),
@@ -634,8 +788,15 @@ impl InputEngine {
             life: self.life_gate.clone(),
             world: self.world_gate.clone(),
             travel: self.travel_gate.clone(),
-            epoch: Arc::clone(&self.fishing_authorization_epoch),
+            epoch: Arc::clone(&self.autonomous_authorization_epoch),
+            native_bindings: Arc::clone(&self.native_bindings),
+            physical_modifier_bits: Arc::clone(&self.physical_modifier_bits),
         }
+    }
+
+    /// Shared runtime authorization for Fishing synthesis.
+    pub fn fishing_gates(&self) -> FishingGates {
+        self.autonomous_gates()
     }
 
     /// Captures the current weave authorization generation.
@@ -681,6 +842,8 @@ impl InputEngine {
         let mut current = self.native_bindings.lock().unwrap();
         if *current != bindings {
             self.weave_authorization_epoch
+                .fetch_add(1, Ordering::AcqRel);
+            self.autonomous_authorization_epoch
                 .fetch_add(1, Ordering::AcqRel);
             *current = bindings;
         }

@@ -2,7 +2,6 @@
 
 use eso_weave::app::settings_form::{ui_from_value, ui_to_value, SettingsForm, UiPrefs};
 use eso_weave::config::{LevelName, NoticeKind, Settings, Theme};
-use eso_weave::input::Key;
 use eso_weave::pixelbus::{load_reader_config, store_reader_config, ReaderConfig};
 use eso_weave::weave::LatencyConfig;
 
@@ -133,7 +132,6 @@ fn settings_form_round_trips_custom_values() {
     edited.ui.theme = Theme::Light;
     edited.ui.always_on_top = true;
     edited.fishing.arm_timeout_ms = 4000;
-    edited.fishing.interact_key = Key::R;
     edited.reader.tolerance = 5;
     edited.latency = LatencyConfig {
         enabled: true,
@@ -152,7 +150,6 @@ fn settings_form_round_trips_custom_values() {
     assert_eq!(loaded.ui.theme, Theme::Light);
     assert!(loaded.ui.always_on_top);
     assert_eq!(loaded.fishing.arm_timeout_ms, 4000);
-    assert_eq!(loaded.fishing.interact_key, Key::R);
     assert_eq!(loaded.reader.tolerance, 5);
     assert_eq!(
         loaded.latency,
@@ -174,7 +171,6 @@ fn s062_fishing_and_reader_boundaries_round_trip_without_schema_changes() {
     form.fishing.arm_timeout_ms = 60_000;
     form.fishing.reel_delay_ms = 0;
     form.fishing.recast_delay_ms = 60_000;
-    form.fishing.interact_key = Key::F3;
     form.reader.interval_fishing_ms = 1;
     form.reader.interval_idle_ms = 60_000;
 

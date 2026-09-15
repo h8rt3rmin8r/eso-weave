@@ -99,6 +99,7 @@ pub const FISHING_IDLE_PLAYER_UNAVAILABLE: &str = "Idle (player unavailable)";
 pub const FISHING_IDLE_WORLD_UNAVAILABLE: &str = "Idle (world unavailable)";
 pub const FISHING_IDLE_TRAVEL_PENDING: &str = "Idle (travel pending)";
 pub const FISHING_IDLE_SETTINGS_CHANGED: &str = "Idle (settings changed)";
+pub const FISHING_IDLE_INTERACT_UNAVAILABLE: &str = "Idle (Interact binding unavailable)";
 
 // Status region toggles.
 pub const SUSPEND_LABEL: &str = "Running";
@@ -169,6 +170,7 @@ pub const AUTO_POTION_OFF: &str = "Off";
 pub const AUTO_POTION_DORMANT_GAME: &str = "Dormant: game inactive";
 pub const AUTO_POTION_DORMANT_UNFOCUSED: &str = "Dormant: game unfocused";
 pub const AUTO_POTION_BLOCKED_BEACON: &str = "Blocked: beacon unavailable";
+pub const AUTO_POTION_BLOCKED_BINDING: &str = "Blocked: Quickslot binding unavailable";
 pub const AUTO_POTION_BLOCKED_SUSPENDED: &str = "Blocked: input suspended";
 pub const AUTO_POTION_BLOCKED_CONTEXT: &str = "Blocked: game context";
 pub const AUTO_POTION_BLOCKED_SPRINTING: &str = "Blocked: sprinting";
@@ -204,8 +206,8 @@ pub const SET_POTION_STAMINA: Setting = Setting {
     help: "Fire when stamina is at or below this percentage.",
 };
 pub const SET_POTION_KEY: Setting = Setting {
-    label: "Quickslot Key",
-    help: "The key pressed to drink. Defaults to Q, the game's default quickslot bind; change it here if you rebound it in game.",
+    label: "Detected Quickslot Binding",
+    help: "Read from ESO. Change Quickslot in ESO, then reload the UI if this status is not valid.",
 };
 pub const SET_POTION_RETRY: Setting = Setting {
     label: "Minimum Retry Interval (ms)",
@@ -349,8 +351,8 @@ pub const SET_RECAST_DELAY: Setting = Setting {
     help: "Delay before casting the line again after a catch or timeout.",
 };
 pub const SET_FISHING_INTERACT_KEY: Setting = Setting {
-    label: "Interact Key",
-    help: "The key ESO Weave sends to cast, reel, and recast.",
+    label: "Detected Interact Binding",
+    help: "Read from ESO. Change Interact in ESO, then reload the UI if this status is not valid.",
 };
 pub const SET_BEACON_PATH: Setting = Setting {
     label: "AddOns Folder Override",

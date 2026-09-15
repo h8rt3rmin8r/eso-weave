@@ -3,9 +3,9 @@
 //! The [`FishingController`] consumes [`DetectorEvent`]s (from a [`BiteDetector`])
 //! and clock ticks, driving the Disabled, Armed, Waiting, Reeling, Recast state
 //! machine. All delays and timeouts are deadlines evaluated against an injected
-//! millisecond clock, so the controller never blocks. The interact key is emitted
-//! through the [`FishingSink`] seam. On [`DetectorEvent::SignalLost`] the
-//! controller disables fishing and cancels any pending interact rather than
+//! millisecond clock, so the controller never blocks. The native Interact action
+//! is emitted through the [`FishingSink`] seam. On [`DetectorEvent::SignalLost`]
+//! the controller disables fishing and cancels any pending interact rather than
 //! blind-firing. The controller depends on the input engine and the pixel bus
 //! reader, not on the weave engine.
 
@@ -17,8 +17,8 @@ use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
 use crate::input::{
-    FishingAuthorizationEpoch, FishingGates, InputBackend, Key, LifeGate, Transition,
-    WorldTravelGate,
+    FishingAuthorizationEpoch, FishingGates, InputBackend, Key, LifeGate, NativeAction,
+    NativeActionExecutor, Transition, WorldTravelGate,
 };
 use crate::pixelbus::{LifeState, TravelState, WorldState};
 
@@ -81,6 +81,8 @@ pub enum StopReason {
     TravelPending,
     /// Runtime fishing settings changed while a session was requested or active.
     SettingsChanged,
+    /// Native Interact authority could not admit the requested action.
+    InteractUnavailable,
 }
 
 /// The kind of the controller's single pending deadline.
@@ -96,7 +98,7 @@ enum TimerKind {
     RecastArmTimeout,
 }
 
-/// User-configurable fishing timing and the interact key.
+/// User-configurable fishing timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FishingConfig {
     /// Maximum wait for FishingStarted after a cast or recast, in milliseconds.
@@ -105,8 +107,6 @@ pub struct FishingConfig {
     pub reel_delay_ms: u32,
     /// Delay after reeling before the recast interact, in milliseconds.
     pub recast_delay_ms: u32,
-    /// The key synthesized to cast, reel, and recast.
-    pub interact_key: Key,
 }
 
 impl Default for FishingConfig {
@@ -118,7 +118,6 @@ impl Default for FishingConfig {
             arm_timeout_ms: 8000,
             reel_delay_ms: 100,
             recast_delay_ms: 3000,
-            interact_key: Key::E,
         }
     }
 }
@@ -131,15 +130,13 @@ struct RawFishing {
     reel_delay_ms: Option<u32>,
     #[serde(default)]
     recast_delay_ms: Option<u32>,
-    #[serde(default)]
-    interact_key: Option<String>,
 }
 
 impl FishingConfig {
     /// Loads the fishing configuration from the opaque `fishing` settings value.
-    /// A null value yields defaults; an out-of-range timing or an unparsable
-    /// interact key falls back to its default with an [`NoticeKind::InvalidValue`]
-    /// notice.
+    /// A null value yields defaults; an out-of-range timing falls back to its
+    /// default with an [`NoticeKind::InvalidValue`] notice. Legacy gameplay-key
+    /// fields are ignored because ESO is the sole binding authority.
     pub fn load(value: &serde_json::Value, notices: &mut Vec<Notice>) -> FishingConfig {
         if value.is_null() {
             return FishingConfig::default();
@@ -165,22 +162,6 @@ impl FishingConfig {
                 "recast_delay_ms",
                 notices,
             ),
-            interact_key: match raw.interact_key {
-                None => defaults.interact_key,
-                Some(name) => match Key::parse(&name) {
-                    Some(key) => key,
-                    None => {
-                        notices.push(Notice {
-                            kind: NoticeKind::InvalidValue,
-                            message: format!(
-                                "fishing interact_key '{name}' is not a known key; using default {}",
-                                defaults.interact_key
-                            ),
-                        });
-                        defaults.interact_key
-                    }
-                },
-            },
         }
     }
 
@@ -190,7 +171,6 @@ impl FishingConfig {
             "arm_timeout_ms": self.arm_timeout_ms,
             "reel_delay_ms": self.reel_delay_ms,
             "recast_delay_ms": self.recast_delay_ms,
-            "interact_key": self.interact_key.as_str(),
         })
     }
 }
@@ -209,13 +189,13 @@ fn checked(value: Option<u32>, default: u32, name: &str, notices: &mut Vec<Notic
     }
 }
 
-/// The seam through which the controller synthesizes the interact key.
+/// The seam through which the controller synthesizes the native Interact chord.
 pub trait FishingSink {
     /// Captures authorization for the next scheduled interact.
     fn arm_authorization(&mut self) {}
 
     /// Synthesizes one complete interact and reports whether it was admitted.
-    fn interact(&mut self, key: Key) -> bool;
+    fn interact(&mut self) -> bool;
 }
 
 /// A test sink that records each emitted key transition in order.
@@ -238,7 +218,8 @@ impl MockFishingSink {
 }
 
 impl FishingSink for MockFishingSink {
-    fn interact(&mut self, key: Key) -> bool {
+    fn interact(&mut self) -> bool {
+        let key = Key::E;
         self.ops.push((key, Transition::Down));
         self.ops.push((key, Transition::Up));
         true
@@ -246,9 +227,8 @@ impl FishingSink for MockFishingSink {
 }
 
 /// A real sink that drives the input engine's synthesis. Never panics or blocks.
-pub struct RealFishingSink<B> {
-    backend: B,
-    gates: FishingGates,
+pub struct RealFishingSink<B: InputBackend> {
+    executor: NativeActionExecutor<B>,
     admitted_epoch: Option<FishingAuthorizationEpoch>,
 }
 
@@ -256,8 +236,7 @@ impl<B: InputBackend> RealFishingSink<B> {
     /// Creates a real sink over the given input backend.
     pub fn new(backend: B, gates: FishingGates) -> Self {
         Self {
-            backend,
-            gates,
+            executor: NativeActionExecutor::new(backend, gates),
             admitted_epoch: None,
         }
     }
@@ -265,27 +244,15 @@ impl<B: InputBackend> RealFishingSink<B> {
 
 impl<B: InputBackend> FishingSink for RealFishingSink<B> {
     fn arm_authorization(&mut self) {
-        self.admitted_epoch = Some(self.gates.current_epoch());
+        self.admitted_epoch = Some(self.executor.current_epoch());
     }
 
-    fn interact(&mut self, key: Key) -> bool {
+    fn interact(&mut self) -> bool {
         let epoch = self
             .admitted_epoch
             .take()
-            .unwrap_or_else(|| self.gates.current_epoch());
-        if !self.gates.admits(epoch) {
-            return false;
-        }
-        if let Err(err) = self.backend.synthesize(key, Transition::Down) {
-            tracing::warn!(target: "eso_weave::fishing", "interact synthesis failed: {err}");
-            return false;
-        }
-        // A successful press always gets its release, even if a gate closes in
-        // between, so cancellation cannot strand a generated key logically down.
-        if let Err(err) = self.backend.synthesize(key, Transition::Up) {
-            tracing::warn!(target: "eso_weave::fishing", "interact release failed: {err}");
-        }
-        true
+            .unwrap_or_else(|| self.executor.current_epoch());
+        self.executor.execute(NativeAction::Interact, epoch)
     }
 }
 
@@ -786,7 +753,12 @@ impl FishingController {
     }
 
     /// Emits one interact: a key press followed by a key release.
-    fn send_interact(&self, sink: &mut dyn FishingSink) -> bool {
-        sink.interact(self.config.interact_key)
+    fn send_interact(&mut self, sink: &mut dyn FishingSink) -> bool {
+        if sink.interact() {
+            true
+        } else {
+            self.disable(StopReason::InteractUnavailable);
+            false
+        }
     }
 }

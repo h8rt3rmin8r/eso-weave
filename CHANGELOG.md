@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S102 makes live PixelBeacon evidence authoritative for Fishing Interact and
+  Auto Potion Quickslot. One shared autonomous chord executor validates the
+  binding generation and every applicable runtime gate, supports keyboard,
+  mouse, wheel, and modifier chords, preserves physical modifier ownership, and
+  records potion retry time only after a successful primary press. Settings now
+  show both bindings read-only, while legacy gameplay-key fields load safely and
+  disappear on save (issue #208, epic #188).
+
 - S101 makes current PixelBeacon binding evidence authoritative for Skill 1
   through 5, Ultimate, Synergy, Attack, and Block. Exact keyboard, mouse, wheel,
   and modifier chords now drive interception and all four weave sequences on
@@ -95,6 +103,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Generalize the Fishing authorization generation into one non-roll
+  autonomous controller boundary shared with Auto Potion. Keep policy in each
+  controller, place portable chord ownership in the input layer, and ignore
+  legacy Interact and Quickslot settings without fallback. This avoids importing
+  combat-only roll policy or duplicating cancellation-sensitive synthesis logic.
 
 - 2026-09-15: Make the coherent native binding snapshot the sole authority for
   combat interception and synthesis. Trigger matching is exact, generated

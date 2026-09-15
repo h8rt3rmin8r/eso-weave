@@ -35,7 +35,11 @@ fn s062_settings_copy_distinguishes_live_updates_from_staged_geometry() {
         strings::FISHING_IDLE_SETTINGS_CHANGED,
         "Idle (settings changed)"
     );
-    assert_eq!(strings::SET_FISHING_INTERACT_KEY.label, "Interact Key");
+    assert_eq!(
+        strings::SET_FISHING_INTERACT_KEY.label,
+        "Detected Interact Binding"
+    );
+    assert_eq!(strings::SET_POTION_KEY.label, "Detected Quickslot Binding");
     assert!(strings::FISHING_SETTINGS_APPLICATION_HELP.contains("apply while ESO Weave is running"));
     assert!(strings::READER_SETTINGS_APPLICATION_HELP.contains("apply while ESO Weave is running"));
 
@@ -141,7 +145,8 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
         "Auto Timing from Weapon",
         "Adapt to Latency",
         "Sample Interval While Idle (ms)",
-        "Interact Key",
+        "Detected Interact Binding",
+        "Detected Quickslot Binding",
         "Write Log to File",
         "Watch Health (Threshold %)",
         "Toggle Suspend",

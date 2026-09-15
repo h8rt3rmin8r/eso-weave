@@ -114,14 +114,14 @@ pub struct Settings {
     /// compatible.
     #[serde(default)]
     pub beacon: serde_json::Value,
-    /// Fishing controller configuration (timing parameters and interact key), as
+    /// Fishing controller timing configuration, as
     /// an opaque JSON section owned by the fishing module. Null or absent means
     /// the fishing defaults are used. Additive and backward compatible.
     #[serde(default)]
     pub fishing: serde_json::Value,
-    /// Auto-potion configuration (per-resource enables and thresholds, the
-    /// quickslot key, and the retry interval), as an opaque JSON section owned by
-    /// the potion module. Null or absent means the defaults are used, which
+    /// Auto-potion configuration (per-resource enables, thresholds, and retry
+    /// interval), as an opaque JSON section owned by the potion module. Null or
+    /// absent means the defaults are used, which
     /// includes every resource watch being off. Additive and backward compatible.
     ///
     /// Requested auto-potion enablement is deliberately absent because it is

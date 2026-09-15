@@ -35,7 +35,9 @@
 use serde::Deserialize;
 
 use crate::config::{Notice, NoticeKind};
-use crate::input::{InputBackend, Key, Transition};
+use crate::input::{
+    AutonomousGates, InputBackend, Key, NativeAction, NativeActionExecutor, Transition,
+};
 use crate::pixelbus::{
     LifeState, MovementSignal, QuickslotClassification, QuickslotPotionAvailability,
     QuickslotState, RecoveryPath, ResourceLevel, ResourceSet, SlotCooldown, TravelState,
@@ -74,8 +76,6 @@ pub struct AutoPotionConfig {
     pub magicka: ResourceWatch,
     /// The stamina watch.
     pub stamina: ResourceWatch,
-    /// The key synthesized to drink.
-    pub quickslot_key: Key,
     /// The minimum time between two attempts, in milliseconds.
     ///
     /// This is not a duplicate of the quickslot cooldown. The cooldown is read
@@ -93,8 +93,6 @@ impl Default for AutoPotionConfig {
             health: ResourceWatch::default(),
             magicka: ResourceWatch::default(),
             stamina: ResourceWatch::default(),
-            // The game's default quickslot bind.
-            quickslot_key: Key::Q,
             retry_interval_ms: 1500,
         }
     }
@@ -134,6 +132,8 @@ pub enum DormantReason {
 /// A current safety or observation condition that prevents input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockReason {
+    /// Native Quickslot authority could not admit an input attempt.
+    QuickslotBindingUnavailable,
     /// No fresh PixelBus heartbeat is available.
     BeaconUnavailable,
     /// The application is suspended.
@@ -187,6 +187,9 @@ impl AutoPotionState {
             Self::Dormant(DormantReason::GameInactive) => "dormant_game_inactive",
             Self::Dormant(DormantReason::Unfocused) => "dormant_unfocused",
             Self::Blocked(BlockReason::BeaconUnavailable) => "blocked_beacon_unavailable",
+            Self::Blocked(BlockReason::QuickslotBindingUnavailable) => {
+                "blocked_quickslot_binding_unavailable"
+            }
             Self::Blocked(BlockReason::Suspended) => "blocked_suspended",
             Self::Blocked(BlockReason::GameContext) => "blocked_game_context",
             Self::Blocked(BlockReason::PlayerUnavailable(LifeState::Unknown)) => {
@@ -393,15 +396,20 @@ pub fn evaluate(
     cause.map_or(AutoPotionState::Ready, AutoPotionState::Triggered)
 }
 
-/// The seam through which the controller synthesizes the quickslot key.
+/// The seam through which the controller synthesizes the native Quickslot chord.
 ///
 /// Identical in shape to [`FishingSink`](crate::fishing::FishingSink), and for the
 /// same reason: it is the only place this feature reaches synthesis, so the real
 /// implementation is the one line that has to be right for the whole feature to
 /// stay inside the input engine's safety properties.
 pub trait AutoPotionSink {
-    /// Synthesizes one key transition of the given key.
-    fn key(&mut self, key: Key, transition: Transition);
+    /// Whether current native Quickslot evidence is valid for presentation.
+    fn binding_available(&self) -> bool {
+        true
+    }
+
+    /// Synthesizes one complete Quickslot action and reports primary admission.
+    fn quickslot(&mut self) -> bool;
 }
 
 /// A test sink that records each emitted key transition in order.
@@ -424,28 +432,37 @@ impl MockAutoPotionSink {
 }
 
 impl AutoPotionSink for MockAutoPotionSink {
-    fn key(&mut self, key: Key, transition: Transition) {
-        self.ops.push((key, transition));
+    fn quickslot(&mut self) -> bool {
+        self.ops.push((Key::Q, Transition::Down));
+        self.ops.push((Key::Q, Transition::Up));
+        true
     }
 }
 
 /// A real sink driving the input engine's synthesis. Never panics or blocks.
-pub struct RealAutoPotionSink<B> {
-    backend: B,
+pub struct RealAutoPotionSink<B: InputBackend> {
+    executor: NativeActionExecutor<B>,
 }
 
 impl<B: InputBackend> RealAutoPotionSink<B> {
     /// Creates a real sink over the given input backend.
-    pub fn new(backend: B) -> Self {
-        Self { backend }
+    pub fn new(backend: B, gates: AutonomousGates) -> Self {
+        Self {
+            executor: NativeActionExecutor::new(backend, gates),
+        }
     }
 }
 
 impl<B: InputBackend> AutoPotionSink for RealAutoPotionSink<B> {
-    fn key(&mut self, key: Key, transition: Transition) {
-        if let Err(err) = self.backend.synthesize(key, transition) {
-            tracing::warn!(target: "eso_weave::potion", "quickslot synthesis failed: {err}");
-        }
+    fn binding_available(&self) -> bool {
+        matches!(
+            self.executor.binding_state(NativeAction::Quickslot),
+            crate::input::NativeBindingState::Valid(_)
+        )
+    }
+
+    fn quickslot(&mut self) -> bool {
+        self.executor.execute_current(NativeAction::Quickslot)
     }
 }
 
@@ -693,7 +710,7 @@ impl AutoPotionController {
         self.apply_immediate_state();
     }
 
-    /// Evaluates the rule and, if it fires, presses the quickslot key once.
+    /// Evaluates the rule and, if it fires, presses the native Quickslot chord once.
     ///
     /// Returns and stores the effective state. The last-attempt time is recorded
     /// on the *attempt*, not on a confirmed
@@ -740,17 +757,24 @@ impl AutoPotionController {
             retry_baseline_ms,
             now_ms,
         );
-        if matches!(outcome, AutoPotionState::Triggered(_)) {
-            tracing::debug!(
-                target: "eso_weave::potion",
-                key = %self.config.quickslot_key,
-                "auto-potion firing"
-            );
-            sink.key(self.config.quickslot_key, Transition::Down);
-            sink.key(self.config.quickslot_key, Transition::Up);
-            self.last_attempt_ms = Some(now_ms);
-            self.retry_episode_started_ms = None;
-        }
+        let outcome = if matches!(
+            outcome,
+            AutoPotionState::Ready | AutoPotionState::Triggered(_)
+        ) && !sink.binding_available()
+        {
+            AutoPotionState::Blocked(BlockReason::QuickslotBindingUnavailable)
+        } else if matches!(outcome, AutoPotionState::Triggered(_)) {
+            tracing::debug!(target: "eso_weave::potion", "auto-potion firing detected Quickslot chord");
+            if sink.quickslot() {
+                self.last_attempt_ms = Some(now_ms);
+                self.retry_episode_started_ms = None;
+                outcome
+            } else {
+                AutoPotionState::Blocked(BlockReason::QuickslotBindingUnavailable)
+            }
+        } else {
+            outcome
+        };
         self.set_state(outcome);
         outcome
     }
@@ -772,8 +796,6 @@ struct RawPotion {
     magicka: Option<RawWatch>,
     #[serde(default)]
     stamina: Option<RawWatch>,
-    #[serde(default)]
-    quickslot_key: Option<String>,
     #[serde(default)]
     retry_interval_ms: Option<u32>,
 }
@@ -806,8 +828,9 @@ fn load_watch(raw: Option<RawWatch>, name: &str, notices: &mut Vec<Notice>) -> R
 
 impl AutoPotionConfig {
     /// Loads the auto-potion configuration from the opaque `potion` settings
-    /// value. A null value yields defaults; an out-of-range threshold or interval,
-    /// or an unparsable key, falls back to its default with a notice.
+    /// value. A null value yields defaults; an out-of-range threshold or interval
+    /// falls back to its default with a notice. Legacy gameplay-key fields are
+    /// ignored because ESO is the sole binding authority.
     pub fn load(value: &serde_json::Value, notices: &mut Vec<Notice>) -> AutoPotionConfig {
         if value.is_null() {
             return AutoPotionConfig::default();
@@ -818,22 +841,6 @@ impl AutoPotionConfig {
             health: load_watch(raw.health, "health", notices),
             magicka: load_watch(raw.magicka, "magicka", notices),
             stamina: load_watch(raw.stamina, "stamina", notices),
-            quickslot_key: match raw.quickslot_key {
-                None => defaults.quickslot_key,
-                Some(name) => match Key::parse(&name) {
-                    Some(key) => key,
-                    None => {
-                        notices.push(Notice {
-                            kind: NoticeKind::InvalidValue,
-                            message: format!(
-                                "auto-potion quickslot_key '{name}' is not a known key; using default {}",
-                                defaults.quickslot_key
-                            ),
-                        });
-                        defaults.quickslot_key
-                    }
-                },
-            },
             retry_interval_ms: match raw.retry_interval_ms {
                 None => defaults.retry_interval_ms,
                 Some(ms) if ms <= MAX_RETRY_MS => ms,
@@ -858,7 +865,6 @@ impl AutoPotionConfig {
             "health": watch(&self.health),
             "magicka": watch(&self.magicka),
             "stamina": watch(&self.stamina),
-            "quickslot_key": self.quickslot_key.as_str(),
             "retry_interval_ms": self.retry_interval_ms,
         })
     }

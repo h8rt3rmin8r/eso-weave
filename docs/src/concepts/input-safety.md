@@ -130,8 +130,9 @@ assignments. In other words, it rejects conflicting assignments among the three
 desktop-owned toggles. Every interception remains scoped to the focused ESO
 window.
 
-These three application bindings are separate from fishing's generated Interact
-Key, which remains independently configurable until S102. A
-changed Fishing configuration turns requested work off without input before the
-new key can be used. Pixel Bus tolerance and cadence changes stay on the reader
-worker and never move work onto the input callback.
+Fishing Interact and Auto Potion Quickslot also follow current valid ESO chords.
+They share a non-roll autonomous authorization generation so binding replacement,
+signal loss, and every applicable runtime gate can reject scheduled work before
+a later primary down. Their settings rows are read-only. Pixel Bus tolerance and
+cadence changes stay on the reader worker and never move work onto the input
+callback.

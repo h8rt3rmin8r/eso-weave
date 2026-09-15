@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [043](plan-043.md) | Active | S101 native combat binding consumption, issue #207 |
+| [043](plan-043.md) | Active | S102 controller native binding consumption, issue #208 |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five

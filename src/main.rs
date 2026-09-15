@@ -223,7 +223,8 @@ fn main() {
             // Auto-potion synthesizes through its own sink over the same backend,
             // preserving recursion flagging. Focus is pushed into the controller
             // explicitly because autonomous synthesis bypasses interception.
-            let mut potion_sink = RealAutoPotionSink::new(SharedBackend(backend));
+            let mut potion_sink =
+                RealAutoPotionSink::new(SharedBackend(backend), input.autonomous_gates());
             let mut sampler = None;
             // Display detection rides this loop: no new thread and no new timer.
             // It is change-detected, so a stationary window costs nothing beyond

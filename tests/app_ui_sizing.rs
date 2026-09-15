@@ -1370,7 +1370,7 @@ fn render_modal_at(size: egui::Vec2) -> EsoWeaveApp {
 }
 
 #[test]
-fn s062_settings_modal_exposes_fishing_key_and_application_boundaries() {
+fn s102_settings_modal_exposes_detected_bindings_and_application_boundaries() {
     let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
     harness.step();
     harness.state_mut().set_settings_open(true);
@@ -1378,8 +1378,15 @@ fn s062_settings_modal_exposes_fishing_key_and_application_boundaries() {
         harness.step();
     }
 
-    harness.get_by_label("Interact Key");
-    harness.get_by_value("E");
+    harness.get_by_label("Detected Interact Binding");
+    harness.get_by_label("Detected Quickslot Binding");
+    assert!(
+        harness
+            .query_all(egui_kittest::kittest::By::new().value("Unavailable"))
+            .count()
+            >= 2,
+        "both read-only native binding rows should show unavailable startup evidence"
+    );
     harness.get_by_label(eso_weave::app::strings::FISHING_SETTINGS_APPLICATION_HELP);
     harness.get_by_label(eso_weave::app::strings::READER_SETTINGS_APPLICATION_HELP);
 }

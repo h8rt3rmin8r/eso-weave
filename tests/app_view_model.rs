@@ -1925,7 +1925,6 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
         enabled: true,
         threshold: 42,
     };
-    form.potion.quickslot_key = eso_weave::input::Key::X;
     form.potion.retry_interval_ms = 2345;
 
     model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
@@ -1933,7 +1932,6 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
     let config = *potion.lock().unwrap().config();
     assert!(config.health.enabled);
     assert_eq!(config.health.threshold, 42);
-    assert_eq!(config.quickslot_key, eso_weave::input::Key::X);
     assert_eq!(config.retry_interval_ms, 2345);
 }
 
@@ -1947,7 +1945,6 @@ fn s062_applying_settings_refreshes_live_fishing_and_reader_fields() {
         arm_timeout_ms: 7_000,
         reel_delay_ms: 250,
         recast_delay_ms: 2_000,
-        interact_key: eso_weave::input::Key::R,
     };
     form.reader.tolerance = 7;
     form.reader.interval_fishing_ms = 75;
@@ -1956,10 +1953,6 @@ fn s062_applying_settings_refreshes_live_fishing_and_reader_fields() {
 
     model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
 
-    assert_eq!(
-        model.runtime_fishing_config().interact_key,
-        eso_weave::input::Key::R
-    );
     assert_eq!(model.runtime_fishing_config().reel_delay_ms, 250);
     let reader = model.runtime_reader_config();
     assert_eq!(reader.tolerance, 7);
@@ -2032,7 +2025,7 @@ fn s062_changed_fishing_settings_turn_off_requested_work_but_no_op_edits_do_not(
     );
 
     let mut changed = model.settings_form();
-    changed.fishing.interact_key = eso_weave::input::Key::R;
+    changed.fishing.reel_delay_ms += 1;
     model.apply_intent(UiIntent::ApplySettings(Box::new(changed)));
 
     assert!(!model.fishing_on());

@@ -28,7 +28,10 @@ use eso_weave::game::{
     InstallationState, Presence, ProcessObservation, SurfaceObservation,
 };
 use eso_weave::input::bindings::BindingTable;
-use eso_weave::input::{ActionReceiver, InputEngine};
+use eso_weave::input::{
+    ActionReceiver, InputEngine, KeyboardControl, ModifierSet, NativeAction, NativeBindingSet,
+    NativeBindingState, NativeChord, NativeControl,
+};
 use eso_weave::logging;
 use eso_weave::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, MenuSurface, MovementSignal,
@@ -872,6 +875,22 @@ fn build_scene(
     }
 
     let (input, action_rx) = InputEngine::new(BindingTable::default(), 16);
+    let mut native_bindings = NativeBindingSet::new_unavailable();
+    native_bindings.set(
+        NativeAction::Interact,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::E),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    native_bindings.set(
+        NativeAction::Quickslot,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Keyboard(KeyboardControl::Q),
+            modifiers: ModifierSet::EMPTY,
+        }),
+    );
+    input.set_native_bindings(native_bindings);
     let input = Arc::new(input);
     let mut weave_engine = WeaveEngine::new(weave_config);
     seed_weave_observations(&mut weave_engine, scene.active_game());

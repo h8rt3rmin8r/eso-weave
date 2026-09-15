@@ -36,9 +36,14 @@ and telemetry safety conditions are true. Loading failures fall back safely
 rather than panicking. Unlike corrupt `config.json`, a rejected session-state
 file has no `.invalid` preservation guarantee.
 
-Auto Potion watches, thresholds, key, and retry interval remain settings. Only
+Auto Potion watches, thresholds, and retry interval remain settings. Only
 the requested on or off toggle is session state. Effective state, telemetry,
 blockers, and retry history are always rebuilt from the running process.
+
+Legacy `fishing.interact_key` and `potion.quickslot_key` members are accepted as
+unknown input for compatibility, never used as authority, and omitted on the
+next settings save. Current Interact and Quickslot chords come only from live
+PixelBeacon evidence of ESO controls.
 
 Writes are coalesced. A change marks the relevant store dirty and one write occurs
 after the configured settling interval.

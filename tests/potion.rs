@@ -18,9 +18,9 @@ use eso_weave::pixelbus::{
     SlotCooldown, TravelState, WorldState,
 };
 use eso_weave::potion::{
-    evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState,
-    BlockReason, DormantReason, MockAutoPotionSink, PotionInputs, PotionReadings, ResourceWatch,
-    TriggerCause,
+    evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionSink,
+    AutoPotionState, BlockReason, DormantReason, MockAutoPotionSink, PotionInputs, PotionReadings,
+    ResourceWatch, TriggerCause,
 };
 
 /// A configuration with all three resources watched at 50 percent.
@@ -694,6 +694,25 @@ fn armed_controller() -> AutoPotionController {
     controller
 }
 
+struct RejectingSink;
+
+impl AutoPotionSink for RejectingSink {
+    fn quickslot(&mut self) -> bool {
+        false
+    }
+}
+
+#[test]
+fn s102_rejected_native_quickslot_does_not_consume_retry_time() {
+    let mut controller = armed_controller();
+    let mut sink = RejectingSink;
+    assert_eq!(
+        controller.tick(eligible_readings(), 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::QuickslotBindingUnavailable)
+    );
+    assert_eq!(controller.last_attempt_ms(), None);
+}
+
 #[test]
 fn sprint_defers_without_queueing_then_fires_from_current_readings() {
     let mut controller = armed_controller();
@@ -990,7 +1009,6 @@ fn config_round_trips_through_settings() {
             enabled: true,
             threshold: 0,
         },
-        quickslot_key: Key::X,
         retry_interval_ms: 2500,
         ..AutoPotionConfig::default()
     };
@@ -1026,11 +1044,11 @@ fn invalid_stored_values_degrade_to_defaults_with_notices() {
         loaded.health.enabled,
         "a valid field must survive its neighbour"
     );
-    assert_eq!(loaded.quickslot_key, defaults.quickslot_key);
+    assert!(loaded.store().get("quickslot_key").is_none());
     assert_eq!(loaded.retry_interval_ms, defaults.retry_interval_ms);
     assert_eq!(
         notices.len(),
-        3,
+        2,
         "one notice per invalid value: {notices:?}"
     );
 }
