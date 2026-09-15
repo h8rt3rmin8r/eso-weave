@@ -469,6 +469,14 @@ pub enum NativeModifier {
     Command,
 }
 
+/// Physical side used to distinguish independently held modifier keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ModifierSide {
+    Unspecified,
+    Left,
+    Right,
+}
+
 impl NativeModifier {
     /// Canonical generated press order. Cleanup uses the reverse order.
     pub const ORDERED: [Self; 4] = [Self::Control, Self::Alt, Self::Shift, Self::Command];
@@ -494,7 +502,19 @@ pub struct NativeChord {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NativeInput {
     Primary(NativeControl),
+    /// A normalized modifier event from a platform-neutral caller.
     Modifier(NativeModifier),
+    /// A physical modifier event whose left or right ownership is known.
+    SidedModifier {
+        modifier: NativeModifier,
+        side: ModifierSide,
+    },
+    /// A Windows/Meta key that is both a portable primary and a modifier.
+    ModifierPrimary {
+        modifier: NativeModifier,
+        side: ModifierSide,
+        primary: NativeControl,
+    },
 }
 
 /// The native controls copied into one admitted combat request.

@@ -26,8 +26,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::input::{
-    Decision, InputBackend, InputEngine, InputError, Key, KeyboardControl, MouseButton,
-    MouseControl, NativeControl, NativeInput, NativeInputEvent, NativeModifier, Origin, Transition,
+    Decision, InputBackend, InputEngine, InputError, Key, KeyboardControl, ModifierSide,
+    MouseButton, MouseControl, NativeControl, NativeInput, NativeInputEvent, NativeModifier,
+    Origin, Transition,
 };
 
 static ENGINE: OnceLock<Arc<InputEngine>> = OnceLock::new();
@@ -304,13 +305,46 @@ fn foreground_is_target() -> bool {
 
 fn vk_to_input(vk: u32, extended: bool) -> Option<NativeInput> {
     let modifier = match vk {
-        0x10 | 0xA0 | 0xA1 => Some(NativeModifier::Shift),
-        0x11 | 0xA2 | 0xA3 => Some(NativeModifier::Control),
-        0x12 | 0xA4 | 0xA5 => Some(NativeModifier::Alt),
+        0x10 | 0xA0 => Some((NativeModifier::Shift, ModifierSide::Left)),
+        0xA1 => Some((NativeModifier::Shift, ModifierSide::Right)),
+        0x11 => Some((
+            NativeModifier::Control,
+            if extended {
+                ModifierSide::Right
+            } else {
+                ModifierSide::Left
+            },
+        )),
+        0xA2 => Some((NativeModifier::Control, ModifierSide::Left)),
+        0xA3 => Some((NativeModifier::Control, ModifierSide::Right)),
+        0x12 => Some((
+            NativeModifier::Alt,
+            if extended {
+                ModifierSide::Right
+            } else {
+                ModifierSide::Left
+            },
+        )),
+        0xA4 => Some((NativeModifier::Alt, ModifierSide::Left)),
+        0xA5 => Some((NativeModifier::Alt, ModifierSide::Right)),
+        0x5B => {
+            return Some(NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Left,
+                primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            });
+        }
+        0x5C => {
+            return Some(NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Right,
+                primary: NativeControl::Keyboard(KeyboardControl::RightWindows),
+            });
+        }
         _ => None,
     };
-    if let Some(modifier) = modifier {
-        return Some(NativeInput::Modifier(modifier));
+    if let Some((modifier, side)) = modifier {
+        return Some(NativeInput::SidedModifier { modifier, side });
     }
     vk_to_keyboard(vk, extended).map(|key| NativeInput::Primary(NativeControl::Keyboard(key)))
 }
@@ -479,6 +513,32 @@ mod tests {
                 "{key:?}"
             );
         }
+    }
+
+    #[test]
+    fn physical_modifiers_preserve_side_and_windows_primary_identity() {
+        assert_eq!(
+            vk_to_input(0xA0, false),
+            Some(NativeInput::SidedModifier {
+                modifier: NativeModifier::Shift,
+                side: ModifierSide::Left,
+            })
+        );
+        assert_eq!(
+            vk_to_input(0x11, true),
+            Some(NativeInput::SidedModifier {
+                modifier: NativeModifier::Control,
+                side: ModifierSide::Right,
+            })
+        );
+        assert_eq!(
+            vk_to_input(0x5B, true),
+            Some(NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Left,
+                primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            })
+        );
     }
 
     #[test]

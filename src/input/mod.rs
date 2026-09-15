@@ -31,8 +31,9 @@ pub use action::Action;
 pub use bindings::{BindingTable, Conflict, RebindError};
 pub use key::Key;
 pub use native::{
-    CombatChordPlan, CombatRequirement, KeyboardControl, ModifierSet, MouseControl, NativeAction,
-    NativeBindingSet, NativeBindingState, NativeChord, NativeControl, NativeInput, NativeModifier,
+    CombatChordPlan, CombatRequirement, KeyboardControl, ModifierSet, ModifierSide, MouseControl,
+    NativeAction, NativeBindingSet, NativeBindingState, NativeChord, NativeControl, NativeInput,
+    NativeModifier,
 };
 
 /// A cheaply cloned, independently updateable life-state synthesis gate.
@@ -370,6 +371,7 @@ pub struct InputEngine {
     death_epoch: AtomicU64,
     safety_refresh_generation: AtomicU64,
     physical_modifier_bits: Arc<AtomicU8>,
+    physical_modifier_controls: Mutex<HashSet<(NativeModifier, ModifierSide)>>,
     held: Mutex<HashSet<NativeControl>>,
     passed_through: Mutex<HashSet<NativeControl>>,
     active: Mutex<HashSet<Action>>,
@@ -416,6 +418,7 @@ impl InputEngine {
             death_epoch: AtomicU64::new(0),
             safety_refresh_generation: AtomicU64::new(0),
             physical_modifier_bits: Arc::new(AtomicU8::new(0)),
+            physical_modifier_controls: Mutex::new(HashSet::new()),
             held: Mutex::new(HashSet::new()),
             passed_through: Mutex::new(HashSet::new()),
             active: Mutex::new(Action::ALL.into_iter().collect()),
@@ -657,10 +660,12 @@ impl InputEngine {
     /// Sets the native chords required by one combat action's weave type.
     pub fn set_combat_requirement(&self, action: Action, requirement: CombatRequirement) {
         if !action.is_app_toggle() {
-            self.combat_requirements
-                .lock()
-                .unwrap()
-                .insert(action, requirement);
+            let mut requirements = self.combat_requirements.lock().unwrap();
+            if requirements.get(&action) != Some(&requirement) {
+                self.weave_authorization_epoch
+                    .fetch_add(1, Ordering::AcqRel);
+                requirements.insert(action, requirement);
+            }
         }
     }
 
@@ -702,11 +707,38 @@ impl InputEngine {
         if event.origin == Origin::SelfOriginated {
             return Decision::Pass;
         }
-        let NativeInput::Primary(primary) = event.input else {
-            if let NativeInput::Modifier(modifier) = event.input {
-                self.observe_physical_modifier(modifier, event.transition);
+        let primary = match event.input {
+            NativeInput::Primary(primary) => primary,
+            NativeInput::Modifier(modifier) => {
+                self.observe_physical_modifier(
+                    modifier,
+                    ModifierSide::Unspecified,
+                    event.transition,
+                );
+                return Decision::Pass;
             }
-            return Decision::Pass;
+            NativeInput::SidedModifier { modifier, side } => {
+                self.observe_physical_modifier(modifier, side, event.transition);
+                return Decision::Pass;
+            }
+            NativeInput::ModifierPrimary {
+                modifier,
+                side,
+                primary,
+            } => {
+                if event.transition == Transition::Up {
+                    self.observe_physical_modifier(modifier, side, event.transition);
+                }
+                let decision = self.classify_native(NativeInputEvent {
+                    input: NativeInput::Primary(primary),
+                    transition: event.transition,
+                    origin: event.origin,
+                });
+                if event.transition == Transition::Down {
+                    self.observe_physical_modifier(modifier, side, event.transition);
+                }
+                return decision;
+            }
         };
         let authorization_epoch = self.authorization_epoch();
         // A release must retire physical held-key state even when a lifecycle or
@@ -729,10 +761,13 @@ impl InputEngine {
         let toggle =
             native_to_key(primary).and_then(|key| self.bindings.lock().unwrap().lookup(key));
         let combat = self.resolve_combat(primary, self.physical_modifiers());
-        let (action, suspend_exempt, combat_plan) = match (toggle, combat) {
-            (Some((action, exempt)), _) => (action, exempt, None),
-            (None, Some((action, plan))) => (action, false, Some(plan)),
+        let (action, suspend_exempt, combat_plan) = match (combat, toggle) {
+            (Some((action, plan)), _) => (action, false, Some(plan)),
+            (None, Some((action, exempt))) if self.physical_modifiers() == ModifierSet::EMPTY => {
+                (action, exempt, None)
+            }
             (None, None) => return self.pass_physical(primary, event.transition),
+            (None, Some(_)) => return self.pass_physical(primary, event.transition),
         };
         if !self.active.lock().unwrap().contains(&action) {
             return self.pass_physical(primary, event.transition);
@@ -779,17 +814,26 @@ impl InputEngine {
         Decision::Suppress
     }
 
-    fn observe_physical_modifier(&self, modifier: NativeModifier, transition: Transition) {
-        let flag = modifier.flag().bits();
+    fn observe_physical_modifier(
+        &self,
+        modifier: NativeModifier,
+        side: ModifierSide,
+        transition: Transition,
+    ) {
+        let mut controls = self.physical_modifier_controls.lock().unwrap();
         match transition {
             Transition::Down => {
-                self.physical_modifier_bits.fetch_or(flag, Ordering::AcqRel);
+                controls.insert((modifier, side));
             }
             Transition::Up => {
-                self.physical_modifier_bits
-                    .fetch_and(!flag, Ordering::AcqRel);
+                controls.remove(&(modifier, side));
             }
         }
+        let bits = controls
+            .iter()
+            .fold(ModifierSet::EMPTY, |set, (modifier, _)| set.with(*modifier))
+            .bits();
+        self.physical_modifier_bits.store(bits, Ordering::Release);
     }
 
     fn resolve_combat(

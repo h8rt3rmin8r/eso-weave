@@ -22,8 +22,9 @@ use evdev::{
 };
 
 use crate::input::{
-    Decision, InputBackend, InputEngine, InputError, Key, KeyboardControl, MouseButton,
-    MouseControl, NativeControl, NativeInput, NativeInputEvent, NativeModifier, Origin, Transition,
+    Decision, InputBackend, InputEngine, InputError, Key, KeyboardControl, ModifierSide,
+    MouseButton, MouseControl, NativeControl, NativeInput, NativeInputEvent, NativeModifier,
+    Origin, Transition,
 };
 
 /// The default ESO window title fragment used for focus matching.
@@ -451,14 +452,30 @@ fn mouse_to_ev(mouse: MouseControl) -> EvKey {
 
 fn ev_to_native_input(key: EvKey) -> Option<NativeInput> {
     let modifier = match key {
-        EvKey::KEY_LEFTCTRL | EvKey::KEY_RIGHTCTRL => Some(NativeModifier::Control),
-        EvKey::KEY_LEFTALT | EvKey::KEY_RIGHTALT => Some(NativeModifier::Alt),
-        EvKey::KEY_LEFTSHIFT | EvKey::KEY_RIGHTSHIFT => Some(NativeModifier::Shift),
-        EvKey::KEY_LEFTMETA | EvKey::KEY_RIGHTMETA => Some(NativeModifier::Command),
+        EvKey::KEY_LEFTCTRL => Some((NativeModifier::Control, ModifierSide::Left)),
+        EvKey::KEY_RIGHTCTRL => Some((NativeModifier::Control, ModifierSide::Right)),
+        EvKey::KEY_LEFTALT => Some((NativeModifier::Alt, ModifierSide::Left)),
+        EvKey::KEY_RIGHTALT => Some((NativeModifier::Alt, ModifierSide::Right)),
+        EvKey::KEY_LEFTSHIFT => Some((NativeModifier::Shift, ModifierSide::Left)),
+        EvKey::KEY_RIGHTSHIFT => Some((NativeModifier::Shift, ModifierSide::Right)),
+        EvKey::KEY_LEFTMETA => {
+            return Some(NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Left,
+                primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            });
+        }
+        EvKey::KEY_RIGHTMETA => {
+            return Some(NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Right,
+                primary: NativeControl::Keyboard(KeyboardControl::RightWindows),
+            });
+        }
         _ => None,
     };
-    if let Some(modifier) = modifier {
-        return Some(NativeInput::Modifier(modifier));
+    if let Some((modifier, side)) = modifier {
+        return Some(NativeInput::SidedModifier { modifier, side });
     }
     let mouse = match key {
         EvKey::BTN_LEFT => Some(MouseControl::Left),
@@ -625,17 +642,37 @@ mod tests {
         for key in KeyboardControl::ALL {
             let native = keyboard_to_ev(key);
             assert!(capabilities.contains(native), "missing {key:?}");
-            if !matches!(
-                key,
-                KeyboardControl::LeftWindows | KeyboardControl::RightWindows
-            ) {
-                assert_eq!(
-                    ev_to_native_input(native),
-                    Some(NativeInput::Primary(NativeControl::Keyboard(key)))
-                );
-            }
+            let input = ev_to_native_input(native).unwrap();
+            let primary = match input {
+                NativeInput::Primary(primary) | NativeInput::ModifierPrimary { primary, .. } => {
+                    primary
+                }
+                NativeInput::Modifier(_) | NativeInput::SidedModifier { .. } => {
+                    panic!("{key:?} lost its primary identity")
+                }
+            };
+            assert_eq!(primary, NativeControl::Keyboard(key));
         }
         assert!(advertised_axes(None).contains(RelativeAxisCode::REL_WHEEL));
+    }
+
+    #[test]
+    fn physical_modifiers_preserve_side_and_meta_primary_identity() {
+        assert_eq!(
+            ev_to_native_input(EvKey::KEY_RIGHTSHIFT),
+            Some(NativeInput::SidedModifier {
+                modifier: NativeModifier::Shift,
+                side: ModifierSide::Right,
+            })
+        );
+        assert_eq!(
+            ev_to_native_input(EvKey::KEY_LEFTMETA),
+            Some(NativeInput::ModifierPrimary {
+                modifier: NativeModifier::Command,
+                side: ModifierSide::Left,
+                primary: NativeControl::Keyboard(KeyboardControl::LeftWindows),
+            })
+        );
     }
 
     #[test]

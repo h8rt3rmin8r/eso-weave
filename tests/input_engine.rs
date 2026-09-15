@@ -7,9 +7,10 @@ use eso_weave::input::action::Action;
 use eso_weave::input::key::Key;
 use eso_weave::input::mock::MockBackend;
 use eso_weave::input::{
-    BindingTable, Decision, InputBackend, InputEngine, KeyEvent, KeyboardControl, ModifierSet,
-    MouseControl, NativeAction, NativeBindingSet, NativeBindingState, NativeChord, NativeControl,
-    NativeInput, NativeInputEvent, NativeModifier, Origin, Transition,
+    BindingTable, CombatRequirement, Decision, InputBackend, InputEngine, KeyEvent,
+    KeyboardControl, ModifierSet, ModifierSide, MouseControl, NativeAction, NativeBindingSet,
+    NativeBindingState, NativeChord, NativeControl, NativeInput, NativeInputEvent, NativeModifier,
+    Origin, Transition,
 };
 
 fn install_native(engine: &InputEngine) {
@@ -257,6 +258,79 @@ fn binding_replacement_invalidates_queued_work_and_retires_old_trigger() {
         engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
         Decision::Pass
     );
+}
+
+#[test]
+fn combat_requirement_replacement_invalidates_queued_work() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    assert_eq!(
+        engine.classify(ev(Key::Digit1, Transition::Down, Origin::Real)),
+        Decision::Suppress
+    );
+    let queued = rx.try_recv_authorized().unwrap();
+
+    engine.set_combat_requirement(Action::Skill1, CombatRequirement::BASH);
+
+    assert!(!engine.weave_gates().admits(queued.authorization_epoch()));
+}
+
+#[test]
+fn exact_modified_combat_chord_outranks_unmodified_app_toggle() {
+    let (engine, rx) = engine();
+    engine.set_focused(true);
+    let mut bindings = engine.native_bindings();
+    let shifted_f1 = NativeChord {
+        primary: NativeControl::Keyboard(KeyboardControl::F1),
+        modifiers: ModifierSet::SHIFT,
+    };
+    bindings.set(NativeAction::Skill1, NativeBindingState::Valid(shifted_f1));
+    bindings.set(
+        NativeAction::Attack,
+        NativeBindingState::Valid(NativeChord {
+            primary: NativeControl::Mouse(MouseControl::Left),
+            modifiers: ModifierSet::SHIFT,
+        }),
+    );
+    engine.set_native_bindings(bindings);
+    engine.classify_native(native_event(
+        NativeInput::SidedModifier {
+            modifier: NativeModifier::Shift,
+            side: ModifierSide::Left,
+        },
+        Transition::Down,
+    ));
+
+    assert_eq!(
+        engine.classify_native(native_event(
+            NativeInput::Primary(shifted_f1.primary),
+            Transition::Down,
+        )),
+        Decision::Suppress
+    );
+    assert_eq!(rx.try_recv_authorized().unwrap().action(), Action::Skill1);
+}
+
+#[test]
+fn releasing_one_modifier_side_preserves_the_other_side() {
+    let (engine, _) = engine();
+    let modifier = |side, transition| {
+        engine.classify_native(native_event(
+            NativeInput::SidedModifier {
+                modifier: NativeModifier::Shift,
+                side,
+            },
+            transition,
+        ));
+    };
+
+    modifier(ModifierSide::Left, Transition::Down);
+    modifier(ModifierSide::Right, Transition::Down);
+    modifier(ModifierSide::Left, Transition::Up);
+    assert_eq!(engine.physical_modifiers(), ModifierSet::SHIFT);
+
+    modifier(ModifierSide::Right, Transition::Up);
+    assert_eq!(engine.physical_modifiers(), ModifierSet::EMPTY);
 }
 
 fn ev(key: Key, transition: Transition, origin: Origin) -> KeyEvent {
