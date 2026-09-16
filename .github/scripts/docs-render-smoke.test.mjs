@@ -87,9 +87,11 @@ const validLayoutObservation = {
   surface: "generated-loopback",
   nodeCount: 6,
   edgeCount: 6,
+  connectorCount: 6,
   labelCount: 0,
   visibleElementCount: 24,
   metadataComplete: true,
+  connectorsTracked: true,
   insideCanvas: true,
   visibleElementsInsideCanvas: true,
   minimumStageGap: 48,
@@ -126,6 +128,8 @@ test("S103 accepts explicit, separated, unambiguous diagram topology", () => {
 test("S103 rejects compressed, incomplete, intersecting, and ambiguous layouts", () => {
   for (const [change, expected] of [
     [{ metadataComplete: false }, /metadata/i],
+    [{ connectorCount: 7 }, /connector inventory/i],
+    [{ connectorsTracked: false }, /connector.*metadata/i],
     [{ insideCanvas: false }, /canvas/i],
     [{ visibleElementCount: 0 }, /visible element/i],
     [{ visibleElementsInsideCanvas: false }, /visible element.*canvas/i],

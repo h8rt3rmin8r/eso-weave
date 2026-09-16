@@ -38,7 +38,7 @@
 - [x] T022 Run full repository merge-gate verification required for the documentation-only scope.
 - [x] T023 Commit and push S103 with issue linkage.
 - [x] T024 Open the official pull request and set project Stage to PR review.
-- [ ] T025 Address every first-round review and CI finding.
-- [ ] T026 Request and address at most one authorized second Codex review round.
+- [x] T025 Address every first-round review and CI finding.
+- [x] T026 Request and address at most one authorized second Codex review round.
 - [ ] T027 Confirm every review conversation resolved and every required check green.
 - [ ] T028 Hand off to the maintainer for final review and merge.

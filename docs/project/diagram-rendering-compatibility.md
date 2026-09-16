@@ -80,7 +80,9 @@ Its four-item S103 receipt measures actual element bounds and paths, then
 requires declared endpoints, orthogonal routing, at least 10 units of clearance
 from unrelated nodes, no crossing or shared edge segments, complete branch
 labels, clearance from nodes, peer labels, bends, and terminal arrowheads, and
-canvas containment for every visible text and graphical element.
+canvas containment for every visible text and graphical element. Every rendered
+arrow path must also appear exactly once in the annotated edge inventory, so a
+connector that loses metadata cannot disappear from topology checks.
 
 Taller assets may exceed the dialog's available vertical space. The existing
 panel now keeps intrinsic image width and provides bounded vertical scrolling,

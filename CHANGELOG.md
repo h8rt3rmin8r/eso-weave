@@ -102,9 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with explicit stages, independent connector lanes, and unambiguous branch
   labels. A generated direct-SVG layout receipt now enforces stage spacing,
   unrelated-node clearance, route intersections, label association, arrowhead
-  clearance, and canvas containment for every visible text and graphical
-  element. Tall expanded diagrams retain their normal rendered width and use
-  bounded modal scrolling instead of shrinking labels (issue #168).
+  clearance, canvas containment for every visible text and graphical element,
+  and exact reconciliation between rendered arrow paths and topology metadata.
+  Tall expanded diagrams retain their normal rendered width and use bounded
+  modal scrolling instead of shrinking labels (issue #168).
 
 - S092 repairs the v0.16.0 main-branch CI regression by making collector-capture
   integration requests use the current package version and aligning the committed

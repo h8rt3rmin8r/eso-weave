@@ -3,6 +3,7 @@
 ## Topology
 
 - [x] Every node, edge, and branch label has stable identity metadata
+- [x] Every visible arrow path appears exactly once in the annotated edge inventory
 - [x] Every edge names one source and one destination
 - [x] Every branch and merge is traceable without guessing
 - [x] No undeclared crossing, shared segment, or ambiguous junction remains

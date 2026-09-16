@@ -34,6 +34,7 @@ Metadata is inert. It neither receives focus nor changes SVG accessibility. Root
 8. A label stays 4 to 24 units from its edge and at least 12 units from bends and the terminal arrowhead.
 9. Every visible text and graphical element outside SVG definition containers is inventoried, and all measured bounds remain within the root viewBox.
 10. Each expanded rendering is at least as wide as its paired normal rendering. Tall content remains reachable through the bounded dialog panel.
+11. Every visible path with a terminal arrow marker appears exactly once in the annotated edge inventory.
 
 ## Browser receipt
 

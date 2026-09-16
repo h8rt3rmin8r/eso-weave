@@ -84,6 +84,7 @@ A maintainer receives a deterministic failure when a future diagram change compr
 - **FR-017**: Build-plan chronology MUST archive completed Plan 043 and establish S103 in a new active plan.
 - **FR-018**: Every expanded diagram MUST render at least as wide as its paired normal observation. A diagram taller than the available dialog space MUST retain intrinsic width and remain fully reachable through bounded panel scrolling.
 - **FR-019**: Layout containment MUST inventory every visible text and graphical element outside SVG definition containers, not only annotated nodes, edges, and branch labels.
+- **FR-020**: The visible rendered connector inventory MUST exactly equal the annotated edge inventory so a path that loses topology metadata fails closed.
 
 ### Key Entities
 
@@ -104,6 +105,7 @@ A maintainer receives a deterministic failure when a future diagram change compr
 - **SC-005**: Focused tests reject missing topology metadata, compressed stages, node incursions, edge crossings, and label collisions.
 - **SC-006**: Documentation policy, browser smoke, mdBook test/build/link checks, spelling, UTF-8, mojibake, and hosted CI pass.
 - **SC-007**: At 1280 by 920 CSS pixels, all four expanded diagrams retain the 400-pixel normal width, and tall diagrams remain reachable through the existing dialog panel without page-level overflow.
+- **SC-008**: Removing edge metadata from any rendered arrow path causes layout validation to fail before route geometry can be accepted.
 
 ## Assumptions
 

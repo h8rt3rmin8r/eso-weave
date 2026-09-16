@@ -115,6 +115,8 @@ export function validateLayoutObservation(observation) {
   if (!(observation?.nodeCount > 0) || !(observation?.edgeCount > 0) || !(observation?.labelCount >= 0)) {
     errors.push(`${prefix}: node, edge, and label counts must be complete`);
   }
+  if (observation?.connectorCount !== observation?.edgeCount) errors.push(`${prefix}: visible connector inventory must exactly match annotated edges`);
+  if (!observation?.connectorsTracked) errors.push(`${prefix}: every visible connector requires complete edge metadata`);
   if (!(observation?.visibleElementCount > 0)) errors.push(`${prefix}: visible element inventory must not be empty`);
   if (!observation?.metadataComplete) errors.push(`${prefix}: node and edge topology metadata is incomplete`);
   if (!observation?.insideCanvas) errors.push(`${prefix}: every measured element must remain inside the SVG canvas`);
@@ -507,6 +509,13 @@ const viewBox = root?.viewBox?.baseVal;
 const nodeElements = [...document.querySelectorAll("[data-node]")];
 const edgeElements = [...document.querySelectorAll("[data-edge]")];
 const labelElements = [...document.querySelectorAll("[data-edge-label]")];
+const isRendered = (element) => {
+  const style = getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden" && Number.parseFloat(style.opacity) > 0;
+};
+const connectorElements = [...document.querySelectorAll("path[marker-end]")]
+  .filter((element) => !element.closest("defs, marker, symbol, clipPath, mask, pattern"))
+  .filter(isRendered);
 const number = (value) => Number.parseFloat(value);
 const box = (element) => {
   const value = element.getBBox();
@@ -576,8 +585,11 @@ const edges = edgeElements.map((element) => {
 });
 const labels = labelElements.map((element) => ({ edgeId: element.dataset.edgeLabel, text: element.textContent.trim(), bounds: box(element) }));
 const unique = (values) => new Set(values).size === values.length;
+const connectorsTracked = connectorElements.length === edgeElements.length
+  && edgeElements.every((element) => connectorElements.includes(element) && element.matches("path[marker-end]"));
 const metadataComplete = Boolean(viewBox?.width > 0 && viewBox?.height > 0)
   && nodes.length > 0 && edges.length > 0
+  && connectorsTracked
   && unique(nodes.map((node) => node.id)) && unique(edges.map((edge) => edge.id))
   && nodes.every((node) => node.id && Number.isInteger(node.stage) && node.stage > 0)
   && edges.every((edge) => edge.id && edge.from && edge.to && edge.from !== edge.to && nodeById.has(edge.from) && nodeById.has(edge.to) && edge.points.length >= 2)
@@ -585,10 +597,7 @@ const metadataComplete = Boolean(viewBox?.width > 0 && viewBox?.height > 0)
 const inside = (rectangle) => rectangle.x >= -1 && rectangle.y >= -1 && rectangle.right <= viewBox.width + 1 && rectangle.bottom <= viewBox.height + 1;
 const visibleElements = [...document.querySelectorAll("text, rect, path, circle, ellipse, line, polyline, polygon, image, use")]
   .filter((element) => !element.closest("defs, marker, symbol, clipPath, mask, pattern"))
-  .filter((element) => {
-    const style = getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden" && number(style.opacity) > 0;
-  });
+  .filter(isRendered);
 const visibleElementBounds = visibleElements.map(box);
 const visibleElementsInsideCanvas = Boolean(viewBox) && visibleElementBounds.length > 0 && visibleElementBounds.every(inside);
 const insideCanvas = visibleElementsInsideCanvas && nodes.every((node) => inside(node.bounds)) && labels.every((label) => inside(label.bounds))
@@ -674,9 +683,11 @@ return {
   surface: "generated-loopback",
   nodeCount: nodes.length,
   edgeCount: edges.length,
+  connectorCount: connectorElements.length,
   labelCount: labels.length,
   visibleElementCount: visibleElements.length,
   metadataComplete,
+  connectorsTracked,
   insideCanvas,
   visibleElementsInsideCanvas,
   minimumStageGap: finiteOrNull(minimumStageGap),
