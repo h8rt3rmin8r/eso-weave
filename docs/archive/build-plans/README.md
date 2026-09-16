@@ -54,6 +54,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [040](plan-040.md) | Complete, Archived | [S090 evidence-scoped recommendations](../../../specs/090-evidence-scoped-recommendations/spec.md), completed when [PR #162](https://github.com/h8rt3rmin8r/eso-weave/pull/162) merged and closed issue #136 |
 | [041](plan-041.md) | Complete, Archived | [S091 v0.16.0 release preparation](../../../specs/091-v016-release-prep/spec.md), completed when [v0.16.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.16.0) published with all five required assets |
 | [042](plan-042.md) | Complete, Archived | [S092](../../../specs/092-data-addon-foundation/spec.md) through [S096](../../../specs/096-encounter-capture-modes/spec.md), completed when [PR #202](https://github.com/h8rt3rmin8r/eso-weave/pull/202) merged, closed issue #183, and enabled epic #182 to close; native-log verification remains separate in issue #190 |
+| [043](plan-043.md) | Complete, Archived | [S097](../../../specs/097-auto-potion-persistence/spec.md) through [S102](../../../specs/102-controller-binding-consumption/spec.md), completed when [PR #211](https://github.com/h8rt3rmin8r/eso-weave/pull/211) merged, closed issue #208, and enabled epic #188 to close |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

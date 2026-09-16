@@ -1,6 +1,6 @@
 # Plan 043: Operator Intent Reliability
 
-Status: Active
+Status: Complete, Archived
 
 Sequence:
 
@@ -18,15 +18,16 @@ Sequence:
    halt protocol was exercised before each authorized remediation phase.
 4. S100 completed issue #206, the first child of epic #188, by publishing and
    decoding fixed-size read-only native binding evidence for eleven ESO actions.
-   It deliberately leaves controller behavior and duplicate settings unchanged.
+   It deliberately left controller behavior and duplicate settings unchanged.
 5. S101 completed issue #207 by making coherent native evidence authoritative
    for combat interception and weave execution, adding keyboard and pointer
    coverage on both platforms, and removing duplicate combat binding settings
    while retaining F1, F2, and F3 as desktop-owned controls.
-6. S102 implements issue #208 by consuming Interact and Quickslot evidence for
+6. S102 completed issue #208 by consuming Interact and Quickslot evidence for
    Fishing and Auto Potion through one shared autonomous chord executor, then
-   removes their remaining duplicate gameplay settings and guidance. It
-   completes epic #188 when merged.
+   removing their remaining duplicate gameplay settings and guidance. It closed
+   epic #188 when [PR #211](https://github.com/h8rt3rmin8r/eso-weave/pull/211)
+   merged.
 
 Release-verification issues #110, #129, #131, and #190 remain independent of
 this repository-verifiable sequence. They do not become complete without their

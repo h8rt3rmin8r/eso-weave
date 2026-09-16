@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 export const PASS_SENTINEL = "ESO_WEAVE_DIAGRAM_SMOKE_PASS_V1";
 export const SYNTAX_PASS_SENTINEL = "ESO_WEAVE_SYNTAX_SMOKE_PASS_V1";
 export const FIGURE_PASS_SENTINEL = "ESO_WEAVE_FIGURE_SMOKE_PASS_V1";
+export const LAYOUT_PASS_SENTINEL = "ESO_WEAVE_DIAGRAM_LAYOUT_PASS_V1";
 export const TABLE_PASS_SENTINEL = "ESO_WEAVE_TABLE_SMOKE_PASS_V1";
 
 const DIAGRAMS = [
@@ -85,6 +86,17 @@ export function validateRenderingReceipt(receipt) {
     errors.push(`S086 rendering matrix requires ${expectedKeys.size} unique observations`);
   }
   for (const observation of observations) errors.push(...validateObservation(observation));
+  for (const diagram of DIAGRAMS) {
+    for (const theme of THEMES) {
+      for (const viewportWidth of VIEWPORTS) {
+        const normal = observations.find((observation) => observationKey(observation) === `${diagram.id}|${theme}|${viewportWidth}|normal`);
+        const expanded = observations.find((observation) => observationKey(observation) === `${diagram.id}|${theme}|${viewportWidth}|expanded`);
+        if (normal?.renderedWidth > 0 && expanded?.renderedWidth > 0 && expanded.renderedWidth + 1 < normal.renderedWidth) {
+          errors.push(`${diagram.id} ${theme} ${viewportWidth}: expanded image must not shrink below its normal rendered width`);
+        }
+      }
+    }
+  }
   const requests = Array.isArray(receipt?.requests) ? receipt.requests : [];
   for (const diagram of DIAGRAMS) {
     const request = requests.find((candidate) => candidate.asset === diagram.asset);
@@ -93,6 +105,56 @@ export function validateRenderingReceipt(receipt) {
     }
   }
   if (Array.isArray(receipt?.failures) && receipt.failures.length > 0) errors.push(...receipt.failures.map((failure) => `S086 browser: ${failure}`));
+  return [...new Set(errors)];
+}
+
+export function validateLayoutObservation(observation) {
+  const errors = [];
+  const prefix = `${observation?.diagramId ?? "unknown"} layout`;
+  if (observation?.surface !== "generated-loopback") errors.push(`${prefix}: observation surface must be generated-loopback`);
+  if (!(observation?.nodeCount > 0) || !(observation?.edgeCount > 0) || !(observation?.labelCount >= 0)) {
+    errors.push(`${prefix}: node, edge, and label counts must be complete`);
+  }
+  if (observation?.connectorCount !== observation?.edgeCount) errors.push(`${prefix}: visible connector inventory must exactly match annotated edges`);
+  if (!observation?.connectorsTracked) errors.push(`${prefix}: every visible connector requires complete edge metadata`);
+  if (!(observation?.visibleElementCount > 0)) errors.push(`${prefix}: visible element inventory must not be empty`);
+  if (!observation?.metadataComplete) errors.push(`${prefix}: node and edge topology metadata is incomplete`);
+  if (!observation?.insideCanvas) errors.push(`${prefix}: every measured element must remain inside the SVG canvas`);
+  if (!observation?.visibleElementsInsideCanvas) errors.push(`${prefix}: every visible element must remain inside the SVG canvas`);
+  if (!(observation?.minimumStageGap >= 36)) errors.push(`${prefix}: minimum successive stage gap must be at least 36 SVG units`);
+  if (!observation?.endpointsConnected) errors.push(`${prefix}: every edge must connect its declared source and destination boundaries`);
+  if (!observation?.orthogonalRoutes) errors.push(`${prefix}: every edge route must be orthogonal`);
+  if (!(observation?.minimumUnrelatedNodeClearance >= 10)) errors.push(`${prefix}: every edge requires at least 10 SVG units of unrelated node clearance`);
+  if (observation?.edgeCrossings !== 0) errors.push(`${prefix}: edge routes must not cross`);
+  if (observation?.sharedSegments !== 0) errors.push(`${prefix}: edge routes must not use an undeclared shared segment`);
+  if (!observation?.labelsComplete) errors.push(`${prefix}: every branch edge requires exactly one associated branch label`);
+
+  if (observation?.labelCount > 0) {
+    if (!(observation?.minimumLabelEdgeDistance >= 4)) errors.push(`${prefix}: a branch label must not overlap its edge`);
+    if (!(observation?.maximumLabelEdgeDistance <= 24)) errors.push(`${prefix}: every branch label must stay near its associated edge`);
+    if (!(observation?.minimumLabelNodeClearance >= 4)) errors.push(`${prefix}: every branch label requires node clearance`);
+    if (!(observation?.minimumLabelPeerClearance >= 4)) errors.push(`${prefix}: every branch label requires peer label clearance`);
+    if (!(observation?.minimumLabelBendClearance >= 12)) errors.push(`${prefix}: every branch label requires bend clearance`);
+    if (!(observation?.minimumLabelTerminalClearance >= 12)) errors.push(`${prefix}: every branch label requires terminal arrowhead clearance`);
+  }
+  if (Array.isArray(observation?.failures) && observation.failures.length > 0) errors.push(...observation.failures.map((failure) => `${prefix}: ${failure}`));
+  return [...new Set(errors)];
+}
+
+export function validateLayoutReceipt(receipt) {
+  const errors = [];
+  if (receipt?.layoutSchemaVersion !== 1) errors.push("S103 layout receipt schema is invalid");
+  if (receipt?.layoutSentinel !== LAYOUT_PASS_SENTINEL) errors.push("S103 layout receipt pass sentinel is missing");
+  const observations = Array.isArray(receipt?.layoutObservations) ? receipt.layoutObservations : [];
+  const expectedIds = new Set(DIAGRAMS.map((diagram) => diagram.id));
+  const actualIds = new Set(observations.map((observation) => observation?.diagramId));
+  if (observations.length !== expectedIds.size || actualIds.size !== expectedIds.size || [...expectedIds].some((id) => !actualIds.has(id))) {
+    errors.push("S103 layout receipt requires four unique diagram observations");
+  }
+  for (const observation of observations) errors.push(...validateLayoutObservation(observation));
+  if (Array.isArray(receipt?.layoutFailures) && receipt.layoutFailures.length > 0) {
+    errors.push(...receipt.layoutFailures.map((failure) => `S103 browser: ${failure}`));
+  }
   return [...new Set(errors)];
 }
 
@@ -370,12 +432,20 @@ function paintStats(image) {
   const total = width * height;
   return { opaqueCoverage: opaque / total, opaqueColorCount: colors.size, nonBackgroundCoverage: opaque === 0 ? 0 : (opaque - dominant) / opaque };
 }
-function observe(diagramId, state, image, boundary) {
+function observe(diagramId, state, image, boundary, scrollPanel = null) {
   const rectangle = image.getBoundingClientRect();
   const style = getComputedStyle(image);
   const horizontalDecoration = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
   const verticalDecoration = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
   const tolerance = 1.5;
+  const viewportContained = rectangle.left >= boundary.left - tolerance && rectangle.top >= boundary.top - tolerance
+    && rectangle.right <= boundary.right + tolerance && rectangle.bottom <= boundary.bottom + tolerance;
+  const panelRectangle = scrollPanel?.getBoundingClientRect();
+  const panelStyle = scrollPanel ? getComputedStyle(scrollPanel) : null;
+  const scrollReachable = Boolean(scrollPanel && panelRectangle && panelStyle
+    && ["auto", "scroll"].includes(panelStyle.overflowY)
+    && rectangle.left >= panelRectangle.left - tolerance && rectangle.right <= panelRectangle.right + tolerance
+    && image.offsetTop >= 0 && image.offsetTop + image.offsetHeight <= scrollPanel.scrollHeight + tolerance);
   return {
     diagramId,
     surface: "generated-loopback",
@@ -387,7 +457,9 @@ function observe(diagramId, state, image, boundary) {
     renderedWidth: rectangle.width - horizontalDecoration,
     renderedHeight: rectangle.height - verticalDecoration,
     visible: isVisiblyPainted(image),
-    contained: rectangle.left >= boundary.left - tolerance && rectangle.top >= boundary.top - tolerance && rectangle.right <= boundary.right + tolerance && rectangle.bottom <= boundary.bottom + tolerance,
+    contained: viewportContained || scrollReachable,
+    viewportContained,
+    scrollReachable,
     ...paintStats(image),
   };
 }
@@ -399,8 +471,9 @@ try {
   const control = figure?.querySelector(":scope > p > button.docs-figure-trigger");
   const primary = control?.querySelector(":scope > img");
   const dialog = document.querySelector("dialog[data-docs-figure-dialog]");
+  const panel = dialog?.querySelector(".docs-figure-dialog__panel");
   const expanded = dialog?.querySelector(".docs-figure-dialog__image");
-  if (!figure || !control || !primary || !dialog || !expanded) throw new Error("expected shared figure dialog DOM is missing");
+  if (!figure || !control || !primary || !dialog || !panel || !expanded) throw new Error("expected shared figure dialog DOM is missing");
   if (figure.querySelectorAll(".checkbox-img, .img-wrapper").length !== 0) throw new Error("legacy diagram modal remains after enhancement");
   const expectedPath = "/eso-weave/assets/diagrams/" + configuration.diagram.asset;
   if (new URL(primary.currentSrc).pathname !== expectedPath) throw new Error("generated primary image source does not match the expected local asset");
@@ -415,7 +488,7 @@ try {
   await nextFrame();
   if (!dialog.matches(":modal") || !isVisiblyPainted(expanded)) throw new Error("expanded image did not become visible after activation");
   if (new URL(expanded.currentSrc).pathname !== expectedPath) throw new Error("expanded image source does not match the expected local asset");
-  observations.push(observe(configuration.diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }));
+  observations.push(observe(configuration.diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }, panel));
   if (expanded.alt !== "" || expanded.getAttribute("aria-hidden") !== "true") throw new Error("expanded clone is not decorative");
   dialog.close();
   await nextFrame();
@@ -423,6 +496,215 @@ try {
   failures.push(configuration.diagram.id + ": " + error.message);
 }
 return { schemaVersion: 1, sentinel: failures.length === 0 ? configuration.sentinel : "FAILED", observations, failures };
+})()`;
+}
+
+function layoutObservationExpression(diagram) {
+  const configuration = JSON.stringify({ diagram });
+  return `(() => {
+const configuration = ${configuration};
+const failures = [];
+const root = document.documentElement;
+const viewBox = root?.viewBox?.baseVal;
+const nodeElements = [...document.querySelectorAll("[data-node]")];
+const edgeElements = [...document.querySelectorAll("[data-edge]")];
+const labelElements = [...document.querySelectorAll("[data-edge-label]")];
+const isRendered = (element) => {
+  const style = getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden" && Number.parseFloat(style.opacity) > 0;
+};
+const connectorElements = [...document.querySelectorAll("path[marker-end]")]
+  .filter((element) => !element.closest("defs, marker, symbol, clipPath, mask, pattern"))
+  .filter(isRendered);
+const number = (value) => Number.parseFloat(value);
+const box = (element) => {
+  const value = element.getBBox();
+  return { x: value.x, y: value.y, width: value.width, height: value.height, right: value.x + value.width, bottom: value.y + value.height };
+};
+const rangeDistance = (firstStart, firstEnd, secondStart, secondEnd) => Math.max(firstStart - secondEnd, secondStart - firstEnd, 0);
+const boxDistance = (first, second) => Math.hypot(
+  rangeDistance(first.x, first.right, second.x, second.right),
+  rangeDistance(first.y, first.bottom, second.y, second.bottom),
+);
+const pointBoxDistance = (point, rectangle) => Math.hypot(
+  rangeDistance(point.x, point.x, rectangle.x, rectangle.right),
+  rangeDistance(point.y, point.y, rectangle.y, rectangle.bottom),
+);
+const segmentBoxDistance = (segment, rectangle) => {
+  if (segment.a.y === segment.b.y) {
+    return Math.hypot(
+      rangeDistance(Math.min(segment.a.x, segment.b.x), Math.max(segment.a.x, segment.b.x), rectangle.x, rectangle.right),
+      rangeDistance(segment.a.y, segment.a.y, rectangle.y, rectangle.bottom),
+    );
+  }
+  return Math.hypot(
+    rangeDistance(segment.a.x, segment.a.x, rectangle.x, rectangle.right),
+    rangeDistance(Math.min(segment.a.y, segment.b.y), Math.max(segment.a.y, segment.b.y), rectangle.y, rectangle.bottom),
+  );
+};
+function parsePath(value) {
+  const tokens = value.replaceAll(",", " ").match(/[MLHV]|-?[0-9]+(?:[.][0-9]+)?/gu) ?? [];
+  const points = [];
+  let command = null;
+  let x = 0;
+  let y = 0;
+  for (let index = 0; index < tokens.length;) {
+    if (["M", "L", "H", "V"].includes(tokens[index])) {
+      command = tokens[index];
+      index += 1;
+    }
+    if (command === "M" || command === "L") {
+      x = number(tokens[index]);
+      y = number(tokens[index + 1]);
+      index += 2;
+    } else if (command === "H") {
+      x = number(tokens[index]);
+      index += 1;
+    } else if (command === "V") {
+      y = number(tokens[index]);
+      index += 1;
+    } else {
+      throw new Error("unsupported edge path command");
+    }
+    points.push({ x, y });
+  }
+  return points;
+}
+const nodes = nodeElements.map((element) => ({ id: element.dataset.node, stage: number(element.dataset.stage), bounds: box(element) }));
+const nodeById = new Map(nodes.map((node) => [node.id, node]));
+const edges = edgeElements.map((element) => {
+  const points = parsePath(element.getAttribute("d") ?? "");
+  return {
+    id: element.dataset.edge,
+    from: element.dataset.from,
+    to: element.dataset.to,
+    branch: element.dataset.branch === "true",
+    points,
+    segments: points.slice(1).map((point, index) => ({ a: points[index], b: point })),
+  };
+});
+const labels = labelElements.map((element) => ({ edgeId: element.dataset.edgeLabel, text: element.textContent.trim(), bounds: box(element) }));
+const unique = (values) => new Set(values).size === values.length;
+const connectorsTracked = connectorElements.length === edgeElements.length
+  && edgeElements.every((element) => connectorElements.includes(element) && element.matches("path[marker-end]"));
+const metadataComplete = Boolean(viewBox?.width > 0 && viewBox?.height > 0)
+  && nodes.length > 0 && edges.length > 0
+  && connectorsTracked
+  && unique(nodes.map((node) => node.id)) && unique(edges.map((edge) => edge.id))
+  && nodes.every((node) => node.id && Number.isInteger(node.stage) && node.stage > 0)
+  && edges.every((edge) => edge.id && edge.from && edge.to && edge.from !== edge.to && nodeById.has(edge.from) && nodeById.has(edge.to) && edge.points.length >= 2)
+  && labels.every((label) => label.edgeId && label.text && edges.some((edge) => edge.id === label.edgeId));
+const inside = (rectangle) => rectangle.x >= -1 && rectangle.y >= -1 && rectangle.right <= viewBox.width + 1 && rectangle.bottom <= viewBox.height + 1;
+const visibleElements = [...document.querySelectorAll("text, rect, path, circle, ellipse, line, polyline, polygon, image, use")]
+  .filter((element) => !element.closest("defs, marker, symbol, clipPath, mask, pattern"))
+  .filter(isRendered);
+const visibleElementBounds = visibleElements.map(box);
+const visibleElementsInsideCanvas = Boolean(viewBox) && visibleElementBounds.length > 0 && visibleElementBounds.every(inside);
+const insideCanvas = visibleElementsInsideCanvas && nodes.every((node) => inside(node.bounds)) && labels.every((label) => inside(label.bounds))
+  && edges.every((edge) => edge.points.every((point) => point.x >= -1 && point.y >= -1 && point.x <= viewBox.width + 1 && point.y <= viewBox.height + 1));
+const stages = [...new Set(nodes.map((node) => node.stage))].sort((first, second) => first - second);
+let minimumStageGap = Number.POSITIVE_INFINITY;
+for (let index = 1; index < stages.length; index += 1) {
+  const priorBottom = Math.max(...nodes.filter((node) => node.stage === stages[index - 1]).map((node) => node.bounds.bottom));
+  const nextTop = Math.min(...nodes.filter((node) => node.stage === stages[index]).map((node) => node.bounds.y));
+  minimumStageGap = Math.min(minimumStageGap, nextTop - priorBottom);
+}
+const onBoundary = (point, rectangle) => {
+  const horizontal = point.x >= rectangle.x - 1 && point.x <= rectangle.right + 1
+    && (Math.abs(point.y - rectangle.y) <= 1 || Math.abs(point.y - rectangle.bottom) <= 1);
+  const vertical = point.y >= rectangle.y - 1 && point.y <= rectangle.bottom + 1
+    && (Math.abs(point.x - rectangle.x) <= 1 || Math.abs(point.x - rectangle.right) <= 1);
+  return horizontal || vertical;
+};
+const endpointsConnected = edges.every((edge) => onBoundary(edge.points[0], nodeById.get(edge.from).bounds)
+  && onBoundary(edge.points.at(-1), nodeById.get(edge.to).bounds));
+const orthogonalRoutes = edges.every((edge) => edge.segments.every((segment) => segment.a.x === segment.b.x || segment.a.y === segment.b.y));
+let minimumUnrelatedNodeClearance = Number.POSITIVE_INFINITY;
+for (const edge of edges) {
+  for (const node of nodes) {
+    if (node.id === edge.from || node.id === edge.to) continue;
+    for (const segment of edge.segments) minimumUnrelatedNodeClearance = Math.min(minimumUnrelatedNodeClearance, segmentBoxDistance(segment, node.bounds));
+  }
+}
+let edgeCrossings = 0;
+let sharedSegments = 0;
+for (let firstIndex = 0; firstIndex < edges.length; firstIndex += 1) {
+  for (let secondIndex = firstIndex + 1; secondIndex < edges.length; secondIndex += 1) {
+    for (const first of edges[firstIndex].segments) {
+      for (const second of edges[secondIndex].segments) {
+        const firstHorizontal = first.a.y === first.b.y;
+        const secondHorizontal = second.a.y === second.b.y;
+        if (firstHorizontal === secondHorizontal) {
+          const sameLine = firstHorizontal ? first.a.y === second.a.y : first.a.x === second.a.x;
+          if (!sameLine) continue;
+          const firstStart = firstHorizontal ? Math.min(first.a.x, first.b.x) : Math.min(first.a.y, first.b.y);
+          const firstEnd = firstHorizontal ? Math.max(first.a.x, first.b.x) : Math.max(first.a.y, first.b.y);
+          const secondStart = secondHorizontal ? Math.min(second.a.x, second.b.x) : Math.min(second.a.y, second.b.y);
+          const secondEnd = secondHorizontal ? Math.max(second.a.x, second.b.x) : Math.max(second.a.y, second.b.y);
+          if (Math.min(firstEnd, secondEnd) - Math.max(firstStart, secondStart) > 1) sharedSegments += 1;
+          continue;
+        }
+        const horizontal = firstHorizontal ? first : second;
+        const vertical = firstHorizontal ? second : first;
+        const crossingX = vertical.a.x;
+        const crossingY = horizontal.a.y;
+        if (crossingX >= Math.min(horizontal.a.x, horizontal.b.x) && crossingX <= Math.max(horizontal.a.x, horizontal.b.x)
+            && crossingY >= Math.min(vertical.a.y, vertical.b.y) && crossingY <= Math.max(vertical.a.y, vertical.b.y)) edgeCrossings += 1;
+      }
+    }
+  }
+}
+const labelGroups = new Map();
+for (const label of labels) labelGroups.set(label.edgeId, [...(labelGroups.get(label.edgeId) ?? []), label]);
+const labelsComplete = edges.every((edge) => edge.branch ? labelGroups.get(edge.id)?.length === 1 : !labelGroups.has(edge.id));
+let minimumLabelEdgeDistance = Number.POSITIVE_INFINITY;
+let maximumLabelEdgeDistance = Number.NEGATIVE_INFINITY;
+let minimumLabelNodeClearance = Number.POSITIVE_INFINITY;
+let minimumLabelPeerClearance = Number.POSITIVE_INFINITY;
+let minimumLabelBendClearance = Number.POSITIVE_INFINITY;
+let minimumLabelTerminalClearance = Number.POSITIVE_INFINITY;
+for (const label of labels) {
+  const edge = edges.find((candidate) => candidate.id === label.edgeId);
+  const edgeDistance = Math.min(...edge.segments.map((segment) => segmentBoxDistance(segment, label.bounds)));
+  minimumLabelEdgeDistance = Math.min(minimumLabelEdgeDistance, edgeDistance);
+  maximumLabelEdgeDistance = Math.max(maximumLabelEdgeDistance, edgeDistance);
+  for (const node of nodes) minimumLabelNodeClearance = Math.min(minimumLabelNodeClearance, boxDistance(label.bounds, node.bounds));
+  for (const bend of edge.points.slice(1, -1)) minimumLabelBendClearance = Math.min(minimumLabelBendClearance, pointBoxDistance(bend, label.bounds));
+  minimumLabelTerminalClearance = Math.min(minimumLabelTerminalClearance, pointBoxDistance(edge.points.at(-1), label.bounds));
+}
+for (let firstIndex = 0; firstIndex < labels.length; firstIndex += 1) {
+  for (let secondIndex = firstIndex + 1; secondIndex < labels.length; secondIndex += 1) {
+    minimumLabelPeerClearance = Math.min(minimumLabelPeerClearance, boxDistance(labels[firstIndex].bounds, labels[secondIndex].bounds));
+  }
+}
+const finiteOrNull = (value) => Number.isFinite(value) ? value : null;
+return {
+  diagramId: configuration.diagram.id,
+  surface: "generated-loopback",
+  nodeCount: nodes.length,
+  edgeCount: edges.length,
+  connectorCount: connectorElements.length,
+  labelCount: labels.length,
+  visibleElementCount: visibleElements.length,
+  metadataComplete,
+  connectorsTracked,
+  insideCanvas,
+  visibleElementsInsideCanvas,
+  minimumStageGap: finiteOrNull(minimumStageGap),
+  endpointsConnected,
+  orthogonalRoutes,
+  minimumUnrelatedNodeClearance: finiteOrNull(minimumUnrelatedNodeClearance),
+  edgeCrossings,
+  sharedSegments,
+  labelsComplete,
+  minimumLabelEdgeDistance: finiteOrNull(minimumLabelEdgeDistance),
+  maximumLabelEdgeDistance: finiteOrNull(maximumLabelEdgeDistance),
+  minimumLabelNodeClearance: finiteOrNull(minimumLabelNodeClearance),
+  minimumLabelPeerClearance: finiteOrNull(minimumLabelPeerClearance),
+  minimumLabelBendClearance: finiteOrNull(minimumLabelBendClearance),
+  minimumLabelTerminalClearance: finiteOrNull(minimumLabelTerminalClearance),
+  failures,
+};
 })()`;
 }
 
@@ -565,10 +847,11 @@ const figure = trigger.closest("figure");
 const sourceImage = trigger.querySelector(":scope > img");
 const sourceCaption = figure?.querySelector(":scope > figcaption") ?? null;
 const dialog = document.querySelector("dialog[data-docs-figure-dialog]");
+const panel = dialog?.querySelector(".docs-figure-dialog__panel");
 const close = dialog?.querySelector(".docs-figure-dialog__close");
 const expanded = dialog?.querySelector(".docs-figure-dialog__image");
 const modalCaption = dialog?.querySelector(".docs-figure-dialog__caption");
-if (!figure || !sourceImage || !dialog || !close || !expanded || !modalCaption) throw new Error("figure system DOM is incomplete");
+if (!figure || !sourceImage || !dialog || !panel || !close || !expanded || !modalCaption) throw new Error("figure system DOM is incomplete");
 if (trigger.getAttribute("aria-label") !== "Expand image: " + alternative) throw new Error("figure trigger alternative is incorrect");
 const affordanceStyle = getComputedStyle(trigger, "::after");
 const visibleAffordance = affordanceStyle.display !== "none" && affordanceStyle.content.includes("Expand image");
@@ -587,6 +870,12 @@ const modalCaptionStyle = !modalCaption.hidden ? getComputedStyle(modalCaption) 
 const modalCaptionRectangle = !modalCaption.hidden ? modalCaption.getBoundingClientRect() : null;
 const figureRectangle = figure.getBoundingClientRect();
 const dialogRectangle = dialog.getBoundingClientRect();
+const panelRectangle = panel.getBoundingClientRect();
+const panelStyle = getComputedStyle(panel);
+const viewportContained = rectangle.left >= -1 && rectangle.top >= -1 && rectangle.right <= innerWidth + 1 && rectangle.bottom <= innerHeight + 1;
+const scrollReachable = ["auto", "scroll"].includes(panelStyle.overflowY)
+  && rectangle.left >= panelRectangle.left - 1 && rectangle.right <= panelRectangle.right + 1
+  && expanded.offsetTop >= 0 && expanded.offsetTop + expanded.offsetHeight <= panel.scrollHeight + 1;
 const observation = {
   caseId: configuration.figureCase.id,
   surface: "generated-loopback",
@@ -610,7 +899,9 @@ const observation = {
   naturalHeight: expanded.naturalHeight,
   renderedWidth: rectangle.width,
   renderedHeight: rectangle.height,
-  contained: rectangle.left >= -1 && rectangle.top >= -1 && rectangle.right <= innerWidth + 1 && rectangle.bottom <= innerHeight + 1,
+  contained: viewportContained || scrollReachable,
+  viewportContained,
+  scrollReachable,
   upscaled: rectangle.width > expanded.naturalWidth + 1 || rectangle.height > expanded.naturalHeight + 1,
   captionFontSize: captionStyle ? Number.parseFloat(captionStyle.fontSize) : null,
   captionLineHeight: captionStyle ? Number.parseFloat(captionStyle.lineHeight) : null,
@@ -1093,6 +1384,10 @@ export async function run(siteRoot) {
     observations: [],
     requests: [],
     failures: [],
+    layoutSchemaVersion: 1,
+    layoutSentinel: LAYOUT_PASS_SENTINEL,
+    layoutObservations: [],
+    layoutFailures: [],
     syntaxObservations: [],
     syntaxFailures: [],
     figureSentinel: FIGURE_PASS_SENTINEL,
@@ -1141,6 +1436,22 @@ export async function run(siteRoot) {
       }
     }
     receipt.requests = [...diagramRequests.values()];
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 800, height: 1200, deviceScaleFactor: 1, mobile: false });
+    for (const diagram of DIAGRAMS) {
+      const url = `http://127.0.0.1:${port}/eso-weave/assets/diagrams/${diagram.asset}`;
+      const loaded = client.waitFor("Page.loadEventFired");
+      await client.send("Page.navigate", { url });
+      await loaded;
+      const evaluated = await client.send("Runtime.evaluate", {
+        expression: layoutObservationExpression(diagram),
+        returnByValue: true,
+      });
+      if (evaluated.exceptionDetails || !evaluated.result?.value) {
+        receipt.layoutFailures.push(`${diagram.id}: direct SVG layout evaluation failed`);
+      } else {
+        receipt.layoutObservations.push(evaluated.result.value);
+      }
+    }
     for (const theme of SYNTAX_THEMES) {
       for (const viewportWidth of VIEWPORTS) {
         await client.send("Emulation.setDeviceMetricsOverride", { width: viewportWidth, height: 920, deviceScaleFactor: 1, mobile: false });
@@ -1356,10 +1667,11 @@ export async function run(siteRoot) {
     receipt.tableNoScript = await evaluateValue(tableNoScriptExpression());
     await client.send("Network.setBlockedURLs", { urls: [] });
 
-    const errors = [...validateRenderingReceipt(receipt), ...validateSyntaxReceipt(receipt), ...validateFigureReceipt(receipt), ...validateTableReceipt(receipt)];
+    const errors = [...validateRenderingReceipt(receipt), ...validateLayoutReceipt(receipt), ...validateSyntaxReceipt(receipt), ...validateFigureReceipt(receipt), ...validateTableReceipt(receipt)];
     if (errors.length > 0) throw new Error(errors.join("\n"));
     console.log(JSON.stringify(receipt, null, 2));
     console.log(PASS_SENTINEL);
+    console.log(LAYOUT_PASS_SENTINEL);
     console.log(SYNTAX_PASS_SENTINEL);
     console.log(FIGURE_PASS_SENTINEL);
     console.log(TABLE_PASS_SENTINEL);

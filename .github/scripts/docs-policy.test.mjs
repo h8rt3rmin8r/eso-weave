@@ -181,10 +181,10 @@ test("S081 requires bounded swatches, contained images, and narrow gallery reflo
 });
 
 const diagramRecords = [
-  ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"], 650],
-  ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 700],
-  ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 690],
-  ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 820],
+  ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"], 860],
+  ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
+  ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
+  ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 1080],
 ];
 
 function diagramFixture() {
@@ -255,11 +255,11 @@ test("S082 rejects horizontal, inaccessible, active, remote, and color-only SVGs
 
 test("S086 requires intrinsic dimensions that exactly match each viewBox", () => {
   const missing = diagramFixture();
-  missing.svgs.set("architecture-ownership.svg", missing.svgs.get("architecture-ownership.svg").replace(' width="400" height="650"', ""));
+  missing.svgs.set("architecture-ownership.svg", missing.svgs.get("architecture-ownership.svg").replace(' width="400" height="860"', ""));
   assert.match(validateDocumentationDiagrams(missing).join("\n"), /intrinsic geometry/i);
 
   const mismatched = diagramFixture();
-  mismatched.svgs.set("safety-recovery.svg", mismatched.svgs.get("safety-recovery.svg").replace('height="690"', 'height="689"'));
+  mismatched.svgs.set("safety-recovery.svg", mismatched.svgs.get("safety-recovery.svg").replace('height="930"', 'height="929"'));
   assert.match(validateDocumentationDiagrams(mismatched).join("\n"), /intrinsic geometry/i);
 
   const spoofed = diagramFixture();
@@ -2835,6 +2835,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
     [".docs-flow-diagram .checkbox-img,", ".docs-flow-diagram .unused,", /no-JavaScript|legacy mdBook/i],
     [".docs-flow-diagram .checkbox-img:checked ~ .img-wrapper", ".docs-flow-diagram .unused:checked ~ .img-wrapper", /checked-state/i],
     ["object-fit: contain;\n  width: auto", "object-fit: contain;\n  width: 100%", /intrinsic|upscal/i],
+    ["max-height: none", "max-height: calc(var(--docs-figure-viewport-height, 100vh) - 11rem)", /intrinsic|scroll|shrink/i],
     ["@media print", "@media screen", /print/i],
   ]) {
     assert.match(validateDocumentationFigureCss(css.replace(needle, replacement)).join("\n"), expected);

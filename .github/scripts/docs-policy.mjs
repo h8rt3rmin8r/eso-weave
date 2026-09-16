@@ -1514,7 +1514,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "development/architecture.html",
     asset: "architecture-ownership.svg",
     width: 400,
-    height: 650,
+    height: 860,
     alt: "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers",
     heading: "Ownership flow text equivalent",
     anchors: [
@@ -1531,7 +1531,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "concepts/action-authorization.html",
     asset: "action-authorization.svg",
     width: 400,
-    height: 700,
+    height: 950,
     alt: "Action authorization flow requires every positive gate or fails closed without generated input",
     heading: "Authorization flow text equivalent",
     anchors: [
@@ -1548,7 +1548,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "development/state-machines.html",
     asset: "safety-recovery.svg",
     width: 400,
-    height: 690,
+    height: 930,
     alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline",
     heading: "Safety recovery text equivalent",
     anchors: [
@@ -1565,7 +1565,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "reference/pixel-bus-protocol.html",
     asset: "pixel-bus-validation.svg",
     width: 400,
-    height: 820,
+    height: 1080,
     alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals",
     heading: "Pixel Bus validation text equivalent",
     anchors: [
@@ -2171,6 +2171,7 @@ export function validateDocumentationFigureCss(css) {
   const trigger = css.match(/\.docs-figure-trigger\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const affordance = css.match(/\.docs-figure-trigger::after\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const dialog = css.match(/\.docs-figure-dialog\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const dialogPanel = css.match(/\.docs-figure-dialog__panel\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const dialogImage = css.match(/\.docs-figure-dialog__image\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const caption = css.match(/\.docs-screenshot figcaption,\s*\.brand-surface figcaption\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const print = css.match(/@media\s+print\s*\{(?<body>[\s\S]*)\}\s*$/u)?.groups?.body ?? "";
@@ -2195,9 +2196,10 @@ export function validateDocumentationFigureCss(css) {
   if (!/display:\s*block/iu.test(dialogImage) || !/height:\s*auto/iu.test(dialogImage)
       || !/width:\s*auto/iu.test(dialogImage)
       || !/max-width:\s*calc\(var\(--docs-figure-viewport-width,\s*100vw\)/iu.test(dialogImage)
-      || !/max-height:\s*calc\(var\(--docs-figure-viewport-height,\s*100vh\)/iu.test(dialogImage)
+      || !/max-height:\s*none/iu.test(dialogImage)
+      || !/overflow:\s*auto/iu.test(dialogPanel)
       || !/object-fit:\s*contain/iu.test(dialogImage)) {
-    errors.push("S088 expanded figure must preserve intrinsic geometry without upscaling and remain viewport-contained");
+    errors.push("S088 expanded figure must preserve intrinsic geometry without upscaling or shrinking and permit panel scrolling");
   }
   const fontSize = Number(caption.match(/font-size:\s*(\d+(?:\.\d+)?)em/iu)?.[1]);
   const lineHeight = Number(caption.match(/line-height:\s*(\d+(?:\.\d+)?)/iu)?.[1]);

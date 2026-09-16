@@ -98,11 +98,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- S103 reconstructs all four documentation flow diagrams on taller canvases
+  with explicit stages, independent connector lanes, and unambiguous branch
+  labels. A generated direct-SVG layout receipt now enforces stage spacing,
+  unrelated-node clearance, route intersections, label association, arrowhead
+  clearance, canvas containment for every visible text and graphical element,
+  and exact reconciliation between rendered arrow paths and topology metadata.
+  Tall expanded diagrams retain their normal rendered width and use bounded
+  modal scrolling instead of shrinking labels (issue #168).
+
 - S092 repairs the v0.16.0 main-branch CI regression by making collector-capture
   integration requests use the current package version and aligning the committed
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-15: Keep the diagrams 400 SVG units wide and grow them vertically so
+  narrow-screen text scale does not regress. Mark nodes, stages, edges, and
+  branch labels with inert topology metadata, then measure the generated SVG DOM
+  in the existing hidden Chrome process. This replaces subjective paint-only
+  evidence with actionable geometry without adding a renderer, dependency, or
+  browser-specific pixel baseline.
+
+- 2026-09-15: Let tall figures retain intrinsic width inside the existing
+  bounded, scrollable dialog panel instead of fitting their full height into the
+  viewport. Require each expanded diagram to render at least as wide as its
+  normal state. This narrowly extends the S088 viewer contract because fitting a
+  400 by 1080 diagram into 744 vertical pixels made its labels smaller after the
+  reader selected Expand image.
 
 - 2026-09-15: Generalize the Fishing authorization generation into one non-roll
   autonomous controller boundary shared with Auto Potion. Keep policy in each
