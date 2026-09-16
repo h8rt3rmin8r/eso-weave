@@ -5,6 +5,7 @@ use crate::beacon::{self, BeaconPrefs};
 use crate::config::{LoggingPrefs, Notice, NoticeKind, Settings, Theme};
 use crate::fishing::FishingConfig;
 use crate::input::bindings::BindingTable;
+use crate::local_service::LocalServicePrefs;
 use crate::pixelbus::{self, ReaderConfig};
 use crate::potion::AutoPotionConfig;
 use crate::weave::{LatencyConfig, WeaveConfig, WeaveEngine};
@@ -144,6 +145,8 @@ pub struct SettingsForm {
     pub logging: LoggingPrefs,
     /// Theme and always-on-top.
     pub ui: UiPrefs,
+    /// Whether the complete local HTTP and MCP service is requested.
+    pub local_service_enabled: bool,
 }
 
 impl SettingsForm {
@@ -166,6 +169,7 @@ impl SettingsForm {
         let logging = settings.logging.clone();
         let (ui, ui_notices) = ui_from_value(&settings.ui);
         notices.extend(ui_notices);
+        let local_service_enabled = LocalServicePrefs::load(&settings.local_service).enabled;
 
         (
             SettingsForm {
@@ -178,6 +182,7 @@ impl SettingsForm {
                 beacon,
                 logging,
                 ui,
+                local_service_enabled,
             },
             notices,
         )
@@ -198,5 +203,8 @@ impl SettingsForm {
         settings.beacon = beacon::prefs_to_value(&self.beacon);
         settings.logging = self.logging.clone();
         settings.ui = ui_to_value(&self.ui);
+        let mut local_service = LocalServicePrefs::load(&settings.local_service);
+        local_service.enabled = self.local_service_enabled;
+        settings.local_service = local_service.store();
     }
 }

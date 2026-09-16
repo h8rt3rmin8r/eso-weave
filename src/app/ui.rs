@@ -2843,6 +2843,8 @@ impl EsoWeaveApp {
         let layout = self.model.layout_state();
         let runtime_block_px = self.model.runtime_block_px();
         let native_bindings = self.model.native_bindings();
+        let local_service_status = self.model.local_service_status();
+        let local_service_credential = self.model.local_service_credential();
         let mut draft = match self.settings_draft.take() {
             Some(draft) => draft,
             None => {
@@ -2925,6 +2927,10 @@ impl EsoWeaveApp {
                             layout,
                             runtime_block_px,
                             native_bindings,
+                            LocalServiceUi {
+                                status: &local_service_status,
+                                credential: local_service_credential.as_deref(),
+                            },
                         );
                     });
                 (body.content_size.y, body_max_h)
@@ -3208,6 +3214,11 @@ fn render_virtual_rows<T>(
 
 /// Renders the clustered settings body into the modal. Each option carries a
 /// human-readable label (no underscore) and a short inline help line.
+struct LocalServiceUi<'a> {
+    status: &'a crate::local_service::ServiceStatus,
+    credential: Option<&'a str>,
+}
+
 fn settings_body(
     ui: &mut egui::Ui,
     palette: &crate::app::theme::Palette,
@@ -3215,6 +3226,7 @@ fn settings_body(
     layout: crate::pixelbus::LayoutState,
     runtime_block_px: u32,
     native_bindings: crate::input::NativeBindingSet,
+    local_service: LocalServiceUi<'_>,
 ) {
     widgets::heading(ui, strings::CLUSTER_APPEARANCE);
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -3413,6 +3425,37 @@ fn settings_body(
         setting(ui, palette, &strings::SET_FILE_LOGGING, |ui| {
             widgets::toggle_switch(ui, &mut draft.logging.file_enabled, palette);
         });
+    });
+    ui.add_space(6.0);
+
+    widgets::heading(ui, strings::CLUSTER_LOCAL_SERVICE);
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        setting(ui, palette, &strings::SET_LOCAL_SERVICE_ENABLED, |ui| {
+            widgets::toggle_switch(ui, &mut draft.local_service_enabled, palette);
+        });
+        widgets::muted_help(ui, palette, strings::LOCAL_SERVICE_WARNING);
+        ui.horizontal(|ui| {
+            ui.label("Status");
+            ui.monospace(local_service.status.phase.as_str());
+        });
+        if let Some(connection) = &local_service.status.connection {
+            widgets::muted_help(ui, palette, &format!("HTTP: {}", connection.http_base_url));
+            widgets::muted_help(ui, palette, &format!("MCP: {}", connection.mcp_url));
+        }
+        if let Some(failure) = &local_service.status.failure {
+            widgets::muted_help(ui, palette, &failure.message);
+        }
+        if let Some(credential) = local_service.credential {
+            if ui
+                .button(strings::LOCAL_SERVICE_COPY_CREDENTIAL)
+                .on_hover_text(strings::LOCAL_SERVICE_COPY_CREDENTIAL_HELP)
+                .clickable()
+                .clicked()
+            {
+                ui.ctx().copy_text(credential.to_owned());
+            }
+            widgets::muted_help(ui, palette, strings::LOCAL_SERVICE_COPY_CREDENTIAL_HELP);
+        }
     });
     ui.add_space(6.0);
 

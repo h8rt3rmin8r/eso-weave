@@ -23,6 +23,7 @@ pub mod game;
 mod hash;
 pub mod icon_cache;
 pub mod input;
+pub mod local_service;
 pub mod logging;
 pub mod pixelbus;
 pub mod platform;

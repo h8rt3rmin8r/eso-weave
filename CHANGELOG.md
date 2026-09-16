@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S105 adds one persisted, off-by-default Local API and MCP server setting that
+  owns an authenticated `127.0.0.1:18765` listener, a minimal stateless MCP
+  initialization surface, non-secret atomic discovery, truthful lifecycle and
+  endpoint status, explicit credential copy, and bounded owned shutdown. Host,
+  Origin, bearer, and request-size checks protect the shared router; port
+  collisions, rapid toggles, partial starts, recovery, and exit remain atomic
+  and observable without exposing player state or database operations early
+  (issue #176, epic #174).
+
 - S102 makes live PixelBeacon evidence authoritative for Fishing Interact and
   Auto Potion Quickslot. One shared autonomous chord executor validates the
   binding generation and every applicable runtime gate, supports keyboard,
@@ -112,6 +121,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-16: Ship the S104-selected Axum 0.8.9, RMCP 3.4.0, Tokio
+  1.53.1, and Tokio Util 0.7.16 stack as one dedicated current-thread runtime
+  owner. S105 mounts an empty stateless RMCP handler so HTTP and MCP share one
+  atomic lifecycle now, while issues #177 through #179 retain ownership of
+  canonical observations, MCP resources, and queries. Persist one OS-random
+  256-bit bearer credential before first listener availability, restrict the
+  Unix settings file to the current user, and reveal the secret only through an
+  explicit clipboard copy action.
 
 - 2026-09-15: Make the pinned responsive-table resize receipt wait for the same
   two browser animation frames already required by its table matrix. The prior

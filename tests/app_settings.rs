@@ -2,6 +2,7 @@
 
 use eso_weave::app::settings_form::{ui_from_value, ui_to_value, SettingsForm, UiPrefs};
 use eso_weave::config::{LevelName, NoticeKind, Settings, Theme};
+use eso_weave::local_service::LocalServicePrefs;
 use eso_weave::pixelbus::{load_reader_config, store_reader_config, ReaderConfig};
 use eso_weave::weave::LatencyConfig;
 
@@ -141,6 +142,7 @@ fn settings_form_round_trips_custom_values() {
     edited.logging.file_enabled = true;
     edited.weave.timing.d_weave = 77;
     edited.weave.slots[0].active = false;
+    edited.local_service_enabled = true;
 
     let mut settings = Settings::default();
     edited.apply(&mut settings);
@@ -162,6 +164,30 @@ fn settings_form_round_trips_custom_values() {
     assert!(loaded.logging.file_enabled);
     assert_eq!(loaded.weave.timing.d_weave, 77);
     assert!(!loaded.weave.slots[0].active);
+    assert!(loaded.local_service_enabled);
+}
+
+#[test]
+fn local_service_form_defaults_off_and_preserves_credential() {
+    let credential = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let mut settings = Settings {
+        local_service: LocalServicePrefs {
+            enabled: false,
+            credential: Some(credential.into()),
+        }
+        .store(),
+        ..Settings::default()
+    };
+
+    let (mut form, notices) = SettingsForm::load(&settings);
+    assert!(notices.is_empty());
+    assert!(!form.local_service_enabled);
+    form.local_service_enabled = true;
+    form.apply(&mut settings);
+
+    let prefs = LocalServicePrefs::load(&settings.local_service);
+    assert!(prefs.enabled);
+    assert_eq!(prefs.credential.as_deref(), Some(credential));
 }
 
 #[test]
