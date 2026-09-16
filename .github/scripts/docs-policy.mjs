@@ -1514,7 +1514,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "development/architecture.html",
     asset: "architecture-ownership.svg",
     width: 400,
-    height: 650,
+    height: 860,
     alt: "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers",
     heading: "Ownership flow text equivalent",
     anchors: [
@@ -1531,7 +1531,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "concepts/action-authorization.html",
     asset: "action-authorization.svg",
     width: 400,
-    height: 700,
+    height: 950,
     alt: "Action authorization flow requires every positive gate or fails closed without generated input",
     heading: "Authorization flow text equivalent",
     anchors: [
@@ -1548,7 +1548,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "development/state-machines.html",
     asset: "safety-recovery.svg",
     width: 400,
-    height: 690,
+    height: 930,
     alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline",
     heading: "Safety recovery text equivalent",
     anchors: [
@@ -1565,7 +1565,7 @@ const DOCUMENTATION_DIAGRAMS = [
     outputPage: "reference/pixel-bus-protocol.html",
     asset: "pixel-bus-validation.svg",
     width: 400,
-    height: 820,
+    height: 1080,
     alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals",
     heading: "Pixel Bus validation text equivalent",
     anchors: [

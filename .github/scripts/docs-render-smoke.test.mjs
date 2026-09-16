@@ -3,11 +3,14 @@ import test from "node:test";
 
 import {
   FIGURE_PASS_SENTINEL,
+  LAYOUT_PASS_SENTINEL,
   PASS_SENTINEL,
   SYNTAX_PASS_SENTINEL,
   TABLE_PASS_SENTINEL,
   validateFigureObservation,
   validateFigureReceipt,
+  validateLayoutObservation,
+  validateLayoutReceipt,
   validateObservation,
   validateRenderingReceipt,
   validateSyntaxObservation,
@@ -70,6 +73,102 @@ test("S086 requires the complete receipt, SVG media types, and pass sentinel", (
   assert.match(validateRenderingReceipt({ ...receipt, observations: observations.slice(1) }).join("\n"), /matrix/i);
   assert.match(validateRenderingReceipt({ ...receipt, observations: [...observations, observations[0]] }).join("\n"), /matrix/i);
   assert.match(validateRenderingReceipt({ ...receipt, requests: [{ asset: "architecture-ownership.svg", status: 200, contentType: "text/plain" }] }).join("\n"), /media type|request/i);
+});
+
+const validLayoutObservation = {
+  diagramId: "S082-D01",
+  surface: "generated-loopback",
+  nodeCount: 6,
+  edgeCount: 6,
+  labelCount: 0,
+  metadataComplete: true,
+  insideCanvas: true,
+  minimumStageGap: 48,
+  endpointsConnected: true,
+  orthogonalRoutes: true,
+  minimumUnrelatedNodeClearance: 18,
+  edgeCrossings: 0,
+  sharedSegments: 0,
+  labelsComplete: true,
+  minimumLabelEdgeDistance: null,
+  maximumLabelEdgeDistance: null,
+  minimumLabelNodeClearance: null,
+  minimumLabelPeerClearance: null,
+  minimumLabelBendClearance: null,
+  minimumLabelTerminalClearance: null,
+  failures: [],
+};
+
+test("S103 accepts explicit, separated, unambiguous diagram topology", () => {
+  assert.deepEqual(validateLayoutObservation(validLayoutObservation), []);
+  assert.deepEqual(validateLayoutObservation({
+    ...validLayoutObservation,
+    diagramId: "S082-D02",
+    labelCount: 2,
+    minimumLabelEdgeDistance: 8,
+    maximumLabelEdgeDistance: 16,
+    minimumLabelNodeClearance: 10,
+    minimumLabelPeerClearance: 20,
+    minimumLabelBendClearance: 14,
+    minimumLabelTerminalClearance: 18,
+  }), []);
+});
+
+test("S103 rejects compressed, incomplete, intersecting, and ambiguous layouts", () => {
+  for (const [change, expected] of [
+    [{ metadataComplete: false }, /metadata/i],
+    [{ insideCanvas: false }, /canvas/i],
+    [{ minimumStageGap: 35.9 }, /stage gap/i],
+    [{ endpointsConnected: false }, /source and destination/i],
+    [{ orthogonalRoutes: false }, /orthogonal/i],
+    [{ minimumUnrelatedNodeClearance: 9.9 }, /unrelated node/i],
+    [{ edgeCrossings: 1 }, /cross/i],
+    [{ sharedSegments: 1 }, /shared segment/i],
+    [{ labelsComplete: false }, /branch label/i],
+    [{ failures: ["edge enters node"] }, /edge enters node/i],
+  ]) {
+    assert.match(validateLayoutObservation({ ...validLayoutObservation, ...change }).join("\n"), expected);
+  }
+
+  const labelled = {
+    ...validLayoutObservation,
+    diagramId: "S082-D04",
+    labelCount: 6,
+    minimumLabelEdgeDistance: 8,
+    maximumLabelEdgeDistance: 16,
+    minimumLabelNodeClearance: 10,
+    minimumLabelPeerClearance: 20,
+    minimumLabelBendClearance: 14,
+    minimumLabelTerminalClearance: 18,
+  };
+  for (const [change, expected] of [
+    [{ minimumLabelEdgeDistance: 3.9 }, /overlap its edge/i],
+    [{ maximumLabelEdgeDistance: 24.1 }, /associated edge/i],
+    [{ minimumLabelNodeClearance: 3.9 }, /node clearance/i],
+    [{ minimumLabelPeerClearance: 3.9 }, /peer label/i],
+    [{ minimumLabelBendClearance: 11.9 }, /bend/i],
+    [{ minimumLabelTerminalClearance: 11.9 }, /arrowhead/i],
+  ]) {
+    assert.match(validateLayoutObservation({ ...labelled, ...change }).join("\n"), expected);
+  }
+});
+
+test("S103 requires exactly one passing layout observation per diagram", () => {
+  const observations = ["S082-D01", "S082-D02", "S082-D03", "S082-D04"].map((diagramId) => ({
+    ...validLayoutObservation,
+    diagramId,
+  }));
+  const receipt = {
+    layoutSchemaVersion: 1,
+    layoutSentinel: LAYOUT_PASS_SENTINEL,
+    layoutObservations: observations,
+    layoutFailures: [],
+  };
+  assert.deepEqual(validateLayoutReceipt(receipt), []);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutSentinel: "wrong" }).join("\n"), /sentinel/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: observations.slice(1) }).join("\n"), /four unique/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: [...observations, observations[0]] }).join("\n"), /four unique/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutFailures: ["measurement failed"] }).join("\n"), /measurement failed/i);
 });
 
 const validSyntaxObservation = {

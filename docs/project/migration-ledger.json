@@ -1610,14 +1610,28 @@
     },
     {
       "id": "043",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-043.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-043.md",
       "specs": [
         "specs/097-auto-potion-persistence",
-        "specs/098-stale-hud-retention"
+        "specs/098-stale-hud-retention",
+        "specs/099-trust-boundary-audit",
+        "specs/100-native-binding-evidence",
+        "specs/101-native-binding-consumption",
+        "specs/102-controller-binding-consumption"
       ],
-      "evidence": "S097 completed issue #172. Issue #171 tracks active S098 stale HUD presentation retention with current-evidence-only action authority."
+      "evidence": "S097 through S102 completed operator intent reliability and native binding authority when PR #211 merged, closing issue #208 and enabling epic #188 to close."
+    },
+    {
+      "id": "044",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-044.md",
+      "specs": [
+        "specs/103-documentation-diagram-legibility"
+      ],
+      "evidence": "Issue #168 tracks active S103 documentation diagram legibility reconstruction."
     }
   ],
   "safetyCrosswalk": [
