@@ -16,7 +16,7 @@ These are the only application-owned runtime SQLite query surfaces. Temporary te
   "sql": "SELECT entity_id, kind FROM entity WHERE kind = ?1 LIMIT ?2",
   "parameters": [
     { "type": "text", "value": "skill" },
-    { "type": "integer", "value": 20 }
+    { "type": "integer", "value": "20" }
   ],
   "row_limit": 20
 }
@@ -35,7 +35,7 @@ One request contains exactly one statement of at most 16 KiB and at most 64 type
   ],
   "rows": [
     [
-      { "type": "integer", "value": 123 },
+      { "type": "integer", "value": "123" },
       { "type": "text", "value": "skill" }
     ]
   ],
@@ -51,7 +51,7 @@ One request contains exactly one statement of at most 16 KiB and at most 64 type
 }
 ```
 
-SQLite values use `null`, `integer`, `real`, `text`, and `blob`. Blob values carry base64 text. Non-finite real inputs are rejected. Boolean inputs are explicit and bind as integer 0 or 1. Rows are arrays, so duplicate column names and column order remain lossless.
+SQLite values use `null`, `integer`, `real`, `text`, and `blob`. Signed 64-bit integers use canonical decimal strings so JSON clients cannot round them. Finite reals use the shortest decimal string that round-trips to the same 64-bit value. Non-finite results use the strings `positive_infinity`, `negative_infinity`, or `nan`; non-finite real inputs are rejected. Blob values carry base64 text. Boolean inputs are explicit and bind as integer 0 or 1. Rows are arrays, so duplicate column names and column order remain lossless.
 
 ## Defense in depth
 

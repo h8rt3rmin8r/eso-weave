@@ -51,7 +51,7 @@ Retained values may be stale, but lifecycle facts such as focus and signal loss 
 - `parameters`: ordered positional or named typed values, maximum 64
 - `requested_row_limit`: optional integer from 1 through 1,000; an out-of-range value is `invalid_request`
 
-Supported parameter types are null, signed 64-bit integer, finite 64-bit real, UTF-8 text, boolean converted deliberately to integer, and base64 blob.
+Supported parameter types are null, signed 64-bit integer as a canonical decimal string, finite 64-bit real as a round-trippable decimal string, UTF-8 text, boolean converted deliberately to integer, and base64 blob.
 
 ## Query result
 
@@ -64,7 +64,7 @@ Supported parameter types are null, signed 64-bit integer, finite 64-bit real, U
 - `elapsed_ms`
 - `limits`: effective bounds
 
-Rows are arrays so duplicate column names remain representable. Each value has an explicit `type` and corresponding `value`.
+Rows are arrays so duplicate column names remain representable. Each value has an explicit `type` and corresponding `value`. Integer values are canonical signed decimal strings. Finite reals use shortest round-trippable decimal strings; non-finite reals use `positive_infinity`, `negative_infinity`, or `nan`.
 
 ## Extension error
 

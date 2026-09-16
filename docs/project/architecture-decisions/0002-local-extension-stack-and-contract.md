@@ -16,7 +16,7 @@ Use exact future production versions Axum 0.8.9, RMCP 3.4.0, Tokio 1.53.1, and T
 
 Use one IPv4 listener at `127.0.0.1:18765`, one Axum router, and one dedicated OS thread containing a current-thread Tokio runtime. HTTP lives under `/api/v1`; stateless MCP Streamable HTTP lives at `/mcp`. Production fails visibly on port collision. Tests may bind port 0.
 
-Require one persistent per-install bearer token with at least 256 bits of entropy on every operation. Validate Host and browser Origin against the effective loopback authority, emit no permissive CORS policy, and keep the token out of URLs, discovery, logs, and errors. Atomically publish non-secret endpoint, process, generation, and schema metadata only while the service is running.
+Require one persistent per-install bearer token with at least 256 bits of entropy on every operation. Validate Host and browser Origin against the effective loopback authority, emit no permissive CORS policy, and keep the token out of URLs, discovery, logs, and errors. Atomically publish non-secret endpoint, process, generation, and schema metadata only while the service is running. Cleanup may remove only a discovery record owned by the matching process and generation.
 
 Treat both transports as adapters over one immutable revisioned snapshot service and one bounded database query service. The version 1 schema preserves observed, unknown, unavailable, dormant, fresh, and stale distinctions with source, protocol, and observation-time metadata. HTTP capabilities and player-state routes match MCP resources; HTTP database discovery and query match an MCP resource and tool.
 

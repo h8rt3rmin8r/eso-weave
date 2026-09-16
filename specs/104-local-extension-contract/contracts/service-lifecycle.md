@@ -51,7 +51,7 @@ While running, atomically replace `local-extension.json` in the existing applica
 }
 ```
 
-The record contains no credential. Remove it on stop and failed startup. A client must treat a dead process, unreachable endpoint, or mismatched generation as stale discovery.
+The record contains no credential. Stop and failed-start cleanup may remove it only after reading and matching both the current process identity and service generation. If this start attempt never published the record, or another process or generation replaced it, cleanup leaves it untouched. A client must treat a dead process, unreachable endpoint, or mismatched generation as stale discovery.
 
 ## Runtime ownership
 
@@ -69,7 +69,7 @@ running  -> failed   -> stopping -> stopped
 ```
 
 - Start succeeds only after the listener, both adapters, authentication state, and discovery record are ready.
-- Any partial start failure cancels all components, closes the listener, removes discovery, and reports `failed`.
+- Any partial start failure cancels all components, closes the listener, removes only discovery owned by that start attempt, and reports `failed`.
 - A rapid disable during `starting` cancels startup and reaches `stopped`.
 - Re-enable after a completed stop or recoverable failure creates a new generation.
 - A collision on port 18765 reports `address_in_use` with the address but no internal path.
@@ -78,7 +78,7 @@ running  -> failed   -> stopping -> stopped
 
 Disable and application exit use the same sequence:
 
-1. Enter `stopping`, stop accepting new requests, and remove discovery.
+1. Enter `stopping`, stop accepting new requests, and compare-and-remove discovery only when its process and generation match this running service.
 2. Cancel HTTP and MCP serving and reject new query work.
 3. Interrupt in-flight SQLite work through its progress handler.
 4. Allow bounded response cleanup, close database handles, and release the listener.

@@ -39,7 +39,7 @@ The approximately 1.21 MiB incremental stripped footprint is proportionate for a
 
 Use one IPv4 loopback listener at `127.0.0.1:18765`. A fixed preferred port keeps HTTP and common MCP client configuration stable. Production fails visibly on collision rather than silently moving. Integration tests may request port `0` and consume the effective address.
 
-When running, atomically write a non-secret discovery record beneath the application's existing per-user data area. It contains endpoints, process identity, schema version, and generation, never the bearer credential. Remove it during clean stop; clients must also reject a record whose process or generation is no longer live.
+When running, atomically write a non-secret discovery record beneath the application's existing per-user data area. It contains endpoints, process identity, schema version, and generation, never the bearer credential. Clean stop or failed-start cleanup removes only a record whose process and generation match the current attempt; a colliding process cannot delete the live owner's record. Clients must also reject a record whose process or generation is no longer live.
 
 ## Authentication and browser boundary
 
