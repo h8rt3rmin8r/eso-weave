@@ -17,7 +17,7 @@ The table maps every current external fact represented by `GameObservations`, `P
 | `application.catalog` | availability and immutable catalog release identity | catalog model |
 | `application.addons.data` | managed lifecycle, ownership, compatibility, configured enablement, loaded/reload state, catalog activity, encounter activity, and safe remediation | data-addon lifecycle model |
 | `game.installation` | availability, provider, install classification; no path | game observations |
-| `game.runtime` | process running state and process identity without executable path | game observations |
+| `game.runtime` | `active`, `launcher_open`, `inactive`, or `unknown`; no process identity | game observations |
 | `game.focus` | focused, unfocused, or unknown | game observations |
 | `game.context` | derived active, dormant, or unavailable context | game observations |
 | `game.surface` | `none`, `system_menu`, `map`, `inventory`, `mail`, `character`, `guild_store`, `crown_store`, `journal`, `chat_entry`, `other`, `unknown` | game and PixelBus observations |
@@ -37,6 +37,7 @@ The table maps every current external fact represented by `GameObservations`, `P
 | `player.resources.health` | percent 0 through 100 or unknown | PixelBus resource observation |
 | `player.resources.stamina` | percent 0 through 100 or unknown | PixelBus resource observation |
 | `player.resources.magicka` | percent 0 through 100 or unknown | PixelBus resource observation |
+| `player.network.latency_ms` | current nonnegative server latency in milliseconds or unknown | PixelBus latency observation and weave engine |
 | `player.ultimate.current` | nonnegative points or unknown | PixelBus Ultimate observation |
 | `player.ultimate.maximum` | nonnegative points or unknown | PixelBus Ultimate observation |
 | `player.ultimate.front_cost` | nonnegative points or unknown | PixelBus Ultimate observation |
@@ -63,6 +64,8 @@ The table maps every current external fact represented by `GameObservations`, `P
 | `automation.weave.slots` | fixed seven-slot interpretation configuration with active flag, weave type, and override | persisted weave configuration |
 | `automation.weave.slots[].effective_delay_ms` | resolved per-slot delay for the current bar profile | canonical projection |
 | `interpretation.auto_potion.thresholds` | enabled health, stamina, and magicka watches and thresholds | persisted auto-potion configuration |
+| `interpretation.auto_potion.retry_interval_ms` | configured minimum interval between admitted potion attempts | persisted auto-potion configuration |
+| `interpretation.fishing` | configured arm timeout, reel delay, and recast delay in milliseconds | persisted fishing configuration |
 | `interpretation.weave.front_timing` | configured front-bar timing and auto-timing mode | persisted weave configuration |
 | `interpretation.weave.back_timing` | configured back-bar timing and auto-timing mode | persisted weave configuration |
 | `interpretation.latency` | configured compensation facts that affect timing interpretation | persisted settings |

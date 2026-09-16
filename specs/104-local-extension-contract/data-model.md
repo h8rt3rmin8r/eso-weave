@@ -49,7 +49,7 @@ Retained values may be stale, but lifecycle facts such as focus and signal loss 
 - `database_id`: stable inventory identifier
 - `sql`: one statement, maximum 16 KiB
 - `parameters`: ordered positional or named typed values, maximum 64
-- `requested_row_limit`: optional value clamped to 1,000
+- `requested_row_limit`: optional integer from 1 through 1,000; an out-of-range value is `invalid_request`
 
 Supported parameter types are null, signed 64-bit integer, finite 64-bit real, UTF-8 text, boolean converted deliberately to integer, and base64 blob.
 

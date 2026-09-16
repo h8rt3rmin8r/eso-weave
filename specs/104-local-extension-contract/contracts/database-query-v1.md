@@ -22,7 +22,7 @@ These are the only application-owned runtime SQLite query surfaces. Temporary te
 }
 ```
 
-One request contains exactly one statement of at most 16 KiB and at most 64 typed named or positional parameters. Mixed named and positional parameters are rejected. The requested row limit is optional and cannot exceed 1,000.
+One request contains exactly one statement of at most 16 KiB and at most 64 typed named or positional parameters. Mixed named and positional parameters are rejected. The requested row limit is optional and must be an integer from 1 through 1,000; zero, negative, non-integral, or larger values return `invalid_request` rather than being clamped.
 
 ## Result
 
