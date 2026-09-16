@@ -22,4 +22,4 @@
 
 4. Confirm the output includes the S086 rendering sentinel, S088 figure sentinel, and the new S103 layout sentinel with no failures.
 
-5. Inspect each normal and expanded diagram at 320 and 1280 CSS pixels in navy and light themes. Follow every labeled branch from its source to destination and compare it with the adjacent prose equivalent.
+5. Inspect each normal and expanded diagram at 320 and 1280 CSS pixels in navy and light themes. Confirm expansion never makes a diagram narrower, tall assets scroll inside the bounded dialog, and every labeled branch can be followed from source to destination against the adjacent prose equivalent.

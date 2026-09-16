@@ -6,7 +6,7 @@
 
 ## Summary
 
-Recompose all four static documentation SVGs on taller canvases with explicit node, edge, stage, and branch-label identities. Extend the existing dependency-free Chrome smoke with direct-SVG element measurements so stage gaps, node clearance, crossings, label association, and arrowhead clearance become deterministic merge gates while the established 32-cell rendering and accessible figure contracts remain intact.
+Recompose all four static documentation SVGs on taller canvases with explicit node, edge, stage, and branch-label identities. Extend the existing dependency-free Chrome smoke with direct-SVG element measurements so stage gaps, node clearance, crossings, label association, arrowhead clearance, and all-visible-element containment become deterministic merge gates. Preserve readable expanded width for tall assets through the existing bounded dialog panel.
 
 ## Technical Context
 
@@ -24,7 +24,7 @@ Recompose all four static documentation SVGs on taller canvases with explicit no
 
 **Performance Goals**: Reuse the existing browser process and add only four bounded direct-SVG observations
 
-**Constraints**: No package graph, remote renderer, raster golden, runtime diagram library, second viewer, or application behavior change
+**Constraints**: No package graph, remote renderer, raster golden, runtime diagram library, second viewer, broad interaction redesign, or application behavior change. One narrow intrinsic-size scrolling adjustment is permitted for tall S103 assets.
 
 **Scale/Scope**: Four SVG assets, one browser-smoke module and test module, compatibility record, changelog, build-plan chronology, spec packet
 
@@ -64,6 +64,9 @@ docs/project/build-plans/plan-044.md
 docs/archive/build-plans/plan-043.md
 .github/scripts/docs-render-smoke.mjs
 .github/scripts/docs-render-smoke.test.mjs
+.github/scripts/docs-policy.mjs
+.github/scripts/docs-policy.test.mjs
+docs/theme/eso-weave.css
 CHANGELOG.md
 ```
 
@@ -91,7 +94,8 @@ Outputs: [data-model.md](data-model.md), [contracts/diagram-layout.md](contracts
 1. Add failing pure validation tests for incomplete receipts and every clearance failure family.
 2. Implement layout observation validation and direct-SVG browser collection.
 3. Recompose all four SVGs with stable topology metadata, taller stages, and dedicated routing lanes.
-4. Update compatibility evidence, build-plan chronology, and changelog decisions.
+4. Preserve intrinsic expanded width for tall diagrams through the existing scrollable panel and add a paired no-shrink assertion.
+5. Update compatibility evidence, build-plan chronology, and changelog decisions.
 
 ## Phase 3: Review and Delivery
 

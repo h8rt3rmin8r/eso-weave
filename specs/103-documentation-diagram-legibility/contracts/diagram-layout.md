@@ -32,7 +32,8 @@ Metadata is inert. It neither receives focus nor changes SVG accessibility. Root
 6. A branch label names exactly one edge and has non-empty visible text.
 7. A label does not intersect a node or peer label.
 8. A label stays 4 to 24 units from its edge and at least 12 units from bends and the terminal arrowhead.
-9. All element bounds remain within the root viewBox.
+9. Every visible text and graphical element outside SVG definition containers is inventoried, and all measured bounds remain within the root viewBox.
+10. Each expanded rendering is at least as wide as its paired normal rendering. Tall content remains reachable through the bounded dialog panel.
 
 ## Browser receipt
 
@@ -40,4 +41,4 @@ The existing documentation smoke loads each generated SVG directly, collects one
 
 ## Compatibility boundary
 
-S103 owns comprehension geometry. S086 continues to own decode, paint, aspect ratio, byte identity, and media type. S088 continues to own expansion semantics, modal focus, captions, and figure containment.
+S103 owns comprehension geometry, all-visible-element canvas evidence, and the paired expanded-width assertion. S086 continues to own decode, paint, aspect ratio, byte identity, and media type. S088 continues to own expansion semantics, modal focus, captions, and the scrollable intrinsic-size container.

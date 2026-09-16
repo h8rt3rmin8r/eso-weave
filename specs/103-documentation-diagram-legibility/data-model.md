@@ -32,6 +32,8 @@ Rules: the named edge exists, each branch edge has one label, label bounds remai
 - `diagram_id`: one of `S082-D01` through `S082-D04`
 - `surface`: `generated-loopback`
 - `node_count`, `edge_count`, `label_count`
+- `visible_element_count`: every rendered text or graphical element outside non-rendered SVG definition containers
+- `visible_elements_inside_canvas`: whether every inventoried visible bound remains inside the root viewBox
 - `minimum_stage_gap`
 - `topology_complete`
 - `orthogonal_routes`

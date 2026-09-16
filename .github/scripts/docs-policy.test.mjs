@@ -2835,6 +2835,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
     [".docs-flow-diagram .checkbox-img,", ".docs-flow-diagram .unused,", /no-JavaScript|legacy mdBook/i],
     [".docs-flow-diagram .checkbox-img:checked ~ .img-wrapper", ".docs-flow-diagram .unused:checked ~ .img-wrapper", /checked-state/i],
     ["object-fit: contain;\n  width: auto", "object-fit: contain;\n  width: 100%", /intrinsic|upscal/i],
+    ["max-height: none", "max-height: calc(var(--docs-figure-viewport-height, 100vh) - 11rem)", /intrinsic|scroll|shrink/i],
     ["@media print", "@media screen", /print/i],
   ]) {
     assert.match(validateDocumentationFigureCss(css.replace(needle, replacement)).join("\n"), expected);

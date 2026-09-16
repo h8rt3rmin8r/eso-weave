@@ -39,8 +39,8 @@ generated mdBook figure DOM and styles.
 | Total observations | 32 |
 
 All 32 observations passed image decode, positive geometry, computed visibility,
-intrinsic aspect ratio, container or viewport containment, at least 95 percent
-opaque pixels, at least four opaque colors, and more than 1 percent
+intrinsic aspect ratio, viewport or reachable scroll-container containment, at
+least 95 percent opaque pixels, at least four opaque colors, and more than 1 percent
 non-background paint. The expanded wrapper was hidden before activation and
 visible afterward. The four asset requests returned 200 as `image/svg+xml`.
 
@@ -79,7 +79,15 @@ directly in the same hidden Chrome process used by the 32-cell rendering matrix.
 Its four-item S103 receipt measures actual element bounds and paths, then
 requires declared endpoints, orthogonal routing, at least 10 units of clearance
 from unrelated nodes, no crossing or shared edge segments, complete branch
-labels, and clearance from nodes, peer labels, bends, and terminal arrowheads.
+labels, clearance from nodes, peer labels, bends, and terminal arrowheads, and
+canvas containment for every visible text and graphical element.
+
+Taller assets may exceed the dialog's available vertical space. The existing
+panel now keeps intrinsic image width and provides bounded vertical scrolling,
+and paired normal plus expanded observations reject any expansion that makes a
+diagram narrower. At the 1280 by 920 matrix viewport, every diagram remains 400
+CSS pixels wide in both states. Narrow 320-pixel observations remain responsive
+and make the expanded image slightly wider than its normal state.
 
 These element-level checks would reject the earlier compressed routing even
 when the image still decoded and painted. The root title and description,
@@ -97,5 +105,6 @@ the preserved text equivalents provide bounded fallback behavior.
 S086 remains the rendering-compatibility authority for the four diagram assets.
 S088 owns the shared click-to-expand behavior, visible affordances, keyboard and
 focus semantics, background inertness, raw HTML figures, screenshots, captions,
-and brand assets. S103 owns intrinsic comprehension geometry and its
+brand assets, and scrollable intrinsic-size presentation. S103 owns intrinsic
+comprehension geometry, the paired no-shrink diagram assertion, and its
 element-level regression evidence.

@@ -86,6 +86,17 @@ export function validateRenderingReceipt(receipt) {
     errors.push(`S086 rendering matrix requires ${expectedKeys.size} unique observations`);
   }
   for (const observation of observations) errors.push(...validateObservation(observation));
+  for (const diagram of DIAGRAMS) {
+    for (const theme of THEMES) {
+      for (const viewportWidth of VIEWPORTS) {
+        const normal = observations.find((observation) => observationKey(observation) === `${diagram.id}|${theme}|${viewportWidth}|normal`);
+        const expanded = observations.find((observation) => observationKey(observation) === `${diagram.id}|${theme}|${viewportWidth}|expanded`);
+        if (normal?.renderedWidth > 0 && expanded?.renderedWidth > 0 && expanded.renderedWidth + 1 < normal.renderedWidth) {
+          errors.push(`${diagram.id} ${theme} ${viewportWidth}: expanded image must not shrink below its normal rendered width`);
+        }
+      }
+    }
+  }
   const requests = Array.isArray(receipt?.requests) ? receipt.requests : [];
   for (const diagram of DIAGRAMS) {
     const request = requests.find((candidate) => candidate.asset === diagram.asset);
@@ -104,8 +115,10 @@ export function validateLayoutObservation(observation) {
   if (!(observation?.nodeCount > 0) || !(observation?.edgeCount > 0) || !(observation?.labelCount >= 0)) {
     errors.push(`${prefix}: node, edge, and label counts must be complete`);
   }
+  if (!(observation?.visibleElementCount > 0)) errors.push(`${prefix}: visible element inventory must not be empty`);
   if (!observation?.metadataComplete) errors.push(`${prefix}: node and edge topology metadata is incomplete`);
   if (!observation?.insideCanvas) errors.push(`${prefix}: every measured element must remain inside the SVG canvas`);
+  if (!observation?.visibleElementsInsideCanvas) errors.push(`${prefix}: every visible element must remain inside the SVG canvas`);
   if (!(observation?.minimumStageGap >= 36)) errors.push(`${prefix}: minimum successive stage gap must be at least 36 SVG units`);
   if (!observation?.endpointsConnected) errors.push(`${prefix}: every edge must connect its declared source and destination boundaries`);
   if (!observation?.orthogonalRoutes) errors.push(`${prefix}: every edge route must be orthogonal`);
@@ -417,12 +430,20 @@ function paintStats(image) {
   const total = width * height;
   return { opaqueCoverage: opaque / total, opaqueColorCount: colors.size, nonBackgroundCoverage: opaque === 0 ? 0 : (opaque - dominant) / opaque };
 }
-function observe(diagramId, state, image, boundary) {
+function observe(diagramId, state, image, boundary, scrollPanel = null) {
   const rectangle = image.getBoundingClientRect();
   const style = getComputedStyle(image);
   const horizontalDecoration = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
   const verticalDecoration = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
   const tolerance = 1.5;
+  const viewportContained = rectangle.left >= boundary.left - tolerance && rectangle.top >= boundary.top - tolerance
+    && rectangle.right <= boundary.right + tolerance && rectangle.bottom <= boundary.bottom + tolerance;
+  const panelRectangle = scrollPanel?.getBoundingClientRect();
+  const panelStyle = scrollPanel ? getComputedStyle(scrollPanel) : null;
+  const scrollReachable = Boolean(scrollPanel && panelRectangle && panelStyle
+    && ["auto", "scroll"].includes(panelStyle.overflowY)
+    && rectangle.left >= panelRectangle.left - tolerance && rectangle.right <= panelRectangle.right + tolerance
+    && image.offsetTop >= 0 && image.offsetTop + image.offsetHeight <= scrollPanel.scrollHeight + tolerance);
   return {
     diagramId,
     surface: "generated-loopback",
@@ -434,7 +455,9 @@ function observe(diagramId, state, image, boundary) {
     renderedWidth: rectangle.width - horizontalDecoration,
     renderedHeight: rectangle.height - verticalDecoration,
     visible: isVisiblyPainted(image),
-    contained: rectangle.left >= boundary.left - tolerance && rectangle.top >= boundary.top - tolerance && rectangle.right <= boundary.right + tolerance && rectangle.bottom <= boundary.bottom + tolerance,
+    contained: viewportContained || scrollReachable,
+    viewportContained,
+    scrollReachable,
     ...paintStats(image),
   };
 }
@@ -446,8 +469,9 @@ try {
   const control = figure?.querySelector(":scope > p > button.docs-figure-trigger");
   const primary = control?.querySelector(":scope > img");
   const dialog = document.querySelector("dialog[data-docs-figure-dialog]");
+  const panel = dialog?.querySelector(".docs-figure-dialog__panel");
   const expanded = dialog?.querySelector(".docs-figure-dialog__image");
-  if (!figure || !control || !primary || !dialog || !expanded) throw new Error("expected shared figure dialog DOM is missing");
+  if (!figure || !control || !primary || !dialog || !panel || !expanded) throw new Error("expected shared figure dialog DOM is missing");
   if (figure.querySelectorAll(".checkbox-img, .img-wrapper").length !== 0) throw new Error("legacy diagram modal remains after enhancement");
   const expectedPath = "/eso-weave/assets/diagrams/" + configuration.diagram.asset;
   if (new URL(primary.currentSrc).pathname !== expectedPath) throw new Error("generated primary image source does not match the expected local asset");
@@ -462,7 +486,7 @@ try {
   await nextFrame();
   if (!dialog.matches(":modal") || !isVisiblyPainted(expanded)) throw new Error("expanded image did not become visible after activation");
   if (new URL(expanded.currentSrc).pathname !== expectedPath) throw new Error("expanded image source does not match the expected local asset");
-  observations.push(observe(configuration.diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }));
+  observations.push(observe(configuration.diagram.id, "expanded", expanded, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }, panel));
   if (expanded.alt !== "" || expanded.getAttribute("aria-hidden") !== "true") throw new Error("expanded clone is not decorative");
   dialog.close();
   await nextFrame();
@@ -559,7 +583,15 @@ const metadataComplete = Boolean(viewBox?.width > 0 && viewBox?.height > 0)
   && edges.every((edge) => edge.id && edge.from && edge.to && edge.from !== edge.to && nodeById.has(edge.from) && nodeById.has(edge.to) && edge.points.length >= 2)
   && labels.every((label) => label.edgeId && label.text && edges.some((edge) => edge.id === label.edgeId));
 const inside = (rectangle) => rectangle.x >= -1 && rectangle.y >= -1 && rectangle.right <= viewBox.width + 1 && rectangle.bottom <= viewBox.height + 1;
-const insideCanvas = Boolean(viewBox) && nodes.every((node) => inside(node.bounds)) && labels.every((label) => inside(label.bounds))
+const visibleElements = [...document.querySelectorAll("text, rect, path, circle, ellipse, line, polyline, polygon, image, use")]
+  .filter((element) => !element.closest("defs, marker, symbol, clipPath, mask, pattern"))
+  .filter((element) => {
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && number(style.opacity) > 0;
+  });
+const visibleElementBounds = visibleElements.map(box);
+const visibleElementsInsideCanvas = Boolean(viewBox) && visibleElementBounds.length > 0 && visibleElementBounds.every(inside);
+const insideCanvas = visibleElementsInsideCanvas && nodes.every((node) => inside(node.bounds)) && labels.every((label) => inside(label.bounds))
   && edges.every((edge) => edge.points.every((point) => point.x >= -1 && point.y >= -1 && point.x <= viewBox.width + 1 && point.y <= viewBox.height + 1));
 const stages = [...new Set(nodes.map((node) => node.stage))].sort((first, second) => first - second);
 let minimumStageGap = Number.POSITIVE_INFINITY;
@@ -643,8 +675,10 @@ return {
   nodeCount: nodes.length,
   edgeCount: edges.length,
   labelCount: labels.length,
+  visibleElementCount: visibleElements.length,
   metadataComplete,
   insideCanvas,
+  visibleElementsInsideCanvas,
   minimumStageGap: finiteOrNull(minimumStageGap),
   endpointsConnected,
   orthogonalRoutes,
@@ -802,10 +836,11 @@ const figure = trigger.closest("figure");
 const sourceImage = trigger.querySelector(":scope > img");
 const sourceCaption = figure?.querySelector(":scope > figcaption") ?? null;
 const dialog = document.querySelector("dialog[data-docs-figure-dialog]");
+const panel = dialog?.querySelector(".docs-figure-dialog__panel");
 const close = dialog?.querySelector(".docs-figure-dialog__close");
 const expanded = dialog?.querySelector(".docs-figure-dialog__image");
 const modalCaption = dialog?.querySelector(".docs-figure-dialog__caption");
-if (!figure || !sourceImage || !dialog || !close || !expanded || !modalCaption) throw new Error("figure system DOM is incomplete");
+if (!figure || !sourceImage || !dialog || !panel || !close || !expanded || !modalCaption) throw new Error("figure system DOM is incomplete");
 if (trigger.getAttribute("aria-label") !== "Expand image: " + alternative) throw new Error("figure trigger alternative is incorrect");
 const affordanceStyle = getComputedStyle(trigger, "::after");
 const visibleAffordance = affordanceStyle.display !== "none" && affordanceStyle.content.includes("Expand image");
@@ -824,6 +859,12 @@ const modalCaptionStyle = !modalCaption.hidden ? getComputedStyle(modalCaption) 
 const modalCaptionRectangle = !modalCaption.hidden ? modalCaption.getBoundingClientRect() : null;
 const figureRectangle = figure.getBoundingClientRect();
 const dialogRectangle = dialog.getBoundingClientRect();
+const panelRectangle = panel.getBoundingClientRect();
+const panelStyle = getComputedStyle(panel);
+const viewportContained = rectangle.left >= -1 && rectangle.top >= -1 && rectangle.right <= innerWidth + 1 && rectangle.bottom <= innerHeight + 1;
+const scrollReachable = ["auto", "scroll"].includes(panelStyle.overflowY)
+  && rectangle.left >= panelRectangle.left - 1 && rectangle.right <= panelRectangle.right + 1
+  && expanded.offsetTop >= 0 && expanded.offsetTop + expanded.offsetHeight <= panel.scrollHeight + 1;
 const observation = {
   caseId: configuration.figureCase.id,
   surface: "generated-loopback",
@@ -847,7 +888,9 @@ const observation = {
   naturalHeight: expanded.naturalHeight,
   renderedWidth: rectangle.width,
   renderedHeight: rectangle.height,
-  contained: rectangle.left >= -1 && rectangle.top >= -1 && rectangle.right <= innerWidth + 1 && rectangle.bottom <= innerHeight + 1,
+  contained: viewportContained || scrollReachable,
+  viewportContained,
+  scrollReachable,
   upscaled: rectangle.width > expanded.naturalWidth + 1 || rectangle.height > expanded.naturalHeight + 1,
   captionFontSize: captionStyle ? Number.parseFloat(captionStyle.fontSize) : null,
   captionLineHeight: captionStyle ? Number.parseFloat(captionStyle.lineHeight) : null,

@@ -2171,6 +2171,7 @@ export function validateDocumentationFigureCss(css) {
   const trigger = css.match(/\.docs-figure-trigger\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const affordance = css.match(/\.docs-figure-trigger::after\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const dialog = css.match(/\.docs-figure-dialog\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
+  const dialogPanel = css.match(/\.docs-figure-dialog__panel\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const dialogImage = css.match(/\.docs-figure-dialog__image\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const caption = css.match(/\.docs-screenshot figcaption,\s*\.brand-surface figcaption\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   const print = css.match(/@media\s+print\s*\{(?<body>[\s\S]*)\}\s*$/u)?.groups?.body ?? "";
@@ -2195,9 +2196,10 @@ export function validateDocumentationFigureCss(css) {
   if (!/display:\s*block/iu.test(dialogImage) || !/height:\s*auto/iu.test(dialogImage)
       || !/width:\s*auto/iu.test(dialogImage)
       || !/max-width:\s*calc\(var\(--docs-figure-viewport-width,\s*100vw\)/iu.test(dialogImage)
-      || !/max-height:\s*calc\(var\(--docs-figure-viewport-height,\s*100vh\)/iu.test(dialogImage)
+      || !/max-height:\s*none/iu.test(dialogImage)
+      || !/overflow:\s*auto/iu.test(dialogPanel)
       || !/object-fit:\s*contain/iu.test(dialogImage)) {
-    errors.push("S088 expanded figure must preserve intrinsic geometry without upscaling and remain viewport-contained");
+    errors.push("S088 expanded figure must preserve intrinsic geometry without upscaling or shrinking and permit panel scrolling");
   }
   const fontSize = Number(caption.match(/font-size:\s*(\d+(?:\.\d+)?)em/iu)?.[1]);
   const lineHeight = Number(caption.match(/line-height:\s*(\d+(?:\.\d+)?)/iu)?.[1]);

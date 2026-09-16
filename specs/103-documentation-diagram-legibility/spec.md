@@ -34,7 +34,7 @@ A reader can use each diagram in normal and expanded states, in navy and light t
 
 **Acceptance Scenarios**:
 
-1. **Given** a 320 or 1280 CSS-pixel viewport, **when** a diagram is shown normally or expanded, **then** it remains proportionate, contained, nonblank, and readable.
+1. **Given** a 320 or 1280 CSS-pixel viewport, **when** a diagram is shown normally or expanded, **then** it remains proportionate, contained, nonblank, and readable, and expansion never makes it narrower than its normal state.
 2. **Given** navy or light documentation themes, **when** the same diagram is shown, **then** text, state distinctions, and direction remain understandable without relying on color alone.
 
 ### User Story 3 - Catch renewed crowding before publication (Priority: P2)
@@ -57,6 +57,7 @@ A maintainer receives a deterministic failure when a future diagram change compr
 - An edge may touch only its declared source and destination nodes; clearance checks exclude those two nodes and no others.
 - A label may sit beside its edge, but it must not overlap the edge, a bend, or its terminal arrowhead.
 - Narrow responsive rendering may scale a diagram down, but intrinsic label sizes remain at least 14 SVG units and the expanded view provides full-size inspection.
+- A tall expanded diagram may require vertical scrolling inside the bounded dialog panel, but all of its content remains reachable and its width does not shrink to fit the viewport height.
 - Complete adjacent prose equivalents remain authoritative when a reader cannot use the visual.
 - Browser font metrics can vary slightly, so geometry thresholds include a small deterministic tolerance without accepting overlaps.
 
@@ -81,6 +82,8 @@ A maintainer receives a deterministic failure when a future diagram change compr
 - **FR-015**: The maintained compatibility record MUST distinguish S103 comprehension evidence from the S086 rendering and S088 interaction contracts.
 - **FR-016**: S103 MUST add no remote renderer, runtime diagram library, package dependency, application behavior, addon behavior, or second figure viewer.
 - **FR-017**: Build-plan chronology MUST archive completed Plan 043 and establish S103 in a new active plan.
+- **FR-018**: Every expanded diagram MUST render at least as wide as its paired normal observation. A diagram taller than the available dialog space MUST retain intrinsic width and remain fully reachable through bounded panel scrolling.
+- **FR-019**: Layout containment MUST inventory every visible text and graphical element outside SVG definition containers, not only annotated nodes, edges, and branch labels.
 
 ### Key Entities
 
@@ -100,6 +103,7 @@ A maintainer receives a deterministic failure when a future diagram change compr
 - **SC-004**: All 32 established normal and expanded rendering observations pass at 320 and 1280 CSS pixels in navy and light themes.
 - **SC-005**: Focused tests reject missing topology metadata, compressed stages, node incursions, edge crossings, and label collisions.
 - **SC-006**: Documentation policy, browser smoke, mdBook test/build/link checks, spelling, UTF-8, mojibake, and hosted CI pass.
+- **SC-007**: At 1280 by 920 CSS pixels, all four expanded diagrams retain the 400-pixel normal width, and tall diagrams remain reachable through the existing dialog panel without page-level overflow.
 
 ## Assumptions
 
@@ -111,6 +115,6 @@ A maintainer receives a deterministic failure when a future diagram change compr
 ## Out of Scope
 
 - New diagrams, new documentation topics, or the corpus-wide visualization audit in issue #170.
-- Changes to the figure dialog, responsive table system, syntax highlighting, or screenshot inventory.
+- Broad changes to the figure dialog, responsive table system, syntax highlighting, or screenshot inventory. The narrow intrinsic-width scrolling adjustment required by FR-018 is included.
 - Pixel-golden screenshots tied to one browser rasterizer.
 - Application, addon, input, automation, telemetry, packaging, or release behavior.

@@ -44,6 +44,18 @@ All four SVGs render and pass the S086 paint and aspect-ratio matrix. The defect
 
 **Why**: Orthogonal routes are easy to trace and allow deterministic segment intersection and unrelated-node clearance checks.
 
+## Decision 5: Scroll tall expanded figures at intrinsic width
+
+**Selected**: Remove the dialog image's viewport-height cap, retain the bounded panel's vertical scrolling, and reject any expanded diagram that renders narrower than its paired normal observation.
+
+**Why**: At 1280 by 920 CSS pixels, fitting the 400 by 1080 Pixel Bus diagram into the available 744-pixel image row reduced it to roughly 276 pixels wide. Expansion therefore made its 14-unit labels smaller. The existing panel already owns overflow, so intrinsic-width scrolling is the smallest correction and does not introduce another viewer.
+
+**Rejected**:
+
+- Reducing the reconstructed canvas height would reintroduce the crowded routing issue.
+- Widening the SVG would shrink its labels on narrow normal views.
+- A new zoom library or second viewer would duplicate the established S088 interaction.
+
 ## Thresholds
 
 - Successive stage separation: at least 36 SVG units.

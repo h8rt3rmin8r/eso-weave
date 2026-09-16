@@ -72,6 +72,13 @@ test("S086 requires the complete receipt, SVG media types, and pass sentinel", (
   assert.match(validateRenderingReceipt({ ...receipt, sentinel: "wrong" }).join("\n"), /sentinel/i);
   assert.match(validateRenderingReceipt({ ...receipt, observations: observations.slice(1) }).join("\n"), /matrix/i);
   assert.match(validateRenderingReceipt({ ...receipt, observations: [...observations, observations[0]] }).join("\n"), /matrix/i);
+  assert.match(validateRenderingReceipt({
+    ...receipt,
+    observations: observations.map((observation) => observation.diagramId === "S082-D04"
+      && observation.theme === "navy" && observation.viewportWidth === 1280 && observation.state === "expanded"
+      ? { ...observation, renderedWidth: 200, renderedHeight: 325 }
+      : observation),
+  }).join("\n"), /expanded.*smaller|must not shrink/i);
   assert.match(validateRenderingReceipt({ ...receipt, requests: [{ asset: "architecture-ownership.svg", status: 200, contentType: "text/plain" }] }).join("\n"), /media type|request/i);
 });
 
@@ -81,8 +88,10 @@ const validLayoutObservation = {
   nodeCount: 6,
   edgeCount: 6,
   labelCount: 0,
+  visibleElementCount: 24,
   metadataComplete: true,
   insideCanvas: true,
+  visibleElementsInsideCanvas: true,
   minimumStageGap: 48,
   endpointsConnected: true,
   orthogonalRoutes: true,
@@ -118,6 +127,8 @@ test("S103 rejects compressed, incomplete, intersecting, and ambiguous layouts",
   for (const [change, expected] of [
     [{ metadataComplete: false }, /metadata/i],
     [{ insideCanvas: false }, /canvas/i],
+    [{ visibleElementCount: 0 }, /visible element/i],
+    [{ visibleElementsInsideCanvas: false }, /visible element.*canvas/i],
     [{ minimumStageGap: 35.9 }, /stage gap/i],
     [{ endpointsConnected: false }, /source and destination/i],
     [{ orthogonalRoutes: false }, /orthogonal/i],
