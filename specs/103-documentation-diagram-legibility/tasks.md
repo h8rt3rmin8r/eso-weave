@@ -36,8 +36,8 @@
 - [x] T020 Run focused Node tests and documentation policy.
 - [x] T021 Run mdBook tests, build, link checks, spelling, browser smoke, UTF-8, mojibake, and diff hygiene.
 - [x] T022 Run full repository merge-gate verification required for the documentation-only scope.
-- [ ] T023 Commit and push S103 with issue linkage.
-- [ ] T024 Open the official pull request and set project Stage to PR review.
+- [x] T023 Commit and push S103 with issue linkage.
+- [x] T024 Open the official pull request and set project Stage to PR review.
 - [ ] T025 Address every first-round review and CI finding.
 - [ ] T026 Request and address at most one authorized second Codex review round.
 - [ ] T027 Confirm every review conversation resolved and every required check green.
