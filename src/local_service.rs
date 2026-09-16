@@ -10,8 +10,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use axum::body::{to_bytes, Body};
 use axum::extract::{Request, State};
 use axum::http::header::{AUTHORIZATION, CONTENT_LENGTH, HOST, ORIGIN};
 use axum::http::{HeaderMap, StatusCode};
@@ -177,6 +178,7 @@ impl Default for ServiceStatus {
 pub struct LocalServiceConfig {
     pub config_dir: Option<PathBuf>,
     pub port: u16,
+    pub shutdown_timeout: Duration,
 }
 
 impl LocalServiceConfig {
@@ -184,6 +186,7 @@ impl LocalServiceConfig {
         Self {
             config_dir,
             port: DEFAULT_PORT,
+            shutdown_timeout: SHUTDOWN_TIMEOUT,
         }
     }
 }
@@ -192,7 +195,7 @@ impl LocalServiceConfig {
 enum OwnerCommand {
     Start(String),
     Stop,
-    Shutdown,
+    Shutdown(Instant),
 }
 
 /// Non-blocking UI-facing controller for the dedicated service owner.
@@ -201,11 +204,13 @@ pub struct LocalServiceController {
     status: Arc<Mutex<ServiceStatus>>,
     completion: std::sync::mpsc::Receiver<()>,
     owner: Option<JoinHandle<()>>,
+    shutdown_timeout: Duration,
 }
 
 impl LocalServiceController {
     /// Starts the idle owner thread. No listener is created until `start`.
     pub fn new(config: LocalServiceConfig) -> Self {
+        let shutdown_timeout = config.shutdown_timeout;
         let (commands, receiver) = mpsc::unbounded_channel();
         let status = Arc::new(Mutex::new(ServiceStatus::default()));
         let owner_status = status.clone();
@@ -250,6 +255,7 @@ impl LocalServiceController {
             status,
             completion,
             owner,
+            shutdown_timeout,
         }
     }
 
@@ -303,8 +309,10 @@ impl LocalServiceController {
         let Some(owner) = self.owner.take() else {
             return Ok(());
         };
-        let _ = self.commands.send(OwnerCommand::Shutdown);
-        if self.completion.recv_timeout(SHUTDOWN_TIMEOUT).is_err() {
+        let deadline = Instant::now() + self.shutdown_timeout;
+        let _ = self.commands.send(OwnerCommand::Shutdown(deadline));
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if self.completion.recv_timeout(remaining).is_err() {
             let generation = self.status().generation;
             let failure = ServiceFailure {
                 code: ServiceFailureCode::ShutdownTimeout,
@@ -426,7 +434,7 @@ async fn owner_loop(
                             desired = true;
                         }
                         OwnerCommand::Stop => desired = false,
-                        OwnerCommand::Shutdown => {
+                        OwnerCommand::Shutdown(_) => {
                             desired = false;
                             shutdown = true;
                         }
@@ -482,7 +490,7 @@ async fn owner_loop(
                     match queued {
                         OwnerCommand::Start(_) => desired = true,
                         OwnerCommand::Stop => desired = false,
-                        OwnerCommand::Shutdown => {
+                        OwnerCommand::Shutdown(_) => {
                             desired = false;
                             shutdown = true;
                         }
@@ -544,10 +552,20 @@ async fn owner_loop(
 
                 match exit {
                     RunningExit::Command(command) => {
-                        let shutdown = matches!(command, Some(OwnerCommand::Shutdown) | None);
+                        let shutdown_deadline = match command {
+                            Some(OwnerCommand::Shutdown(deadline)) => Some(deadline),
+                            None => Some(Instant::now()),
+                            _ => None,
+                        };
                         set_status(&status, stopping_status(generation));
                         cancellation.cancel();
-                        let stopped_in_time = tokio::time::timeout(SHUTDOWN_TIMEOUT, &mut server)
+                        let graceful_timeout =
+                            shutdown_deadline.map_or(config.shutdown_timeout, |deadline| {
+                                deadline
+                                    .saturating_duration_since(Instant::now())
+                                    .saturating_sub(shutdown_join_margin(config.shutdown_timeout))
+                            });
+                        let stopped_in_time = tokio::time::timeout(graceful_timeout, &mut server)
                             .await
                             .is_ok();
                         let discovery_removed =
@@ -575,7 +593,7 @@ async fn owner_loop(
                         } else {
                             set_status(&status, stopped_status(generation));
                         }
-                        if shutdown {
+                        if shutdown_deadline.is_some() {
                             break;
                         }
                     }
@@ -600,9 +618,13 @@ async fn owner_loop(
                 }
             }
             OwnerCommand::Stop => set_status(&status, stopped_status(generation)),
-            OwnerCommand::Shutdown => break,
+            OwnerCommand::Shutdown(_) => break,
         }
     }
+}
+
+fn shutdown_join_margin(timeout: Duration) -> Duration {
+    (timeout / 10).min(Duration::from_millis(100))
 }
 
 enum RunningExit {
@@ -728,7 +750,18 @@ async fn request_guard(
             "Bearer authentication is required.",
         );
     }
-    next.run(request).await
+    let (parts, body) = request.into_parts();
+    let body = match to_bytes(body, MAX_REQUEST_BODY_BYTES).await {
+        Ok(body) => body,
+        Err(_) => {
+            return safe_error(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "request_too_large",
+                "Request body exceeds the 64 KiB limit.",
+            );
+        }
+    };
+    next.run(Request::from_parts(parts, Body::from(body))).await
 }
 
 fn single_header_equals(

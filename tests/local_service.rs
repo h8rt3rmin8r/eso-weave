@@ -109,6 +109,14 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
     );
     assert!(oversized.starts_with("HTTP/1.1 413"));
 
+    let oversized_chunked = chunked_request(
+        authority,
+        "/api/v1",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        &oversized_body,
+    );
+    assert!(oversized_chunked.starts_with("HTTP/1.1 413"));
+
     let api = request(
         authority,
         "GET",
@@ -211,6 +219,7 @@ fn invalid_credential_and_unavailable_settings_fail_before_running() {
     let mut invalid = LocalServiceController::new(LocalServiceConfig {
         config_dir: Some(tempfile::tempdir().unwrap().path().to_owned()),
         port: 0,
+        shutdown_timeout: Duration::from_millis(200),
     });
     assert!(!invalid.start("not-a-credential"));
     assert_eq!(
@@ -222,6 +231,7 @@ fn invalid_credential_and_unavailable_settings_fail_before_running() {
     let mut unavailable = LocalServiceController::new(LocalServiceConfig {
         config_dir: None,
         port: 0,
+        shutdown_timeout: Duration::from_millis(200),
     });
     assert!(unavailable.start(TEST_CREDENTIAL));
     let failed = wait_for(&unavailable, ServicePhase::Failed);
@@ -240,6 +250,7 @@ fn discovery_failure_releases_the_partially_started_listener() {
     let mut controller = LocalServiceController::new(LocalServiceConfig {
         config_dir: Some(blocked_path),
         port: 0,
+        shutdown_timeout: Duration::from_millis(200),
     });
     controller.start(TEST_CREDENTIAL);
     let failed = wait_for(&controller, ServicePhase::Failed);
@@ -272,10 +283,36 @@ fn rapid_toggle_converges_and_drop_releases_owned_resources() {
     assert!(TcpListener::bind(address).is_ok());
 }
 
+#[test]
+fn shutdown_reserves_time_to_join_after_a_stalled_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut controller = controller(dir.path(), 0);
+    controller.start(TEST_CREDENTIAL);
+    let running = wait_for(&controller, ServicePhase::Running);
+    let address = running
+        .connection
+        .unwrap()
+        .mcp_url
+        .trim_start_matches("http://")
+        .trim_end_matches("/mcp")
+        .to_owned();
+    let mut stalled = TcpStream::connect(&address).unwrap();
+    stalled.write_all(b"POST /mcp HTTP/1.1\r\n").unwrap();
+    std::thread::sleep(Duration::from_millis(25));
+
+    let started = Instant::now();
+    controller.shutdown().unwrap();
+    assert!(started.elapsed() < Duration::from_millis(400));
+    assert!(!dir.path().join(DISCOVERY_FILE_NAME).exists());
+    drop(stalled);
+    assert!(TcpListener::bind(address).is_ok());
+}
+
 fn controller(config_dir: &Path, port: u16) -> LocalServiceController {
     LocalServiceController::new(LocalServiceConfig {
         config_dir: Some(config_dir.to_owned()),
         port,
+        shutdown_timeout: Duration::from_millis(200),
     })
 }
 
@@ -319,6 +356,23 @@ fn request(
         "Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     ));
+    stream.write_all(text.as_bytes()).unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    response
+}
+
+fn chunked_request(authority: &str, path: &str, headers: &[(&str, &str)], body: &str) -> String {
+    let mut stream = TcpStream::connect(authority).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut text = format!("POST {path} HTTP/1.1\r\nHost: {authority}\r\n");
+    for (name, value) in headers {
+        text.push_str(&format!("{name}: {value}\r\n"));
+    }
+    text.push_str("Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+    text.push_str(&format!("{:x}\r\n{body}\r\n0\r\n\r\n", body.len()));
     stream.write_all(text.as_bytes()).unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
