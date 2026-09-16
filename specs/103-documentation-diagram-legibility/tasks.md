@@ -40,5 +40,5 @@
 - [x] T024 Open the official pull request and set project Stage to PR review.
 - [x] T025 Address every first-round review and CI finding.
 - [x] T026 Request and address at most one authorized second Codex review round.
-- [ ] T027 Confirm every review conversation resolved and every required check green.
-- [ ] T028 Hand off to the maintainer for final review and merge.
+- [x] T027 Confirm every review conversation resolved and every required check green.
+- [x] T028 Hand off to the maintainer for final review and merge.
