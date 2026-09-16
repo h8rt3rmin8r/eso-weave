@@ -30,8 +30,9 @@ manifest, so changing a count cannot hide an omission or substitution.
 - Plans 001 through 027 and the website announcement live under `docs/archive/`.
 - The post-baseline lifecycle preserves every completed plan with concrete
   delivery evidence. Plans 028 through 042 are archived after their named pull
-  requests or release completed. Plan 043 is active for the operator-intent
-  reliability sequence. Independent release verification does not reactivate a
+  requests or release completed. Plan 044 completed the diagram-legibility
+  sequence. Plan 045 is active for the local extension surface. Independent
+  release verification does not reactivate a
   completed plan. The policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six

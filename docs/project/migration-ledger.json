@@ -1625,13 +1625,23 @@
     },
     {
       "id": "044",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-044.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-044.md",
       "specs": [
         "specs/103-documentation-diagram-legibility"
       ],
-      "evidence": "Issue #168 tracks active S103 documentation diagram legibility reconstruction."
+      "evidence": "S103 completed documentation diagram legibility when PR #212 merged and closed issue #168."
+    },
+    {
+      "id": "045",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-045.md",
+      "specs": [
+        "specs/104-local-extension-contract"
+      ],
+      "evidence": "Issue #175 tracks active S104 local extension stack and contract definition."
     }
   ],
   "safetyCrosswalk": [

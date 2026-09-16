@@ -1626,6 +1626,7 @@ export async function run(siteRoot) {
     };
 
     await navigateToFigure({ page: "features/interface.html" });
+    await nextBrowserFrames();
     const narrowTable = await evaluateValue(tableStateExpression());
     await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
     await nextBrowserFrames();

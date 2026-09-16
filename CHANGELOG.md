@@ -113,6 +113,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-15: Make the pinned responsive-table resize receipt wait for the same
+  two browser animation frames already required by its table matrix. The prior
+  immediate post-navigation read could run before the table initializer's
+  scheduled frame and report correct overflow geometry without the focus or
+  hint semantics that were about to be applied. This stabilizes evidence timing
+  only and changes no documentation or application behavior.
+
+- 2026-09-15: Select exact future versions Axum 0.8.9 and official RMCP
+  3.4.0 on Tokio 1.53.1 for one authenticated `127.0.0.1:18765` listener.
+  HTTP and stateless MCP Streamable HTTP will share immutable revisioned state,
+  one bounded query service, one error vocabulary, Host and Origin validation,
+  and a 3-second shutdown boundary. Expose only `catalog` and `encounters`, with
+  layered SQLite read-only enforcement and exact concurrency, duration, row,
+  byte, SQL, parameter, and body limits. S104 records this contract without
+  shipping the service (issue #175, epic #174).
+
 - 2026-09-15: Keep the diagrams 400 SVG units wide and grow them vertically so
   narrow-screen text scale does not regress. Mark nodes, stages, edges, and
   branch labels with inert topology metadata, then measure the generated SVG DOM
