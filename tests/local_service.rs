@@ -301,11 +301,67 @@ fn shutdown_reserves_time_to_join_after_a_stalled_connection() {
     std::thread::sleep(Duration::from_millis(25));
 
     let started = Instant::now();
+    controller.stop();
     controller.shutdown().unwrap();
     assert!(started.elapsed() < Duration::from_millis(400));
     assert!(!dir.path().join(DISCOVERY_FILE_NAME).exists());
     drop(stalled);
     assert!(TcpListener::bind(address).is_ok());
+}
+
+#[test]
+fn stopped_generation_cancels_a_stalled_authenticated_body_before_reenable() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut controller = controller(dir.path(), 0);
+    controller.start(TEST_CREDENTIAL);
+    let running = wait_for(&controller, ServicePhase::Running);
+    let address = running
+        .connection
+        .unwrap()
+        .mcp_url
+        .trim_start_matches("http://")
+        .trim_end_matches("/mcp")
+        .to_owned();
+    let mut old_connection = TcpStream::connect(&address).unwrap();
+    old_connection
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    old_connection
+        .write_all(
+            format!(
+                "POST /api/v1 HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {TEST_CREDENTIAL}\r\nContent-Length: 1\r\nConnection: keep-alive\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(25));
+
+    controller.stop();
+    wait_for(&controller, ServicePhase::Stopped);
+    controller.start(TEST_CREDENTIAL);
+    wait_for(&controller, ServicePhase::Running);
+
+    let _ = old_connection.write_all(b"x");
+    let mut old_response = String::new();
+    let read = old_connection.read_to_string(&mut old_response);
+    assert!(
+        read.is_ok()
+            || read.as_ref().is_err_and(|error| matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::UnexpectedEof
+            )),
+        "{read:?}"
+    );
+    if !old_response.is_empty() {
+        assert!(old_response.starts_with("HTTP/1.1 503"), "{old_response}");
+    }
+    assert!(!old_response.contains("service_unavailable"));
+
+    controller.stop();
+    wait_for(&controller, ServicePhase::Stopped);
+    controller.shutdown().unwrap();
 }
 
 fn controller(config_dir: &Path, port: u16) -> LocalServiceController {

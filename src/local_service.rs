@@ -5,16 +5,19 @@
 //! and discovery record. UI-facing calls enqueue commands and read immutable
 //! status snapshots without waiting for network work.
 
-use std::io::Write;
+use std::future::Future;
+use std::io::{self, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use axum::body::{to_bytes, Body};
 use axum::extract::{Request, State};
-use axum::http::header::{AUTHORIZATION, CONTENT_LENGTH, HOST, ORIGIN};
+use axum::http::header::{AUTHORIZATION, CONNECTION, CONTENT_LENGTH, HOST, ORIGIN};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -24,6 +27,7 @@ use rmcp::transport::streamable_http_server::session::never::NeverSessionManager
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::ServerHandler;
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -530,41 +534,65 @@ async fn owner_loop(
                 );
 
                 let serve_cancellation = cancellation.clone();
+                let listener = CancellationListener::new(listener, cancellation.clone());
                 let server = std::future::IntoFuture::into_future(
                     axum::serve(listener, router).with_graceful_shutdown(async move {
                         serve_cancellation.cancelled().await;
                     }),
                 );
                 tokio::pin!(server);
-                let exit = loop {
+                let exit = 'running: loop {
                     let next = tokio::select! {
-                        result = &mut server => RunningExit::Server(result),
-                        command = commands.recv() => RunningExit::Command(command),
+                        result = &mut server => break 'running RunningExit::Server(result),
+                        command = commands.recv() => command,
                     };
                     match next {
-                        RunningExit::Command(Some(OwnerCommand::Start(_))) => {
+                        Some(OwnerCommand::Start(_)) => {
                             // Already running. The persisted credential is stable,
                             // so a repeated start is idempotent.
                         }
-                        other => break other,
+                        Some(OwnerCommand::Stop) => {
+                            let mut stop_requested = true;
+                            let mut shutdown = false;
+                            let mut deadline = Instant::now() + config.shutdown_timeout;
+                            while let Ok(queued) = commands.try_recv() {
+                                match queued {
+                                    OwnerCommand::Start(_) if !shutdown => stop_requested = false,
+                                    OwnerCommand::Stop if !shutdown => stop_requested = true,
+                                    OwnerCommand::Shutdown(next_deadline) => {
+                                        stop_requested = true;
+                                        shutdown = true;
+                                        deadline = deadline.min(next_deadline);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if stop_requested {
+                                break 'running RunningExit::Stop { deadline, shutdown };
+                            }
+                        }
+                        Some(OwnerCommand::Shutdown(deadline)) => {
+                            break 'running RunningExit::Stop {
+                                deadline,
+                                shutdown: true,
+                            };
+                        }
+                        None => {
+                            break 'running RunningExit::Stop {
+                                deadline: Instant::now(),
+                                shutdown: true,
+                            };
+                        }
                     }
                 };
 
                 match exit {
-                    RunningExit::Command(command) => {
-                        let shutdown_deadline = match command {
-                            Some(OwnerCommand::Shutdown(deadline)) => Some(deadline),
-                            None => Some(Instant::now()),
-                            _ => None,
-                        };
+                    RunningExit::Stop { deadline, shutdown } => {
                         set_status(&status, stopping_status(generation));
                         cancellation.cancel();
-                        let graceful_timeout =
-                            shutdown_deadline.map_or(config.shutdown_timeout, |deadline| {
-                                deadline
-                                    .saturating_duration_since(Instant::now())
-                                    .saturating_sub(shutdown_join_margin(config.shutdown_timeout))
-                            });
+                        let graceful_timeout = deadline
+                            .saturating_duration_since(Instant::now())
+                            .saturating_sub(shutdown_join_margin(config.shutdown_timeout));
                         let stopped_in_time = tokio::time::timeout(graceful_timeout, &mut server)
                             .await
                             .is_ok();
@@ -593,7 +621,7 @@ async fn owner_loop(
                         } else {
                             set_status(&status, stopped_status(generation));
                         }
-                        if shutdown_deadline.is_some() {
+                        if shutdown {
                             break;
                         }
                     }
@@ -629,13 +657,123 @@ fn shutdown_join_margin(timeout: Duration) -> Duration {
 
 enum RunningExit {
     Server(std::io::Result<()>),
-    Command(Option<OwnerCommand>),
+    Stop { deadline: Instant, shutdown: bool },
+}
+
+struct CancellationListener {
+    listener: tokio::net::TcpListener,
+    cancellation: CancellationToken,
+}
+
+impl CancellationListener {
+    fn new(listener: tokio::net::TcpListener, cancellation: CancellationToken) -> Self {
+        Self {
+            listener,
+            cancellation,
+        }
+    }
+}
+
+impl axum::serve::Listener for CancellationListener {
+    type Io = CancellationIo;
+    type Addr = SocketAddr;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        loop {
+            match self.listener.accept().await {
+                Ok((stream, address)) => {
+                    return (
+                        CancellationIo::new(stream, self.cancellation.clone()),
+                        address,
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "eso_weave::local_service",
+                        error = %error,
+                        "local service accept failed; retrying"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+
+    fn local_addr(&self) -> io::Result<Self::Addr> {
+        self.listener.local_addr()
+    }
+}
+
+struct CancellationIo {
+    stream: tokio::net::TcpStream,
+    cancelled: Pin<Box<dyn Future<Output = ()> + Send>>,
+}
+
+impl CancellationIo {
+    fn new(stream: tokio::net::TcpStream, cancellation: CancellationToken) -> Self {
+        Self {
+            stream,
+            cancelled: Box::pin(cancellation.cancelled_owned()),
+        }
+    }
+
+    fn cancellation_ready(&mut self, context: &mut Context<'_>) -> bool {
+        self.cancelled.as_mut().poll(context).is_ready()
+    }
+}
+
+impl AsyncRead for CancellationIo {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        if self.cancellation_ready(context) {
+            return Poll::Ready(Err(cancelled_connection()));
+        }
+        Pin::new(&mut self.stream).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for CancellationIo {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        if self.cancellation_ready(context) {
+            return Poll::Ready(Err(cancelled_connection()));
+        }
+        Pin::new(&mut self.stream).poll_write(context, buffer)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.cancellation_ready(context) {
+            return Poll::Ready(Err(cancelled_connection()));
+        }
+        Pin::new(&mut self.stream).poll_flush(context)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.cancellation_ready(context) {
+            return Poll::Ready(Err(cancelled_connection()));
+        }
+        Pin::new(&mut self.stream).poll_shutdown(context)
+    }
+}
+
+fn cancelled_connection() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::ConnectionAborted,
+        "local service generation stopped",
+    )
 }
 
 #[derive(Clone)]
 struct SecurityState {
     authority: String,
     credential: String,
+    cancellation: CancellationToken,
 }
 
 #[derive(Clone, Default)]
@@ -657,7 +795,7 @@ fn build_router(
         ]);
     mcp_config.legacy_session_mode = false;
     mcp_config.json_response = true;
-    mcp_config.cancellation_token = cancellation;
+    mcp_config.cancellation_token = cancellation.clone();
     mcp_config.max_request_body_bytes = MAX_REQUEST_BODY_BYTES;
     let mcp = StreamableHttpService::new(
         || Ok(LifecycleMcp),
@@ -667,6 +805,7 @@ fn build_router(
     let security = SecurityState {
         authority,
         credential,
+        cancellation,
     };
     Router::new()
         .route_service("/mcp", mcp)
@@ -750,8 +889,16 @@ async fn request_guard(
             "Bearer authentication is required.",
         );
     }
+    if state.cancellation.is_cancelled() {
+        return stopping_error();
+    }
+    let cancellation = state.cancellation.clone();
     let (parts, body) = request.into_parts();
-    let body = match to_bytes(body, MAX_REQUEST_BODY_BYTES).await {
+    let body = match tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return stopping_error(),
+        result = to_bytes(body, MAX_REQUEST_BODY_BYTES) => result,
+    } {
         Ok(body) => body,
         Err(_) => {
             return safe_error(
@@ -761,7 +908,12 @@ async fn request_guard(
             );
         }
     };
-    next.run(Request::from_parts(parts, Body::from(body))).await
+    let request = Request::from_parts(parts, Body::from(body));
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => stopping_error(),
+        response = next.run(request) => response,
+    }
 }
 
 fn single_header_equals(
@@ -822,6 +974,21 @@ fn safe_error(status: StatusCode, code: &'static str, message: &'static str) -> 
                 "code": code,
                 "message": message,
                 "retryable": false
+            }
+        })),
+    )
+        .into_response()
+}
+
+fn stopping_error() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        [(CONNECTION, "close")],
+        Json(serde_json::json!({
+            "error": {
+                "code": "service_stopping",
+                "message": "The local service generation is stopping.",
+                "retryable": true
             }
         })),
     )
