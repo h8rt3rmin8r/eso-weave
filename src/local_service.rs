@@ -208,6 +208,7 @@ enum OwnerCommand {
 /// Non-blocking UI-facing controller for the dedicated service owner.
 pub struct LocalServiceController {
     commands: mpsc::UnboundedSender<OwnerCommand>,
+    shutdown: CancellationToken,
     status: Arc<Mutex<ServiceStatus>>,
     completion: std::sync::mpsc::Receiver<()>,
     owner: Option<JoinHandle<()>>,
@@ -237,6 +238,8 @@ impl LocalServiceController {
     ) -> Self {
         let shutdown_timeout = config.shutdown_timeout;
         let (commands, receiver) = mpsc::unbounded_channel();
+        let shutdown = CancellationToken::new();
+        let owner_shutdown = shutdown.clone();
         let status = Arc::new(Mutex::new(ServiceStatus::default()));
         let owner_status = status.clone();
         let (completion_tx, completion) = std::sync::mpsc::channel();
@@ -251,6 +254,7 @@ impl LocalServiceController {
                     Ok(runtime) => runtime.block_on(owner_loop(
                         config,
                         receiver,
+                        owner_shutdown,
                         owner_status,
                         publisher,
                         queries,
@@ -283,6 +287,7 @@ impl LocalServiceController {
 
         Self {
             commands,
+            shutdown,
             status,
             completion,
             owner,
@@ -342,12 +347,17 @@ impl LocalServiceController {
         };
         let deadline = Instant::now() + self.shutdown_timeout;
         let _ = self.commands.send(OwnerCommand::Shutdown(deadline));
+        // Cancel the active generation from the caller before the owner thread
+        // is scheduled. This prevents Windows scheduler latency from consuming
+        // the shutdown budget before connection teardown can begin. The queued
+        // command remains authoritative for cleanup and owner termination.
+        self.shutdown.cancel();
         let remaining = deadline.saturating_duration_since(Instant::now());
         if self.completion.recv_timeout(remaining).is_err() {
             let generation = self.status().generation;
             let failure = ServiceFailure {
                 code: ServiceFailureCode::ShutdownTimeout,
-                message: "The local service did not stop within 3 seconds.".into(),
+                message: shutdown_timeout_message(self.shutdown_timeout),
                 retryable: false,
             };
             set_status(
@@ -389,6 +399,7 @@ impl Drop for LocalServiceController {
 async fn owner_loop(
     config: LocalServiceConfig,
     mut commands: mpsc::UnboundedReceiver<OwnerCommand>,
+    owner_shutdown: CancellationToken,
     status: Arc<Mutex<ServiceStatus>>,
     publisher: SnapshotPublisher,
     queries: DatabaseQueryService,
@@ -495,7 +506,7 @@ async fn owner_loop(
                     continue;
                 }
 
-                let cancellation = CancellationToken::new();
+                let cancellation = owner_shutdown.child_token();
                 let router = build_router(
                     effective,
                     credential,
@@ -579,8 +590,9 @@ async fn owner_loop(
                 tokio::pin!(server);
                 let exit = 'running: loop {
                     let next = tokio::select! {
-                        result = &mut server => break 'running RunningExit::Server(result),
+                        biased;
                         command = commands.recv() => command,
+                        result = &mut server => break 'running RunningExit::Server(result),
                     };
                     match next {
                         Some(OwnerCommand::Start(_)) => {
@@ -640,7 +652,7 @@ async fn owner_loop(
                                 failed_status(
                                     generation,
                                     ServiceFailureCode::ShutdownTimeout,
-                                    "The local service did not stop within 3 seconds.",
+                                    &shutdown_timeout_message(config.shutdown_timeout),
                                     false,
                                 ),
                             );
@@ -689,6 +701,52 @@ async fn owner_loop(
 
 fn shutdown_join_margin(timeout: Duration) -> Duration {
     (timeout / 10).min(Duration::from_millis(100))
+}
+
+fn shutdown_timeout_message(timeout: Duration) -> String {
+    let whole_seconds = timeout.as_secs();
+    if timeout.subsec_nanos() == 0 {
+        let unit = if whole_seconds == 1 {
+            "second"
+        } else {
+            "seconds"
+        };
+        return format!("The local service did not stop within {whole_seconds} {unit}.");
+    }
+
+    let whole_milliseconds = timeout.as_millis();
+    if whole_milliseconds > 0 && timeout.as_micros().is_multiple_of(1_000) {
+        let unit = if whole_milliseconds == 1 {
+            "millisecond"
+        } else {
+            "milliseconds"
+        };
+        return format!("The local service did not stop within {whole_milliseconds} {unit}.");
+    }
+
+    format!("The local service did not stop within {timeout:?}.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shutdown_timeout_message;
+    use std::time::Duration;
+
+    #[test]
+    fn shutdown_timeout_message_reports_the_configured_bound() {
+        assert_eq!(
+            shutdown_timeout_message(Duration::from_secs(3)),
+            "The local service did not stop within 3 seconds."
+        );
+        assert_eq!(
+            shutdown_timeout_message(Duration::from_secs(1)),
+            "The local service did not stop within 1 second."
+        );
+        assert_eq!(
+            shutdown_timeout_message(Duration::from_millis(200)),
+            "The local service did not stop within 200 milliseconds."
+        );
+    }
 }
 
 enum RunningExit {

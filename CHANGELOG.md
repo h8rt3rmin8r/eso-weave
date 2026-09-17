@@ -173,6 +173,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- S113 makes local API and MCP shutdown cancellation begin synchronously on the
+  caller before the owner thread consumes its terminal command, preventing
+  Windows scheduler latency from consuming the bounded connection-teardown
+  budget. Command processing remains authoritative for discovery cleanup and
+  thread completion, timeout diagnostics now report the configured duration,
+  and repeated official-client coverage guards the race for v0.17.0 (issue
+  #226; release #227).
+
 - S103 reconstructs all four documentation flow diagrams on taller canvases
   with explicit stages, independent connector lanes, and unambiguous branch
   labels. A generated direct-SVG layout receipt now enforces stage spacing,
