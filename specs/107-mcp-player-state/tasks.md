@@ -43,7 +43,7 @@
 - [x] T022 Run focused RMCP client and local-service tests
 - [x] T023 Run format, strict clippy, full locked tests, and release build
 - [x] T024 Run documentation policy, spelling, link, encoding, BOM, mojibake, and forbidden-dash checks
-- [ ] T025 Commit, push, and open the authorized PR closing issue #178
+- [x] T025 Commit, push, and open the authorized PR closing issue #178 ([PR #216](https://github.com/h8rt3rmin8r/eso-weave/pull/216))
 - [ ] T026 Resolve every hosted review and CI finding, with at most one authorized second Codex review
 - [ ] T027 Stop for the operator final review and merge ritual
 
