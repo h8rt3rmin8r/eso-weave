@@ -78,17 +78,37 @@ impl PlayerStateMcp {
                     "type": "array",
                     "maxItems": 64,
                     "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "type": {
-                                "type": "string",
-                                "enum": ["null", "integer", "real", "text", "blob", "boolean"]
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "type": {"const": "null"}
+                                },
+                                "required": ["type"],
+                                "additionalProperties": false
                             },
-                            "value": {}
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "type": {"enum": ["integer", "real", "text", "blob"]},
+                                    "value": {"type": "string"}
+                                },
+                                "required": ["type", "value"],
+                                "additionalProperties": false
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "type": {"const": "boolean"},
+                                    "value": {"type": "boolean"}
+                                },
+                                "required": ["type", "value"],
+                                "additionalProperties": false
+                            }
+                        ]
                     }
                 },
                 "row_limit": {"type": "integer", "minimum": 1, "maximum": 1000}

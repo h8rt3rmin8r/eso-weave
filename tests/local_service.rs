@@ -469,6 +469,20 @@ fn http_and_mcp_database_inventory_queries_and_errors_match() {
         let annotations = tools[0].annotations.as_ref().unwrap();
         assert_eq!(annotations.read_only_hint, Some(true));
         assert_eq!(annotations.destructive_hint, Some(false));
+        let parameter_variants = tools[0].input_schema["properties"]["parameters"]["items"]
+            ["oneOf"]
+            .as_array()
+            .unwrap();
+        assert_eq!(parameter_variants.len(), 3);
+        assert_eq!(parameter_variants[0]["properties"]["type"]["const"], "null");
+        assert_eq!(
+            parameter_variants[1]["properties"]["value"]["type"],
+            "string"
+        );
+        assert_eq!(
+            parameter_variants[2]["properties"]["value"]["type"],
+            "boolean"
+        );
 
         let mut arguments = query.as_object().unwrap().clone();
         arguments.insert("database_id".into(), serde_json::json!("catalog"));

@@ -11,6 +11,7 @@ use eso_weave::catalog_update::{
     UpdateStage, WorkerEvent,
 };
 use eso_weave::collector::{import_capture, ImportRequest};
+use eso_weave::database_query::{DatabaseQueryService, QueryRequest, ResultValue};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -309,6 +310,35 @@ fn reviewed_install_survives_restart_and_rolls_back_to_bundled() {
             .unwrap()
             .catalog_version,
         "s070-live-1"
+    );
+}
+
+#[test]
+fn resolved_startup_catalog_path_feeds_external_queries() {
+    let sandbox = Sandbox::new();
+    let candidate = sandbox.candidate(CHANGED_LIVE_BUNDLE, "s108-active-query");
+    sandbox
+        .service
+        .install(&candidate, true, &CancellationToken::new(), |_| {})
+        .unwrap();
+
+    let restarted = CatalogUpdateService::new(&sandbox.config, &sandbox.bundled);
+    let resolution = restarted.resolve_catalog();
+    let queries = DatabaseQueryService::new(resolution.path, None);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    let result = runtime
+        .block_on(queries.execute(
+            "catalog",
+            QueryRequest::new("SELECT catalog_version FROM catalog_release"),
+            tokio_util::sync::CancellationToken::new(),
+        ))
+        .unwrap();
+    assert_eq!(
+        result.rows[0][0],
+        ResultValue::Text("s108-active-query".into())
     );
 }
 
