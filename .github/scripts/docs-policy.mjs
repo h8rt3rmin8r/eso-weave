@@ -1281,6 +1281,15 @@ function releaseReplacementValue(block, key) {
 
 export function validateReleaseRollover(releaseToml) {
   const errors = [];
+  if (!/^allow-branch\s*=\s*\["codex\/\*-release"\]\s*$/mu.test(releaseToml)) {
+    errors.push("S114 release rollover must run only on a protected-main release branch");
+  }
+  if (!/^tag\s*=\s*false\s*$/mu.test(releaseToml)) {
+    errors.push("S114 cargo-release must leave the post-merge annotated tag to the maintainer");
+  }
+  if (!/^push\s*=\s*false\s*$/mu.test(releaseToml)) {
+    errors.push("S114 cargo-release must not push a release branch or protected main");
+  }
   const requirements = [
     {
       label: "documentation version",

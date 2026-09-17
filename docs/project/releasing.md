@@ -1,10 +1,11 @@
 # Releasing ESO Weave
 
 This is the one authoritative procedure for cutting a release. It exists so the steps are never
-re-derived or improvised per session. Cutting a release is a single action; the pipeline does the
-rest and fails loudly if anything required is missing.
+re-derived or improvised per session. Protected `main` requires the release identity to pass
+through a reviewed pull request before the tag can exist. The tag pipeline then builds and
+publishes the packages, failing loudly if anything required is missing.
 
-## Cut a release
+## Prepare the release pull request
 
 Prerequisite: every change since the last release is logged under `## [Unreleased]` in
 `CHANGELOG.md`. Keep the complete Added, Changed, Fixed, and Decisions history there.
@@ -23,7 +24,7 @@ CHANGELOG_HEADING=Unreleased scripts/release-notes.sh X.Y.Z h8rt3rmin8r/eso-weav
 The command fails when Highlights is missing, empty, malformed, or over budget. Replace `X.Y.Z`
 with the version being prepared.
 
-Run one command:
+Create a short-lived branch named `codex/sNNN-vXYZ-release`, then run:
 
 ```bash
 cargo release X.Y.Z --execute
@@ -38,13 +39,33 @@ That command (configured in `release.toml`):
 3. Rewrites the root README badge and bundled documentation snapshot version and date from the
    same release version and date.
 4. Commits the change as `release: vX.Y.Z`.
-5. Tags `vX.Y.Z` and pushes the commit and tag.
+5. Deliberately creates no tag and pushes nothing.
 
-Pushing the tag triggers `.github/workflows/release.yml`.
+Push the branch, open the release pull request against `main`, and wait for every required check,
+review, and conversation to complete. The release issue remains open because merging the identity
+commit does not yet publish an artifact. The operator performs the final review and merge ritual.
+
+## Publish the reviewed commit
+
+After the pull request merges:
+
+1. Fetch and prune, switch to `main`, and fast-forward to `origin/main`.
+2. Confirm the merge commit contains the expected Cargo version, changelog section, README badge,
+   bundled documentation metadata, and version-sensitive fixtures.
+3. Wait for CI, documentation checks, and CodeQL to pass on that exact `main` commit.
+4. Confirm that neither the local nor remote `vX.Y.Z` tag already exists.
+5. Create the annotated tag on the exact reviewed `main` commit and push only that tag:
+
+```bash
+git tag -a vX.Y.Z -m "Release ESO Weave vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+Pushing the tag triggers `.github/workflows/release.yml`. Do not move or recreate a published tag.
 
 ## Post-publication verification
 
-The candidate and tag workflow must pass every available CI, safety,
+The candidate pull request, merged `main` commit, and tag workflow must pass every available CI, safety,
 release-note, packaging, repository, and authorization gate before publication.
 Installed UI, package, field, platform, or production checks that require a
 downloadable artifact occur after the GitHub Release exists. They do not block
@@ -114,5 +135,7 @@ Three pinned scripts back the pipeline and are shared with local development:
 
 `.github/workflows/**`, `rust-toolchain.toml`, `release.toml`, `scripts/**`, `packaging/**`, and
 this file are pinned. An agent must not modify them without an explicit dated decision recorded in
-`CHANGELOG.md`. If branch protection ever blocks the release commit, the rollover stays local
-(it happens before the tag push), so the workflow itself never needs write access to `main`.
+`CHANGELOG.md`. The rollover is committed on the release branch, while protected `main` receives
+it only through the reviewed pull request. The tag is created after the exact merged commit passes
+its post-merge checks, so neither local tooling nor the release workflow needs write access to
+`main`.

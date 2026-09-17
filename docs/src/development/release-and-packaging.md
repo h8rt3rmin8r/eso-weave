@@ -11,10 +11,12 @@ maintainer ritual.
 
 The release moves through this ordered text flow:
 
-`human-authorized preparation -> vX.Y.Z tag -> verify -> Windows and Linux builds -> checksums -> GitHub Release`
+`human-authorized preparation -> reviewed release pull request -> green main commit -> annotated vX.Y.Z tag -> verify -> Windows and Linux builds -> checksums -> GitHub Release`
 
 Failure at a required stage prevents publication. Build jobs do not write back
-to `main`.
+to `main`. Protected `main` receives the release identity only through the pull
+request; the tag is created on that exact merged commit after its post-merge
+checks pass.
 
 ## Version and content gates
 

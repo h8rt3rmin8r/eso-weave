@@ -1,21 +1,21 @@
 # cargo-release configuration for ESO Weave.
 #
-# Cutting a release is `cargo release X.Y.Z --execute` (see docs/project/releasing.md).
-# That bumps the crate version in Cargo.toml (the single source of the app and
-# package version), rolls CHANGELOG.md (renaming the Unreleased section
-# to the versioned one and opening a fresh Unreleased), commits as
-# `release: vX.Y.Z`, and tags and pushes vX.Y.Z. Pushing the tag triggers
+# Preparing a release is `cargo release X.Y.Z --execute` on a protected-main
+# release branch (see docs/project/releasing.md). That bumps the crate version
+# in Cargo.toml (the single source of the app and package version), rolls
+# CHANGELOG.md (renaming the Unreleased section to the versioned one and opening
+# a fresh Unreleased), and commits as `release: vX.Y.Z`. It deliberately does
+# not tag or push. After the reviewed commit merges and main is green, the
+# maintainer creates and pushes the annotated tag that triggers
 # .github/workflows/release.yml.
 #
 # Pinned artifact. Do not modify without a dated decision recorded in CHANGELOG.md.
 
-allow-branch = ["main"]
+allow-branch = ["codex/*-release"]
 sign-commit = false
-sign-tag = false
-push = true
+tag = false
+push = false
 publish = false
-tag-name = "v{{version}}"
-tag-message = "Release ESO Weave v{{version}}"
 pre-release-commit-message = "release: v{{version}}"
 
 # Roll CHANGELOG.md: keep a fresh "## [Unreleased]" at the top and open a new

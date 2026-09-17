@@ -214,6 +214,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Decisions
 
+- 2026-09-17: Replace the pre-protection direct release push with a reviewed
+  release-branch rollover. `cargo release` now creates the version commit but
+  neither a tag nor a push; after the pull request merges, the exact `main`
+  commit must pass CI, documentation checks, and CodeQL before the maintainer
+  creates and pushes its annotated release tag. This preserves enforced branch
+  protection, the human merge ritual, and post-merge verification without
+  granting the release workflow write access to `main`.
+
 - 2026-09-17: Implement database access through one transport-neutral service
   that opens a defended short-lived read-only SQLite connection per operation
   and executes synchronous work on Tokio blocking workers behind one shared
