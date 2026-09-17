@@ -1660,13 +1660,23 @@
     },
     {
       "id": "047",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-047.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-047.md",
       "specs": [
         "specs/111-documentation-visualization-audit"
       ],
-      "evidence": "Issue #170 tracks active S111 delivery of the complete documentation visualization audit; Plan 047 remains active until its pull request is merged."
+      "evidence": "S111 completed the documentation visualization audit when PR #224 merged, closed issue #170, and created implementation issues #220 through #223."
+    },
+    {
+      "id": "048",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-048.md",
+      "specs": [
+        "specs/112-troubleshooting-decision-tree"
+      ],
+      "evidence": "Issue #220 tracks active S112 delivery of the first approved documentation visualization; Plan 048 remains active for issues #220 through #223."
     }
   ],
   "safetyCrosswalk": [

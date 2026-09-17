@@ -58,6 +58,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [044](plan-044.md) | Complete, Archived | [S103 documentation diagram legibility](../../../specs/103-documentation-diagram-legibility/spec.md), completed when [PR #212](https://github.com/h8rt3rmin8r/eso-weave/pull/212) merged and closed issue #168 |
 | [045](plan-045.md) | Complete, Archived | [S104](../../../specs/104-local-extension-contract/spec.md) through [S109](../../../specs/109-extension-docs-e2e/spec.md), completed when [PR #218](https://github.com/h8rt3rmin8r/eso-weave/pull/218) merged, closed issue #180, and enabled epic #174 to close |
 | [046](plan-046.md) | Complete, Archived | [S110 Ultimate Auto Potion watch](../../../specs/110-ultimate-auto-potion/spec.md), merged in [PR #219](https://github.com/h8rt3rmin8r/eso-weave/pull/219) and closed issue #173 |
+| [047](plan-047.md) | Complete, Archived | [S111 documentation visualization audit](../../../specs/111-documentation-visualization-audit/spec.md), merged in [PR #224](https://github.com/h8rt3rmin8r/eso-weave/pull/224), closed issue #170, and created issues #220 through #223 |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

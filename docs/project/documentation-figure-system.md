@@ -4,12 +4,12 @@ S088 provides one local, accessible expansion interaction and one caption hierar
 
 ## Maintained inventory
 
-The canonical source contains 21 image placements.
+The canonical source contains 22 image placements.
 
 | Kind | Placements | Interactive | Caption contract |
 | --- | ---: | --- | --- |
 | Screenshots and synthetic illustration | 11 | Yes | One adjacent caption per figure |
-| Flow diagrams | 4 | Yes | Complete adjacent prose equivalent |
+| Flow diagrams | 5 | Yes | Complete adjacent prose equivalent |
 | Brand examples | 5 | Yes | One group caption per brand surface |
 | Landing wordmark | 1 | No | Decorative empty alternative beside the accessible heading |
 
@@ -33,7 +33,7 @@ The close button receives focus on open. Tab and Shift+Tab stay on that sole int
 
 ## Geometry and captions
 
-The modal image uses intrinsic auto dimensions with viewport maxima. It may shrink to fit but never stretches beyond its natural dimensions. This preserves the four SVG diagram ratios, large landscape captures, and the smaller portrait Windows Properties image.
+The modal image uses intrinsic auto dimensions with viewport maxima. It may shrink to fit but never stretches beyond its natural dimensions. This preserves the five SVG diagram ratios, large landscape captures, and the smaller portrait Windows Properties image.
 
 Screenshot and brand captions use `0.9em` with a `1.55` line height. mdBook uses a 10-pixel root and 16-pixel body copy, so `0.9em` computes to 14.4 pixels. The initially suggested `0.9rem` would compute to only 9 pixels and is intentionally not used. Borders, padding, and surface colors remain component-specific, and strong brand lead-ins remain bold without italicizing entire captions.
 
@@ -41,7 +41,7 @@ Print rules hide the expansion badge and dialog while leaving the source image a
 
 ## Automated evidence
 
-Source policy accounts for all 20 meaningful placements, the one decorative exception, and all 13 captions. Script and CSS mutations cover selector boundaries, native-dialog construction, idempotence, mdBook wrapper replacement, accessible name and description, close paths, sequential focus, focus return, intrinsic sizing, caption scale, caption line height, strong lead-ins, print neutralization, and no-script legacy-chrome suppression.
+Source policy accounts for all 21 meaningful placements, the one decorative exception, and all 13 captions. Script and CSS mutations cover selector boundaries, native-dialog construction, idempotence, mdBook wrapper replacement, accessible name and description, close paths, sequential focus, focus return, intrinsic sizing, caption scale, caption line height, strong lead-ins, print neutralization, and no-script legacy-chrome suppression.
 
 The dependency-free browser smoke reuses one hidden host Chrome process and the generated local site. Its 20-cell S088 matrix covers:
 
@@ -54,7 +54,7 @@ The dependency-free browser smoke reuses one hidden host Chrome process and the 
 
 Each observation proves one semantic trigger, one native modal, no legacy checkbox or clone, persistent affordance, accessible label and caption association, initial close-button focus, background inertness, intrinsic aspect ratio, no upscaling, viewport containment, source and modal caption size and contrast, the matching light or dark brand surface, and no page-level overflow introduced by the figure system.
 
-Separate trusted CDP keyboard and pointer journeys prove Enter and Space opening, forward and reverse Tab containment, Escape closing, close-button closing, backdrop hit testing, and exact focus return. Dedicated observations prove readable associated captions and contained images at 200 percent browser scale, static source images and captions with script resources blocked, and clean print media with interaction chrome hidden. The existing 32-cell diagram paint matrix and 40-cell syntax matrix continue to pass in the same browser run.
+Separate trusted CDP keyboard and pointer journeys prove Enter and Space opening, forward and reverse Tab containment, Escape closing, close-button closing, backdrop hit testing, and exact focus return. Dedicated observations prove readable associated captions and contained images at 200 percent browser scale, static source images and captions with script resources blocked, and clean print media with interaction chrome hidden. The 40-cell diagram paint matrix and 40-cell syntax matrix continue to pass in the same browser run.
 
 The figure system adds no dependency, remote resource, browser download, or second viewer. GitHub Pages and release builds continue to consume the same generated documentation bytes.
 

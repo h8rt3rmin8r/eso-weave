@@ -14,6 +14,14 @@ troubleshooting](../reference/local-api-and-mcp.md#troubleshooting).
 
 ## Shared diagnostic flow
 
+<figure class="docs-flow-diagram">
+
+![Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence](../assets/diagrams/troubleshooting-decision-tree.svg)
+
+</figure>
+
+### Shared diagnostic flow text equivalent
+
 ```text
 Is ESO detected and Active?
   No -> fix installation or runtime discovery.

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S112 adds one accessible troubleshooting decision tree that routes five
+  first-observation families to the next startup, game, PixelBeacon, input,
+  encounter, or feature evidence check without claiming a diagnosis. The
+  existing shared sequence and symptom guidance remain the complete authority,
+  while source policy, generated-site policy, the finite figure inventory, and
+  browser rendering and layout receipts now govern the fifth local SVG (issue
+  #220). Dated decision 2026-09-17: the maintained figure inventory expands to
+  21 meaningful placements and five flow diagrams by reusing the existing
+  static SVG and shared native-dialog systems, with no new renderer or viewer.
+
 - S111 audits all 49 published documentation pages against one reproducible
   four-gate visualization warrant. The exact `SUMMARY.md` inventory, approved
   and rejected candidates, cross-page clusters, all seven requested visual
