@@ -864,6 +864,7 @@ impl EsoWeaveApp {
             warning,
             ..
         } = resolution;
+        self.model.set_catalog_query_path(path.clone());
         if let Some(worker) = &self.encounter_history_worker {
             worker.set_catalog_path(path);
         }

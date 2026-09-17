@@ -107,7 +107,7 @@ pub const NON_PUBLIC_STATES: &[&str] = &[
 pub struct Capabilities {
     pub schema_version: &'static str,
     pub domains: [&'static str; 6],
-    pub http_operations: [&'static str; 2],
+    pub http_operations: [&'static str; 4],
     pub database_ids: [&'static str; 2],
     pub query_execution: bool,
     pub mcp_player_state: bool,
@@ -133,9 +133,14 @@ impl Default for Capabilities {
                 "automation",
                 "interpretation",
             ],
-            http_operations: ["capabilities", "player_state"],
+            http_operations: [
+                "capabilities",
+                "player_state",
+                "databases",
+                "query_database",
+            ],
             database_ids: ["catalog", "encounters"],
-            query_execution: false,
+            query_execution: true,
             mcp_player_state: true,
             pixel_bus: PixelBusCapabilities {
                 supported_layout_revisions: [1, 2, 3, 4, 5, 6],

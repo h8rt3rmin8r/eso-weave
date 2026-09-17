@@ -93,16 +93,21 @@ fn readers_hold_one_immutable_revision_after_a_replacement() {
 }
 
 #[test]
-fn capabilities_claim_the_s107_http_and_mcp_state_surfaces() {
+fn capabilities_claim_the_s108_state_and_database_surfaces() {
     let capabilities = Capabilities::default();
     let value = serde_json::to_value(capabilities).unwrap();
     assert_eq!(value["schema_version"], SCHEMA_VERSION);
     assert_eq!(
         value["http_operations"],
-        json!(["capabilities", "player_state"])
+        json!([
+            "capabilities",
+            "player_state",
+            "databases",
+            "query_database"
+        ])
     );
     assert_eq!(value["mcp_player_state"], true);
-    assert_eq!(value["query_execution"], false);
+    assert_eq!(value["query_execution"], true);
     assert_eq!(value["database_ids"], json!(["catalog", "encounters"]));
 }
 

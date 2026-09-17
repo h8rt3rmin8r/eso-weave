@@ -492,7 +492,13 @@ fn main() {
     // change detection so an unchanged restored window is not re-saved.
     let restored_geometry = session.as_ref().and_then(|(state, _)| state.window);
     let (api_tx, api_rx) = std::sync::mpsc::channel();
-    let mut model = AppModel::new_with_game(
+    let database_queries = eso_weave::database_query::DatabaseQueryService::new(
+        catalog_path.clone(),
+        config_dir
+            .as_ref()
+            .map(|dir| dir.join("encounters").join("encounters.sqlite")),
+    );
+    let mut model = AppModel::new_with_game_and_queries(
         input.clone(),
         weave.clone(),
         fishing.clone(),
@@ -504,6 +510,7 @@ fn main() {
         settings,
         config_dir,
         clock_origin,
+        database_queries,
     );
     model.set_catalog(catalog);
     if let Some((state, notices)) = session {

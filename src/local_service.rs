@@ -15,9 +15,9 @@ use std::task::{Context, Poll};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use axum::body::{to_bytes, Body};
-use axum::extract::{Request, State};
-use axum::http::header::{AUTHORIZATION, CONNECTION, CONTENT_LENGTH, HOST, ORIGIN};
+use axum::body::{to_bytes, Body, Bytes};
+use axum::extract::{Path as AxumPath, Request, State};
+use axum::http::header::{AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, HOST, ORIGIN};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -30,6 +30,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::database_query::{DatabaseQueryService, QueryError, QueryRequest};
 use crate::mcp_state::PlayerStateMcp;
 use crate::player_state::SnapshotPublisher;
 
@@ -216,11 +217,24 @@ pub struct LocalServiceController {
 impl LocalServiceController {
     /// Starts the idle owner thread. No listener is created until `start`.
     pub fn new(config: LocalServiceConfig) -> Self {
-        Self::new_with_publisher(config, SnapshotPublisher::default())
+        Self::new_with_services(
+            config,
+            SnapshotPublisher::default(),
+            DatabaseQueryService::default(),
+        )
     }
 
     /// Starts an idle owner over the application-owned canonical state source.
     pub fn new_with_publisher(config: LocalServiceConfig, publisher: SnapshotPublisher) -> Self {
+        Self::new_with_services(config, publisher, DatabaseQueryService::default())
+    }
+
+    /// Starts an idle owner over the canonical state and database sources.
+    pub fn new_with_services(
+        config: LocalServiceConfig,
+        publisher: SnapshotPublisher,
+        queries: DatabaseQueryService,
+    ) -> Self {
         let shutdown_timeout = config.shutdown_timeout;
         let (commands, receiver) = mpsc::unbounded_channel();
         let status = Arc::new(Mutex::new(ServiceStatus::default()));
@@ -234,9 +248,13 @@ impl LocalServiceController {
                     .enable_time()
                     .build();
                 match runtime {
-                    Ok(runtime) => {
-                        runtime.block_on(owner_loop(config, receiver, owner_status, publisher))
-                    }
+                    Ok(runtime) => runtime.block_on(owner_loop(
+                        config,
+                        receiver,
+                        owner_status,
+                        publisher,
+                        queries,
+                    )),
                     Err(_) => set_status(
                         &owner_status,
                         failed_status(
@@ -373,6 +391,7 @@ async fn owner_loop(
     mut commands: mpsc::UnboundedReceiver<OwnerCommand>,
     status: Arc<Mutex<ServiceStatus>>,
     publisher: SnapshotPublisher,
+    queries: DatabaseQueryService,
 ) {
     let mut generation = 0u64;
     while let Some(command) = commands.recv().await {
@@ -482,6 +501,7 @@ async fn owner_loop(
                     credential,
                     cancellation.clone(),
                     publisher.clone(),
+                    queries.clone(),
                     generation,
                 );
                 let connection = connection_info(effective, generation);
@@ -795,6 +815,8 @@ struct SecurityState {
 #[derive(Clone)]
 struct ApiState {
     publisher: SnapshotPublisher,
+    queries: DatabaseQueryService,
+    cancellation: CancellationToken,
     generation: u64,
 }
 
@@ -803,6 +825,7 @@ fn build_router(
     credential: String,
     cancellation: CancellationToken,
     publisher: SnapshotPublisher,
+    queries: DatabaseQueryService,
     generation: u64,
 ) -> Router {
     let authority = effective.to_string();
@@ -816,7 +839,12 @@ fn build_router(
     mcp_config.json_response = true;
     mcp_config.cancellation_token = cancellation.clone();
     mcp_config.max_request_body_bytes = MAX_REQUEST_BODY_BYTES;
-    let mcp_handler = PlayerStateMcp::new(publisher.clone(), generation);
+    let mcp_handler = PlayerStateMcp::new(
+        publisher.clone(),
+        queries.clone(),
+        cancellation.clone(),
+        generation,
+    );
     let mcp = StreamableHttpService::new(
         move || Ok(mcp_handler.clone()),
         Arc::new(NeverSessionManager::default()),
@@ -825,10 +853,12 @@ fn build_router(
     let security = SecurityState {
         authority,
         credential,
-        cancellation,
+        cancellation: cancellation.clone(),
     };
     let api = ApiState {
         publisher,
+        queries,
+        cancellation,
         generation,
     };
     Router::new()
@@ -836,6 +866,11 @@ fn build_router(
         .route("/api/v1", any(api_capabilities))
         .route("/api/v1/capabilities", any(api_capabilities))
         .route("/api/v1/player-state", any(api_player_state))
+        .route("/api/v1/databases", any(api_databases))
+        .route(
+            "/api/v1/databases/{database_id}/query",
+            any(api_database_query),
+        )
         .route("/api/v1/{*path}", any(not_found))
         .fallback(not_found)
         .with_state(api)
@@ -996,12 +1031,82 @@ async fn api_player_state(State(state): State<ApiState>, method: Method) -> Resp
     Json(snapshot.document(state.generation)).into_response()
 }
 
+async fn api_databases(State(state): State<ApiState>, method: Method) -> Response {
+    if method != Method::GET {
+        return method_not_allowed_for("This route supports GET only.");
+    }
+    let cancellation = state.cancellation.child_token();
+    let _drop_guard = cancellation.clone().drop_guard();
+    match state.queries.inventory(cancellation).await {
+        Ok(inventory) => Json(inventory).into_response(),
+        Err(error) => query_error_response(&error),
+    }
+}
+
+async fn api_database_query(
+    State(state): State<ApiState>,
+    AxumPath(database_id): AxumPath<String>,
+    method: Method,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if method != Method::POST {
+        return method_not_allowed_for("This route supports POST only.");
+    }
+    if !headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(';')
+                .next()
+                .is_some_and(|media_type| media_type.trim() == "application/json")
+        })
+    {
+        return query_error_response(&QueryError::invalid_request());
+    }
+    let request = match serde_json::from_slice::<QueryRequest>(&body) {
+        Ok(request) => request,
+        Err(_) => return query_error_response(&QueryError::invalid_request()),
+    };
+    let cancellation = state.cancellation.child_token();
+    let _drop_guard = cancellation.clone().drop_guard();
+    match state
+        .queries
+        .execute(&database_id, request, cancellation)
+        .await
+    {
+        Ok(result) => Json(result).into_response(),
+        Err(error) => query_error_response(&error),
+    }
+}
+
 fn method_not_allowed() -> Response {
+    method_not_allowed_for("This route supports GET only.")
+}
+
+fn method_not_allowed_for(message: &'static str) -> Response {
     safe_error(
         StatusCode::METHOD_NOT_ALLOWED,
         "method_not_allowed",
-        "This route supports GET only.",
+        message,
     )
+}
+
+fn query_error_response(error: &QueryError) -> Response {
+    let status = match error.code() {
+        "invalid_request" | "query_invalid" => StatusCode::BAD_REQUEST,
+        "database_not_found" => StatusCode::NOT_FOUND,
+        "query_denied" => StatusCode::FORBIDDEN,
+        "query_busy" => StatusCode::TOO_MANY_REQUESTS,
+        "query_timeout" => StatusCode::REQUEST_TIMEOUT,
+        "result_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
+        "database_unavailable" | "database_busy" | "service_stopping" => {
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (status, Json(error.envelope())).into_response()
 }
 
 async fn not_found() -> Response {
