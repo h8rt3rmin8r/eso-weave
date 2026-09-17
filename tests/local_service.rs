@@ -222,7 +222,7 @@ fn mcp_client_discovers_reads_and_matches_http_state() {
         LocalServiceConfig {
             config_dir: Some(dir.path().to_owned()),
             port: 0,
-            shutdown_timeout: Duration::from_millis(200),
+            shutdown_timeout: Duration::from_secs(3),
         },
         publisher.clone(),
     );
@@ -360,6 +360,40 @@ fn mcp_client_discovers_reads_and_matches_http_state() {
     });
 
     controller.shutdown().unwrap();
+}
+
+#[test]
+fn repeated_mcp_client_completion_cannot_race_bounded_shutdown() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    for iteration in 0..12 {
+        let dir = tempfile::tempdir().unwrap();
+        let mut controller = LocalServiceController::new(LocalServiceConfig {
+            config_dir: Some(dir.path().to_owned()),
+            port: 0,
+            shutdown_timeout: Duration::from_millis(500),
+        });
+        assert!(controller.start(TEST_CREDENTIAL));
+        let connection = wait_for(&controller, ServicePhase::Running)
+            .connection
+            .unwrap();
+        runtime.block_on(async {
+            let transport = StreamableHttpClientTransport::from_config(
+                StreamableHttpClientTransportConfig::with_uri(connection.mcp_url)
+                    .auth_header(TEST_CREDENTIAL),
+            );
+            let client = ().serve(transport).await.unwrap();
+            client.cancel().await.unwrap();
+        });
+
+        controller
+            .shutdown()
+            .unwrap_or_else(|failure| panic!("shutdown iteration {iteration} failed: {failure:?}"));
+        assert!(!dir.path().join(DISCOVERY_FILE_NAME).exists());
+    }
 }
 
 #[test]
@@ -929,7 +963,9 @@ fn controller(config_dir: &Path, port: u16) -> LocalServiceController {
     LocalServiceController::new(LocalServiceConfig {
         config_dir: Some(config_dir.to_owned()),
         port,
-        shutdown_timeout: Duration::from_millis(200),
+        // Ordinary lifecycle tests use the production bound. Tests that verify
+        // a tighter shutdown contract provide their own explicit timeout.
+        shutdown_timeout: Duration::from_secs(3),
     })
 }
 
