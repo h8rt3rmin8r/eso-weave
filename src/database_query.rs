@@ -24,7 +24,7 @@ pub const MAX_ROWS: usize = 1_000;
 pub const MAX_RESULT_BYTES: usize = 1024 * 1024;
 pub const MAX_DURATION: Duration = Duration::from_secs(2);
 
-const EXTERNAL_SCHEMA_VERSION: &str = "1.0.0";
+const EXTERNAL_SCHEMA_VERSION: &str = crate::player_state::SCHEMA_VERSION;
 const CATALOG_ID: &str = "catalog";
 const ENCOUNTERS_ID: &str = "encounters";
 

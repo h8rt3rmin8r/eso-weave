@@ -1,4 +1,4 @@
-# Contract: Read-Only Database Query 1.0.0
+# Contract: Read-Only Database Query 1.1.0
 
 ## Runtime database inventory
 

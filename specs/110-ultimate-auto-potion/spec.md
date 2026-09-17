@@ -18,6 +18,7 @@
 - Q: How are mixed watches ordered? -> A: Preserve the established deterministic Health, Magicka, Stamina order and append Ultimate last. The rule remains OR-based, and the first qualifying watch in that order supplies the named trigger cause.
 - Q: Does stale or inactive evidence need a new timestamp? -> A: No. Existing heartbeat, game lifecycle, life, world, travel, focus, suspension, and context gates already reject stale or non-active observations before resource evaluation. Signal loss also clears cached Ultimate to unknown.
 - Q: How does configuration migrate? -> A: The additive `ultimate` watch defaults through serde-compatible loading to `{ enabled: false, threshold: 35 }`. Current saves always emit it. The top-level settings schema remains unchanged because the opaque potion section is explicitly additive and backward compatible.
+- Q: Does the public local-extension schema change? -> A: Yes. The new optional Ultimate member under `interpretation.auto_potion.thresholds` advances the external schema from `1.0.0` to minor-compatible `1.1.0`; the unrelated top-level settings schema remains unchanged.
 - Q: Does the fourth row require a new settings layout? -> A: No. It joins the existing vertically stacked resource-watch loop with the same checkbox, 0 through 100 numeric control, help treatment, and keyboard accessibility.
 
 ## User Scenarios and Testing
@@ -100,6 +101,7 @@ An operator can enable Ultimate, choose a 0 through 100 threshold, persist the c
 - **FR-018**: S110 MUST archive completed Plan 045 with PR #218 as delivery evidence and establish Plan 046 as the active build-plan authority for issue #173.
 - **FR-019**: S110 MUST update the `[Unreleased]` changelog and leave issue #173 ready to close through the pull request while preserving operator merge authority.
 - **FR-020**: S110 MUST NOT change potion selection, quickslot selection, cooldown or retry behavior, the Pixel Bus protocol, addon files, sampling cadence, session enablement, or another synthesized-input path.
+- **FR-021**: The public local-extension schema and its discovery, capabilities, database inventory, documentation, and maintained contract metadata MUST advertise `1.1.0` for the additive Ultimate threshold member.
 
 ### Key Entities
 

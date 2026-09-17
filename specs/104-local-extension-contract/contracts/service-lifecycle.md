@@ -47,7 +47,7 @@ While running, atomically replace `local-extension.json` in the existing applica
   "process_id": 1234,
   "http_base_url": "http://127.0.0.1:18765/api/v1",
   "mcp_url": "http://127.0.0.1:18765/mcp",
-  "schema_version": "1.0.0"
+  "schema_version": "1.1.0"
 }
 ```
 

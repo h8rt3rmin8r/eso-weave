@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "fields": [
     {"path":"application.lifecycle","type":"observation<string>","meaning":"Current ESO Weave running or suspended lifecycle.","source":"application","availability":"Always observed while the snapshot publisher is running."},
     {"path":"application.version","type":"observation<string>","meaning":"ESO Weave package version.","source":"build_metadata","availability":"Always observed from the running build."},

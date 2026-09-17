@@ -62,6 +62,11 @@
 - Infer Ultimate enablement from another watch. Rejected because issue #173 requires independent configuration and safe default-off migration.
 - Omit disabled Ultimate on save. Rejected because explicit current output improves inspectability and round-trip evidence.
 
+The settings decision is separate from the local-extension contract. Publishing
+the new optional Ultimate threshold member advances that semantic external
+schema from `1.0.0` to minor-compatible `1.1.0` across discovery, capabilities,
+player state, database inventory, and contract metadata.
+
 ## Decision 6: Reuse the settings row and existing safety gates
 
 **Decision**: Add Ultimate to the current vertically stacked row loop and only extend cause projection and documentation. Do not change controller gate order, worker timing, or synthesis.

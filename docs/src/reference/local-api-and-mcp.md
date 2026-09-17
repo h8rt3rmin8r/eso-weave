@@ -41,7 +41,7 @@ service runs. Discovery is not authentication and contains no credential.
 | `process_id` | integer | Owning ESO Weave process |
 | `http_base_url` | string | Versioned HTTP base URL |
 | `mcp_url` | string | Streamable HTTP MCP endpoint |
-| `schema_version` | string | External data contract, currently `1.0.0` |
+| `schema_version` | string | External data contract, currently `1.1.0` |
 
 The default listener is `127.0.0.1:18765`. A test or future configuration may
 select another loopback port, so clients that automate discovery should use the

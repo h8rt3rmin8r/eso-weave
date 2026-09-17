@@ -30,7 +30,7 @@ The adapters share one immutable revisioned snapshot service, one query service,
 
 ## State authority
 
-External schema `1.0.0` covers all current application, game, PixelBus, player, automation, and interpretation facts. Every observation preserves knowledge, value, source, protocol, observation time, age, and freshness. Unknown, unavailable, dormant, fresh, and stale are distinct. Retained values never hide immediate focus or signal loss.
+External schema `1.1.0` covers all current application, game, PixelBus, player, automation, and interpretation facts. S110 advances the minor version because `interpretation.auto_potion.thresholds` gains the optional Ultimate watch. Every observation preserves knowledge, value, source, protocol, observation time, age, and freshness. Unknown, unavailable, dormant, fresh, and stale are distinct. Retained values never hide immediate focus or signal loss.
 
 The complete field and non-public inventories are [the canonical player-state contract](../../specs/104-local-extension-contract/contracts/player-state-v1.md). S106 turns that inventory into maintained source-coverage tests and publishes it through one immutable revisioned snapshot. Raw source observations that the current runtime does not retain remain explicitly unknown rather than being inferred from controller state.
 

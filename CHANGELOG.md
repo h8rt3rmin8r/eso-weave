@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   current-over-maximum ratios without floating-point or truncation errors,
   fails closed on unknown or zero-maximum evidence, preserves deterministic OR
   ordering and every existing action gate, and extends settings, diagnostics,
-  tests, and documentation (issue #173).
+  tests, and documentation. The additive public threshold field advances the
+  local-extension schema from `1.0.0` to `1.1.0` (issue #173).
 
 - S109 publishes the complete Local API and MCP user and integrator guide,
   including enablement, discovery, authentication, player-state semantics,

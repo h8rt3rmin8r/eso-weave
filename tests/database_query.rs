@@ -57,7 +57,7 @@ fn run<T>(future: impl std::future::Future<Output = T>) -> T {
 fn inventory_is_fixed_ordered_safe_and_truthful() {
     let (root, service) = fixture();
     let inventory = run(service.inventory(CancellationToken::new())).unwrap();
-    assert_eq!(inventory.schema_version, "1.0.0");
+    assert_eq!(inventory.schema_version, "1.1.0");
     assert_eq!(inventory.databases.len(), 2);
     assert_eq!(inventory.databases[0].database_id, "catalog");
     assert_eq!(inventory.databases[1].database_id, "encounters");

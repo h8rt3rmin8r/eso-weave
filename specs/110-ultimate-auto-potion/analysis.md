@@ -55,4 +55,5 @@ The S110 packet and implementation are internally consistent and complete. No un
 - `cargo fmt`, strict all-target Clippy, the full locked Rust suite, and the locked release build pass.
 - The documentation unit suite, mdBook test and build, rendered-site policy, repository trust policy, release-notes contract, and typo checks pass.
 - The deterministic Auto Potion screenshot was regenerated from the repository harness, inspected for the fourth row and keyboard evidence, and recorded with its new digest and byte count.
+- The first hosted Codex review correctly identified that the additive public threshold member requires a minor external-schema advance. The implementation now single-sources and advertises `1.1.0` across every local-extension surface while leaving the unrelated settings schema unchanged.
 - The final diff check reports no whitespace errors, and repository policy verifies UTF-8, punctuation, lifecycle, and documentation integrity.

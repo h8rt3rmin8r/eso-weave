@@ -27,7 +27,7 @@ use crate::potion::{
 };
 use crate::weave::{effective_delay, effective_timing, LatencyConfig, WeaveConfig};
 
-pub const SCHEMA_VERSION: &str = "1.0.0";
+pub const SCHEMA_VERSION: &str = "1.1.0";
 
 pub const PUBLIC_PATHS: &[&str] = &[
     "application.lifecycle",
