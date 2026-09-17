@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [045](plan-045.md) | Active | S104 local extension stack and contract, issue #175 |
+| [045](plan-045.md) | Active | S105 local service lifecycle, issue #176 |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five
@@ -27,4 +27,4 @@ database query, and documentation sequence.
 Installed v0.15.1 verification in issue #110, catalog-field verification in
 issue #129, live Combat Metrics verification in issue #131, and native-log
 verification in issue #190 remain independent Release verification work. They
-do not block S104.
+do not block S105.

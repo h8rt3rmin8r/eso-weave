@@ -21,7 +21,7 @@ fn every_tooltip_and_help_string_is_non_empty() {
 
 #[test]
 fn settings_labels_and_help_are_present() {
-    assert_eq!(strings::ALL_SETTINGS.len(), 27);
+    assert_eq!(strings::ALL_SETTINGS.len(), 28);
     for setting in strings::ALL_SETTINGS {
         assert!(!setting.label.trim().is_empty());
         assert!(!setting.label.contains('_'));

@@ -1404,6 +1404,32 @@ fn s098_settings_modal_exposes_the_bounded_stale_retention_control() {
     harness.get_by_value("120 s");
 }
 
+#[test]
+fn s105_settings_modal_exposes_one_local_service_toggle_warning_and_status() {
+    let settings = Settings {
+        local_service: eso_weave::local_service::LocalServicePrefs {
+            enabled: false,
+            credential: Some(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
+            ),
+        }
+        .store(),
+        ..Settings::default()
+    };
+    let mut harness = harness_for_app(test_app_with_settings(settings), egui::vec2(1400.0, 1000.0));
+    harness.step();
+    harness.state_mut().set_settings_open(true);
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+
+    harness.get_by_label(eso_weave::app::strings::SET_LOCAL_SERVICE_ENABLED.label);
+    harness.get_by_label("Status");
+    harness.get_by_label(eso_weave::app::strings::LOCAL_SERVICE_WARNING);
+    harness.get_by_label("stopped");
+    harness.get_by_label(eso_weave::app::strings::LOCAL_SERVICE_COPY_CREDENTIAL);
+}
+
 /// C5 (FR-014): the modal's rendered rectangle matches the size its growth rule
 /// calls for, on both axes, at every window size.
 #[test]

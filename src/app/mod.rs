@@ -35,6 +35,10 @@ use crate::game::{
     InstallationProvider, InstallationState, SurfaceObservation,
 };
 use crate::input::{InputEngine, NativeBindingSet};
+use crate::local_service::{
+    valid_credential, LocalServiceConfig, LocalServiceController, LocalServicePrefs,
+    ServiceFailure, ServiceFailureCode, ServicePhase, ServiceStatus,
+};
 use crate::logging::LogHandle;
 use crate::pixelbus::{
     ActiveBar, CombatSignal, CooldownSet, LifeState, LiveReaderConfig, MenuSurface, MovementSignal,
@@ -2003,6 +2007,7 @@ pub struct AppModel {
     catalog: CatalogAccess,
     window: Option<WindowGeometry>,
     hud_retention: RefCell<HudRetentionState>,
+    local_service: Option<LocalServiceController>,
 }
 
 impl AppModel {
@@ -2046,11 +2051,56 @@ impl AppModel {
         game: GameState,
         log: LogHandle,
         reader_update_tx: Sender<LiveReaderConfig>,
-        settings: Settings,
+        mut settings: Settings,
         config_dir: Option<PathBuf>,
         clock: Instant,
     ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
+        let mut local_prefs = LocalServicePrefs::load(&settings.local_service);
+        let mut startup_failure = None;
+        if local_prefs.enabled
+            && !local_prefs
+                .credential
+                .as_deref()
+                .is_some_and(valid_credential)
+        {
+            match local_prefs.ensure_credential() {
+                Ok(_) => {
+                    settings.local_service = local_prefs.store();
+                    if config_dir
+                        .as_deref()
+                        .is_none_or(|dir| config::save(dir, &settings).is_err())
+                    {
+                        startup_failure = Some(ServiceFailure {
+                            code: ServiceFailureCode::SettingsUnavailable,
+                            message: "The local service credential could not be saved, so the service was not started.".into(),
+                            retryable: true,
+                        });
+                    }
+                }
+                Err(_) => {
+                    startup_failure = Some(ServiceFailure {
+                        code: ServiceFailureCode::CredentialUnavailable,
+                        message: "The local service credential could not be created.".into(),
+                        retryable: true,
+                    });
+                }
+            }
+        }
+        let local_service = config_dir
+            .clone()
+            .map(|dir| LocalServiceController::new(LocalServiceConfig::production(Some(dir))));
+        if local_prefs.enabled {
+            if let Some(failure) = startup_failure {
+                if let Some(controller) = &local_service {
+                    controller.report_failure(failure);
+                }
+            } else if let (Some(controller), Some(credential)) =
+                (&local_service, local_prefs.credential.as_deref())
+            {
+                controller.start(credential);
+            }
+        }
         let (data_addon_status, data_addon_inspection_available, data_addon_error) =
             match beacon::resolve_addons_dir(&beacon_prefs) {
                 Ok(root) => match crate::data_addon::inspect(&root) {
@@ -2099,6 +2149,7 @@ impl AppModel {
             ),
             window: None,
             hud_retention: RefCell::new(HudRetentionState::default()),
+            local_service,
         }
     }
 
@@ -2120,6 +2171,36 @@ impl AppModel {
     /// A fresh settings form seeded from the current configuration.
     pub fn settings_form(&self) -> SettingsForm {
         SettingsForm::load(&self.settings).0
+    }
+
+    /// Current local HTTP and MCP lifecycle status for settings presentation.
+    pub fn local_service_status(&self) -> ServiceStatus {
+        if let Some(controller) = &self.local_service {
+            return controller.status();
+        }
+        let requested = LocalServicePrefs::load(&self.settings.local_service).enabled;
+        if requested {
+            ServiceStatus {
+                phase: ServicePhase::Failed,
+                generation: 0,
+                connection: None,
+                failure: Some(ServiceFailure {
+                    code: ServiceFailureCode::SettingsUnavailable,
+                    message: "The settings directory is unavailable, so the local service cannot start safely.".into(),
+                    retryable: true,
+                }),
+            }
+        } else {
+            ServiceStatus::default()
+        }
+    }
+
+    /// Returns the credential only for the explicit settings copy action. The
+    /// value is never included in status, discovery, logs, or rendered text.
+    pub fn local_service_credential(&self) -> Option<String> {
+        LocalServicePrefs::load(&self.settings.local_service)
+            .credential
+            .filter(|credential| valid_credential(credential))
     }
 
     /// Current coherent native binding evidence for read-only settings status.
@@ -2774,8 +2855,67 @@ impl AppModel {
 
     fn apply_settings(&mut self, form: SettingsForm) -> Vec<Notice> {
         let previous_block_px = self.configured_block_px();
+        let previous_local = LocalServicePrefs::load(&self.settings.local_service);
         form.apply(&mut self.settings);
-        let notices = self.reload_from_settings();
+        let mut notices = self.reload_from_settings();
+        let mut current_local = LocalServicePrefs::load(&self.settings.local_service);
+        if current_local.enabled != previous_local.enabled {
+            if current_local.enabled {
+                match current_local.ensure_credential() {
+                    Ok(_) => {
+                        self.settings.local_service = current_local.store();
+                        let persisted = self
+                            .config_dir
+                            .as_deref()
+                            .is_some_and(|dir| config::save(dir, &self.settings).is_ok());
+                        if persisted {
+                            if let (Some(controller), Some(credential)) =
+                                (&self.local_service, current_local.credential.as_deref())
+                            {
+                                controller.start(credential);
+                            }
+                        } else {
+                            let failure = ServiceFailure {
+                                code: ServiceFailureCode::SettingsUnavailable,
+                                message: "The local service setting could not be saved, so the service was not started.".into(),
+                                retryable: true,
+                            };
+                            if let Some(controller) = &self.local_service {
+                                controller.report_failure(failure);
+                            }
+                            notices.push(Notice {
+                                kind: crate::config::NoticeKind::Unwritable,
+                                message: "local service enablement was not started because its credential could not be saved".into(),
+                            });
+                        }
+                    }
+                    Err(_) => {
+                        let failure = ServiceFailure {
+                            code: ServiceFailureCode::CredentialUnavailable,
+                            message: "The local service credential could not be created.".into(),
+                            retryable: true,
+                        };
+                        if let Some(controller) = &self.local_service {
+                            controller.report_failure(failure);
+                        }
+                    }
+                }
+            } else {
+                if let Some(controller) = &self.local_service {
+                    controller.stop();
+                }
+                if let Some(dir) = self.config_dir.as_deref() {
+                    if let Err(error) = config::save(dir, &self.settings) {
+                        notices.push(Notice {
+                            kind: crate::config::NoticeKind::Unwritable,
+                            message: format!(
+                                "could not save disabled local service setting: {error}"
+                            ),
+                        });
+                    }
+                }
+            }
+        }
         // A block-size change re-derives the reader geometry (adopted on the next
         // start) and re-deploys the addon so the drawn squares match. The
         // comparison runs both values through the same sanitize path.

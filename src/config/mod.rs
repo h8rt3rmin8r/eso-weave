@@ -87,7 +87,7 @@ impl Default for LoggingPrefs {
 }
 
 /// The persisted user configuration.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Settings {
     /// The settings schema version.
     pub schema_version: u32,
@@ -143,6 +143,32 @@ pub struct Settings {
     /// backward compatible.
     #[serde(default)]
     pub ui: serde_json::Value,
+    /// Local API and MCP service preference plus its persistent bearer
+    /// credential, as an opaque JSON section owned by the local-service module.
+    /// Runtime phase, endpoints, process identity, and failures never enter this
+    /// settings store.
+    #[serde(default)]
+    pub local_service: serde_json::Value,
+}
+
+impl std::fmt::Debug for Settings {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Settings")
+            .field("schema_version", &self.schema_version)
+            .field("logging", &self.logging)
+            .field("bindings", &self.bindings)
+            .field("timing", &self.timing)
+            .field("skills", &self.skills)
+            .field("beacon", &self.beacon)
+            .field("fishing", &self.fishing)
+            .field("potion", &self.potion)
+            .field("latency", &self.latency)
+            .field("pixelbus", &self.pixelbus)
+            .field("ui", &self.ui)
+            .field("local_service", &"<redacted>")
+            .finish()
+    }
 }
 
 impl Default for Settings {
@@ -159,6 +185,7 @@ impl Default for Settings {
             latency: serde_json::Value::Null,
             pixelbus: serde_json::Value::Null,
             ui: serde_json::Value::Null,
+            local_service: serde_json::Value::Null,
         }
     }
 }
@@ -231,6 +258,8 @@ struct RawSettings {
     pixelbus: serde_json::Value,
     #[serde(default)]
     ui: serde_json::Value,
+    #[serde(default)]
+    local_service: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -287,6 +316,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         "latency",
         "pixelbus",
         "ui",
+        "local_service",
     ]
     .into_iter()
     .collect();
@@ -330,6 +360,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         latency: raw.latency,
         pixelbus: raw.pixelbus,
         ui: raw.ui,
+        local_service: raw.local_service,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {
@@ -360,7 +391,28 @@ pub fn save(config_dir: &Path, settings: &Settings) -> Result<(), ConfigError> {
     std::fs::create_dir_all(config_dir)?;
     let mut json = serde_json::to_string_pretty(settings)?;
     json.push('\n');
-    std::fs::write(config_dir.join(CONFIG_FILE_NAME), json.as_bytes())?;
+    let path = config_dir.join(CONFIG_FILE_NAME);
+    #[cfg(unix)]
+    {
+        use std::io::Write as _;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        if path.exists() {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o600)
+            .open(&path)?;
+        file.write_all(json.as_bytes())?;
+        file.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, json.as_bytes())?;
+    }
     Ok(())
 }
 

@@ -273,12 +273,18 @@ pub const CLUSTER_APPEARANCE: &str = "Appearance";
 pub const CLUSTER_COMBAT_TIMING: &str = "Combat Timing";
 pub const CLUSTER_FISHING: &str = "Fishing";
 pub const CLUSTER_BEACON: &str = "PixelBeacon and Bus";
+pub const CLUSTER_LOCAL_SERVICE: &str = "Local API and MCP";
 pub const CLUSTER_LOGGING: &str = "Logging";
 pub const CLUSTER_KEYBINDINGS: &str = "Keybindings";
 pub const FISHING_SETTINGS_APPLICATION_HELP: &str =
     "Fishing changes apply while ESO Weave is running. Changing a setting safely stops a requested or active Fishing session; enable it again to use the new values.";
 pub const READER_SETTINGS_APPLICATION_HELP: &str =
     "Color Tolerance and sampling intervals apply while ESO Weave is running. Block Size remains staged until ESO reloads PixelBeacon and ESO Weave restarts.";
+pub const LOCAL_SERVICE_WARNING: &str =
+    "Connected clients can read live player state and query ESO Weave application data. Enable only for local clients you trust.";
+pub const LOCAL_SERVICE_COPY_CREDENTIAL: &str = "Copy Credential";
+pub const LOCAL_SERVICE_COPY_CREDENTIAL_HELP: &str =
+    "Copy the bearer credential for a trusted local client. The credential is never shown in discovery or logs.";
 pub const ACTION_SKILL_1: &str = "Skill 1";
 pub const ACTION_SKILL_2: &str = "Skill 2";
 pub const ACTION_SKILL_3: &str = "Skill 3";
@@ -386,9 +392,13 @@ pub const SET_FILE_LOGGING: Setting = Setting {
     label: "Write Log to File",
     help: "Also write captured events to a monthly log file.",
 };
+pub const SET_LOCAL_SERVICE_ENABLED: Setting = Setting {
+    label: "Local API and MCP Server",
+    help: "Start or stop both authenticated local transports together. The setting is off by default and persists across restarts.",
+};
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 27] = [
+pub const ALL_SETTINGS: [&Setting; 28] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
     &SET_STALE_RETENTION,
@@ -416,6 +426,7 @@ pub const ALL_SETTINGS: [&Setting; 27] = [
     &SET_POTION_RETRY,
     &SET_LOG_LEVEL,
     &SET_FILE_LOGGING,
+    &SET_LOCAL_SERVICE_ENABLED,
 ];
 
 /// Visible field and settings labels governed by the title-case policy.
@@ -462,6 +473,7 @@ pub fn field_labels() -> Vec<&'static str> {
         CLUSTER_FISHING,
         CLUSTER_BEACON,
         CLUSTER_AUTO_POTION,
+        CLUSTER_LOCAL_SERVICE,
         CLUSTER_LOGGING,
         CLUSTER_KEYBINDINGS,
         ACTION_SKILL_1,

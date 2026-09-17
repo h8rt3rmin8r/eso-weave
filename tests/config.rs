@@ -3,6 +3,7 @@
 use std::fs;
 
 use eso_weave::config::{self, LevelName, LoggingPrefs, NoticeKind, Settings};
+use eso_weave::local_service::LocalServicePrefs;
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().unwrap()
@@ -35,6 +36,42 @@ fn file_encoding_has_no_bom_lf_and_trailing_newline() {
     assert_ne!(bytes.get(..3), Some(&[0xEF, 0xBB, 0xBF][..]));
     assert!(!bytes.contains(&b'\r'));
     assert_eq!(bytes.last(), Some(&b'\n'));
+}
+
+#[test]
+fn local_service_preference_and_secret_round_trip_without_unknown_key_notice() {
+    let dir = tmp();
+    let settings = Settings {
+        local_service: LocalServicePrefs {
+            enabled: true,
+            credential: Some(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
+            ),
+        }
+        .store(),
+        ..Settings::default()
+    };
+    config::save(dir.path(), &settings).unwrap();
+
+    let outcome = config::load(dir.path());
+    assert!(outcome.notices.is_empty());
+    assert_eq!(outcome.settings.local_service, settings.local_service);
+    assert!(!format!("{settings:?}").contains("0123456789abcdef"));
+}
+
+#[cfg(unix)]
+#[test]
+fn config_file_is_user_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tmp();
+    config::save(dir.path(), &Settings::default()).unwrap();
+    let mode = fs::metadata(dir.path().join("config.json"))
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600);
 }
 
 #[test]
