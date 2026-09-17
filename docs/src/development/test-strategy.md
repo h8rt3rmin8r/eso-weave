@@ -46,8 +46,8 @@ These seams make negative properties reviewable:
 - no generated Down operation after a tested shared gate closes;
 - no replay when life, world, travel, or roll state recovers;
 - no Fishing output after SignalLost;
-- no Auto Potion output from Unknown resources, quickslot, cooldown, life,
-  world, or travel;
+- no Auto Potion output from Unknown resources, unknown or zero-maximum
+  Ultimate, quickslot, cooldown, life, world, or travel;
 - no PixelBeacon removal without the managed marker;
 - no ESO Weave Data mutation without its exact managed inventory and marker;
 - no enabled, loaded, or collecting claim inferred from installed files or ESO
@@ -73,6 +73,7 @@ These seams make negative properties reviewable:
 | Death episode ordering | `PixelBusReader::observe`, `InputEngine::death_epoch` | Recovered Alive is published after an actionable baseline, and [S067](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/067-death-recovery-safety/spec.md) proves one death-epoch advance per open-to-closed transition in the [input tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/input_engine.rs) |
 | Fishing signal loss | `FishingController::on_event` | `signal_lost_from_every_active_state_disables_without_emitting` |
 | Auto Potion first blocker | `potion::evaluate` | [S043](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/043-auto-potion-restoration/spec.md) proves Ready, Triggered, and every runtime blocker family in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |
+| Ultimate Auto Potion watch | `potion::low_resource`, `UltimateTelemetry` | S110 proves exact inclusive ratios, non-divisible boundaries, unavailable evidence, deterministic four-watch OR order, migration, diagnostics, settings accessibility, and current-evidence routing in the Auto Potion and application tests |
 | Auto Potion request persistence | `SessionState`, `AppModel::restore_session` | S097 proves legacy default-off migration, enabled and disabled round trips, UI and F3 convergence, close-time flush, and fail-closed startup in the application session-state tests |
 | Stale HUD presentation separation | `GameState::presentation_snapshot`, `AppModel::view_at`, `HudRetentionState` | S098 proves transition-stamped age without repaint, default and bounds, every runtime/focus/signal cause, visible age, recovery, immutable deadline cap, exact expiry, zero retention, and simultaneous authoritative gate closure in game-state and application tests |
 | Auto Potion death retry | `AutoPotionController::tick` | [S067](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/067-death-recovery-safety/spec.md) proves recovery starts a complete new retry episode in the [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs) |

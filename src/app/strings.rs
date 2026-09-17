@@ -205,6 +205,10 @@ pub const SET_POTION_STAMINA: Setting = Setting {
     label: "Watch Stamina (Threshold %)",
     help: "Fire when stamina is at or below this percentage.",
 };
+pub const SET_POTION_ULTIMATE: Setting = Setting {
+    label: "Watch Ultimate (Threshold %)",
+    help: "Fire when current Ultimate divided by maximum Ultimate is at or below this percentage. Unknown current, unknown maximum, or zero maximum never qualifies.",
+};
 pub const SET_POTION_KEY: Setting = Setting {
     label: "Detected Quickslot Binding",
     help: "Read from ESO. Change Quickslot in ESO, then reload the UI if this status is not valid.",
@@ -398,7 +402,7 @@ pub const SET_LOCAL_SERVICE_ENABLED: Setting = Setting {
 };
 
 /// Every settings option, for coverage and hygiene tests.
-pub const ALL_SETTINGS: [&Setting; 28] = [
+pub const ALL_SETTINGS: [&Setting; 29] = [
     &SET_THEME,
     &SET_ALWAYS_ON_TOP,
     &SET_STALE_RETENTION,
@@ -422,6 +426,7 @@ pub const ALL_SETTINGS: [&Setting; 28] = [
     &SET_POTION_HEALTH,
     &SET_POTION_MAGICKA,
     &SET_POTION_STAMINA,
+    &SET_POTION_ULTIMATE,
     &SET_POTION_KEY,
     &SET_POTION_RETRY,
     &SET_LOG_LEVEL,

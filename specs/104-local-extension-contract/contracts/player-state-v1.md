@@ -1,4 +1,4 @@
-# Contract: Canonical Player State 1.0.0
+# Contract: Canonical Player State 1.1.0
 
 ## Envelope
 
@@ -63,7 +63,7 @@ The table maps every current external fact represented by `GameObservations`, `P
 | `automation.auto_potion.reason` | dormant, blocked, or trigger reason including resource, observed percent, and threshold where applicable | auto-potion controller |
 | `automation.weave.slots` | fixed seven-slot interpretation configuration with active flag, weave type, and override | persisted weave configuration |
 | `automation.weave.slots[].effective_delays_ms` | named `d_weave`, `d_heavy`, and `d_bash` values resolved from current bar timing, every per-slot override, and latency where applicable | canonical projection |
-| `interpretation.auto_potion.thresholds` | enabled health, stamina, and magicka watches and thresholds | persisted auto-potion configuration |
+| `interpretation.auto_potion.thresholds` | enabled health, stamina, magicka, and Ultimate watches and thresholds | persisted auto-potion configuration |
 | `interpretation.auto_potion.retry_interval_ms` | configured minimum interval between admitted potion attempts | persisted auto-potion configuration |
 | `interpretation.fishing` | configured arm timeout, reel delay, and recast delay in milliseconds | persisted fishing configuration |
 | `interpretation.weave.front_timing` | configured front-bar timing and auto-timing mode | persisted weave configuration |

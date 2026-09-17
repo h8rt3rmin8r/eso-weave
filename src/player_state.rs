@@ -27,7 +27,7 @@ use crate::potion::{
 };
 use crate::weave::{effective_delay, effective_timing, LatencyConfig, WeaveConfig};
 
-pub const SCHEMA_VERSION: &str = "1.0.0";
+pub const SCHEMA_VERSION: &str = "1.1.0";
 
 pub const PUBLIC_PATHS: &[&str] = &[
     "application.lifecycle",
@@ -569,6 +569,7 @@ pub fn project(input: ProjectionInput) -> SnapshotContent {
                     "health": watch(input.auto_potion_config.health),
                     "stamina": watch(input.auto_potion_config.stamina),
                     "magicka": watch(input.auto_potion_config.magicka),
+                    "ultimate": watch(input.auto_potion_config.ultimate),
                 }), "settings"),
                 "retry_interval_ms": observed(json!(input.auto_potion_config.retry_interval_ms), "settings"),
             },
@@ -1095,6 +1096,7 @@ fn potion_resource(value: AutoPotionResource) -> &'static str {
         AutoPotionResource::Health => "health",
         AutoPotionResource::Magicka => "magicka",
         AutoPotionResource::Stamina => "stamina",
+        AutoPotionResource::Ultimate => "ultimate",
     }
 }
 

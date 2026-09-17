@@ -137,7 +137,7 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
     );
     assert!(api.starts_with("HTTP/1.1 200"));
     let capabilities: serde_json::Value = serde_json::from_str(response_body(&api)).unwrap();
-    assert_eq!(capabilities["schema_version"], "1.0.0");
+    assert_eq!(capabilities["schema_version"], "1.1.0");
     assert_eq!(
         capabilities["http_operations"],
         serde_json::json!([

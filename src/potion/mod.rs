@@ -41,7 +41,7 @@ use crate::input::{
 use crate::pixelbus::{
     LifeState, MovementSignal, QuickslotClassification, QuickslotPotionAvailability,
     QuickslotState, RecoveryPath, ResourceLevel, ResourceSet, SlotCooldown, TravelState,
-    WorldState,
+    UltimateTelemetry, UltimateValue, WorldState,
 };
 
 /// The largest accepted retry interval, in milliseconds.
@@ -76,6 +76,8 @@ pub struct AutoPotionConfig {
     pub magicka: ResourceWatch,
     /// The stamina watch.
     pub stamina: ResourceWatch,
+    /// The Ultimate watch.
+    pub ultimate: ResourceWatch,
     /// The minimum time between two attempts, in milliseconds.
     ///
     /// This is not a duplicate of the quickslot cooldown. The cooldown is read
@@ -93,6 +95,7 @@ impl Default for AutoPotionConfig {
             health: ResourceWatch::default(),
             magicka: ResourceWatch::default(),
             stamina: ResourceWatch::default(),
+            ultimate: ResourceWatch::default(),
             retry_interval_ms: 1500,
         }
     }
@@ -107,6 +110,8 @@ pub enum AutoPotionResource {
     Magicka,
     /// The player's Stamina pool.
     Stamina,
+    /// The player's Ultimate pool.
+    Ultimate,
 }
 
 /// The low-resource observation that authorized one input attempt.
@@ -148,7 +153,7 @@ pub enum BlockReason {
     TravelPending,
     /// The player is explicitly detected sprinting.
     Sprinting,
-    /// None of the three resource watches is enabled.
+    /// None of the four resource watches is enabled.
     NoWatchedResource,
     /// No enabled resource has a fresh percentage.
     ResourcesUnavailable,
@@ -231,6 +236,10 @@ impl AutoPotionState {
                 resource: AutoPotionResource::Stamina,
                 ..
             }) => "triggered_stamina",
+            Self::Triggered(TriggerCause {
+                resource: AutoPotionResource::Ultimate,
+                ..
+            }) => "triggered_ultimate",
         }
     }
 }
@@ -245,8 +254,10 @@ impl AutoPotionState {
 /// merely tested against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PotionReadings {
-    /// The three decoded resource pools.
+    /// The three decoded percentage resource pools.
     pub resources: ResourceSet,
+    /// Exact current and maximum Ultimate from the existing atomic observation.
+    pub ultimate: UltimateTelemetry,
     /// The decoded quickslot.
     pub quickslot: QuickslotState,
 }
@@ -283,6 +294,7 @@ pub struct PotionInputs {
 fn low_resource(
     config: &AutoPotionConfig,
     resources: ResourceSet,
+    ultimate: UltimateTelemetry,
 ) -> Result<Option<TriggerCause>, BlockReason> {
     let watches = [
         (AutoPotionResource::Health, config.health, resources.health),
@@ -297,7 +309,7 @@ fn low_resource(
             resources.stamina,
         ),
     ];
-    if watches.iter().all(|(_, watch, _)| !watch.enabled) {
+    if !config.ultimate.enabled && watches.iter().all(|(_, watch, _)| !watch.enabled) {
         return Err(BlockReason::NoWatchedResource);
     }
 
@@ -314,6 +326,26 @@ fn low_resource(
                     observed_percent,
                     threshold_percent: watch.threshold,
                 }));
+            }
+        }
+    }
+
+    if config.ultimate.enabled {
+        if let (UltimateValue::Points(current), UltimateValue::Points(maximum)) =
+            (ultimate.current, ultimate.maximum)
+        {
+            if maximum > 0 {
+                any_fresh = true;
+                let scaled_current = u32::from(current) * 100;
+                let scaled_threshold = u32::from(config.ultimate.threshold) * u32::from(maximum);
+                if scaled_current <= scaled_threshold {
+                    let observed_percent = scaled_current.div_ceil(u32::from(maximum)) as u8;
+                    return Ok(Some(TriggerCause {
+                        resource: AutoPotionResource::Ultimate,
+                        observed_percent,
+                        threshold_percent: config.ultimate.threshold,
+                    }));
+                }
             }
         }
     }
@@ -366,7 +398,7 @@ pub fn evaluate(
         return AutoPotionState::Blocked(BlockReason::Sprinting);
     }
 
-    let cause = match low_resource(config, inputs.readings.resources) {
+    let cause = match low_resource(config, inputs.readings.resources, inputs.readings.ultimate) {
         Ok(cause) => cause,
         Err(reason) => return AutoPotionState::Blocked(reason),
     };
@@ -797,6 +829,8 @@ struct RawPotion {
     #[serde(default)]
     stamina: Option<RawWatch>,
     #[serde(default)]
+    ultimate: Option<RawWatch>,
+    #[serde(default)]
     retry_interval_ms: Option<u32>,
 }
 
@@ -841,6 +875,7 @@ impl AutoPotionConfig {
             health: load_watch(raw.health, "health", notices),
             magicka: load_watch(raw.magicka, "magicka", notices),
             stamina: load_watch(raw.stamina, "stamina", notices),
+            ultimate: load_watch(raw.ultimate, "ultimate", notices),
             retry_interval_ms: match raw.retry_interval_ms {
                 None => defaults.retry_interval_ms,
                 Some(ms) if ms <= MAX_RETRY_MS => ms,
@@ -865,6 +900,7 @@ impl AutoPotionConfig {
             "health": watch(&self.health),
             "magicka": watch(&self.magicka),
             "stamina": watch(&self.stamina),
+            "ultimate": watch(&self.ultimate),
             "retry_interval_ms": self.retry_interval_ms,
         })
     }

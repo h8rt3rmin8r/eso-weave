@@ -1984,6 +1984,10 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
         enabled: true,
         threshold: 42,
     };
+    form.potion.ultimate = eso_weave::potion::ResourceWatch {
+        enabled: true,
+        threshold: 73,
+    };
     form.potion.retry_interval_ms = 2345;
 
     model.apply_intent(UiIntent::ApplySettings(Box::new(form)));
@@ -1991,6 +1995,8 @@ fn applying_settings_refreshes_the_live_auto_potion_controller() {
     let config = *potion.lock().unwrap().config();
     assert!(config.health.enabled);
     assert_eq!(config.health.threshold, 42);
+    assert!(config.ultimate.enabled);
+    assert_eq!(config.ultimate.threshold, 73);
     assert_eq!(config.retry_interval_ms, 2345);
 }
 
@@ -2318,6 +2324,7 @@ fn routing_a_menu_event_gates_both_synthesis_paths() {
         potion.tick(
             eso_weave::potion::PotionReadings {
                 resources: ResourceSet::new_unknown(),
+                ultimate: UltimateTelemetry::new_unknown(),
                 quickslot: QuickslotState::new_unknown(),
             },
             3,
@@ -2427,12 +2434,17 @@ fn routing_a_resource_event_stores_it_without_touching_fishing() {
 }
 
 #[test]
-fn routing_an_ultimate_event_is_display_only() {
+fn routing_an_ultimate_event_preserves_the_single_current_evidence_authority() {
     let mut weave = WeaveEngine::new(WeaveConfig::default());
     let mut fishing = active_fishing_controller();
-    let mut potion = eso_weave::potion::AutoPotionController::new(
-        eso_weave::potion::AutoPotionConfig::default(),
-    );
+    let mut potion =
+        eso_weave::potion::AutoPotionController::new(eso_weave::potion::AutoPotionConfig {
+            ultimate: eso_weave::potion::ResourceWatch {
+                enabled: true,
+                threshold: 50,
+            },
+            ..eso_weave::potion::AutoPotionConfig::default()
+        });
     let mut sink = MockFishingSink::new();
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
     fishing.set_enabled(true, 0, &mut sink);
@@ -2452,8 +2464,42 @@ fn routing_an_ultimate_event_is_display_only() {
         &mut sink,
     );
     assert_eq!(weave.ultimate(), ultimate);
+    assert_eq!(potion.state(), AutoPotionState::Off);
     assert_eq!(fishing.state(), FishingState::Armed);
     assert!(input.is_menu_gated());
+
+    potion.set_game_active(true);
+    potion.set_focused(true);
+    potion.on_heartbeat();
+    potion.set_gated(false);
+    potion.set_life_state(LifeState::Alive);
+    potion.set_world_state(WorldState::Active);
+    potion.set_travel_state(TravelState::Inactive);
+    potion.set_movement(MovementSignal::OnFoot);
+    potion.set_enabled(true);
+    let mut potion_sink = eso_weave::potion::MockAutoPotionSink::new();
+    assert_eq!(
+        potion.tick(
+            eso_weave::potion::PotionReadings {
+                resources: ResourceSet::new_unknown(),
+                ultimate: weave.ultimate(),
+                quickslot: QuickslotState {
+                    classification: QuickslotClassification::Potion(
+                        QuickslotPotionAvailability::Usable,
+                    ),
+                    cooldown: SlotCooldown::Ready,
+                    item_id: Some(1),
+                },
+            },
+            10_000,
+            &mut potion_sink,
+        ),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Ultimate,
+            observed_percent: 37,
+            threshold_percent: 50,
+        })
+    );
 }
 
 // Slice 039: the auto-potion gates reach the controller by the routing path.
@@ -2496,6 +2542,7 @@ fn a_menu_gate_event_gates_the_potion_controller_directly() {
             stamina: ResourceLevel::Percent(0),
             magicka: ResourceLevel::Percent(0),
         },
+        ultimate: UltimateTelemetry::new_unknown(),
         quickslot: QuickslotState {
             classification: QuickslotClassification::Potion(QuickslotPotionAvailability::Usable),
             cooldown: SlotCooldown::Ready,
@@ -2554,6 +2601,7 @@ fn a_signal_lost_event_blocks_auto_potion_without_clearing_the_request() {
         potion.tick(
             eso_weave::potion::PotionReadings {
                 resources: ResourceSet::new_unknown(),
+                ultimate: UltimateTelemetry::new_unknown(),
                 quickslot: QuickslotState::new_unknown(),
             },
             2,
@@ -2576,6 +2624,7 @@ fn a_signal_lost_event_blocks_auto_potion_without_clearing_the_request() {
         potion.tick(
             eso_weave::potion::PotionReadings {
                 resources: ResourceSet::new_unknown(),
+                ultimate: UltimateTelemetry::new_unknown(),
                 quickslot: QuickslotState::new_unknown(),
             },
             3,
@@ -2616,6 +2665,7 @@ fn a_signal_lost_event_blocks_auto_potion_without_clearing_the_request() {
         potion.tick(
             eso_weave::potion::PotionReadings {
                 resources: ResourceSet::new_unknown(),
+                ultimate: UltimateTelemetry::new_unknown(),
                 quickslot: QuickslotState::new_unknown(),
             },
             4,
@@ -2710,6 +2760,14 @@ fn s043_auto_potion_view_names_every_effective_family() {
     }));
     assert_eq!(triggered.text, "Triggered: Health at 20% (threshold 35%)");
     assert_eq!(triggered.role, StatusRole::Active);
+
+    let ultimate = auto_potion_view(AutoPotionState::Triggered(TriggerCause {
+        resource: AutoPotionResource::Ultimate,
+        observed_percent: 35,
+        threshold_percent: 35,
+    }));
+    assert_eq!(ultimate.text, "Triggered: Ultimate at 35% (threshold 35%)");
+    assert_eq!(ultimate.role, StatusRole::Active);
 }
 
 #[test]

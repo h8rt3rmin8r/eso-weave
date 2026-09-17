@@ -31,8 +31,9 @@ manifest, so changing a count cannot hide an omission or substitution.
 - The post-baseline lifecycle preserves every completed plan with concrete
   delivery evidence. Plans 028 through 042 are archived after their named pull
   requests or release completed. Plan 044 completed the diagram-legibility
-  sequence. Plan 045 is active for the local extension surface. Independent
-  release verification does not reactivate a
+  sequence, and Plan 045 completed the local extension surface. Plan 046 is
+  active for the Ultimate Auto Potion resource watch. Independent release
+  verification does not reactivate a
   completed plan. The policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six

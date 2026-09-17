@@ -56,6 +56,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [042](plan-042.md) | Complete, Archived | [S092](../../../specs/092-data-addon-foundation/spec.md) through [S096](../../../specs/096-encounter-capture-modes/spec.md), completed when [PR #202](https://github.com/h8rt3rmin8r/eso-weave/pull/202) merged, closed issue #183, and enabled epic #182 to close; native-log verification remains separate in issue #190 |
 | [043](plan-043.md) | Complete, Archived | [S097](../../../specs/097-auto-potion-persistence/spec.md) through [S102](../../../specs/102-controller-binding-consumption/spec.md), completed when [PR #211](https://github.com/h8rt3rmin8r/eso-weave/pull/211) merged, closed issue #208, and enabled epic #188 to close |
 | [044](plan-044.md) | Complete, Archived | [S103 documentation diagram legibility](../../../specs/103-documentation-diagram-legibility/spec.md), completed when [PR #212](https://github.com/h8rt3rmin8r/eso-weave/pull/212) merged and closed issue #168 |
+| [045](plan-045.md) | Complete, Archived | [S104](../../../specs/104-local-extension-contract/spec.md) through [S109](../../../specs/109-extension-docs-e2e/spec.md), completed when [PR #218](https://github.com/h8rt3rmin8r/eso-weave/pull/218) merged, closed issue #180, and enabled epic #174 to close |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

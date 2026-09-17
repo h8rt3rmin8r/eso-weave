@@ -38,8 +38,8 @@ use crate::player_state::SnapshotPublisher;
 pub const DEFAULT_PORT: u16 = 18_765;
 /// Non-secret discovery record name in the application configuration directory.
 pub const DISCOVERY_FILE_NAME: &str = "local-extension.json";
-/// External schema version selected by the S104 contract.
-pub const EXTERNAL_SCHEMA_VERSION: &str = "1.0.0";
+/// Current external schema version for every local extension surface.
+pub const EXTERNAL_SCHEMA_VERSION: &str = crate::player_state::SCHEMA_VERSION;
 /// Shared request-body bound for both adapters.
 pub const MAX_REQUEST_BODY_BYTES: usize = 64 * 1024;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);

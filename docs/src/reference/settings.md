@@ -72,11 +72,15 @@ cached safety evidence until a fresh sample is decoded.
 | Watch Health (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when fresh Health is at or below the threshold |
 | Watch Magicka (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when fresh Magicka is at or below the threshold |
 | Watch Stamina (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when fresh Stamina is at or below the threshold |
+| Watch Ultimate (Threshold %) | Off, 35%; threshold 0 through 100 | Qualifies when exact current Ultimate divided by positive maximum Ultimate is at or below the threshold; unknown or zero-maximum evidence does not qualify |
 | Detected Quickslot Binding | Current ESO evidence; read-only | Chord pressed for one eligible attempt; non-valid evidence blocks output |
 | Minimum Retry Interval (ms) | 1500; 0 through 600000 | Floor between attempts, independent of observed cooldown |
 
 The enabled watches use OR, not AND. Any one fresh enabled resource at or below
 its own threshold can qualify after all earlier safety checks pass.
+Health, Magicka, and Stamina use their decoded integer percentages. Ultimate
+uses its exact `current / maximum` ratio without truncating an above-threshold
+value into eligibility.
 
 ## Logging
 

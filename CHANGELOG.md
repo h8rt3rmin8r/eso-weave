@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S110 adds Ultimate as an independent, default-off Auto Potion resource watch
+  with the same 0 through 100 threshold controls as Health, Magicka, and
+  Stamina. It consumes the existing atomic Ultimate observation, compares exact
+  current-over-maximum ratios without floating-point or truncation errors,
+  fails closed on unknown or zero-maximum evidence, preserves deterministic OR
+  ordering and every existing action gate, and extends settings, diagnostics,
+  tests, and documentation. The additive public threshold field advances the
+  local-extension schema from `1.0.0` to `1.1.0` (issue #173).
+
 - S109 publishes the complete Local API and MCP user and integrator guide,
   including enablement, discovery, authentication, player-state semantics,
   database queries, fixed limits, examples, compatibility, and troubleshooting.

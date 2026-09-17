@@ -7,7 +7,7 @@
 - `generation`: monotonic identifier for one start attempt
 - `effective_http_base_url`: present only while running
 - `effective_mcp_url`: present only while running
-- `schema_version`: `1.0.0`
+- `schema_version`: `1.1.0`
 - `failure`: optional safe lifecycle error
 
 Only `running` publishes discovery. A failed partial start returns to one closed listener boundary before the failed state is reported.
