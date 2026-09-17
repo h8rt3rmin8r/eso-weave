@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Follow native ESO bindings for combat weaving, Fishing Interact, and Auto
+  Potion Quickslot across keyboard, mouse, wheel, and modifier chords, while
+  stale evidence continues to fail closed.
+- Capture one encounter or a continuous session through the unified ESO Weave
+  Data addon, retaining raw evidence, deterministic replay, interruption state,
+  and historical presentation.
+- Integrate local tools through an opt-in authenticated loopback HTTP and MCP
+  service with player state, resources, and bounded read-only queries.
+- Configure Ultimate alongside Health, Magicka, and Stamina for Auto Potion,
+  retain requested potion enablement across restarts, and keep stale HUD values
+  visible without granting them action authority.
+- Use expanded offline documentation and troubleshooting guidance alongside a
+  hardened supply chain and reliable bounded Windows service shutdown.
+
 ### Added
 
 - S112 adds one accessible troubleshooting decision tree that routes five
