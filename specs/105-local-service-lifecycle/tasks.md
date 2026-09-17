@@ -43,7 +43,7 @@
 - [x] T022 Mark the S105 spec, analysis, and task packet implemented after verification.
 - [x] T023 Run formatting, clippy, full locked tests, docs, links, spelling, encoding, mojibake, dependency, and diff review gates.
 - [x] T024 Commit as `feat(105): add local service lifecycle`, push, and open the official PR closing issue #176.
-- [ ] T025 Resolve all first-round CI and review feedback, request no more than one authorized second Codex round, and stop for the operator merge ritual.
+- [x] T025 Resolve all first-round CI and review feedback, request no more than one authorized second Codex round, and stop for the operator merge ritual.
 
 ## Dependencies and Execution Order
 
