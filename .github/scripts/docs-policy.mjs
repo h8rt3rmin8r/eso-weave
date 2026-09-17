@@ -3706,18 +3706,23 @@ export function validateWorkflowText(workflow) {
   return errors;
 }
 
-export function validateDocumentationAuthorityTriggers(workflow) {
+export function validateDocumentationAuthorityTriggers(workflow, visualizationAudit) {
   const errors = [];
   const triggerText = workflow.split(/^permissions:/mu)[0] ?? workflow;
   const triggers = yamlBlocks(triggerText, 2);
-  for (const [slice, authority] of [
+  const authorities = [
     ["S080", "Cargo.toml"],
     ["S080", "CHANGELOG.md"],
     ["S091", "release.toml"],
     ["S081", "assets/eso-weave-banner.png"],
     ["S081", "assets/brand/eso-weave-mark.svg"],
     ["S081", "assets/brand/eso-weave-glyph.svg"],
-  ]) {
+  ];
+  const visualizationAuthorities = new Set(visualizationAudit?.candidates?.flatMap((candidate) => candidate.authority ?? []) ?? []);
+  for (const authority of visualizationAuthorities) {
+    if (typeof authority === "string" && !authority.startsWith("docs/")) authorities.push(["S111", authority]);
+  }
+  for (const [slice, authority] of authorities) {
     const missing = [];
     for (const event of ["push", "pull_request"]) {
       const block = triggers.get(event) ?? "";
@@ -3794,6 +3799,177 @@ function yamlListBlock(job, stepName) {
   return lines.slice(start, end).join("\n");
 }
 
+const VISUALIZATION_FORMS = new Set([
+  "relational",
+  "temporal",
+  "spatial",
+  "hierarchical",
+  "comparative",
+  "diagnostic",
+  "quantitative",
+]);
+
+function completeString(value, minimum = 8) {
+  return typeof value === "string" && value.trim().length >= minimum;
+}
+
+function stringList(value, minimum = 1) {
+  return Array.isArray(value) && value.length >= minimum && value.every((item) => completeString(item, 2));
+}
+
+function summaryNavigationMarkdownPaths(summaryMarkdown) {
+  const destinations = [];
+  for (const line of String(summaryMarkdown).split(/\r?\n/gu)) {
+    if (!/^\s*[-*+]\s+/u.test(line)) continue;
+    for (const link of markdownLinks(line)) {
+      const { pathname } = splitTarget(link.destination);
+      if (!pathname.endsWith(".md")) continue;
+      destinations.push(`docs/src/${slash(path.normalize(pathname))}`);
+    }
+  }
+  return destinations;
+}
+
+export function validateVisualizationAudit(manifest, summaryMarkdown, options = {}) {
+  const errors = [];
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    return ["S111 visualization audit must be a JSON object"];
+  }
+  if (manifest.schema_version !== 1 || manifest.issue !== 170 || manifest.summary_path !== "docs/src/SUMMARY.md") {
+    errors.push("S111 visualization audit requires schema 1, issue 170, and the canonical summary path");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(manifest.audited_at ?? "")) {
+    errors.push("S111 visualization audit requires an ISO audit date");
+  }
+
+  const summaryPaths = summaryNavigationMarkdownPaths(summaryMarkdown);
+  const pages = Array.isArray(manifest.pages) ? manifest.pages : [];
+  const pagePaths = pages.map((page) => page?.path);
+  if (new Set(summaryPaths).size !== summaryPaths.length) {
+    errors.push("S111 summary page paths must be unique");
+  }
+  if (new Set(pagePaths).size !== pagePaths.length) {
+    errors.push("S111 audit page paths must be unique without duplicate records");
+  }
+  if (summaryPaths.length !== pagePaths.length || summaryPaths.some((page, index) => pagePaths[index] !== page)) {
+    errors.push("S111 page coverage must match the ordered summary Markdown destinations exactly");
+  }
+
+  const candidates = Array.isArray(manifest.candidates) ? manifest.candidates : [];
+  const candidateIds = candidates.map((candidate) => candidate?.id);
+  const candidateSet = new Set(candidateIds);
+  if (candidateSet.size !== candidateIds.length || candidateIds.some((id) => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id ?? ""))) {
+    errors.push("S111 candidate identifiers must be unique kebab-case values");
+  }
+  const pageSet = new Set(pagePaths);
+  const pageByPath = new Map(pages.map((page) => [page?.path, page]));
+  const referencedCandidates = new Set();
+  const sections = new Set(["root", "getting-started", "features", "concepts", "reference", "development"]);
+  for (const page of pages) {
+    const references = Array.isArray(page?.candidate_ids) ? page.candidate_ids : [];
+    if (!completeString(page?.title, 2) || !sections.has(page?.section)
+      || !completeString(page?.current_medium) || !completeString(page?.rationale)) {
+      errors.push(`S111 page ${page?.path ?? "unknown"} requires title, section, current medium, and rationale`);
+    }
+    if (!new Set(["no_candidate", "candidate", "covered_existing"]).has(page?.decision)) {
+      errors.push(`S111 page ${page?.path ?? "unknown"} has an invalid decision`);
+    }
+    if (page?.decision === "candidate" && references.length === 0) {
+      errors.push(`S111 candidate page ${page?.path ?? "unknown"} requires a candidate reference`);
+    }
+    if (page?.decision !== "candidate" && references.length > 0) {
+      errors.push(`S111 non-candidate page ${page?.path ?? "unknown"} cannot carry a candidate reference`);
+    }
+    for (const id of references) {
+      referencedCandidates.add(id);
+      if (!candidateSet.has(id)) errors.push(`S111 page ${page?.path ?? "unknown"} references unknown candidate ${id}`);
+    }
+  }
+
+  const issueNumbers = new Set();
+  for (const candidate of candidates) {
+    const label = candidate?.id ?? "unknown candidate";
+    const gates = candidate?.gates;
+    const gateNames = ["reader_task", "structural_load", "comprehension_payoff", "durability"];
+    const gateShape = gates && gateNames.every((name) => typeof gates[name]?.pass === "boolean" && completeString(gates[name]?.evidence));
+    if (!completeString(candidate?.title) || !pageSet.has(candidate?.destination)
+      || !stringList(candidate?.supporting_pages) || candidate.supporting_pages.some((page) => !pageSet.has(page))
+      || !completeString(candidate?.reader_question) || !stringList(candidate?.entities, 3)
+      || !stringList(candidate?.relationships) || !completeString(candidate?.structural_load)
+      || !completeString(candidate?.current_burden) || !gateShape
+      || !completeString(candidate?.style) || !completeString(candidate?.style_rationale)
+      || !completeString(candidate?.alternatives?.prose) || !completeString(candidate?.alternatives?.table)
+      || !completeString(candidate?.alternatives?.other_graphics) || !stringList(candidate?.authority)
+      || !completeString(candidate?.text_equivalent) || !completeString(candidate?.offline_delivery)
+      || !completeString(candidate?.update_trigger) || !completeString(candidate?.decision_rationale)) {
+      errors.push(`S111 candidate ${label} requires complete warrant, alternatives, authority, text equivalent, offline, and update evidence`);
+    }
+    if (options.existingAuthorityPaths instanceof Set) {
+      for (const authority of candidate?.authority ?? []) {
+        const normalized = typeof authority === "string" ? slash(path.normalize(authority)) : "";
+        if (path.isAbsolute(normalized) || normalized.startsWith("../") || !options.existingAuthorityPaths.has(normalized)) {
+          errors.push(`S111 candidate ${label} authority must exist inside the repository: ${authority}`);
+        }
+      }
+    }
+    if (!new Set(["approved", "rejected"]).has(candidate?.decision)) {
+      errors.push(`S111 candidate ${label} has an invalid decision`);
+    }
+    for (const candidatePage of [candidate?.destination, ...(candidate?.supporting_pages ?? [])]) {
+      if (!pageByPath.get(candidatePage)?.candidate_ids?.includes(candidate?.id)) {
+        errors.push(`S111 candidate ${label} destination and supporting pages must reference the candidate: ${candidatePage}`);
+      }
+    }
+    if (!referencedCandidates.has(candidate?.id)) {
+      errors.push(`S111 candidate ${label} must be referenced by an audited page`);
+    }
+    const gateValues = gateShape ? gateNames.map((name) => gates[name].pass) : [];
+    if (candidate?.decision === "approved") {
+      if (!gateValues.every(Boolean)) errors.push(`S111 approved candidate ${label} requires all four gates to pass`);
+      const number = candidate?.issue?.number;
+      const expectedUrl = `https://github.com/h8rt3rmin8r/eso-weave/issues/${number}`;
+      if (!Number.isSafeInteger(number) || number <= 0 || candidate?.issue?.url !== expectedUrl) {
+        errors.push(`S111 approved candidate ${label} requires one canonical implementation issue`);
+      } else if (issueNumbers.has(number)) {
+        errors.push(`S111 approved candidate issue numbers must be unique; duplicate issue ${number}`);
+      } else {
+        issueNumbers.add(number);
+      }
+    } else {
+      if (candidate?.issue !== null) errors.push(`S111 rejected candidate ${label} must not carry an implementation issue`);
+      if (gateValues.length === 4 && gateValues.every(Boolean) && !/(?:existing|prose|table).*(?:better|already|direct)/iu.test(candidate?.decision_rationale ?? "")) {
+        errors.push(`S111 rejected candidate ${label} requires a failed gate or superior existing medium rationale`);
+      }
+    }
+  }
+
+  const clusters = Array.isArray(manifest.clusters) ? manifest.clusters : [];
+  const clusterIds = new Set();
+  for (const cluster of clusters) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(cluster?.id ?? "") || clusterIds.has(cluster?.id)) {
+      errors.push("S111 cluster identifiers must be unique kebab-case values");
+    }
+    clusterIds.add(cluster?.id);
+    if (!candidateSet.has(cluster?.candidate_id) || !stringList(cluster?.pages, 2)
+      || cluster.pages.some((page) => !pageSet.has(page)) || !completeString(cluster?.rationale)) {
+      errors.push(`S111 cluster ${cluster?.id ?? "unknown"} requires a known candidate, audited pages, and rationale`);
+    }
+  }
+
+  const forms = Array.isArray(manifest.form_considerations) ? manifest.form_considerations : [];
+  const formNames = forms.map((entry) => entry?.form);
+  if (formNames.length !== VISUALIZATION_FORMS.size || new Set(formNames).size !== formNames.length
+    || [...VISUALIZATION_FORMS].some((form) => !formNames.includes(form))) {
+    errors.push("S111 requires exactly seven form considerations");
+  }
+  for (const entry of forms) {
+    if (!stringList(entry?.candidate_ids) || entry.candidate_ids.some((id) => !candidateSet.has(id)) || !completeString(entry?.outcome)) {
+      errors.push(`S111 form consideration ${entry?.form ?? "unknown"} requires known candidates and an outcome`);
+    }
+  }
+  return errors;
+}
+
 function hasExactPermissions(text, indent, expected) {
   const lines = text.split(/\r?\n/gu);
   const header = `${" ".repeat(indent)}permissions:`;
@@ -3821,11 +3997,14 @@ async function run() {
   const catalogPath = path.join(docsRoot, "project", "catalog-sources.json");
   const encounterModelPath = path.join(docsRoot, "project", "encounter-model.json");
   const screenshotManifestPath = path.join(docsRoot, "project", "documentation-screenshots.json");
+  const visualizationAuditPath = path.join(docsRoot, "project", "documentation-visualization-audit.json");
   const ledger = JSON.parse(await readFile(ledgerPath, "utf8"));
   const coverage = JSON.parse(await readFile(coveragePath, "utf8"));
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const encounterModel = JSON.parse(await readFile(encounterModelPath, "utf8"));
   const screenshotManifest = JSON.parse(await readFile(screenshotManifestPath, "utf8"));
+  const visualizationAudit = JSON.parse(await readFile(visualizationAuditPath, "utf8"));
+  const summaryMarkdown = await readFile(path.join(docsRoot, "src", "SUMMARY.md"), "utf8");
   const encounterFixturePath = path.join(repositoryRoot, encounterModel.synthetic_fixture.encounter);
   const encounterProjectionPath = path.join(repositoryRoot, encounterModel.synthetic_fixture.projection);
   const encounterFixtureBytes = await readFile(encounterFixturePath);
@@ -3893,6 +4072,19 @@ async function run() {
   const searchIndex = searchIndexFiles.length === 1
     ? await readFile(path.join(outputRoot, searchIndexFiles[0]), "utf8")
     : "";
+  const visualizationAuthorityPaths = new Set();
+  const declaredAuthorities = new Set(visualizationAudit.candidates?.flatMap((candidate) => candidate.authority ?? []) ?? []);
+  for (const authority of declaredAuthorities) {
+    if (typeof authority !== "string" || path.isAbsolute(authority)) continue;
+    const resolved = path.resolve(repositoryRoot, authority);
+    const relative = slash(path.relative(repositoryRoot, resolved));
+    if (relative.startsWith("../") || path.isAbsolute(relative)) continue;
+    try {
+      if ((await stat(resolved)).isFile()) visualizationAuthorityPaths.add(relative);
+    } catch {
+      // The validator reports missing declared authorities below.
+    }
+  }
   const errors = [
     ...(await validateSourceTree(docsRoot, { completeFenceInventory: true })),
     ...(await validateGeneratedSite(outputRoot)),
@@ -3901,7 +4093,7 @@ async function run() {
     ...validateBrandStandardVisualCss(css),
     ...validateSyntaxHighlightingCss(css),
     ...validateWorkflowText(workflow),
-    ...validateDocumentationAuthorityTriggers(workflow),
+    ...validateDocumentationAuthorityTriggers(workflow, visualizationAudit),
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
@@ -3939,6 +4131,7 @@ async function run() {
     ...validateCatalogSourceContract(catalog),
     ...validateEncounterModelContract(encounterModel),
     ...validateEncounterEvidence(encounterFixture, encounterProjection, encounterFixtureBytes),
+    ...validateVisualizationAudit(visualizationAudit, summaryMarkdown, { existingAuthorityPaths: visualizationAuthorityPaths }),
   ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`docs policy: ${error}`);

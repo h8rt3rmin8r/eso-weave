@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S111 audits all 49 published documentation pages against one reproducible
+  four-gate visualization warrant. The exact `SUMMARY.md` inventory, approved
+  and rejected candidates, cross-page clusters, all seven requested visual
+  forms, accessibility and offline contracts, and update authorities now live
+  in paired machine-readable and human records. Four atomic follow-up issues
+  own the approved troubleshooting, catalog lifecycle, encounter lineage, and
+  local-extension authority figures; S111 changes no published graphic or
+  page content (issue #170; follow-ups #220 through #223).
+
 - S110 adds Ultimate as an independent, default-off Auto Potion resource watch
   with the same 0 through 100 threshold controls as Health, Magicka, and
   Stamina. It consumes the existing atomic Ultimate observation, compares exact
