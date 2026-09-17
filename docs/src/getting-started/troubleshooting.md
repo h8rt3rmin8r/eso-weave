@@ -14,22 +14,37 @@ troubleshooting](../reference/local-api-and-mcp.md#troubleshooting).
 
 ## Shared diagnostic flow
 
+<figure class="docs-flow-diagram">
+
+![Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence](../assets/diagrams/troubleshooting-decision-tree.svg)
+
+</figure>
+
+### Shared diagnostic flow text equivalent
+
 ```text
-Is ESO detected and Active?
-  No -> fix installation or runtime discovery.
-  Yes -> is the ESO window focused?
-    No -> focus ESO.
-    Yes -> is PixelBeacon Installed (current)?
-      No -> fix addon discovery or lifecycle state.
-      Yes -> is PixelBeacon Signal detected?
-        No -> check addon enablement, reload, overlay visibility, and geometry.
-        Yes -> is Game Context Gameplay and required safety state available?
-          No -> close menus or wait for fresh lifecycle evidence.
-          Yes -> inspect the feature-specific status and Live Log.
+Does ESO Weave open?
+  No -> inspect Startup failure evidence before or after GUI initialization.
+  Yes -> is ESO detected and Active?
+    No -> fix installation or runtime discovery.
+    Yes -> is the ESO window focused and Game Context Gameplay?
+      No -> focus ESO, close menus, or wait for fresh lifecycle evidence.
+      Yes -> is PixelBeacon Installed (current)?
+        No -> fix addon discovery or lifecycle state.
+        Yes -> is PixelBeacon Signal detected?
+          No -> check addon enablement, reload, overlay visibility, and geometry.
+          Yes -> are the platform input path and native binding evidence valid?
+            No -> is native binding evidence Unavailable?
+              Yes -> update or reload PixelBeacon and restore the shared signal first.
+              No -> use the platform input guidance and native binding state table.
+            Yes -> is encounter capture or import the first failing observation?
+              Yes -> inspect addon status, saved authority, receipt, loss, and validation.
+              No -> inspect the feature-specific status and Live Log.
 ```
 
-The indented text is the complete decision tree. Each `No` branch stops before
-feature-specific diagnosis because later observations depend on the earlier one.
+The indented text is the complete decision tree. Each matching failure branch
+stops before feature-specific diagnosis because later observations depend on
+the earlier one.
 
 ## Game discovery and runtime
 

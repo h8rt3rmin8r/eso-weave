@@ -121,7 +121,7 @@ const CONTENT_OBLIGATION_IDS = new Set([
 const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
-const CONTENT_CONTRACT_SHA256 = "1c5b7cb15c1bd6ec5c5e09f68b71043e233769b96dd2a9c02274275d8416e0eb";
+const CONTENT_CONTRACT_SHA256 = "e80fd8d1e1c1171b11743053bd44ffde97230d7ba5b53e4f68406204b745f65f";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -388,7 +388,7 @@ const PLAIN_CODE_BLOCKS = [
   { page: "features/encounter-capture.md", sha256: "7670ddaeb06a92493c7156e32a8eb3bf286fb146597d34530d28b7486ec1eb94", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
   { page: "features/weaving.md", sha256: "74576ddc34a330808aa09f8bbc76348f573f3686a2eec2555060dc5651c3bee5", rationale: "A mathematical formula, not executable syntax." },
   { page: "features/weaving.md", sha256: "4fa825b4a104e43a5c6c4fff848dfd7f8192486b146e1ce02ee9f551694e62b1", rationale: "An authorization process flow, not executable syntax." },
-  { page: "getting-started/troubleshooting.md", sha256: "37c611fcdadd2bf1f87561e8fa4d110d1d1fcab662a40d3771d0cd1a3e0ee04a", rationale: "A diagnostic decision tree, not executable syntax." },
+  { page: "getting-started/troubleshooting.md", sha256: "2041b1a45d75c539e4eff851077493e0b0253d4843625e49eb50fefdc90b1ae5", rationale: "A diagnostic decision tree, not executable syntax." },
   { page: "reference/pixel-bus-protocol.md", sha256: "e159118f0007ffa610a1afedeb56051affb6758336b096c99e6456a0b828e3e4", rationale: "Protocol geometry formulas, not executable syntax." },
 ];
 
@@ -1575,6 +1575,40 @@ const DOCUMENTATION_DIAGRAMS = [
     ],
     svgAnchors: ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"],
   },
+  {
+    id: "S112-D01",
+    label: "troubleshooting decision tree",
+    page: "getting-started/troubleshooting.md",
+    outputPage: "getting-started/troubleshooting.html",
+    asset: "troubleshooting-decision-tree.svg",
+    width: 400,
+    height: 1520,
+    alt: "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence",
+    heading: "Shared diagnostic flow text equivalent",
+    anchors: [
+      "The indented text is the complete decision tree",
+      "Game discovery and runtime",
+      "PixelBeacon Signal is missing or lost",
+      "Native binding evidence is unavailable",
+      "Encounter capture is waiting, interrupted, or failed",
+      "Startup failure",
+      "Use the Live Log",
+    ],
+    rawAnchors: [
+      "Does ESO Weave open?",
+      "is ESO detected and Active?",
+      "is the ESO window focused and Game Context Gameplay?",
+      "is PixelBeacon Installed (current)?",
+      "is PixelBeacon Signal detected?",
+      "are the platform input path and native binding evidence valid?",
+      "is native binding evidence Unavailable?",
+      "update or reload PixelBeacon and restore the shared signal first",
+      "use the platform input guidance and native binding state table",
+      "is encounter capture or import the first failing observation?",
+      "inspect the feature-specific status and Live Log",
+    ],
+    svgAnchors: ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status"],
+  },
 ];
 
 export function validateDocumentationDiagrams({ pages, svgs }) {
@@ -1592,6 +1626,9 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
     if (!markdown.includes(`### ${record.heading}`)) errors.push(`S082 ${record.label} page requires its text equivalent heading`);
     for (const anchor of record.anchors) {
       if (!hasVisiblePhrase(markdown, anchor)) errors.push(`S082 ${record.label} text equivalent is missing: ${anchor}`);
+    }
+    for (const anchor of record.rawAnchors ?? []) {
+      if (!markdown.includes(anchor)) errors.push(`S112 ${record.label} fenced text equivalent is missing: ${anchor}`);
     }
 
     const svg = svgs.get(record.asset) ?? "";
@@ -2104,8 +2141,8 @@ export function validateDocumentationFigureInventory(pages) {
   }
 
   const meaningful = screenshots + diagrams + brandImages;
-  if (screenshots !== 11 || diagrams !== 4 || brandImages !== 5 || meaningful !== 20) {
-    errors.push(`S088 figure inventory requires 20 meaningful placements (11 screenshot or illustration, 4 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
+  if (screenshots !== 11 || diagrams !== 5 || brandImages !== 5 || meaningful !== 21) {
+    errors.push(`S088 figure inventory requires 21 meaningful placements (11 screenshot or illustration, 5 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
   }
   if (decorativeWordmarks !== 1) errors.push("S088 figure inventory requires exactly one empty-alt decorative wordmark");
   if (screenshotCaptions !== 11 || brandCaptions !== 2) {

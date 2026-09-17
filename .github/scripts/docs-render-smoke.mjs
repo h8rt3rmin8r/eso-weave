@@ -16,6 +16,7 @@ const DIAGRAMS = [
   { id: "S082-D02", page: "concepts/action-authorization.html", asset: "action-authorization.svg", alt: "Action authorization flow requires every positive gate or fails closed without generated input" },
   { id: "S082-D03", page: "development/state-machines.html", asset: "safety-recovery.svg", alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline" },
   { id: "S082-D04", page: "reference/pixel-bus-protocol.html", asset: "pixel-bus-validation.svg", alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals" },
+  { id: "S112-D01", page: "getting-started/troubleshooting.html", asset: "troubleshooting-decision-tree.svg", alt: "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence" },
 ];
 const THEMES = ["navy", "light"];
 const VIEWPORTS = [320, 1280];
@@ -149,7 +150,7 @@ export function validateLayoutReceipt(receipt) {
   const expectedIds = new Set(DIAGRAMS.map((diagram) => diagram.id));
   const actualIds = new Set(observations.map((observation) => observation?.diagramId));
   if (observations.length !== expectedIds.size || actualIds.size !== expectedIds.size || [...expectedIds].some((id) => !actualIds.has(id))) {
-    errors.push("S103 layout receipt requires four unique diagram observations");
+    errors.push("S103 layout receipt requires five unique diagram observations");
   }
   for (const observation of observations) errors.push(...validateLayoutObservation(observation));
   if (Array.isArray(receipt?.layoutFailures) && receipt.layoutFailures.length > 0) {

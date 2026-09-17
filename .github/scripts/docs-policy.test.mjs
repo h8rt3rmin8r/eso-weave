@@ -196,6 +196,7 @@ const diagramRecords = [
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
   ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 1080],
+  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Encounter capture is waiting, interrupted, or failed", "Startup failure", "Use the Live Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Live Log"]],
 ];
 
 function diagramFixture() {
@@ -206,9 +207,10 @@ function diagramFixture() {
     ["action-authorization.svg", ["Physical event", "Positive gates", "Authorized", "Fails closed"]],
     ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
     ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"]],
+    ["troubleshooting-decision-tree.svg", ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status and Live Log"]],
   ]);
-  for (const [page, asset, alt, heading, anchors, height] of diagramRecords) {
-    pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n`);
+  for (const [page, asset, alt, heading, anchors, height, rawAnchors = []] of diagramRecords) {
+    pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n\n${rawAnchors.join("\n")}\n`);
     const stem = asset.replace(".svg", "");
     const visible = labels.get(asset).map((label, index) => `<text x="200" y="${60 + index * 44}" text-anchor="middle" font-size="16" fill="#e6edf3">${label}</text>`).join("");
     svgs.set(asset, `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="${height}" viewBox="0 0 400 ${height}" role="img" focusable="false" aria-labelledby="${stem}-title ${stem}-desc" data-flow-direction="top-down"><title id="${stem}-title">${alt}</title><desc id="${stem}-desc">${anchors.join(". ")}.</desc><rect width="400" height="${height}" fill="#0e1116" stroke="#65758b"/><defs><marker id="arrow" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#f2b03c"/></marker></defs><path d="M200 80 V180" stroke="#f2b03c" marker-end="url(#arrow)"/>${visible}</svg>`);
@@ -218,6 +220,19 @@ function diagramFixture() {
 
 test("S082 accepts exact local diagrams with complete text equivalents", () => {
   assert.deepEqual(validateDocumentationDiagrams(diagramFixture()), []);
+});
+
+test("S112 requires the troubleshooting decision tree and complete prose authority", () => {
+  const missing = diagramFixture();
+  missing.pages.delete("getting-started/troubleshooting.md");
+  assert.match(validateDocumentationDiagrams(missing).join("\n"), /troubleshooting.*reference/i);
+
+  const incomplete = diagramFixture();
+  incomplete.pages.set(
+    "getting-started/troubleshooting.md",
+    incomplete.pages.get("getting-started/troubleshooting.md").replace("is encounter capture or import the first failing observation?", "Encounter help"),
+  );
+  assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /troubleshooting.*text equivalent/i);
 });
 
 test("S082 rejects missing references, weak alternatives, and incomplete equivalents", () => {
@@ -2814,7 +2829,7 @@ test("S088 inventories every meaningful figure and the sole decorative image", a
     "getting-started/installation.md",
     missingScreenshotClass.get("getting-started/installation.md").replace("docs-screenshot docs-screenshot--portrait", "unclassified-figure"),
   );
-  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /20 meaningful|unclassified/i);
+  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /21 meaningful|unclassified/i);
 
   const interactiveWordmark = new Map(pages);
   interactiveWordmark.set("README.md", interactiveWordmark.get("README.md").replace('alt=""', 'alt="ESO Weave"'));

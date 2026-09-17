@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="1520" viewBox="0 0 400 1520" role="img" focusable="false" aria-labelledby="troubleshooting-decision-tree-title troubleshooting-decision-tree-desc" data-flow-direction="top-down">
+  <title id="troubleshooting-decision-tree-title">Troubleshooting from the first failing observation</title>
+  <desc id="troubleshooting-decision-tree-desc">Choose the first visible failure across application launch, game observation, PixelBeacon, input and bindings, or encounter evidence. Each matching branch names the next evidence to inspect without claiming a diagnosis.</desc>
+  <rect width="400" height="1520" rx="12" fill="#0e1116" stroke="#65758b"/>
+  <defs>
+    <marker id="troubleshooting-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/>
+    </marker>
+  </defs>
+
+  <text x="200" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#e6edf3">Find the next evidence check</text>
+
+  <rect data-node="first-failure" data-stage="1" x="50" y="60" width="300" height="70" rx="8" fill="#151b23" stroke="#2dd4bf" stroke-width="2"/>
+  <text x="200" y="91" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Start with the</text>
+  <text x="200" y="116" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">First failing observation</text>
+
+  <path data-edge="root-to-launch" data-from="first-failure" data-to="launch-question" d="M200 130 V200" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+
+  <rect data-node="launch-question" data-stage="2" x="60" y="200" width="280" height="90" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="200" y="239" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#e6edf3">Application launch</text>
+  <text x="200" y="267" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Does ESO Weave open?</text>
+
+  <path data-edge="launch-match" data-from="launch-question" data-to="startup-evidence" data-branch="true" d="M90 290 V345 H100 V400" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="launch-match" x="114" y="339" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f7c3c3">Does not open</text>
+  <path data-edge="launch-next" data-from="launch-question" data-to="game-question" data-branch="true" d="M300 290 V400" fill="none" stroke="#34d399" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="launch-next" x="278" y="355" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#9de7c5">Opens</text>
+
+  <rect data-node="startup-evidence" data-stage="3" x="15" y="400" width="170" height="105" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="100" y="429" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">Startup evidence</text>
+  <text x="100" y="454" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Notification before GUI</text>
+  <text x="100" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">or Live Log after GUI</text>
+
+  <rect data-node="game-question" data-stage="3" x="205" y="400" width="180" height="105" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="295" y="429" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Game observation</text>
+  <text x="295" y="454" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Detected, Active, focused,</text>
+  <text x="295" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">and gameplay available?</text>
+
+  <path data-edge="game-match" data-from="game-question" data-to="game-evidence" data-branch="true" d="M225 505 V555 H100 V610" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="game-match" x="160" y="548" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f7c3c3">Unavailable</text>
+  <path data-edge="game-next" data-from="game-question" data-to="pixelbeacon-question" data-branch="true" d="M350 505 V610" fill="none" stroke="#34d399" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="game-next" x="328" y="567" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#9de7c5">Available</text>
+
+  <rect data-node="game-evidence" data-stage="4" x="15" y="610" width="170" height="105" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="100" y="639" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">Game observation</text>
+  <text x="100" y="664" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Installation, runtime,</text>
+  <text x="100" y="688" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">focus, game context</text>
+
+  <rect data-node="pixelbeacon-question" data-stage="4" x="205" y="610" width="180" height="105" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="295" y="639" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">PixelBeacon</text>
+  <text x="295" y="664" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Managed lifecycle current</text>
+  <text x="295" y="688" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">and signal healthy?</text>
+
+  <path data-edge="pixelbeacon-match" data-from="pixelbeacon-question" data-to="pixelbeacon-evidence" data-branch="true" d="M225 715 V765 H100 V820" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="pixelbeacon-match" x="160" y="758" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f7c3c3">Not current</text>
+  <path data-edge="pixelbeacon-next" data-from="pixelbeacon-question" data-to="input-question" data-branch="true" d="M350 715 V820" fill="none" stroke="#34d399" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="pixelbeacon-next" x="328" y="777" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#9de7c5">Healthy</text>
+
+  <rect data-node="pixelbeacon-evidence" data-stage="5" x="15" y="820" width="170" height="105" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="100" y="849" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">PixelBeacon evidence</text>
+  <text x="100" y="874" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Managed status, overlay,</text>
+  <text x="100" y="898" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">geometry, heartbeat</text>
+
+  <rect data-node="input-question" data-stage="5" x="205" y="820" width="180" height="105" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="295" y="849" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Input and bindings</text>
+  <text x="295" y="874" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Platform path and required</text>
+  <text x="295" y="898" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">binding evidence valid?</text>
+
+  <path data-edge="input-match" data-from="input-question" data-to="input-evidence" data-branch="true" d="M225 925 V975 H100 V1030" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="input-match" x="160" y="968" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f7c3c3">Unavailable</text>
+  <path data-edge="input-next" data-from="input-question" data-to="encounter-question" data-branch="true" d="M350 925 V1030" fill="none" stroke="#34d399" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="input-next" x="328" y="987" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#9de7c5">Valid</text>
+
+  <rect data-node="input-evidence" data-stage="6" x="15" y="1030" width="170" height="105" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="100" y="1059" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">Input and bindings</text>
+  <text x="100" y="1084" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Platform, focus, device,</text>
+  <text x="100" y="1108" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">ESO binding states</text>
+
+  <rect data-node="encounter-question" data-stage="6" x="205" y="1030" width="180" height="105" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="295" y="1059" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Encounter evidence</text>
+  <text x="295" y="1084" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Capture or import is the</text>
+  <text x="295" y="1108" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">first failing observation?</text>
+
+  <path data-edge="encounter-match" data-from="encounter-question" data-to="encounter-evidence" data-branch="true" d="M225 1135 V1185 H100 V1240" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="encounter-match" x="160" y="1178" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f7c3c3">Fails</text>
+  <path data-edge="encounter-next" data-from="encounter-question" data-to="feature-evidence" data-branch="true" d="M350 1135 V1240" fill="none" stroke="#34d399" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
+  <text data-edge-label="encounter-next" x="328" y="1197" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#9de7c5">Different symptom</text>
+
+  <rect data-node="encounter-evidence" data-stage="7" x="15" y="1240" width="170" height="130" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="100" y="1269" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">Encounter evidence</text>
+  <text x="100" y="1294" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Addon status and saved</text>
+  <text x="100" y="1318" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">authority, receipt, loss,</text>
+  <text x="100" y="1342" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">and validation</text>
+
+  <rect data-node="feature-evidence" data-stage="7" x="205" y="1240" width="180" height="130" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+  <text x="295" y="1284" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Feature status</text>
+  <text x="295" y="1314" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">and Live Log</text>
+  <text x="295" y="1342" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">for a different symptom</text>
+
+  <rect x="35" y="1420" width="330" height="62" rx="8" fill="#151b23" stroke="#65758b"/>
+  <text x="200" y="1447" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#e6edf3">A branch selects the next evidence check.</text>
+  <text x="200" y="1471" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">The text below owns exact remediation.</text>
+</svg>

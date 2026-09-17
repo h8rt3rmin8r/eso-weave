@@ -51,9 +51,9 @@ test("S086 rejects blank, collapsed, distorted, and clipped observations", () =>
   assert.match(validateObservation({ ...validObservation, surface: "other" }).join("\n"), /surface/i);
 });
 
-test("S086 requires the complete receipt, SVG media types, and pass sentinel", () => {
+test("S086 requires the complete five-diagram receipt, SVG media types, and pass sentinel", () => {
   const observations = [];
-  for (const diagramId of ["S082-D01", "S082-D02", "S082-D03", "S082-D04"]) {
+  for (const diagramId of ["S082-D01", "S082-D02", "S082-D03", "S082-D04", "S112-D01"]) {
     for (const theme of ["navy", "light"]) {
       for (const viewportWidth of [320, 1280]) {
         for (const state of ["normal", "expanded"]) {
@@ -66,7 +66,7 @@ test("S086 requires the complete receipt, SVG media types, and pass sentinel", (
     schemaVersion: 1,
     sentinel: PASS_SENTINEL,
     observations,
-    requests: ["architecture-ownership.svg", "action-authorization.svg", "safety-recovery.svg", "pixel-bus-validation.svg"].map((asset) => ({ asset, status: 200, contentType: "image/svg+xml" })),
+    requests: ["architecture-ownership.svg", "action-authorization.svg", "safety-recovery.svg", "pixel-bus-validation.svg", "troubleshooting-decision-tree.svg"].map((asset) => ({ asset, status: 200, contentType: "image/svg+xml" })),
   };
   assert.deepEqual(validateRenderingReceipt(receipt), []);
   assert.match(validateRenderingReceipt({ ...receipt, sentinel: "wrong" }).join("\n"), /sentinel/i);
@@ -169,7 +169,7 @@ test("S103 rejects compressed, incomplete, intersecting, and ambiguous layouts",
 });
 
 test("S103 requires exactly one passing layout observation per diagram", () => {
-  const observations = ["S082-D01", "S082-D02", "S082-D03", "S082-D04"].map((diagramId) => ({
+  const observations = ["S082-D01", "S082-D02", "S082-D03", "S082-D04", "S112-D01"].map((diagramId) => ({
     ...validLayoutObservation,
     diagramId,
   }));
@@ -181,8 +181,8 @@ test("S103 requires exactly one passing layout observation per diagram", () => {
   };
   assert.deepEqual(validateLayoutReceipt(receipt), []);
   assert.match(validateLayoutReceipt({ ...receipt, layoutSentinel: "wrong" }).join("\n"), /sentinel/i);
-  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: observations.slice(1) }).join("\n"), /four unique/i);
-  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: [...observations, observations[0]] }).join("\n"), /four unique/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: observations.slice(1) }).join("\n"), /five unique/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: [...observations, observations[0]] }).join("\n"), /five unique/i);
   assert.match(validateLayoutReceipt({ ...receipt, layoutFailures: ["measurement failed"] }).join("\n"), /measurement failed/i);
 });
 

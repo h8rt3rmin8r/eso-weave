@@ -96,6 +96,34 @@ when the image still decoded and painted. The root title and description,
 meaningful page alternative, visible outcome words, shape distinctions, and
 complete nearby prose continue to provide the non-color accessibility contract.
 
+## S112 inventory expansion
+
+S112 adds `troubleshooting-decision-tree.svg` as the fifth governed flow
+diagram. It reuses the same 400-unit width, accessible root, opaque local
+canvas, stable topology metadata, shared figure dialog, and complete adjacent
+prose contract. The all-diagram rendering matrix expands from 32 to 40 cells,
+and the direct-SVG layout receipt expands from four to five observations. The
+representative S088 interaction matrix remains unchanged because the new asset
+uses the existing `.docs-flow-diagram` class and common native dialog.
+
+The decision tree routes exactly five first-observation families to evidence,
+not diagnoses: application launch, game observation, PixelBeacon lifecycle or
+signal, input or binding evidence, and encounter capture or import. A final
+continuation sends unmatched symptoms to feature status and the Live Log. The
+canonical authority remains `docs/src/getting-started/troubleshooting.md`.
+
+Review the figure when a symptom family, first check, public status name,
+troubleshooting section, or these implementation authorities change:
+
+- startup surfacing in `src/startup/mod.rs`;
+- game presence, focus, or context in `src/game/mod.rs`;
+- managed lifecycle in `src/beacon/mod.rs`;
+- signal and freshness authority in `src/pixelbus/mod.rs`;
+- input or binding authority in `src/input/mod.rs` or
+  `src/input/bindings.rs`; and
+- encounter import or validation in `src/encounter/mod.rs`,
+  `src/encounter/validate.rs`, or `src/app/encounter_history.rs`.
+
 ## Explicit boundary
 
 Chrome is the automated representative renderer because it is present on the
@@ -104,7 +132,9 @@ Current Edge and Firefox remain manual compatibility observations rather than CI
 promises. Unknown embedded web views are untested, but explicit SVG geometry and
 the preserved text equivalents provide bounded fallback behavior.
 
-S086 remains the rendering-compatibility authority for the four diagram assets.
+S086 remains the rendering-compatibility authority for the original four
+diagram assets. S112 owns the fifth asset and the expanded inventory and
+receipts.
 S088 owns the shared click-to-expand behavior, visible affordances, keyboard and
 focus semantics, background inertness, raw HTML figures, screenshots, captions,
 brand assets, and scrollable intrinsic-size presentation. S103 owns intrinsic
