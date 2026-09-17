@@ -55,6 +55,7 @@ import {
   validateWorkSliceHtml,
   validateWorkSliceMarkdown,
   validateWorkflowText,
+  validateVisualizationAudit,
 } from "./docs-policy.mjs";
 
 async function markdownPageMap(root, relative = "") {
@@ -2921,4 +2922,109 @@ test("S092 keeps desktop command ingress empty and user controls explicit", asyn
   for (const forbidden of ["CreateDefaultActionBind", "BindKeyToAction", "SendHTTPRequest", "RequestOpenUnsafeURL", "CopyToClipboard"]) {
     assert.equal(runtime.includes(forbidden), false, `runtime command ingress surface: ${forbidden}`);
   }
+});
+
+function visualizationAuditFixture() {
+  const candidate = (id, decision) => ({
+    id,
+    title: `${id} candidate`,
+    destination: "docs/src/README.md",
+    supporting_pages: ["docs/src/features/README.md"],
+    reader_question: "How does the reader trace the complete relationship?",
+    entities: ["one", "two", "three", "four"],
+    relationships: ["one hands off to two", "two branches to three and four"],
+    structural_load: "Four entities include a branch and a handoff.",
+    current_burden: "The reader must combine three separated explanations.",
+    gates: {
+      reader_task: { pass: true, evidence: "The reader traces one named path." },
+      structural_load: { pass: true, evidence: "Four entities and a branch qualify." },
+      comprehension_payoff: { pass: true, evidence: "One view removes backtracking." },
+      durability: { pass: true, evidence: "Maintained sources and local delivery are stable." },
+    },
+    style: "sequence diagram",
+    style_rationale: "Time-ordered handoffs are the reader question.",
+    alternatives: {
+      prose: "Current prose requires backtracking.",
+      table: "A table loses ordering.",
+      other_graphics: "A hierarchy loses time and ownership.",
+    },
+    authority: ["docs/src/README.md", "src/lib.rs"],
+    text_equivalent: "Keep an adjacent ordered list naming every owner and handoff.",
+    offline_delivery: "Commit one local SVG used by public and bundled mdBook output.",
+    update_trigger: "Refresh when the named owner or handoff changes.",
+    decision,
+    decision_rationale: decision === "approved" ? "All four gates pass." : "The existing table remains better for lookup.",
+    issue: decision === "approved" ? { number: 220, url: "https://github.com/h8rt3rmin8r/eso-weave/issues/220" } : null,
+  });
+  const approved = candidate("approved-path", "approved");
+  const rejected = candidate("rejected-lookup", "rejected");
+  rejected.gates.comprehension_payoff = { pass: false, evidence: "Exact lookup is already direct." };
+  return {
+    schema_version: 1,
+    issue: 170,
+    summary_path: "docs/src/SUMMARY.md",
+    audited_at: "2026-09-17",
+    pages: [
+      { path: "docs/src/README.md", title: "Home", section: "root", current_medium: "Prose links", decision: "candidate", rationale: "Cross-page path needs evaluation.", candidate_ids: ["approved-path"] },
+      { path: "docs/src/features/README.md", title: "Features", section: "features", current_medium: "Navigation list", decision: "candidate", rationale: "The exact lookup form was evaluated and rejected.", candidate_ids: ["rejected-lookup"] },
+    ],
+    candidates: [approved, rejected],
+    clusters: [
+      { id: "root-path", candidate_id: "approved-path", pages: ["docs/src/README.md", "docs/src/features/README.md"], rationale: "One authority prevents duplicate figures." },
+    ],
+    form_considerations: ["relational", "temporal", "spatial", "hierarchical", "comparative", "diagnostic", "quantitative"].map((form) => ({
+      form,
+      candidate_ids: form === "comparative" ? ["rejected-lookup"] : ["approved-path"],
+      outcome: `${form} was considered against the named reader task.`,
+    })),
+  };
+}
+
+const visualizationSummary = "# Summary\n\n- [Home](README.md)\n- [Features](features/README.md)\n";
+
+test("S111 requires one ordered audit decision for every published page", () => {
+  const manifest = visualizationAuditFixture();
+  assert.deepEqual(validateVisualizationAudit(manifest, visualizationSummary), []);
+
+  const missing = structuredClone(manifest);
+  missing.pages.pop();
+  assert.match(validateVisualizationAudit(missing, visualizationSummary).join("\n"), /page coverage|summary/i);
+
+  const duplicate = structuredClone(manifest);
+  duplicate.pages[1].path = duplicate.pages[0].path;
+  assert.match(validateVisualizationAudit(duplicate, visualizationSummary).join("\n"), /unique|duplicate/i);
+
+  const unreferenced = structuredClone(manifest);
+  unreferenced.pages[0].candidate_ids = [];
+  assert.match(validateVisualizationAudit(unreferenced, visualizationSummary).join("\n"), /candidate.*reference/i);
+});
+
+test("S111 requires complete four-gate warrants and restrained rejections", () => {
+  const approval = visualizationAuditFixture();
+  approval.candidates[0].gates.durability.pass = false;
+  assert.match(validateVisualizationAudit(approval, visualizationSummary).join("\n"), /approved.*four gates|approval.*gate/i);
+
+  const inaccessible = visualizationAuditFixture();
+  inaccessible.candidates[0].text_equivalent = "";
+  assert.match(validateVisualizationAudit(inaccessible, visualizationSummary).join("\n"), /text equivalent/i);
+
+  const rejectedIssue = visualizationAuditFixture();
+  rejectedIssue.candidates[1].issue = { number: 221, url: "https://github.com/h8rt3rmin8r/eso-weave/issues/221" };
+  assert.match(validateVisualizationAudit(rejectedIssue, visualizationSummary).join("\n"), /rejected.*issue/i);
+});
+
+test("S111 requires resolved clusters, seven forms, and unique issue handoffs", () => {
+  const unknown = visualizationAuditFixture();
+  unknown.clusters[0].candidate_id = "missing";
+  assert.match(validateVisualizationAudit(unknown, visualizationSummary).join("\n"), /cluster.*candidate/i);
+
+  const incompleteForms = visualizationAuditFixture();
+  incompleteForms.form_considerations.pop();
+  assert.match(validateVisualizationAudit(incompleteForms, visualizationSummary).join("\n"), /seven form|form consideration/i);
+
+  const duplicateIssue = visualizationAuditFixture();
+  const secondApproval = structuredClone(duplicateIssue.candidates[0]);
+  secondApproval.id = "second-approval";
+  duplicateIssue.candidates.push(secondApproval);
+  assert.match(validateVisualizationAudit(duplicateIssue, visualizationSummary).join("\n"), /issue.*unique|duplicate.*issue/i);
 });
