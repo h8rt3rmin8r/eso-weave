@@ -19,6 +19,7 @@ test seams. Platform modules contain operating-system calls.
 | Logging | Global capture level, input suppression, bounded ring, and optional monthly file sink | UI presentation |
 | Interface and App Model | Presentation, UI intent routing, persisted drafts, save scheduling, view projection, and one process-local stale HUD presentation snapshot | Platform input, screen capture, and action authorization from retained values |
 | Documentation Service | Immutable embedded-site lookup, bounded loopback GET and HEAD responses, browser handoff, and worker lifetime | Filesystem serving, application state, remote content, and mutation |
+| Local Extension Service | One opt-in authenticated loopback listener, discovery ownership, immutable player-state projection, bounded read-only database queries, HTTP and MCP adapter parity, and bounded shutdown | Remote clients, writes, agent orchestration, prompts, telemetry, or gameplay actions |
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
 | Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active selection, authenticated origin, releases, or source redistribution |
 | Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
@@ -133,6 +134,11 @@ User-local API discovery precedes that path when explicitly requested:
 `explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
 
 Encounter observation and import follow the isolated encounter-module path:
+
+The separately opt-in [Local API and MCP](../reference/local-api-and-mcp.md)
+surface projects canonical application state and read-only database results to
+trusted local clients. Its HTTP and MCP adapters share the same snapshot and
+query authorities rather than maintaining transport-specific state.
 
 `explicit in-game mode and channel selection -> one in-game toggle -> single encounter OR bounded continuous session -> independently terminal ordered encounters -> SavedVariables flush -> explicit stable read -> restricted spool parser -> full batch validation and deterministic replay -> one SQLite transaction`
 

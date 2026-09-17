@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S109 publishes the complete Local API and MCP user and integrator guide,
+  including enablement, discovery, authentication, player-state semantics,
+  database queries, fixed limits, examples, compatibility, and troubleshooting.
+  A machine-readable 58-field inventory is checked against production, and
+  final HTTP and official RMCP evidence covers state, database, error, restart,
+  recovery, disconnect, and bounded shutdown behavior (issue #180, epic #174).
+  Dated decision 2026-09-17: the pinned documentation policy registers exactly
+  this new canonical page, its eight semantic tables, and its three
+  language-tagged examples while retaining all existing exact corpus checks.
+
 - S108 adds one shared, bounded read-only SQLite query service for the fixed
   `catalog` and `encounters` database inventory. Authenticated HTTP and MCP
   clients receive equivalent safe schema discovery, typed parameter binding,

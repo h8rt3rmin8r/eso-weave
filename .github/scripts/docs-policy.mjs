@@ -380,7 +380,7 @@ function markdownContainerContent(line) {
 }
 
 const DOCUMENTATION_FENCE_LANGUAGES = new Set(["bash", "json", "powershell", "text"]);
-const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 12], ["powershell", 3], ["text", 8]]);
+const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 13], ["json", 1], ["powershell", 4], ["text", 8]]);
 const PLAIN_CODE_BLOCKS = [
   { page: "development/catalog-updates.md", sha256: "394477b8bebb95ddb31e3dbf93c78908468e2f69d91e6992f84b27d916886883", rationale: "A path layout, not an executable command." },
   { page: "development/discovery-collector.md", sha256: "26982824fe45ffb5c1224ed89d9f04d0585059214f5431d5bd2b2065b25bbad3", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
@@ -479,7 +479,7 @@ export function validateDocumentationCodeFences(pages, options = {}) {
     seenPlain.add(`${exception.page}\0${exception.sha256}`);
   }
   if (complete) {
-    if (fences.length !== 23) errors.push(`S087 documentation corpus requires exactly 23 fenced blocks, found ${fences.length}`);
+    if (fences.length !== 26) errors.push(`S087 documentation corpus requires exactly 26 fenced blocks, found ${fences.length}`);
     for (const [language, count] of DOCUMENTATION_FENCE_COUNTS) {
       const actual = fences.filter((fence) => fence.language === language).length;
       if (actual !== count) errors.push(`S087 documentation corpus requires ${count} ${language} blocks, found ${actual}`);
@@ -1975,6 +1975,7 @@ const DOCUMENTATION_TABLE_COUNTS = new Map([
   ["reference/configuration.md", 1],
   ["reference/encounter-data-and-metrics.md", 3],
   ["reference/logging.md", 1],
+  ["reference/local-api-and-mcp.md", 8],
   ["reference/pixel-bus-protocol.md", 2],
   ["reference/settings.md", 8],
   ["reference/status-reference.md", 7],
@@ -2011,8 +2012,8 @@ export function validateDocumentationTableInventory(pages) {
   for (const [page, expected] of DOCUMENTATION_TABLE_COUNTS) {
     if (!pages.has(page)) errors.push(`S089 table inventory is missing ${page} with ${expected} expected table(s)`);
   }
-  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 60) {
-    errors.push(`documentation table inventory requires 60 tables across 27 pages; found ${total} across ${pages.size} pages`);
+  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 68) {
+    errors.push(`documentation table inventory requires 68 tables across 28 pages; found ${total} across ${pages.size} pages`);
   }
   return [...new Set(errors)];
 }

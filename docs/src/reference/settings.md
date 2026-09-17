@@ -88,6 +88,16 @@ its own threshold can qualify after all earlier safety checks pass.
 The Live Log level selector controls this same persisted global capture level
 for both the in-memory ring and optional file logging.
 
+## Local API and MCP
+
+**Local API and MCP Server** is off by default and starts or stops both
+authenticated loopback transports together. While running, Settings shows the
+current lifecycle state, HTTP and MCP endpoints, and **Copy Credential** for a
+trusted local client. Connected clients can read live player state and query ESO
+Weave application data, so enable it only for local clients you trust. See
+[Local API and MCP](local-api-and-mcp.md) for discovery, authentication,
+schemas, examples, limits, compatibility, and troubleshooting.
+
 ## Keybindings
 
 | Action | Default |

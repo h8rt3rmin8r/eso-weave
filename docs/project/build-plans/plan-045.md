@@ -16,8 +16,8 @@ Sequence:
    adapter and proving transport parity against the same snapshot authority.
 5. S108 implements issue #179 with one bounded read-only SQLite query service
    and parity across HTTP and MCP.
-6. Issue #180 publishes user and integrator documentation and closes the sequence
-   with cross-surface end-to-end tests.
+6. S109 implements issue #180 by publishing user and integrator documentation
+   and closing the sequence with cross-surface end-to-end tests.
 
 No production service ships in S104. Each implementation slice must retain the
 loopback-only, authenticated, observation-only, bounded, and adapter-parity

@@ -152,6 +152,16 @@ test("S081 accepts approved assets, valid surfaces, local links, and complete pa
   assert.deepEqual(validateBrandStandard(brandArguments()), []);
 });
 
+test("S109 canonical local extension guide has registered semantic structures", async () => {
+  const guide = await readFile(path.join("docs", "src", "reference", "local-api-and-mcp.md"), "utf8");
+  const pages = new Map([["reference/local-api-and-mcp.md", guide]]);
+  assert.deepEqual(validateDocumentationCodeFences(pages, { complete: false }), []);
+  assert.equal(extractDocumentationTables(guide).length, 8);
+  assert.match(guide, /```bash[\s\S]*ESOWEAVE_TOKEN/u);
+  assert.match(guide, /```powershell[\s\S]*ESOWEAVE_TOKEN/u);
+  assert.match(guide, /```json[\s\S]*Authorization/u);
+});
+
 test("S081 rejects asset drift, missing identity guidance, and light-surface glyph use", () => {
   assert.match(validateBrandStandard({ ...brandArguments(), publishedGlyph: Uint8Array.from([9]) }).join("\n"), /glyph.*bytes/i);
   assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("generated compatibility outputs, not masters", "logos"))).join("\n"), /compatibility.*masters/i);
@@ -1039,7 +1049,7 @@ test("S087 binds deliberate plain blocks to exact content and rationale", () => 
   assert.match(validateDocumentationCodeFences(new Map([["guide.md", source]]), { complete: false, plainExceptions: [{ ...plainExceptions[0], rationale: "flow" }] }).join("\n"), /rationale/i);
 });
 
-test("S087 requires the complete canonical 23-fence repository inventory", async () => {
+test("S087 requires the complete canonical 26-fence repository inventory", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationCodeFences(pages), []);
 });
@@ -2842,7 +2852,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
   }
 });
 
-test("documentation policy inventories all 60 Markdown tables across 27 published pages", async () => {
+test("documentation policy inventories all 68 Markdown tables across 28 published pages", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationTableInventory(pages), []);
   assert.deepEqual(extractDocumentationTables("| Name | Value |\n| --- | --- |\n| one | two |\n"), [

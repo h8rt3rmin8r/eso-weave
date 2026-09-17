@@ -79,3 +79,10 @@ Logs and settings stay in the platform paths described in
 Review a log before sharing it, because paths and operational context may still
 identify the local environment even though input contents are suppressed under
 the documented rules.
+
+The optional [Local API and MCP service](../reference/local-api-and-mcp.md) is
+off by default, loopback-only, bearer-authenticated, and read-only. A connected
+trusted local client can still read current player state and application-owned
+database data. ESO Weave does not upload that data, host an agent, or authorize
+gameplay input through the service. Protect the copied credential and leave the
+service disabled when no trusted local client needs it.

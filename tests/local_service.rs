@@ -395,7 +395,16 @@ fn http_and_mcp_database_inventory_queries_and_errors_match() {
         )
         .unwrap();
     drop(connection);
-    let queries = DatabaseQueryService::new(catalog, None);
+    let encounters = dir.path().join("encounters.sqlite");
+    let connection = Connection::open(&encounters).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE encounter (id INTEGER PRIMARY KEY, outcome TEXT NOT NULL);
+             INSERT INTO encounter VALUES (7, 'complete'), (8, 'partial');",
+        )
+        .unwrap();
+    drop(connection);
+    let queries = DatabaseQueryService::new(catalog, Some(encounters));
     let mut controller = LocalServiceController::new_with_services(
         LocalServiceConfig {
             config_dir: Some(dir.path().to_owned()),
@@ -430,7 +439,7 @@ fn http_and_mcp_database_inventory_queries_and_errors_match() {
     let http_inventory: serde_json::Value =
         serde_json::from_str(response_body(&http_inventory)).unwrap();
     assert_eq!(http_inventory["databases"][0]["available"], true);
-    assert_eq!(http_inventory["databases"][1]["available"], false);
+    assert_eq!(http_inventory["databases"][1]["available"], true);
 
     let query = serde_json::json!({
         "sql": "SELECT id, kind FROM entity WHERE kind = ?1 ORDER BY id",
@@ -450,6 +459,27 @@ fn http_and_mcp_database_inventory_queries_and_errors_match() {
     assert!(http_query.starts_with("HTTP/1.1 200"), "{http_query}");
     let mut http_query: serde_json::Value =
         serde_json::from_str(response_body(&http_query)).unwrap();
+    let encounter_query = serde_json::json!({
+        "sql": "SELECT id, outcome FROM encounter WHERE id = :id",
+        "parameters": [{"name": ":id", "type": "integer", "value": "7"}],
+        "row_limit": 1
+    });
+    let http_encounter_query = request(
+        authority,
+        "POST",
+        "/api/v1/databases/encounters/query",
+        &[
+            ("Authorization", &auth),
+            ("Content-Type", "application/json"),
+        ],
+        &encounter_query.to_string(),
+    );
+    assert!(
+        http_encounter_query.starts_with("HTTP/1.1 200"),
+        "{http_encounter_query}"
+    );
+    let mut http_encounter_query: serde_json::Value =
+        serde_json::from_str(response_body(&http_encounter_query)).unwrap();
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -496,6 +526,20 @@ fn http_and_mcp_database_inventory_queries_and_errors_match() {
         mcp_query["elapsed_ms"] = serde_json::json!(0);
         assert_eq!(mcp_query, http_query);
 
+        let mut encounter_arguments = encounter_query.as_object().unwrap().clone();
+        encounter_arguments.insert("database_id".into(), serde_json::json!("encounters"));
+        let mcp_encounter_query = client
+            .call_tool(
+                CallToolRequestParams::new("query_database").with_arguments(encounter_arguments),
+            )
+            .await
+            .unwrap();
+        assert_eq!(mcp_encounter_query.is_error, Some(false));
+        let mut mcp_encounter_query = mcp_encounter_query.structured_content.unwrap();
+        http_encounter_query["elapsed_ms"] = serde_json::json!(0);
+        mcp_encounter_query["elapsed_ms"] = serde_json::json!(0);
+        assert_eq!(mcp_encounter_query, http_encounter_query);
+
         let denied_arguments = serde_json::json!({
             "database_id": "catalog",
             "sql": "DELETE FROM entity",
@@ -539,11 +583,21 @@ fn mcp_player_state_tracks_each_service_generation_after_restart() {
     let first = wait_for(&controller, ServicePhase::Running)
         .connection
         .unwrap();
+    let first_address = first
+        .mcp_url
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/mcp")
+        .unwrap()
+        .to_owned();
     let first_state = read_mcp_json_once(&first.mcp_url, PLAYER_STATE_RESOURCE_URI);
     assert_eq!(first_state["service_generation"], first.generation);
+    let first_revision = first_state["snapshot_revision"].clone();
 
     controller.stop();
     wait_for(&controller, ServicePhase::Stopped);
+    assert!(TcpStream::connect(&first_address).is_err());
+    assert!(!dir.path().join(DISCOVERY_FILE_NAME).exists());
     assert!(controller.start(TEST_CREDENTIAL));
     let second = wait_for(&controller, ServicePhase::Running)
         .connection
@@ -551,10 +605,7 @@ fn mcp_player_state_tracks_each_service_generation_after_restart() {
     assert!(second.generation > first.generation);
     let second_state = read_mcp_json_once(&second.mcp_url, PLAYER_STATE_RESOURCE_URI);
     assert_eq!(second_state["service_generation"], second.generation);
-    assert_eq!(
-        second_state["snapshot_revision"],
-        first_state["snapshot_revision"]
-    );
+    assert_eq!(second_state["snapshot_revision"], first_revision);
 
     controller.shutdown().unwrap();
 }
@@ -648,9 +699,12 @@ fn collision_fails_atomically_and_reenable_recovers() {
     wait_for(&controller, ServicePhase::Stopped);
     drop(occupied);
     controller.start(TEST_CREDENTIAL);
-    wait_for(&controller, ServicePhase::Running);
+    let recovered = wait_for(&controller, ServicePhase::Running);
+    assert!(recovered.connection.is_some());
+    assert!(dir.path().join(DISCOVERY_FILE_NAME).exists());
     controller.stop();
     wait_for(&controller, ServicePhase::Stopped);
+    assert!(!dir.path().join(DISCOVERY_FILE_NAME).exists());
     assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
     controller.shutdown().unwrap();
 }

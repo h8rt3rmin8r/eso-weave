@@ -1,5 +1,10 @@
 # Live Interface
 
+The Settings modal also owns the optional **Local API and MCP Server** toggle,
+truthful lifecycle status, endpoint display, and credential-copy action. The
+complete client contract is documented under [Local API and
+MCP](../reference/local-api-and-mcp.md).
+
 ESO Weave uses one resizable window with a menu bar, responsive dashboard, Skills
 region, and optional live log panel.
 

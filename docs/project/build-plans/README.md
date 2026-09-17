@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [045](plan-045.md) | Active | S108 read-only database queries, issue #179 |
+| [045](plan-045.md) | Active | S109 extension documentation and end-to-end verification, issue #180 |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five
