@@ -47,6 +47,10 @@ use crate::pixelbus::{
     RollDodgeState, SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponClass,
     WorldState,
 };
+use crate::player_state::{
+    observed, project as project_player_state, unavailable as unavailable_observation,
+    ProjectionInput, SnapshotPublisher,
+};
 use crate::potion::{
     AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionState, BlockReason,
     DormantReason, ResourceWatch,
@@ -2007,6 +2011,7 @@ pub struct AppModel {
     catalog: CatalogAccess,
     window: Option<WindowGeometry>,
     hud_retention: RefCell<HudRetentionState>,
+    player_state: SnapshotPublisher,
     local_service: Option<LocalServiceController>,
 }
 
@@ -2087,20 +2092,13 @@ impl AppModel {
                 }
             }
         }
-        let local_service = config_dir
-            .clone()
-            .map(|dir| LocalServiceController::new(LocalServiceConfig::production(Some(dir))));
-        if local_prefs.enabled {
-            if let Some(failure) = startup_failure {
-                if let Some(controller) = &local_service {
-                    controller.report_failure(failure);
-                }
-            } else if let (Some(controller), Some(credential)) =
-                (&local_service, local_prefs.credential.as_deref())
-            {
-                controller.start(credential);
-            }
-        }
+        let player_state = SnapshotPublisher::default();
+        let local_service = config_dir.clone().map(|dir| {
+            LocalServiceController::new_with_publisher(
+                LocalServiceConfig::production(Some(dir)),
+                player_state.clone(),
+            )
+        });
         let (data_addon_status, data_addon_inspection_available, data_addon_error) =
             match beacon::resolve_addons_dir(&beacon_prefs) {
                 Ok(root) => match crate::data_addon::inspect(&root) {
@@ -2120,7 +2118,7 @@ impl AppModel {
         let mut reader_notices = Vec::new();
         let runtime_reader_config =
             crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices);
-        Self {
+        let model = Self {
             input,
             weave,
             fishing,
@@ -2149,8 +2147,22 @@ impl AppModel {
             ),
             window: None,
             hud_retention: RefCell::new(HudRetentionState::default()),
+            player_state,
             local_service,
+        };
+        model.publish_player_state();
+        if local_prefs.enabled {
+            if let Some(failure) = startup_failure {
+                if let Some(controller) = &model.local_service {
+                    controller.report_failure(failure);
+                }
+            } else if let (Some(controller), Some(credential)) =
+                (&model.local_service, local_prefs.credential.as_deref())
+            {
+                controller.start(credential);
+            }
         }
+        model
     }
 
     /// A shared handle to the logging facility (for the log panel snapshot).
@@ -2203,6 +2215,11 @@ impl AppModel {
             .filter(|credential| valid_credential(credential))
     }
 
+    /// Latest canonical player-state publisher shared with the local service.
+    pub fn player_state_publisher(&self) -> SnapshotPublisher {
+        self.player_state.clone()
+    }
+
     /// Current coherent native binding evidence for read-only settings status.
     pub fn native_bindings(&self) -> NativeBindingSet {
         self.input.native_bindings()
@@ -2223,6 +2240,174 @@ impl AppModel {
         self.runtime_reader_config
     }
 
+    fn publish_player_state(&self) -> BeaconCondition {
+        // Match the reader worker's mutation order so one capture cannot pair
+        // pre-transition controller facts with post-transition game facts.
+        let (
+            game,
+            layout,
+            active_bar,
+            weapon_classes,
+            combat,
+            movement,
+            life,
+            roll_dodge,
+            travel,
+            resources,
+            latency_ms,
+            ultimate,
+            cooldowns,
+            quickslot,
+            bindings,
+            fishing_requested,
+            fishing_state,
+            fishing_stop_reason,
+            fishing_config,
+            auto_potion_requested,
+            auto_potion_state,
+            auto_potion_config,
+            weave_config,
+            latency_config,
+        ) = {
+            let weave = self.weave.lock().unwrap();
+            let fishing = self.fishing.lock().unwrap();
+            let potion = self.potion.lock().unwrap();
+            (
+                self.game.snapshot(),
+                weave.layout(),
+                weave.active_bar(),
+                weave.weapon_classes(),
+                weave.combat(),
+                weave.movement(),
+                weave.life(),
+                weave.roll_dodge(),
+                weave.travel(),
+                weave.resources(),
+                weave.current_latency(),
+                weave.ultimate(),
+                weave.cooldowns(),
+                weave.quickslot(),
+                self.input.native_bindings(),
+                fishing.enabled(),
+                fishing.state(),
+                fishing.stop_reason(),
+                *fishing.config(),
+                potion.enabled(),
+                potion.state(),
+                *potion.config(),
+                weave.config().clone(),
+                *weave.latency_config(),
+            )
+        };
+
+        let catalog = match self.catalog.release() {
+            Ok(Some(release)) => observed(
+                serde_json::to_value(release).unwrap_or(serde_json::Value::Null),
+                "catalog",
+            ),
+            Ok(None) | Err(_) => unavailable_observation("catalog"),
+        };
+        let data_addon = if !self.data_addon_inspection_available {
+            unavailable_observation("data_addon")
+        } else if let Some(status) = self.data_addon_failure_status.or(self.data_addon_status) {
+            observed(
+                serde_json::json!({
+                    "managed_status": status,
+                    "ownership": match status {
+                        crate::data_addon::DataAddonStatus::NotInstalled => "none",
+                        crate::data_addon::DataAddonStatus::Unmanaged => "foreign",
+                        crate::data_addon::DataAddonStatus::ManagedUpToDate
+                        | crate::data_addon::DataAddonStatus::ManagedVersionMismatch => "eso_weave",
+                    },
+                    "compatible": matches!(status, crate::data_addon::DataAddonStatus::ManagedUpToDate),
+                    "reload_required": self.data_addon_reload_required.get(),
+                    "catalog_activity": "unknown",
+                    "encounter_activity": "unknown",
+                    "remediation": match status {
+                        crate::data_addon::DataAddonStatus::NotInstalled => "install",
+                        crate::data_addon::DataAddonStatus::ManagedVersionMismatch => "update",
+                        crate::data_addon::DataAddonStatus::ManagedUpToDate
+                        | crate::data_addon::DataAddonStatus::Unmanaged => "none",
+                    },
+                }),
+                "data_addon",
+            )
+        } else {
+            unavailable_observation("data_addon")
+        };
+        let beacon_condition = self.beacon_condition();
+        let pixel_beacon = match beacon_condition {
+            BeaconCondition::InstalledCurrent => observed(
+                serde_json::json!({
+                    "managed_status": "managed_up_to_date",
+                    "ownership": "eso_weave",
+                    "compatible": true,
+                }),
+                "pixel_beacon",
+            ),
+            BeaconCondition::InstalledOutdated => observed(
+                serde_json::json!({
+                    "managed_status": "managed_version_mismatch",
+                    "ownership": "eso_weave",
+                    "compatible": false,
+                }),
+                "pixel_beacon",
+            ),
+            BeaconCondition::Unmanaged => observed(
+                serde_json::json!({
+                    "managed_status": "unmanaged",
+                    "ownership": "foreign",
+                    "compatible": false,
+                }),
+                "pixel_beacon",
+            ),
+            BeaconCondition::NotInstalled => observed(
+                serde_json::json!({
+                    "managed_status": "not_installed",
+                    "ownership": "none",
+                    "compatible": false,
+                }),
+                "pixel_beacon",
+            ),
+            BeaconCondition::AddonsNotFound => unavailable_observation("pixel_beacon"),
+        };
+
+        let content = project_player_state(ProjectionInput {
+            suspended: self.input.is_suspended(),
+            catalog,
+            data_addon,
+            pixel_beacon,
+            game,
+            layout,
+            active_bar,
+            weapon_classes,
+            combat,
+            movement,
+            life,
+            roll_dodge,
+            travel,
+            resources,
+            latency_ms,
+            ultimate,
+            cooldowns,
+            quickslot,
+            bindings,
+            fishing_requested,
+            fishing_state,
+            fishing_stop_reason,
+            fishing_config,
+            auto_potion_requested,
+            auto_potion_state,
+            auto_potion_config,
+            weave_config,
+            latency_config,
+            reader_config: self.runtime_reader_config,
+        });
+        self.player_state
+            .publish(content, time::OffsetDateTime::now_utc());
+        beacon_condition
+    }
+
     /// The current derived display state.
     pub fn view(&self) -> AppView {
         self.view_at(self.now_ms())
@@ -2232,7 +2417,7 @@ impl AppModel {
     /// monotonic clock. Production uses [`Self::view`]; the explicit seam keeps
     /// retention, recovery, and exact expiry deterministic in tests.
     pub fn view_at(&self, now_ms: u64) -> AppView {
-        let condition = self.beacon_condition();
+        let condition = self.publish_player_state();
         let (fishing_state, fishing_reason, fishing_requested) = {
             let fishing = self.fishing.lock().unwrap();
             (fishing.state(), fishing.stop_reason(), fishing.enabled())

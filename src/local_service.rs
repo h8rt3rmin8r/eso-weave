@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use axum::body::{to_bytes, Body};
 use axum::extract::{Request, State};
 use axum::http::header::{AUTHORIZATION, CONNECTION, CONTENT_LENGTH, HOST, ORIGIN};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::any;
@@ -30,6 +30,8 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+
+use crate::player_state::SnapshotPublisher;
 
 /// Fixed production port selected by ADR 0002.
 pub const DEFAULT_PORT: u16 = 18_765;
@@ -214,6 +216,11 @@ pub struct LocalServiceController {
 impl LocalServiceController {
     /// Starts the idle owner thread. No listener is created until `start`.
     pub fn new(config: LocalServiceConfig) -> Self {
+        Self::new_with_publisher(config, SnapshotPublisher::default())
+    }
+
+    /// Starts an idle owner over the application-owned canonical state source.
+    pub fn new_with_publisher(config: LocalServiceConfig, publisher: SnapshotPublisher) -> Self {
         let shutdown_timeout = config.shutdown_timeout;
         let (commands, receiver) = mpsc::unbounded_channel();
         let status = Arc::new(Mutex::new(ServiceStatus::default()));
@@ -227,7 +234,9 @@ impl LocalServiceController {
                     .enable_time()
                     .build();
                 match runtime {
-                    Ok(runtime) => runtime.block_on(owner_loop(config, receiver, owner_status)),
+                    Ok(runtime) => {
+                        runtime.block_on(owner_loop(config, receiver, owner_status, publisher))
+                    }
                     Err(_) => set_status(
                         &owner_status,
                         failed_status(
@@ -363,6 +372,7 @@ async fn owner_loop(
     config: LocalServiceConfig,
     mut commands: mpsc::UnboundedReceiver<OwnerCommand>,
     status: Arc<Mutex<ServiceStatus>>,
+    publisher: SnapshotPublisher,
 ) {
     let mut generation = 0u64;
     while let Some(command) = commands.recv().await {
@@ -467,7 +477,13 @@ async fn owner_loop(
                 }
 
                 let cancellation = CancellationToken::new();
-                let router = build_router(effective, credential, cancellation.clone());
+                let router = build_router(
+                    effective,
+                    credential,
+                    cancellation.clone(),
+                    publisher.clone(),
+                    generation,
+                );
                 let connection = connection_info(effective, generation);
                 let record = DiscoveryRecord::from(&connection);
                 if publish_discovery(config_dir, &record).is_err() {
@@ -776,6 +792,12 @@ struct SecurityState {
     cancellation: CancellationToken,
 }
 
+#[derive(Clone)]
+struct ApiState {
+    publisher: SnapshotPublisher,
+    generation: u64,
+}
+
 #[derive(Clone, Default)]
 struct LifecycleMcp;
 
@@ -785,6 +807,8 @@ fn build_router(
     effective: SocketAddr,
     credential: String,
     cancellation: CancellationToken,
+    publisher: SnapshotPublisher,
+    generation: u64,
 ) -> Router {
     let authority = effective.to_string();
     let mut mcp_config = StreamableHttpServerConfig::default()
@@ -807,11 +831,18 @@ fn build_router(
         credential,
         cancellation,
     };
+    let api = ApiState {
+        publisher,
+        generation,
+    };
     Router::new()
         .route_service("/mcp", mcp)
-        .route("/api/v1", any(api_unavailable))
-        .route("/api/v1/{*path}", any(api_unavailable))
+        .route("/api/v1", any(api_capabilities))
+        .route("/api/v1/capabilities", any(api_capabilities))
+        .route("/api/v1/player-state", any(api_player_state))
+        .route("/api/v1/{*path}", any(not_found))
         .fallback(not_found)
+        .with_state(api)
         .layer(middleware::from_fn_with_state(security, request_guard))
 }
 
@@ -954,11 +985,26 @@ fn constant_work_eq(presented: &[u8], expected: &[u8]) -> bool {
     difference == 0
 }
 
-async fn api_unavailable() -> Response {
+async fn api_capabilities(State(state): State<ApiState>, method: Method) -> Response {
+    if method != Method::GET {
+        return method_not_allowed();
+    }
+    Json(state.publisher.current().capabilities()).into_response()
+}
+
+async fn api_player_state(State(state): State<ApiState>, method: Method) -> Response {
+    if method != Method::GET {
+        return method_not_allowed();
+    }
+    let snapshot = state.publisher.current();
+    Json(snapshot.document(state.generation)).into_response()
+}
+
+fn method_not_allowed() -> Response {
     safe_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "service_unavailable",
-        "Canonical local API operations are not available in this build.",
+        StatusCode::METHOD_NOT_ALLOWED,
+        "method_not_allowed",
+        "This route supports GET only.",
     )
 }
 
