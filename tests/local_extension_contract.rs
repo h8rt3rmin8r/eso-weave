@@ -61,6 +61,10 @@ fn canonical_guide_names_the_shipped_surface_and_safe_examples() {
         "dormant",
         "fresh",
         "stale",
+        "i64::to_string()",
+        "positive_infinity",
+        "negative_infinity",
+        "nan",
     ] {
         assert!(guide.contains(required), "guide is missing {required}");
     }
@@ -124,6 +128,25 @@ fn documented_field_inventory_matches_production_exactly() {
             field.path
         );
     }
+
+    let field = |path: &str| {
+        inventory
+            .fields
+            .iter()
+            .find(|field| field.path == path)
+            .unwrap_or_else(|| panic!("missing documented field {path}"))
+    };
+    assert!(field("game.context").meaning.contains("dormant"));
+    assert!(field("game.context").meaning.contains("active"));
+    assert!(field("interpretation.weave.front_timing")
+        .meaning
+        .contains("effective_delays_ms"));
+    assert!(field("interpretation.weave.back_timing")
+        .meaning
+        .contains("effective_delays_ms"));
+    assert!(field("interpretation.latency")
+        .meaning
+        .contains("current observed latency"));
 }
 
 const TEST_CREDENTIAL_SHAPE: &str =

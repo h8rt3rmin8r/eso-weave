@@ -175,7 +175,7 @@ must be unique and every statement parameter must be supplied.
 | Parameter `type` | JSON `value` | SQLite binding |
 | --- | --- | --- |
 | `null` | omitted | NULL |
-| `integer` | signed decimal string | 64-bit integer |
+| `integer` | canonical signed decimal string produced by `i64::to_string()` | 64-bit integer; `+1`, `01`, and `-0` are rejected |
 | `real` | finite decimal string | 64-bit real |
 | `text` | string | UTF-8 text |
 | `blob` | standard padded base64 string | bytes |
@@ -186,7 +186,8 @@ Success contains ordered `columns`, typed `rows`, `row_count`, `truncated`,
 `integer`, `real`, `text`, or `blob`. Integer and real output uses strings to
 preserve exact representation; blob output uses standard padded base64. Empty
 results retain column metadata and return an empty row array. Duplicate column
-names remain in their original positions.
+names remain in their original positions. A finite real uses its decimal string;
+non-finite reals use `positive_infinity`, `negative_infinity`, or `nan`.
 
 The executor fully materializes the bounded result and closes its SQLite
 statement and connection before either transport sends data. A slow reader does
