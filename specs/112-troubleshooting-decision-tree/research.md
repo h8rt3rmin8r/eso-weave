@@ -38,9 +38,9 @@
 
 ## Decision 5: Preserve the prose byte-for-byte inside the shared flow
 
-**Decision**: Insert the figure before the existing fenced tree and add only the `Shared diagnostic flow text equivalent` subheading.
+**Decision**: Insert the figure before the existing fenced tree, add the `Shared diagnostic flow text equivalent` subheading, and ensure that the adjacent tree explicitly routes every figure branch.
 
-**Rationale**: The existing fenced tree is already the governed complete equivalent and has a code-block digest. Keeping its bytes unchanged avoids accidental semantic or syntax-policy drift.
+**Rationale**: The pre-implementation assumption that later sibling symptom sections made the shorter fenced tree complete did not survive hosted accessibility review. The adjacent fallback must carry the same five branch decisions as the figure. Its governed code-block digest changes deliberately, while every detailed symptom section remains authoritative and present.
 
 ## Decision 6: Record implementation authorities without workflow trigger expansion
 

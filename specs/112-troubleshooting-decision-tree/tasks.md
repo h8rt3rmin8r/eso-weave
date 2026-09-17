@@ -24,7 +24,7 @@
 - [x] T012 Add `troubleshooting-decision-tree.svg` with the complete accessible root, opaque canvas, five-family topology, evidence endpoints, and unmatched continuation
 - [x] T013 Add stable node, stage, edge, source, destination, branch, and edge-label metadata to every decision-tree element
 - [x] T014 Place the figure under Shared diagnostic flow with the exact meaningful alternative
-- [x] T015 Add the explicit text-equivalent heading while preserving the existing fenced tree and symptom guidance
+- [x] T015 Add the explicit text-equivalent heading and preserve the existing symptom guidance while making the fenced tree cover every figure branch
 - [x] T016 Add S112-D01 to the source diagram registry and generated-site policy
 - [x] T017 Add S112-D01 to the browser diagram inventory and reconcile every route against the direct-SVG layout receipt
 

@@ -23,7 +23,7 @@
 - [x] Every visible label is at least 14 SVG units
 - [x] Words, shapes, position, and direction carry meaning without color
 - [x] The meaningful Markdown alternative matches the routing task
-- [x] The unchanged prose is a complete adjacent text equivalent
+- [x] The adjacent prose is a complete text equivalent for every figure branch
 - [x] Normal and expanded views remain readable at 200 percent zoom
 - [x] Narrow and wide layouts remain contained without page overflow
 - [x] No-script and print surfaces retain the static figure and prose

@@ -33,7 +33,7 @@
 
 ## Consistency Findings
 
-1. The issue names five families, while the current fenced shared tree expresses shared game and PixelBeacon prerequisites rather than a five-family index. This is not a conflict. The figure is a navigation layer across the complete page, and the unchanged fenced tree remains the detailed shared path.
+1. The issue names five families, while the original fenced shared tree expressed only shared game and PixelBeacon prerequisites. The initial design treated later symptom sections as sufficient completion. Hosted accessibility review correctly rejected that assumption, so the adjacent tree now explicitly routes every figure branch while the detailed symptom sections remain authoritative.
 2. A five-way hub conflicts with the S103 no-shared-segment and readable-width constraints. The sequential match-or-advance chain is the scope-proportional design and preserves the first-failure rule.
 3. DIA-006 already reserves a decision-tree coverage record even though no SVG exists. S112 implements that planned media rather than allocating a second diagram ID in the content-coverage manifest.
 4. The S088 representative figure interaction matrix does not need a second diagram case. The all-diagram S086 rendering and S103 layout matrices provide asset-specific evidence, while the S088 matrix proves the shared interaction class once.
@@ -89,3 +89,7 @@ The specification, clarification, checklist, plan, research, data model, contrac
 - Scope drift: none. The implementation changes documentation, documentation policy, and planning evidence only.
 
 The implemented asset, page placement, enforcement code, governance records, and specification packet agree. S112 is ready for publication and hosted review.
+
+### Hosted Review Deviation
+
+The first Codex review identified a P1 accessibility gap in the adjacent fallback. I deviated from the pre-implementation plan to keep the fenced tree byte-unchanged because that plan left startup, native-binding, and encounter choices implicit in later sibling sections. The corrected tree now represents all five figure branches and the unmatched continuation directly, and policy freezes those exact route prompts plus the new intentional plain-block digest. This change preserves the detailed symptom guidance and improves conformance with FR-006, FR-009, and SC-005.
