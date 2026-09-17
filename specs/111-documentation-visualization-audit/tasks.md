@@ -50,8 +50,8 @@
 
 ## Phase 7: Publication and Hosted Review
 
-- [ ] T027 Commit the verified audit with attribution and push the feature branch
-- [ ] T028 Open the official pull request with `Closes #170`, scope, verification, approved-issue links, and explicit exclusions
+- [x] T027 Commit the verified audit with attribution and push the feature branch
+- [x] T028 Open the official pull request with `Closes #170`, scope, verification, approved-issue links, and explicit exclusions
 - [ ] T029 Wait for hosted CI, Codex, and security results and answer every review comment
 - [ ] T030 Apply and verify required review changes, resolve every completed review thread, and push updates
 - [ ] T031 Trigger at most one authorized second `@Codex` review and process it completely
