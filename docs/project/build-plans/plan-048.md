@@ -21,3 +21,6 @@ application, addon, automation, data, transport, or release behavior.
 
 Installed release verification issues #110, #129, #131, and #190 remain
 independent and do not block repository-verifiable figure work.
+
+The official S112 implementation record is
+[PR #225](https://github.com/h8rt3rmin8r/eso-weave/pull/225).

@@ -50,9 +50,9 @@
 
 ## Phase 6: Publication and Hosted Review
 
-- [ ] T032 Commit S112 with issue linkage and the required attribution trailer
-- [ ] T033 Push the feature branch and open the official pull request closing #220
-- [ ] T034 Add the pull request to the delivery project and move issue #220 plus the PR to PR review
+- [x] T032 Commit S112 with issue linkage and the required attribution trailer
+- [x] T033 Push the feature branch and open the official pull request closing #220
+- [x] T034 Add the pull request to the delivery project and move issue #220 plus the PR to PR review
 - [ ] T035 Wait for hosted CI, Codex, and security results and answer every review comment
 - [ ] T036 Apply and verify required review changes, resolve every completed thread, and push updates
 - [ ] T037 Trigger at most one authorized second `@Codex review` and process it completely
