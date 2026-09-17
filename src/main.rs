@@ -330,21 +330,24 @@ fn main() {
                     next_game_probe_ms = now.saturating_add(1000);
                     let installation = eso_weave::game::discover_installation();
                     let processes = eso_weave::game::observe_processes();
-                    let mut weave = weave.lock().unwrap();
-                    let mut fishing = fishing.lock().unwrap();
-                    let mut potion = potion.lock().unwrap();
                     let before = game.snapshot().runtime;
-                    let installation_changed = game.update_installation(installation.clone());
-                    let process_changed = game.update_processes(processes, now);
                     let after = processes.runtime();
                     let active = after == GameRuntime::Active;
                     let focused = matches!(processes.focus, FocusObservation::Focused);
+                    // Close unsafe gates before waiting for a timed weave to
+                    // release controller ownership. Reopening remains below,
+                    // after every controller sees the same process evidence.
                     if !active {
                         input.set_game_active(false);
                     }
                     if !focused {
                         input.set_focused(false);
                     }
+                    let mut weave = weave.lock().unwrap();
+                    let mut fishing = fishing.lock().unwrap();
+                    let mut potion = potion.lock().unwrap();
+                    let installation_changed = game.update_installation(installation.clone());
+                    let process_changed = game.update_processes(processes, now);
                     fishing.set_game_environment(active, focused, now, &mut sink);
                     potion.set_game_active(active);
                     potion.set_focused(focused);

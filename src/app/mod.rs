@@ -2313,12 +2313,22 @@ impl AppModel {
             observed(
                 serde_json::json!({
                     "managed_status": status,
-                    "ownership": if matches!(status, crate::data_addon::DataAddonStatus::Unmanaged) { "foreign" } else { "eso_weave" },
+                    "ownership": match status {
+                        crate::data_addon::DataAddonStatus::NotInstalled => "none",
+                        crate::data_addon::DataAddonStatus::Unmanaged => "foreign",
+                        crate::data_addon::DataAddonStatus::ManagedUpToDate
+                        | crate::data_addon::DataAddonStatus::ManagedVersionMismatch => "eso_weave",
+                    },
                     "compatible": matches!(status, crate::data_addon::DataAddonStatus::ManagedUpToDate),
                     "reload_required": self.data_addon_reload_required.get(),
                     "catalog_activity": "unknown",
                     "encounter_activity": "unknown",
-                    "remediation": if matches!(status, crate::data_addon::DataAddonStatus::ManagedVersionMismatch) { "update" } else { "none" },
+                    "remediation": match status {
+                        crate::data_addon::DataAddonStatus::NotInstalled => "install",
+                        crate::data_addon::DataAddonStatus::ManagedVersionMismatch => "update",
+                        crate::data_addon::DataAddonStatus::ManagedUpToDate
+                        | crate::data_addon::DataAddonStatus::Unmanaged => "none",
+                    },
                 }),
                 "data_addon",
             )

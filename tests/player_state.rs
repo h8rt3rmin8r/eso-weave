@@ -143,6 +143,10 @@ fn active_projection_is_complete_and_loss_never_uses_hud_retention() {
     assert_eq!(content.player["ultimate"]["ready"]["value"], true);
     assert_eq!(content.player["bindings"].as_array().unwrap().len(), 11);
     assert_eq!(
+        content.player["bindings"][0]["state"]["knowledge"],
+        "unavailable"
+    );
+    assert_eq!(
         content.player["quickslot"]["classification"]["knowledge"],
         "unavailable"
     );

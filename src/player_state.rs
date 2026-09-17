@@ -952,16 +952,23 @@ fn bindings(value: NativeBindingSet, game: &GameObservations) -> Vec<Value> {
     NativeAction::ALL
         .into_iter()
         .map(|action| {
-            let (state, chord) = match value.get(action) {
-                NativeBindingState::Unavailable => (None, None),
-                NativeBindingState::Unbound => (Some("unbound"), None),
-                NativeBindingState::Conflicting => (Some("conflicting"), None),
-                NativeBindingState::Unsupported => (Some("unsupported"), None),
-                NativeBindingState::Valid(chord) => (Some("valid"), Some(chord_value(chord))),
+            let (state, unavailable_state, chord) = match value.get(action) {
+                NativeBindingState::Unavailable => (None, true, None),
+                NativeBindingState::Unbound => (Some("unbound"), false, None),
+                NativeBindingState::Conflicting => (Some("conflicting"), false, None),
+                NativeBindingState::Unsupported => (Some("unsupported"), false, None),
+                NativeBindingState::Valid(chord) => {
+                    (Some("valid"), false, Some(chord_value(chord)))
+                }
+            };
+            let state = if unavailable_state {
+                contextual_unavailable(game, "native_binding_resolver")
+            } else {
+                contextual_observation(state.map(Value::from), game, "native_binding_resolver")
             };
             json!({
                 "action": native_action(action),
-                "state": contextual_observation(state.map(Value::from), game, "native_binding_resolver"),
+                "state": state,
                 "chord": chord.map_or_else(
                     || unavailable("native_binding_resolver"),
                     |value| contextual_observation(Some(value), game, "native_binding_resolver"),

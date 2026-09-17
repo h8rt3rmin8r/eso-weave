@@ -1642,6 +1642,15 @@ fn install_and_uninstall_beacon_intents() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());
     assert_eq!(model.view().beacon_condition, BeaconCondition::NotInstalled);
+    let canonical = model.player_state_publisher().current().document(1);
+    assert_eq!(
+        canonical["application"]["addons"]["data"]["value"]["ownership"],
+        "none"
+    );
+    assert_eq!(
+        canonical["application"]["addons"]["data"]["value"]["remediation"],
+        "install"
+    );
 
     model.apply_intent(UiIntent::InstallBeacon);
     assert_eq!(
