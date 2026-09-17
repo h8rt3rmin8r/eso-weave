@@ -1635,9 +1635,9 @@
     },
     {
       "id": "045",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-045.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-045.md",
       "specs": [
         "specs/104-local-extension-contract",
         "specs/105-local-service-lifecycle",
@@ -1646,7 +1646,17 @@
         "specs/108-database-query",
         "specs/109-extension-docs-e2e"
       ],
-      "evidence": "Issue #180 tracks active S109 delivery at the end of the S104 through S109 local extension sequence; Plan 045 remains active until its pull request is merged."
+      "evidence": "S104 through S109 completed the local extension surface when PR #218 merged, closing issue #180 and enabling epic #174 to close."
+    },
+    {
+      "id": "046",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-046.md",
+      "specs": [
+        "specs/110-ultimate-auto-potion"
+      ],
+      "evidence": "Issue #173 tracks active S110 delivery of the Ultimate Auto Potion resource watch; Plan 046 remains active until its pull request is merged."
     }
   ],
   "safetyCrosswalk": [

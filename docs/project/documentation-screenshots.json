@@ -152,11 +152,11 @@
       "pages": ["docs/src/features/auto-potion.md"],
       "reader_question": "Where are resource watches, thresholds, and the detected Quickslot binding shown?",
       "alt": "ESO Weave Auto Potion settings showing resource watches, thresholds, detected Quickslot binding, and retry interval",
-      "caption": "Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the detected Quickslot binding is read-only.",
+      "caption": "Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina and Ultimate are disabled, and the detected Quickslot binding is read-only.",
       "width": 1280,
       "height": 900,
-      "bytes": 211721,
-      "sha256": "27a17f94152ed588fd85ad0fdee147684fad59536c7e511a12dac8152b4ecf7d",
+      "bytes": 222905,
+      "sha256": "772a7106abc2fa5f1b8d9f1a4c7912acc1f4ae46f240a851f1f0819b595e4722",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-ready",
@@ -165,7 +165,7 @@
         "file": "auto-potion-ready--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "27a17f94152ed588fd85ad0fdee147684fad59536c7e511a12dac8152b4ecf7d",
+        "sha256": "772a7106abc2fa5f1b8d9f1a4c7912acc1f4ae46f240a851f1f0819b595e4722",
         "crop": [0, 0, 1280, 900]
       },
       "update_trigger": "Resource-watch, threshold, or ready-state UI changes"

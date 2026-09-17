@@ -3394,6 +3394,7 @@ fn settings_body(
             (&strings::SET_POTION_HEALTH, &mut draft.potion.health),
             (&strings::SET_POTION_MAGICKA, &mut draft.potion.magicka),
             (&strings::SET_POTION_STAMINA, &mut draft.potion.stamina),
+            (&strings::SET_POTION_ULTIMATE, &mut draft.potion.ultimate),
         ] {
             setting(ui, palette, s, |ui| {
                 ui.checkbox(&mut watch.enabled, "").clickable();

@@ -1044,6 +1044,7 @@ fn seed_potion_state(controller: &mut AutoPotionController, scene: Scene) -> Res
     let state = controller.tick(
         PotionReadings {
             resources: healthy_resources(),
+            ultimate: UltimateTelemetry::new_unknown(),
             quickslot: ready_quickslot(),
         },
         10_000,

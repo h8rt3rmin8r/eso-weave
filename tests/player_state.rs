@@ -18,7 +18,9 @@ use eso_weave::pixelbus::{
     MovementSignal, QuickslotState, ReaderConfig, ResourceLevel, ResourceSet, RollDodgeState,
     SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WeaponClass, WorldState,
 };
-use eso_weave::potion::{AutoPotionConfig, AutoPotionState};
+use eso_weave::potion::{
+    AutoPotionConfig, AutoPotionResource, AutoPotionState, ResourceWatch, TriggerCause,
+};
 use eso_weave::weave::{LatencyConfig, WeaveConfig};
 
 #[test]
@@ -195,6 +197,35 @@ fn active_projection_is_complete_and_loss_never_uses_hud_retention() {
     assert_eq!(
         content.player["resources"]["health"]["knowledge"],
         "unknown"
+    );
+}
+
+#[test]
+fn ultimate_auto_potion_configuration_and_trigger_cause_are_public_diagnostics() {
+    let mut input = active_input();
+    input.auto_potion_config.ultimate = ResourceWatch {
+        enabled: true,
+        threshold: 35,
+    };
+    input.auto_potion_state = AutoPotionState::Triggered(TriggerCause {
+        resource: AutoPotionResource::Ultimate,
+        observed_percent: 35,
+        threshold_percent: 35,
+    });
+
+    let content = project(input);
+    assert_eq!(
+        content.interpretation["auto_potion"]["thresholds"]["value"]["ultimate"],
+        json!({"enabled": true, "threshold": 35})
+    );
+    assert_eq!(
+        content.automation["auto_potion"]["reason"]["value"],
+        json!({
+            "type": "trigger",
+            "resource": "ultimate",
+            "observed_percent": 35,
+            "threshold_percent": 35
+        })
     );
 }
 

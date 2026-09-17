@@ -592,6 +592,7 @@ pub fn auto_potion_view(state: AutoPotionState) -> AutoPotionView {
                 AutoPotionResource::Health => "Health",
                 AutoPotionResource::Magicka => "Magicka",
                 AutoPotionResource::Stamina => "Stamina",
+                AutoPotionResource::Ultimate => "Ultimate",
             };
             (
                 format!(

@@ -460,6 +460,7 @@ fn main() {
                     let _ = potion.tick(
                         eso_weave::potion::PotionReadings {
                             resources: weave.resources(),
+                            ultimate: weave.ultimate(),
                             quickslot: weave.quickslot(),
                         },
                         now,

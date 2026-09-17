@@ -1,20 +1,20 @@
 # Auto Potion
 
-A Resource Watch is a Health, Magicka, or Stamina threshold, often described as
-a low-resource trigger.
+A Resource Watch is a Health, Magicka, Stamina, or Ultimate threshold, often
+described as a low-resource trigger.
 
 Auto Potion presses the active quickslot binding when an enabled resource reaches
 its configured threshold. It is the only feature that turns resource telemetry
 into generated input, so unavailable evidence always blocks it.
 
-Configure at least one Health, Magicka, or Stamina watch, then press `F3` or use
-the Auto Potion toggle. ESO Weave remembers that requested toggle across normal
-restarts. A restored request remains dormant or blocked until current runtime
-and telemetry evidence satisfies every safety check. Each watch has its own
-threshold. The rule is an OR: any enabled, fresh resource at or below its
-threshold can qualify.
+Configure at least one Health, Magicka, Stamina, or Ultimate watch, then press
+`F3` or use the Auto Potion toggle. ESO Weave remembers that requested toggle
+across normal restarts. A restored request remains dormant or blocked until
+current runtime and telemetry evidence satisfies every safety check. Each watch
+has its own threshold. The rule is an OR: any enabled, fresh resource at or
+below its threshold can qualify.
 
-Every resource watch is off by default. Requiring all three resources to be low
+Every resource watch is off by default. Requiring all four resources to be low
 would wait until a potion no longer helps, so the OR rule is not configurable.
 Independent enables and thresholds keep that rule visible in the interface and
 allow different limits for each resource.
@@ -28,8 +28,10 @@ retained here only as migration context; the legacy field is now ignored.
 1. Put the intended potion in ESO's active quickslot. ESO Weave does not choose
    or rotate the consumable wheel for you.
 2. Open **Settings > Auto Potion**.
-3. Enable at least one of Watch Health, Watch Magicka, or Watch Stamina. Each
-   threshold defaults to 35 percent and accepts 0 through 100 percent.
+3. Enable at least one of Watch Health, Watch Magicka, Watch Stamina, or Watch
+   Ultimate. Each threshold defaults to 35 percent and accepts 0 through 100
+   percent. Ultimate uses current Ultimate divided by maximum Ultimate; unknown
+   current, unknown maximum, or zero maximum never qualifies.
 4. Confirm **Detected Quickslot Binding** reports a valid current chord. Change it
    in ESO and reload the UI if remediation is shown.
 5. Leave **Minimum Retry Interval** at its 1500 ms default unless diagnosis shows
@@ -39,12 +41,20 @@ retained here only as migration context; the legacy field is now ignored.
 
 <figure class="docs-screenshot">
 <img src="../assets/screenshots/auto-potion-ready.png" alt="ESO Weave Auto Potion settings showing resource watches, thresholds, detected Quickslot binding, and retry interval" width="1280" height="900">
-<figcaption>Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina is disabled, and the detected Quickslot binding is read-only.</figcaption>
+<figcaption>Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina and Ultimate are disabled, and the detected Quickslot binding is read-only.</figcaption>
 </figure>
 
 The enabled checks form an OR rule. In this fixture, either Health at or below
 35 percent or Magicka at or below 25 percent can qualify; disabled Stamina does
 not participate. A current usable potion and ready cooldown are still required.
+
+Health, Magicka, and Stamina arrive as fresh integer percentages. Ultimate
+retains exact current and maximum points, so its comparison is the mathematical
+ratio `current / maximum` against the configured percentage. ESO Weave compares
+the ratio exactly, without first truncating it to an integer percentage. For
+example, 70 of 200 equals 35 percent and qualifies at 35, while 71 of 200 does
+not. A diagnostic rounds a qualifying non-integer percentage upward so its
+display remains consistent with the exact threshold decision.
 
 ## Trigger contract
 
@@ -74,6 +84,8 @@ therefore produces no keypress. Fresh positive observations must return before
 the controller can become Ready or Triggered again. This fail-closed direction
 is deliberate: treating unknown as permissive would fire during beacon outages,
 addon reloads, and loading screens.
+For Ultimate specifically, unreadable means unknown current, unknown maximum,
+or a maximum of zero.
 
 The retry interval is separate from the quickslot cooldown. The screen signal
 can lag behind the generated keypress by at least one sampling interval, so the

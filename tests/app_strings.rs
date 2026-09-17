@@ -21,7 +21,7 @@ fn every_tooltip_and_help_string_is_non_empty() {
 
 #[test]
 fn settings_labels_and_help_are_present() {
-    assert_eq!(strings::ALL_SETTINGS.len(), 28);
+    assert_eq!(strings::ALL_SETTINGS.len(), 29);
     for setting in strings::ALL_SETTINGS {
         assert!(!setting.label.trim().is_empty());
         assert!(!setting.label.contains('_'));
@@ -149,6 +149,7 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
         "Detected Quickslot Binding",
         "Write Log to File",
         "Watch Health (Threshold %)",
+        "Watch Ultimate (Threshold %)",
         "Toggle Suspend",
         "Toggle Fishing",
         "Toggle Auto Potion",
@@ -158,6 +159,13 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
             "audited title-case label is missing: {expected}"
         );
     }
+}
+
+#[test]
+fn ultimate_watch_help_names_exact_normalization_and_fail_closed_inputs() {
+    let help = strings::SET_POTION_ULTIMATE.help;
+    assert!(help.contains("current Ultimate divided by maximum Ultimate"));
+    assert!(help.contains("zero maximum never qualifies"));
 }
 
 #[test]

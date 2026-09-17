@@ -181,6 +181,11 @@ Evidence: `evaluate`, `low_resource`, `AutoPotionController::tick`,
 [Auto Potion tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/potion.rs)
 distinguish Ready, Triggered, every runtime blocker family, specific Quickslot
 blockers, signal-loss recovery, and retry timing.
+S110 extends that fixed OR order from Health, Magicka, and Stamina to Ultimate
+as the fourth watch. Ultimate consumes the existing atomic current and maximum
+observation, requires a positive maximum, and compares the exact ratio by
+widened integer cross multiplication. Unknown values and zero maximum remain
+unavailable rather than low.
 
 ## Pixel Bus lifecycle
 

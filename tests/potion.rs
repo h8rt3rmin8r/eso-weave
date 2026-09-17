@@ -15,7 +15,7 @@ use eso_weave::input::{Key, Transition};
 use eso_weave::pixelbus::{
     LifeState, MovementSignal, QuickslotClassification, QuickslotNonPotionKind,
     QuickslotPotionAvailability, QuickslotState, RecoveryPath, ResourceLevel, ResourceSet,
-    SlotCooldown, TravelState, WorldState,
+    SlotCooldown, TravelState, UltimateTelemetry, UltimateValue, WorldState,
 };
 use eso_weave::potion::{
     evaluate, AutoPotionConfig, AutoPotionController, AutoPotionResource, AutoPotionSink,
@@ -55,11 +55,21 @@ fn ready_potion() -> QuickslotState {
     }
 }
 
+fn ultimate(current: UltimateValue, maximum: UltimateValue) -> UltimateTelemetry {
+    UltimateTelemetry {
+        current,
+        maximum,
+        front_cost: UltimateValue::Unknown,
+        back_cost: UltimateValue::Unknown,
+    }
+}
+
 /// Readings in which the bus half of the rule is satisfied: health is low and a
 /// ready potion is slotted.
 fn eligible_readings() -> PotionReadings {
     PotionReadings {
         resources: levels(10, 90, 90),
+        ultimate: UltimateTelemetry::new_unknown(),
         quickslot: ready_potion(),
     }
 }
@@ -346,6 +356,7 @@ fn inputs_at(resources: ResourceSet) -> PotionInputs {
         game_active: true,
         readings: PotionReadings {
             resources,
+            ultimate: UltimateTelemetry::new_unknown(),
             quickslot: ready_potion(),
         },
         ..eligible_inputs()
@@ -645,6 +656,219 @@ fn thresholds_of_zero_and_one_hundred_are_both_valid() {
     ));
 }
 
+#[test]
+fn ultimate_uses_exact_inclusive_current_over_maximum_percentages() {
+    let config = AutoPotionConfig {
+        ultimate: ResourceWatch {
+            enabled: true,
+            threshold: 35,
+        },
+        ..AutoPotionConfig::default()
+    };
+
+    for (current, expected) in [
+        (
+            69,
+            AutoPotionState::Triggered(TriggerCause {
+                resource: AutoPotionResource::Ultimate,
+                observed_percent: 35,
+                threshold_percent: 35,
+            }),
+        ),
+        (
+            70,
+            AutoPotionState::Triggered(TriggerCause {
+                resource: AutoPotionResource::Ultimate,
+                observed_percent: 35,
+                threshold_percent: 35,
+            }),
+        ),
+        (71, AutoPotionState::Ready),
+    ] {
+        let mut inputs = inputs_at(ResourceSet::new_unknown());
+        inputs.readings.ultimate =
+            ultimate(UltimateValue::Points(current), UltimateValue::Points(200));
+        assert_eq!(
+            evaluate(inputs, &config, true, None, 10_000),
+            expected,
+            "current {current} of 200"
+        );
+    }
+}
+
+#[test]
+fn ultimate_ratio_does_not_floor_an_above_threshold_value_into_eligibility() {
+    let config = AutoPotionConfig {
+        ultimate: ResourceWatch {
+            enabled: true,
+            threshold: 35,
+        },
+        ..AutoPotionConfig::default()
+    };
+
+    let mut inputs = inputs_at(ResourceSet::new_unknown());
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(36), UltimateValue::Points(101));
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Ready,
+        "35.64 percent must not be truncated to 35"
+    );
+
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(35), UltimateValue::Points(101));
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Ultimate,
+            observed_percent: 35,
+            threshold_percent: 35,
+        })
+    );
+}
+
+#[test]
+fn ultimate_zero_and_one_hundred_threshold_boundaries_are_exact() {
+    let mut config = AutoPotionConfig {
+        ultimate: ResourceWatch {
+            enabled: true,
+            threshold: 0,
+        },
+        ..AutoPotionConfig::default()
+    };
+    let mut inputs = inputs_at(ResourceSet::new_unknown());
+
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(0), UltimateValue::Points(200));
+    assert!(matches!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Ultimate,
+            observed_percent: 0,
+            ..
+        })
+    ));
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(1), UltimateValue::Points(200));
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Ready
+    );
+
+    config.ultimate.threshold = 100;
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(200), UltimateValue::Points(200));
+    assert!(matches!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(_)
+    ));
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(201), UltimateValue::Points(200));
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Ready,
+        "above-maximum evidence must not be clamped into eligibility"
+    );
+}
+
+#[test]
+fn unavailable_ultimate_never_qualifies() {
+    let config = AutoPotionConfig {
+        ultimate: ResourceWatch {
+            enabled: true,
+            threshold: 100,
+        },
+        ..AutoPotionConfig::default()
+    };
+
+    for observation in [
+        ultimate(UltimateValue::Unknown, UltimateValue::Points(200)),
+        ultimate(UltimateValue::Points(0), UltimateValue::Unknown),
+        ultimate(UltimateValue::Points(0), UltimateValue::Points(0)),
+    ] {
+        let mut inputs = inputs_at(ResourceSet::new_unknown());
+        inputs.readings.ultimate = observation;
+        assert_eq!(
+            evaluate(inputs, &config, true, None, 10_000),
+            AutoPotionState::Blocked(BlockReason::ResourcesUnavailable)
+        );
+    }
+}
+
+#[test]
+fn low_ultimate_cannot_bypass_signal_loss_or_non_active_world_state() {
+    let config = AutoPotionConfig {
+        ultimate: ResourceWatch {
+            enabled: true,
+            threshold: 50,
+        },
+        ..AutoPotionConfig::default()
+    };
+    let mut controller = AutoPotionController::new(config);
+    controller.set_game_active(true);
+    controller.set_focused(true);
+    controller.on_heartbeat();
+    controller.set_gated(false);
+    controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Active);
+    controller.set_travel_state(TravelState::Inactive);
+    controller.set_movement(MovementSignal::OnFoot);
+    controller.set_enabled(true);
+    let readings = PotionReadings {
+        resources: ResourceSet::new_unknown(),
+        ultimate: ultimate(UltimateValue::Points(1), UltimateValue::Points(200)),
+        quickslot: ready_potion(),
+    };
+    let mut sink = MockAutoPotionSink::new();
+
+    controller.on_signal_lost();
+    assert_eq!(
+        controller.tick(readings, 10_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::BeaconUnavailable)
+    );
+    assert!(sink.ops.is_empty());
+
+    controller.on_heartbeat();
+    controller.set_gated(false);
+    controller.set_life_state(LifeState::Alive);
+    controller.set_world_state(WorldState::Transitioning);
+    controller.set_travel_state(TravelState::Inactive);
+    assert_eq!(
+        controller.tick(readings, 20_000, &mut sink),
+        AutoPotionState::Blocked(BlockReason::WorldUnavailable)
+    );
+    assert!(sink.ops.is_empty());
+}
+
+#[test]
+fn ultimate_extends_the_or_without_changing_existing_first_cause_order() {
+    let watch = ResourceWatch {
+        enabled: true,
+        threshold: 50,
+    };
+    let config = AutoPotionConfig {
+        health: watch,
+        magicka: watch,
+        stamina: watch,
+        ultimate: watch,
+        ..AutoPotionConfig::default()
+    };
+    let mut inputs = inputs_at(levels(10, 10, 10));
+    inputs.readings.ultimate = ultimate(UltimateValue::Points(1), UltimateValue::Points(200));
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Health,
+            observed_percent: 10,
+            threshold_percent: 50,
+        })
+    );
+
+    inputs.readings.resources = ResourceSet::new_unknown();
+    assert_eq!(
+        evaluate(inputs, &config, true, None, 10_000),
+        AutoPotionState::Triggered(TriggerCause {
+            resource: AutoPotionResource::Ultimate,
+            observed_percent: 1,
+            threshold_percent: 50,
+        })
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The retry interval against a virtual clock (FR-006, SC-005).
 // ---------------------------------------------------------------------------
@@ -907,6 +1131,7 @@ fn a_controller_never_enabled_emits_nothing_under_any_readings() {
                     controller.set_gated(gated);
                     let readings = PotionReadings {
                         resources: levels(health, health, health),
+                        ultimate: UltimateTelemetry::new_unknown(),
                         quickslot,
                     };
                     assert_eq!(
@@ -1009,6 +1234,10 @@ fn config_round_trips_through_settings() {
             enabled: true,
             threshold: 0,
         },
+        ultimate: ResourceWatch {
+            enabled: true,
+            threshold: 73,
+        },
         retry_interval_ms: 2500,
         ..AutoPotionConfig::default()
     };
@@ -1017,6 +1246,28 @@ fn config_round_trips_through_settings() {
     let loaded = AutoPotionConfig::load(&config.store(), &mut notices);
     assert!(notices.is_empty());
     assert_eq!(loaded, config);
+}
+
+#[test]
+fn legacy_config_defaults_ultimate_disabled_and_current_store_is_explicit() {
+    let legacy = serde_json::json!({
+        "health": { "enabled": true, "threshold": 40 },
+        "magicka": { "enabled": false, "threshold": 20 },
+        "stamina": { "enabled": true, "threshold": 60 },
+        "retry_interval_ms": 2500,
+    });
+    let mut notices = Vec::new();
+    let loaded = AutoPotionConfig::load(&legacy, &mut notices);
+    assert!(notices.is_empty());
+    assert_eq!(loaded.ultimate, ResourceWatch::default());
+    assert_eq!(loaded.health.threshold, 40);
+    assert_eq!(loaded.stamina.threshold, 60);
+
+    let stored = loaded.store();
+    assert_eq!(
+        stored.get("ultimate"),
+        Some(&serde_json::json!({ "enabled": false, "threshold": 35 }))
+    );
 }
 
 #[test]
@@ -1031,6 +1282,7 @@ fn a_null_value_yields_defaults_without_notices() {
 fn invalid_stored_values_degrade_to_defaults_with_notices() {
     let raw = serde_json::json!({
         "health": { "enabled": true, "threshold": 250 },
+        "ultimate": { "enabled": true, "threshold": 101 },
         "quickslot_key": "not_a_key",
         "retry_interval_ms": 9_999_999u32,
     });
@@ -1048,7 +1300,13 @@ fn invalid_stored_values_degrade_to_defaults_with_notices() {
     assert_eq!(loaded.retry_interval_ms, defaults.retry_interval_ms);
     assert_eq!(
         notices.len(),
-        2,
+        3,
         "one notice per invalid value: {notices:?}"
+    );
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.message.contains("ultimate threshold 101")),
+        "the Ultimate field should be named in its validation notice: {notices:?}"
     );
 }

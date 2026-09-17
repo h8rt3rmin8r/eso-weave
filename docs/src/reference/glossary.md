@@ -372,7 +372,7 @@ configured, and publishes official ESO Weave artifacts.
 
 **Aliases:** health threshold, magicka threshold, stamina threshold, low resource
 
-One independently enabled Health, Magicka, or Stamina threshold used by Auto
+One independently enabled Health, Magicka, Stamina, or Ultimate threshold used by Auto
 Potion to decide whether a resource condition requests an attempt.
 
 **Related:** [Auto Potion resource watches](../features/auto-potion.md)
