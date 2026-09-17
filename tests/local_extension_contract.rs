@@ -138,6 +138,11 @@ fn documented_field_inventory_matches_production_exactly() {
     };
     assert!(field("game.context").meaning.contains("dormant"));
     assert!(field("game.context").meaning.contains("active"));
+    assert!(field("game.runtime").meaning.contains("inactive"));
+    assert!(field("game.runtime").meaning.contains("launcher_open"));
+    assert!(field("game.runtime").meaning.contains("active"));
+    assert!(field("game.focus").meaning.contains("focused"));
+    assert!(field("game.focus").meaning.contains("unfocused"));
     assert!(field("interpretation.weave.front_timing")
         .meaning
         .contains("effective_delays_ms"));
