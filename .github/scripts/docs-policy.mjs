@@ -3812,7 +3812,20 @@ function stringList(value, minimum = 1) {
   return Array.isArray(value) && value.length >= minimum && value.every((item) => completeString(item, 2));
 }
 
-export function validateVisualizationAudit(manifest, summaryMarkdown) {
+function summaryNavigationMarkdownPaths(summaryMarkdown) {
+  const destinations = [];
+  for (const line of String(summaryMarkdown).split(/\r?\n/gu)) {
+    if (!/^\s*[-*+]\s+/u.test(line)) continue;
+    for (const link of markdownLinks(line)) {
+      const { pathname } = splitTarget(link.destination);
+      if (!pathname.endsWith(".md")) continue;
+      destinations.push(`docs/src/${slash(path.normalize(pathname))}`);
+    }
+  }
+  return destinations;
+}
+
+export function validateVisualizationAudit(manifest, summaryMarkdown, options = {}) {
   const errors = [];
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
     return ["S111 visualization audit must be a JSON object"];
@@ -3824,8 +3837,7 @@ export function validateVisualizationAudit(manifest, summaryMarkdown) {
     errors.push("S111 visualization audit requires an ISO audit date");
   }
 
-  const summaryPaths = [...String(summaryMarkdown).matchAll(/\]\(([^)#?]+\.md)(?:#[^)]*)?\)/gu)]
-    .map((match) => `docs/src/${match[1].replaceAll("\\", "/")}`);
+  const summaryPaths = summaryNavigationMarkdownPaths(summaryMarkdown);
   const pages = Array.isArray(manifest.pages) ? manifest.pages : [];
   const pagePaths = pages.map((page) => page?.path);
   if (new Set(summaryPaths).size !== summaryPaths.length) {
@@ -3885,6 +3897,14 @@ export function validateVisualizationAudit(manifest, summaryMarkdown) {
       || !completeString(candidate?.text_equivalent) || !completeString(candidate?.offline_delivery)
       || !completeString(candidate?.update_trigger) || !completeString(candidate?.decision_rationale)) {
       errors.push(`S111 candidate ${label} requires complete warrant, alternatives, authority, text equivalent, offline, and update evidence`);
+    }
+    if (options.existingAuthorityPaths instanceof Set) {
+      for (const authority of candidate?.authority ?? []) {
+        const normalized = typeof authority === "string" ? slash(path.normalize(authority)) : "";
+        if (path.isAbsolute(normalized) || normalized.startsWith("../") || !options.existingAuthorityPaths.has(normalized)) {
+          errors.push(`S111 candidate ${label} authority must exist inside the repository: ${authority}`);
+        }
+      }
     }
     if (!new Set(["approved", "rejected"]).has(candidate?.decision)) {
       errors.push(`S111 candidate ${label} has an invalid decision`);
@@ -4041,6 +4061,19 @@ async function run() {
   const searchIndex = searchIndexFiles.length === 1
     ? await readFile(path.join(outputRoot, searchIndexFiles[0]), "utf8")
     : "";
+  const visualizationAuthorityPaths = new Set();
+  const declaredAuthorities = new Set(visualizationAudit.candidates?.flatMap((candidate) => candidate.authority ?? []) ?? []);
+  for (const authority of declaredAuthorities) {
+    if (typeof authority !== "string" || path.isAbsolute(authority)) continue;
+    const resolved = path.resolve(repositoryRoot, authority);
+    const relative = slash(path.relative(repositoryRoot, resolved));
+    if (relative.startsWith("../") || path.isAbsolute(relative)) continue;
+    try {
+      if ((await stat(resolved)).isFile()) visualizationAuthorityPaths.add(relative);
+    } catch {
+      // The validator reports missing declared authorities below.
+    }
+  }
   const errors = [
     ...(await validateSourceTree(docsRoot, { completeFenceInventory: true })),
     ...(await validateGeneratedSite(outputRoot)),
@@ -4087,7 +4120,7 @@ async function run() {
     ...validateCatalogSourceContract(catalog),
     ...validateEncounterModelContract(encounterModel),
     ...validateEncounterEvidence(encounterFixture, encounterProjection, encounterFixtureBytes),
-    ...validateVisualizationAudit(visualizationAudit, summaryMarkdown),
+    ...validateVisualizationAudit(visualizationAudit, summaryMarkdown, { existingAuthorityPaths: visualizationAuthorityPaths }),
   ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`docs policy: ${error}`);

@@ -2980,7 +2980,7 @@ function visualizationAuditFixture() {
   };
 }
 
-const visualizationSummary = "# Summary\n\n- [Home](README.md)\n- [Features](features/README.md)\n";
+const visualizationSummary = "# Summary\n\n- [Home](README.md)\n- [Features](features/README.md)\n\nSee [planning notes](notes.md) for non-navigation context.\n";
 
 test("S111 requires one ordered audit decision for every published page", () => {
   const manifest = visualizationAuditFixture();
@@ -2997,6 +2997,11 @@ test("S111 requires one ordered audit decision for every published page", () => 
   const unreferenced = structuredClone(manifest);
   unreferenced.pages[0].candidate_ids = [];
   assert.match(validateVisualizationAudit(unreferenced, visualizationSummary).join("\n"), /candidate.*reference/i);
+
+  const danglingAuthority = visualizationAuditFixture();
+  danglingAuthority.candidates[0].authority[0] = "missing.md";
+  const existingAuthorityPaths = new Set(["docs/src/README.md", "src/lib.rs"]);
+  assert.match(validateVisualizationAudit(danglingAuthority, visualizationSummary, { existingAuthorityPaths }).join("\n"), /authority.*exist/i);
 });
 
 test("S111 requires complete four-gate warrants and restrained rejections", () => {

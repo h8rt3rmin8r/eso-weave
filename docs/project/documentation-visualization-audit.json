@@ -171,7 +171,7 @@
         "table": "The operations table proves parity but cannot show ownership boundaries or discovery versus authentication.",
         "other_graphics": "A request sequence would overemphasize timing and repeat the same shared authorities for both transports."
       },
-      "authority": ["docs/src/reference/local-api-and-mcp.md", "specs/104-local-extension-stack-contract/contracts/local-extension-contract.md", "src/local_extension/mod.rs"],
+      "authority": ["docs/src/reference/local-api-and-mcp.md", "docs/project/local-extension-contract.md", "src/local_service.rs"],
       "text_equivalent": "Keep the operations table and add a concise ownership description naming clients, authentication, transports, canonical authorities, and prohibited capabilities.",
       "offline_delivery": "Store one repository-owned SVG with local typography and no network dependency.",
       "update_trigger": "Review when service lifecycle, discovery, authentication, transport, operation, database, query, or schema ownership changes.",
@@ -295,7 +295,7 @@
         "table": "The existing settings tables are better for exact names, defaults, and persistence.",
         "other_graphics": "A component map would duplicate the architecture page without improving lookup."
       },
-      "authority": ["docs/src/reference/configuration.md", "docs/src/reference/settings.md", "src/config.rs"],
+      "authority": ["docs/src/reference/configuration.md", "docs/src/reference/settings.md", "src/config/mod.rs"],
       "text_equivalent": "The current prose and tables are already complete.",
       "offline_delivery": "No new asset is required; all current reference content is local.",
       "update_trigger": "Reconsider if configuration ownership gains deep nesting or cross-owner inheritance.",
