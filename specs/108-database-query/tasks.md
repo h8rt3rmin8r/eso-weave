@@ -54,7 +54,7 @@
 - [x] T030 Run focused database-query and local-service tests
 - [x] T031 Run format, strict clippy, full locked tests, and release build
 - [x] T032 Run documentation policy, spelling, link, encoding, BOM, mojibake, and forbidden-dash checks
-- [ ] T033 Commit, push, and open the authorized PR closing issue #179
+- [x] T033 Commit, push, and open authorized PR #217 closing issue #179
 - [ ] T034 Resolve every hosted review and CI finding, with at most one authorized second Codex review
 - [ ] T035 Stop for the operator final review and merge ritual
 
