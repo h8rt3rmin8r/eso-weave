@@ -56,7 +56,7 @@
 - [x] T030 Commit the verified implementation as `feat(110): add Ultimate auto-potion watch` with attribution and push the feature branch
 - [x] T031 Open the official pull request with `Closes #173`, scope, verification, and explicit exclusions
 - [ ] T032 Wait for hosted CI, Codex, and security results and answer every review comment
-- [ ] T033 Apply and verify required review changes, resolve every completed review thread, and push updates
+- [x] T033 Apply and verify required review changes, resolve every completed review thread, and push updates
 - [ ] T034 Trigger at most one authorized second `@Codex` review and process it completely
 - [ ] T035 Confirm required checks are green, reviews are satisfied, the branch is clean, and the pull request is mergeable
 - [ ] T036 Stop for the operator's final review and merge ritual
