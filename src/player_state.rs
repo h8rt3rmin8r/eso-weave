@@ -310,19 +310,28 @@ pub fn bootstrap_content() -> SnapshotContent {
     let unknown_game = || unknown("game_process");
     let unknown_pixel = || unknown("pixel_bus");
     let unknown_controller = || unknown("controller");
-    let binding = json!({
-        "action": "skill_1",
-        "state": unknown("native_binding_resolver"),
-        "chord": unavailable("native_binding_resolver"),
-    });
+    let bindings = NativeAction::ALL
+        .into_iter()
+        .map(|action| {
+            json!({
+                "action": native_action(action),
+                "state": unknown("native_binding_resolver"),
+                "chord": unavailable("native_binding_resolver"),
+            })
+        })
+        .collect::<Vec<_>>();
     let skill = unknown_pixel();
-    let weave_slot = json!({
-        "index": 1,
-        "active": false,
-        "weave_type": "light_attack",
-        "override": {"d_weave": null, "d_heavy": null, "d_bash": null},
-        "effective_delays_ms": {"d_weave": 0, "d_heavy": 0, "d_bash": 0},
-    });
+    let weave_slots = (1..=7)
+        .map(|index| {
+            json!({
+                "index": index,
+                "active": false,
+                "weave_type": "light_attack",
+                "override": {"d_weave": null, "d_heavy": null, "d_bash": null},
+                "effective_delays_ms": {"d_weave": 0, "d_heavy": 0, "d_bash": 0},
+            })
+        })
+        .collect::<Vec<_>>();
     SnapshotContent {
         capabilities: Capabilities::default(),
         application: json!({
@@ -382,7 +391,7 @@ pub fn bootstrap_content() -> SnapshotContent {
                 "item_id": unavailable("pixel_bus"),
                 "unavailable_reason": unavailable("pixel_bus"),
             },
-            "bindings": [binding],
+            "bindings": bindings,
         }),
         automation: json!({
             "fishing": {
@@ -395,7 +404,7 @@ pub fn bootstrap_content() -> SnapshotContent {
                 "effective_state": observed(json!("off"), "controller"),
                 "reason": unavailable("controller"),
             },
-            "weave": {"slots": [weave_slot]},
+            "weave": {"slots": weave_slots},
         }),
         interpretation: json!({
             "auto_potion": {
@@ -492,7 +501,7 @@ pub fn project(input: ProjectionInput) -> SnapshotContent {
             "runtime": enum_observation(game_runtime(game.runtime), "game_process"),
             "focus": enum_observation(focus(game.focus), "game_process"),
             "context": enum_observation(game_context(game.context()), "game_observations"),
-            "surface": surface_observation(game.surface),
+            "surface": surface_observation(game.surface, game),
             "world": pixel_observation(world_value(game.world), game),
         }),
         pixel_bus: json!({
@@ -600,8 +609,10 @@ fn contextual_observation(
     game: &GameObservations,
     source: &'static str,
 ) -> Value {
-    if game.runtime != GameRuntime::Active {
-        return dormant(source);
+    match game.runtime {
+        GameRuntime::Unknown => return unknown(source),
+        GameRuntime::Active => {}
+        GameRuntime::Inactive | GameRuntime::LauncherOpen => return dormant(source),
     }
     let Some(value) = value else {
         return unknown(source);
@@ -618,6 +629,14 @@ fn pixel_optional_observation(value: Option<Value>, game: &GameObservations) -> 
         || unavailable("pixel_bus"),
         |value| pixel_observation(Some(value), game),
     )
+}
+
+fn contextual_unavailable(game: &GameObservations, source: &'static str) -> Value {
+    match game.runtime {
+        GameRuntime::Unknown => unknown(source),
+        GameRuntime::Active => unavailable(source),
+        GameRuntime::Inactive | GameRuntime::LauncherOpen => dormant(source),
+    }
 }
 
 fn installation_observation(value: &InstallationState) -> Value {
@@ -675,10 +694,12 @@ fn game_context(value: GameContext) -> Option<&'static str> {
     }
 }
 
-fn surface_observation(value: SurfaceObservation) -> Value {
+fn surface_observation(value: SurfaceObservation, game: &GameObservations) -> Value {
     match value {
-        SurfaceObservation::Unavailable => unavailable("pixel_bus"),
-        SurfaceObservation::Observed(value) => observed(json!(menu_surface(value)), "pixel_bus"),
+        SurfaceObservation::Unavailable => contextual_unavailable(game, "pixel_bus"),
+        SurfaceObservation::Observed(value) => {
+            pixel_observation(Some(json!(menu_surface(value))), game)
+        }
     }
 }
 
@@ -861,23 +882,34 @@ fn cooldown_value(value: SlotCooldown) -> Option<Value> {
 }
 
 fn quickslot(value: QuickslotState, game: &GameObservations) -> Value {
-    let (classification, kind, availability, reason) = match value.classification {
-        QuickslotClassification::Unavailable(reason) => {
-            (None, None, None, Some(quickslot_reason(reason)))
-        }
-        QuickslotClassification::Empty => (Some("empty"), None, None, None),
-        QuickslotClassification::NonPotion(kind) => {
-            (Some("non_potion"), Some(non_potion_kind(kind)), None, None)
-        }
-        QuickslotClassification::Potion(availability) => (
-            Some("potion"),
-            None,
-            Some(potion_availability(availability)),
-            None,
-        ),
+    let (classification, unavailable_classification, kind, availability, reason) =
+        match value.classification {
+            QuickslotClassification::Unavailable(reason) => {
+                (None, true, None, None, Some(quickslot_reason(reason)))
+            }
+            QuickslotClassification::Empty => (Some("empty"), false, None, None, None),
+            QuickslotClassification::NonPotion(kind) => (
+                Some("non_potion"),
+                false,
+                Some(non_potion_kind(kind)),
+                None,
+                None,
+            ),
+            QuickslotClassification::Potion(availability) => (
+                Some("potion"),
+                false,
+                None,
+                Some(potion_availability(availability)),
+                None,
+            ),
+        };
+    let classification = if unavailable_classification {
+        contextual_unavailable(game, "pixel_bus")
+    } else {
+        pixel_observation(classification.map(Value::from), game)
     };
     json!({
-        "classification": pixel_observation(classification.map(Value::from), game),
+        "classification": classification,
         "non_potion_kind": pixel_optional_observation(kind.map(Value::from), game),
         "potion_availability": pixel_optional_observation(availability.map(Value::from), game),
         "cooldown": pixel_observation(cooldown_value(value.cooldown), game),

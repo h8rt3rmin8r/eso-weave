@@ -46,6 +46,14 @@ fn bootstrap_document_has_every_stable_domain_and_public_contract_path() {
             "missing public path {path}"
         );
     }
+    assert_eq!(value["player"]["bindings"].as_array().unwrap().len(), 11);
+    assert_eq!(
+        value["automation"]["weave"]["slots"]
+            .as_array()
+            .unwrap()
+            .len(),
+        7
+    );
 }
 
 #[test]
@@ -135,6 +143,10 @@ fn active_projection_is_complete_and_loss_never_uses_hud_retention() {
     assert_eq!(content.player["ultimate"]["ready"]["value"], true);
     assert_eq!(content.player["bindings"].as_array().unwrap().len(), 11);
     assert_eq!(
+        content.player["quickslot"]["classification"]["knowledge"],
+        "unavailable"
+    );
+    assert_eq!(
         content.automation["weave"]["slots"]
             .as_array()
             .unwrap()
@@ -149,6 +161,7 @@ fn active_projection_is_complete_and_loss_never_uses_hud_retention() {
     unfocused.game.focus = FocusObservation::Unfocused;
     let content = project(unfocused);
     assert_eq!(content.game["focus"]["value"], "unfocused");
+    assert_eq!(content.game["surface"]["freshness"], "stale");
     assert_eq!(content.player["resources"]["health"]["value"], 61);
     assert_eq!(content.player["resources"]["health"]["freshness"], "stale");
 
@@ -166,6 +179,14 @@ fn active_projection_is_complete_and_loss_never_uses_hud_retention() {
         "dormant"
     );
     assert!(content.player["resources"]["health"].get("value").is_none());
+
+    let mut indeterminate = active_input();
+    indeterminate.game.runtime = GameRuntime::Unknown;
+    let content = project(indeterminate);
+    assert_eq!(
+        content.player["resources"]["health"]["knowledge"],
+        "unknown"
+    );
 }
 
 fn active_input() -> ProjectionInput {
