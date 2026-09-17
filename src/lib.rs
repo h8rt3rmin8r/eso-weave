@@ -25,6 +25,7 @@ pub mod icon_cache;
 pub mod input;
 pub mod local_service;
 pub mod logging;
+mod mcp_state;
 pub mod pixelbus;
 pub mod platform;
 pub mod player_state;

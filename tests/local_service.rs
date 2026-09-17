@@ -8,8 +8,15 @@ use eso_weave::local_service::{
     LocalServicePrefs, ServiceFailureCode, ServicePhase, ServiceStatus, DISCOVERY_FILE_NAME,
 };
 use eso_weave::player_state::{bootstrap_content, observed, SnapshotPublisher};
+use rmcp::model::{ErrorCode, ReadResourceRequestParams, ResourceContents};
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+use rmcp::transport::StreamableHttpClientTransport;
+use rmcp::{ServiceError, ServiceExt};
 
 const TEST_CREDENTIAL: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+const CAPABILITIES_RESOURCE_URI: &str = "esoweave://capabilities";
+const PLAYER_STATE_RESOURCE_URI: &str = "esoweave://player-state";
 
 #[test]
 fn preferences_default_off_and_create_one_stable_credential() {
@@ -193,6 +200,190 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
 
     controller.stop();
     wait_for(&controller, ServicePhase::Stopped);
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn mcp_client_discovers_reads_and_matches_http_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let publisher = SnapshotPublisher::default();
+    let mut content = bootstrap_content();
+    content.game["runtime"] = observed(serde_json::json!("active"), "game_process");
+    publisher.publish(content, time::OffsetDateTime::UNIX_EPOCH);
+    let mut controller = LocalServiceController::new_with_publisher(
+        LocalServiceConfig {
+            config_dir: Some(dir.path().to_owned()),
+            port: 0,
+            shutdown_timeout: Duration::from_millis(200),
+        },
+        publisher.clone(),
+    );
+    assert!(controller.start(TEST_CREDENTIAL));
+    let running = wait_for(&controller, ServicePhase::Running);
+    let connection = running.connection.unwrap();
+    let authority = connection
+        .http_base_url
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/api/v1")
+        .unwrap();
+    let http_capabilities: serde_json::Value = serde_json::from_str(response_body(&request(
+        authority,
+        "GET",
+        "/api/v1/capabilities",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    )))
+    .unwrap();
+    let http_state: serde_json::Value = serde_json::from_str(response_body(&request(
+        authority,
+        "GET",
+        "/api/v1/player-state",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    )))
+    .unwrap();
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(connection.mcp_url.clone())
+                .auth_header(TEST_CREDENTIAL),
+        );
+        let client = ().serve(transport).await.unwrap();
+        let server = client.peer_info().expect("initialize server info");
+        let resources_capability = server
+            .capabilities
+            .resources
+            .as_ref()
+            .expect("resources advertised");
+        assert_eq!(resources_capability.subscribe, None);
+        assert_eq!(resources_capability.list_changed, None);
+        assert_eq!(server.capabilities.tools, None);
+        assert_eq!(server.capabilities.prompts, None);
+
+        let resources = client.list_all_resources().await.unwrap();
+        assert_eq!(resources.len(), 2);
+        assert_resource(
+            &resources[0],
+            CAPABILITIES_RESOURCE_URI,
+            "capabilities",
+            "ESO Weave Capabilities",
+        );
+        assert_resource(
+            &resources[1],
+            PLAYER_STATE_RESOURCE_URI,
+            "player-state",
+            "ESO Weave Player State",
+        );
+
+        let mcp_capabilities = read_json_resource(&client, CAPABILITIES_RESOURCE_URI).await;
+        let mcp_state = read_json_resource(&client, PLAYER_STATE_RESOURCE_URI).await;
+        assert_eq!(mcp_capabilities, http_capabilities);
+        assert_eq!(mcp_state, http_state);
+        assert_eq!(mcp_capabilities["mcp_player_state"], true);
+        assert_eq!(mcp_capabilities["query_execution"], false);
+        assert_eq!(mcp_state["snapshot_revision"], 2);
+        assert_eq!(mcp_state["service_generation"], connection.generation);
+        assert_eq!(mcp_state["game"]["runtime"]["value"], "active");
+
+        let (reader_one, reader_two, reader_three) = tokio::join!(
+            read_json_resource(&client, PLAYER_STATE_RESOURCE_URI),
+            read_json_resource(&client, PLAYER_STATE_RESOURCE_URI),
+            read_json_resource(&client, PLAYER_STATE_RESOURCE_URI),
+        );
+        assert_eq!(reader_one, mcp_state);
+        assert_eq!(reader_two, mcp_state);
+        assert_eq!(reader_three, mcp_state);
+
+        let mut recovered = bootstrap_content();
+        recovered.game["runtime"] = observed(serde_json::json!("recovered"), "game_process");
+        publisher.publish(
+            recovered,
+            time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(1),
+        );
+        let recovered_http: serde_json::Value = serde_json::from_str(response_body(&request(
+            authority,
+            "GET",
+            "/api/v1/player-state",
+            &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+            "",
+        )))
+        .unwrap();
+        let recovered_mcp = read_json_resource(&client, PLAYER_STATE_RESOURCE_URI).await;
+        assert_eq!(recovered_mcp, recovered_http);
+        assert_eq!(recovered_mcp["snapshot_revision"], 3);
+        assert_eq!(recovered_mcp["game"]["runtime"]["value"], "recovered");
+
+        let missing = client
+            .read_resource(ReadResourceRequestParams::new(
+                "esoweave://player-state?untrusted=secret",
+            ))
+            .await
+            .expect_err("unknown resource should fail");
+        match missing {
+            ServiceError::McpError(error) => {
+                assert_eq!(error.code, ErrorCode::RESOURCE_NOT_FOUND);
+                assert!(!error.message.contains("untrusted"));
+                assert!(!error.message.contains("secret"));
+            }
+            other => panic!("expected MCP error, got {other:?}"),
+        }
+        client.cancel().await.unwrap();
+    });
+
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn mcp_client_without_bearer_cannot_initialize() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut controller = controller(dir.path(), 0);
+    assert!(controller.start(TEST_CREDENTIAL));
+    let connection = wait_for(&controller, ServicePhase::Running)
+        .connection
+        .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(connection.mcp_url),
+        );
+        assert!(().serve(transport).await.is_err());
+    });
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn mcp_player_state_tracks_each_service_generation_after_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut controller = controller(dir.path(), 0);
+    assert!(controller.start(TEST_CREDENTIAL));
+    let first = wait_for(&controller, ServicePhase::Running)
+        .connection
+        .unwrap();
+    let first_state = read_mcp_json_once(&first.mcp_url, PLAYER_STATE_RESOURCE_URI);
+    assert_eq!(first_state["service_generation"], first.generation);
+
+    controller.stop();
+    wait_for(&controller, ServicePhase::Stopped);
+    assert!(controller.start(TEST_CREDENTIAL));
+    let second = wait_for(&controller, ServicePhase::Running)
+        .connection
+        .unwrap();
+    assert!(second.generation > first.generation);
+    let second_state = read_mcp_json_once(&second.mcp_url, PLAYER_STATE_RESOURCE_URI);
+    assert_eq!(second_state["service_generation"], second.generation);
+    assert_eq!(
+        second_state["snapshot_revision"],
+        first_state["snapshot_revision"]
+    );
+
     controller.shutdown().unwrap();
 }
 
@@ -447,6 +638,58 @@ fn controller(config_dir: &Path, port: u16) -> LocalServiceController {
         config_dir: Some(config_dir.to_owned()),
         port,
         shutdown_timeout: Duration::from_millis(200),
+    })
+}
+
+fn assert_resource(resource: &rmcp::model::Resource, uri: &str, name: &str, title: &str) {
+    assert_eq!(resource.uri, uri);
+    assert_eq!(resource.name, name);
+    assert_eq!(resource.title.as_deref(), Some(title));
+    assert_eq!(resource.mime_type.as_deref(), Some("application/json"));
+    assert!(resource
+        .description
+        .as_deref()
+        .is_some_and(|text| !text.is_empty()));
+}
+
+async fn read_json_resource(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ()>,
+    uri: &str,
+) -> serde_json::Value {
+    let result = client
+        .read_resource(ReadResourceRequestParams::new(uri))
+        .await
+        .unwrap();
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        ResourceContents::TextResourceContents {
+            uri: actual_uri,
+            mime_type,
+            text,
+            ..
+        } => {
+            assert_eq!(actual_uri, uri);
+            assert_eq!(mime_type.as_deref(), Some("application/json"));
+            serde_json::from_str(text).unwrap()
+        }
+        other => panic!("expected JSON text resource, got {other:?}"),
+    }
+}
+
+fn read_mcp_json_once(mcp_url: &str, uri: &str) -> serde_json::Value {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(mcp_url.to_owned())
+                .auth_header(TEST_CREDENTIAL),
+        );
+        let client = ().serve(transport).await.unwrap();
+        let value = read_json_resource(&client, uri).await;
+        client.cancel().await.unwrap();
+        value
     })
 }
 
