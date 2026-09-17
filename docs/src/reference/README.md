@@ -7,6 +7,7 @@ Focused migrated references include:
 - [Settings Reference](settings.md)
 - [Status Reference](status-reference.md)
 - [Logging](logging.md)
+- [Local API and MCP](local-api-and-mcp.md)
 - [Pixel Bus Protocol](pixel-bus-protocol.md)
 - [Weave Delay Defaults](weave-delay-defaults.md)
 - [ESO Catalog Sources and Rights](catalog-sources-and-rights.md)

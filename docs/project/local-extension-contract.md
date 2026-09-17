@@ -5,6 +5,8 @@ lifecycle host. S106 adds the canonical immutable player-state publisher and
 authenticated HTTP capabilities and snapshot adapters. S107 adds the two fixed
 read-only MCP resources over that same authority. S108 adds one defended
 database query service plus the HTTP and MCP inventory and query adapters.
+S109 publishes the complete client guide and maintains final cross-transport
+and documentation-contract evidence.
 
 ## Fixed stack and topology
 
@@ -51,5 +53,9 @@ The full authority is [the database query contract](../../specs/104-local-extens
 4. S108 implements issue #179 with one defended query executor and both
    transport adapters.
 5. Issue #180 publishes shipped user and integrator documentation and cross-surface end-to-end parity tests.
+
+The published [Local API and MCP guide](../src/reference/local-api-and-mcp.md)
+is the client-facing authority for enablement, discovery, authentication,
+schemas, examples, limits, compatibility, and troubleshooting.
 
 Detailed lifecycle transitions and middleware order are [the service lifecycle contract](../../specs/104-local-extension-contract/contracts/service-lifecycle.md). Implementations may refine internal names, but changing a fixed external behavior, security boundary, limit, or compatibility rule requires an ADR update before code diverges.

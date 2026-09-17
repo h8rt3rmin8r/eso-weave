@@ -1,5 +1,11 @@
 # Configuration and Session State
 
+The persisted local-extension preference includes only enablement and its
+bearer credential. While the service runs, a separate non-secret discovery file
+publishes loopback endpoints, process, generation, and schema version. See
+[Local API and MCP](local-api-and-mcp.md) for ownership, authentication, and
+restart rules.
+
 Session State is the `state.json` record for saved window position, application
 suspension, and requested Fishing and Auto Potion enablement. Invalid
 Configuration may also be described as a corrupt config, a reset to defaults,

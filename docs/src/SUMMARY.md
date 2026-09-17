@@ -25,6 +25,7 @@
   - [Settings](reference/settings.md)
   - [Status Reference](reference/status-reference.md)
   - [Logging](reference/logging.md)
+  - [Local API and MCP](reference/local-api-and-mcp.md)
   - [Pixel Bus Protocol](reference/pixel-bus-protocol.md)
   - [Weave Delay Defaults](reference/weave-delay-defaults.md)
   - [ESO Catalog Sources and Rights](reference/catalog-sources-and-rights.md)

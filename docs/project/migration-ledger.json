@@ -1639,9 +1639,14 @@
       "lifecycle": "Active",
       "destination": "docs/project/build-plans/plan-045.md",
       "specs": [
-        "specs/104-local-extension-contract"
+        "specs/104-local-extension-contract",
+        "specs/105-local-service-lifecycle",
+        "specs/106-player-state-http",
+        "specs/107-mcp-player-state",
+        "specs/108-database-query",
+        "specs/109-extension-docs-e2e"
       ],
-      "evidence": "Issue #175 tracks active S104 local extension stack and contract definition."
+      "evidence": "Issue #180 tracks active S109 delivery at the end of the S104 through S109 local extension sequence; Plan 045 remains active until its pull request is merged."
     }
   ],
   "safetyCrosswalk": [

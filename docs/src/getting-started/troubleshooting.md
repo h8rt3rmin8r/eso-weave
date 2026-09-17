@@ -7,6 +7,11 @@ Start with the first failing observation, then follow the matching branch. Do no
 disable focus checks, signal validation, suspension, or managed-addon guards to
 make automation run.
 
+For the optional authenticated extension service, including a stopped listener,
+port collision, stale discovery, bearer rejection, protocol mismatch, database
+limits, or client disconnect, use [Local API and MCP
+troubleshooting](../reference/local-api-and-mcp.md#troubleshooting).
+
 ## Shared diagnostic flow
 
 ```text
