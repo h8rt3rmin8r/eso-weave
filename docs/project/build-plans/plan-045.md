@@ -9,8 +9,9 @@ Sequence:
    database query, parity, resource-limit, and compatibility contracts.
 2. S105 implements issue #176 by adding the persisted opt-in combined service
    lifecycle, discovery, status, authentication, and shared runtime host.
-3. Issue #177 projects every canonical current player-state observation through
-   the HTTP adapter and adds maintained source-inventory coverage.
+3. S106 implements issue #177 by projecting every canonical current
+   player-state observation through the HTTP adapter and adding maintained
+   source-inventory coverage.
 4. Issue #178 adds canonical resources to the mounted MCP adapter and proves
    transport parity against the same snapshot authority.
 5. Issue #179 adds one bounded read-only SQLite query service and parity across

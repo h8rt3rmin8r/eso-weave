@@ -7,6 +7,7 @@ use eso_weave::local_service::{
     valid_credential, DiscoveryRecord, LocalServiceConfig, LocalServiceController,
     LocalServicePrefs, ServiceFailureCode, ServicePhase, ServiceStatus, DISCOVERY_FILE_NAME,
 };
+use eso_weave::player_state::{bootstrap_content, observed, SnapshotPublisher};
 
 const TEST_CREDENTIAL: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -124,8 +125,45 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
         &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
         "",
     );
-    assert!(api.starts_with("HTTP/1.1 501"));
-    assert!(api.contains("service_unavailable"));
+    assert!(api.starts_with("HTTP/1.1 200"));
+    let capabilities: serde_json::Value = serde_json::from_str(response_body(&api)).unwrap();
+    assert_eq!(capabilities["schema_version"], "1.0.0");
+    assert_eq!(
+        capabilities["http_operations"],
+        serde_json::json!(["capabilities", "player_state"])
+    );
+
+    let state = request(
+        authority,
+        "GET",
+        "/api/v1/player-state",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    );
+    assert!(state.starts_with("HTTP/1.1 200"), "{state}");
+    let state: serde_json::Value = serde_json::from_str(response_body(&state)).unwrap();
+    assert_eq!(state["service_generation"], connection.generation);
+    assert_eq!(state["snapshot_revision"], 1);
+    assert!(state["application"].is_object());
+
+    let method = request(
+        authority,
+        "POST",
+        "/api/v1/player-state",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    );
+    assert!(method.starts_with("HTTP/1.1 405"), "{method}");
+    assert!(method.contains("method_not_allowed"));
+
+    let missing = request(
+        authority,
+        "GET",
+        "/api/v1/missing",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    );
+    assert!(missing.starts_with("HTTP/1.1 404"), "{missing}");
 
     let initialize = serde_json::json!({
         "jsonrpc": "2.0",
@@ -155,6 +193,46 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
 
     controller.stop();
     wait_for(&controller, ServicePhase::Stopped);
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn player_state_route_clones_the_latest_immutable_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let publisher = SnapshotPublisher::default();
+    let mut content = bootstrap_content();
+    content.game["runtime"] = observed(serde_json::json!("active"), "game_process");
+    publisher.publish(content, time::OffsetDateTime::UNIX_EPOCH);
+    let mut controller = LocalServiceController::new_with_publisher(
+        LocalServiceConfig {
+            config_dir: Some(dir.path().to_owned()),
+            port: 0,
+            shutdown_timeout: Duration::from_millis(200),
+        },
+        publisher,
+    );
+    controller.start(TEST_CREDENTIAL);
+    let running = wait_for(&controller, ServicePhase::Running);
+    let connection = running.connection.unwrap();
+    let authority = connection
+        .http_base_url
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/api/v1")
+        .unwrap();
+
+    let response = request(
+        authority,
+        "GET",
+        "/api/v1/player-state",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    );
+    let value: serde_json::Value = serde_json::from_str(response_body(&response)).unwrap();
+    assert_eq!(value["snapshot_revision"], 2);
+    assert_eq!(value["service_generation"], connection.generation);
+    assert_eq!(value["game"]["runtime"]["value"], "active");
+
     controller.shutdown().unwrap();
 }
 
@@ -416,6 +494,10 @@ fn request(
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
     response
+}
+
+fn response_body(response: &str) -> &str {
+    response.split_once("\r\n\r\n").unwrap().1
 }
 
 fn chunked_request(authority: &str, path: &str, headers: &[(&str, &str)], body: &str) -> String {

@@ -1,8 +1,10 @@
 # Local Extension Implementation Contract
 
 Status: Accepted by ADR 0002 on 2026-09-15. S105 ships the authenticated
-lifecycle host and minimal MCP initialization surface. Canonical player state,
-MCP resources, and database queries remain in the dependent slices below.
+lifecycle host and minimal MCP initialization surface. S106 adds the canonical
+immutable player-state publisher and authenticated HTTP capabilities and
+snapshot adapters. MCP resources and database queries remain in the dependent
+slices below.
 
 ## Fixed stack and topology
 
@@ -28,7 +30,7 @@ The adapters share one immutable revisioned snapshot service, one query service,
 
 External schema `1.0.0` covers all current application, game, PixelBus, player, automation, and interpretation facts. Every observation preserves knowledge, value, source, protocol, observation time, age, and freshness. Unknown, unavailable, dormant, fresh, and stale are distinct. Retained values never hide immediate focus or signal loss.
 
-The complete field and non-public inventories are [the canonical player-state contract](../../specs/104-local-extension-contract/contracts/player-state-v1.md). Issue #177 must turn this inventory into a maintained source-coverage test before adding the HTTP projection.
+The complete field and non-public inventories are [the canonical player-state contract](../../specs/104-local-extension-contract/contracts/player-state-v1.md). S106 turns that inventory into maintained source-coverage tests and publishes it through one immutable revisioned snapshot. Raw source observations that the current runtime does not retain remain explicitly unknown rather than being inferred from controller state.
 
 ## Database authority
 
@@ -40,8 +42,10 @@ The full authority is [the database query contract](../../specs/104-local-extens
 
 ## Dependent implementation sequence
 
-1. Issue #176 implements persisted opt-in lifecycle, authentication, discovery, status, and the shared runtime host.
-2. Issue #177 implements the canonical immutable state projection and HTTP adapters.
+1. S105 implements issue #176 with persisted opt-in lifecycle, authentication,
+   discovery, status, and the shared runtime host.
+2. S106 implements issue #177 with the canonical immutable state projection and
+   HTTP adapters.
 3. Issue #178 adds canonical resources through the mounted RMCP service and proves
    state parity against the same snapshot revision.
 4. Issue #179 implements one defended query executor and both transport adapters.

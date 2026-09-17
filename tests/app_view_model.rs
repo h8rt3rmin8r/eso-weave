@@ -1100,6 +1100,56 @@ struct RetentionHarness {
     _dispatch: tracing::Dispatch,
 }
 
+#[test]
+fn canonical_state_marks_retained_hud_values_stale_or_dormant() {
+    let root = tempfile::tempdir().unwrap();
+    let harness = retention_harness(root.path(), 10);
+    harness.model.view_at(0);
+    let publisher = harness.model.player_state_publisher();
+    let active = publisher.current().document(3);
+    assert_eq!(active["player"]["resources"]["health"]["value"], 73);
+    assert_eq!(
+        active["player"]["resources"]["health"]["freshness"],
+        "fresh"
+    );
+
+    harness.game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unfocused,
+        },
+        1_000,
+    );
+    let retained = harness.model.view_at(1_000);
+    assert_eq!(retained.resources.health.text, "73%");
+    let unfocused = publisher.current().document(3);
+    assert_eq!(unfocused["game"]["focus"]["value"], "unfocused");
+    assert_eq!(unfocused["player"]["resources"]["health"]["value"], 73);
+    assert_eq!(
+        unfocused["player"]["resources"]["health"]["freshness"],
+        "stale"
+    );
+
+    harness.game.update_processes(
+        ProcessObservation {
+            game: Presence::Absent,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Unknown,
+        },
+        2_000,
+    );
+    harness.model.view_at(2_000);
+    let inactive = publisher.current().document(3);
+    assert_eq!(
+        inactive["player"]["resources"]["health"]["knowledge"],
+        "dormant"
+    );
+    assert!(inactive["player"]["resources"]["health"]
+        .get("value")
+        .is_none());
+}
+
 fn retention_harness(root: &std::path::Path, seconds: u16) -> RetentionHarness {
     let (input, _input_rx) = InputEngine::new(BindingTable::default(), 16);
     let input = Arc::new(input);

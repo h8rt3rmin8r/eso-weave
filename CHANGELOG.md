@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S106 adds a dedicated immutable canonical player-state publisher and
+  authenticated `GET /api/v1`, `/api/v1/capabilities`, and
+  `/api/v1/player-state` adapters. The schema covers every maintained S104
+  application, game, PixelBus, player, automation, and interpretation path,
+  preserves unknown, unavailable, dormant, fresh, and stale distinctions,
+  advances revisions only for semantic changes, and lets slow HTTP readers
+  serialize one coherent revision without holding UI or worker locks. MCP
+  resources and database queries remain unadvertised for their dependent slices
+  (issue #177, epic #174).
+
 - S105 adds one persisted, off-by-default Local API and MCP server setting that
   owns an authenticated `127.0.0.1:18765` listener, a minimal stateless MCP
   initialization surface, non-secret atomic discovery, truthful lifecycle and
@@ -121,6 +131,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-17: Give external player state its own transport-independent snapshot
+  authority instead of serializing `AppView`, whose presentation strings and
+  retained HUD values are not runtime truth. Publish immutable revisions through
+  a short shared-reference handoff, overlay service generation at HTTP response
+  time, and align process mutation with capture lock order so a revision cannot
+  combine pre-transition controller facts with post-transition game facts. Raw
+  observations that are not retained, including the current fishing B1 sample,
+  remain explicitly unknown rather than being inferred from controller phase.
 
 - 2026-09-16: Ship the S104-selected Axum 0.8.9, RMCP 3.4.0, Tokio
   1.53.1, and Tokio Util 0.7.16 stack as one dedicated current-thread runtime

@@ -328,9 +328,45 @@ fn main() {
                 }
                 if now >= next_game_probe_ms {
                     next_game_probe_ms = now.saturating_add(1000);
-                    let before = game.snapshot().runtime;
                     let installation = eso_weave::game::discover_installation();
-                    if game.update_installation(installation.clone()) {
+                    let processes = eso_weave::game::observe_processes();
+                    let mut weave = weave.lock().unwrap();
+                    let mut fishing = fishing.lock().unwrap();
+                    let mut potion = potion.lock().unwrap();
+                    let before = game.snapshot().runtime;
+                    let installation_changed = game.update_installation(installation.clone());
+                    let process_changed = game.update_processes(processes, now);
+                    let after = processes.runtime();
+                    let active = after == GameRuntime::Active;
+                    let focused = matches!(processes.focus, FocusObservation::Focused);
+                    if !active {
+                        input.set_game_active(false);
+                    }
+                    if !focused {
+                        input.set_focused(false);
+                    }
+                    fishing.set_game_environment(active, focused, now, &mut sink);
+                    potion.set_game_active(active);
+                    potion.set_focused(focused);
+                    if active {
+                        input.set_game_active(true);
+                    }
+                    if focused {
+                        input.set_focused(true);
+                    }
+                    if before == GameRuntime::Active && !active {
+                        sampler = None;
+                        reader.reset();
+                        weave.clear_game_observations();
+                    } else if before != GameRuntime::Active && active {
+                        sampler = None;
+                        reader.reset();
+                    }
+                    drop(potion);
+                    drop(fishing);
+                    drop(weave);
+
+                    if installation_changed {
                         let (state, provider) = match &installation {
                             eso_weave::game::InstallationState::NotDetected => {
                                 ("not-detected", None)
@@ -348,32 +384,6 @@ fn main() {
                             "game installation observation changed"
                         );
                     }
-                    let processes = eso_weave::game::observe_processes();
-                    let process_changed = game.update_processes(processes, now);
-                    let after = processes.runtime();
-                    let active = after == GameRuntime::Active;
-                    let focused = matches!(processes.focus, FocusObservation::Focused);
-                    if !active {
-                        input.set_game_active(false);
-                    }
-                    if !focused {
-                        input.set_focused(false);
-                    }
-                    fishing
-                        .lock()
-                        .unwrap()
-                        .set_game_environment(active, focused, now, &mut sink);
-                    {
-                        let mut potion = potion.lock().unwrap();
-                        potion.set_game_active(active);
-                        potion.set_focused(focused);
-                    }
-                    if active {
-                        input.set_game_active(true);
-                    }
-                    if focused {
-                        input.set_focused(true);
-                    }
                     if process_changed {
                         tracing::info!(
                             target: "eso_weave::game",
@@ -381,14 +391,6 @@ fn main() {
                             focus = ?processes.focus,
                             "game runtime observation changed"
                         );
-                    }
-                    if before == GameRuntime::Active && !active {
-                        sampler = None;
-                        reader.reset();
-                        weave.lock().unwrap().clear_game_observations();
-                    } else if before != GameRuntime::Active && active {
-                        sampler = None;
-                        reader.reset();
                     }
                 }
                 if game.snapshot().runtime != GameRuntime::Active {
