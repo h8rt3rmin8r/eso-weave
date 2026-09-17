@@ -41,7 +41,7 @@
 - [x] T020 Run focused tests and quickstart validation
 - [x] T021 Run fmt, strict clippy, full locked tests, and release build
 - [x] T022 Run documentation policy, spelling, link, encoding, BOM, mojibake, and forbidden-dash checks
-- [ ] T023 Commit, push, and open the authorized PR closing issue #177
+- [x] T023 Commit, push, and open the authorized PR closing issue #177 ([PR #215](https://github.com/h8rt3rmin8r/eso-weave/pull/215))
 - [ ] T024 Resolve every hosted review and CI finding, with at most one authorized second Codex review
 - [ ] T025 Stop for the operator final review and merge ritual
 
