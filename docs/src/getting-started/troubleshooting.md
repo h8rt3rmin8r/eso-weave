@@ -33,8 +33,10 @@ Does ESO Weave open?
         No -> fix addon discovery or lifecycle state.
         Yes -> is PixelBeacon Signal detected?
           No -> check addon enablement, reload, overlay visibility, and geometry.
-          Yes -> is native binding evidence valid for the requested action?
-            No -> repair the binding in ESO, then restore fresh evidence.
+          Yes -> are the platform input path and native binding evidence valid?
+            No -> is native binding evidence Unavailable?
+              Yes -> update or reload PixelBeacon and restore the shared signal first.
+              No -> use the platform input guidance and native binding state table.
             Yes -> is encounter capture or import the first failing observation?
               Yes -> inspect addon status, saved authority, receipt, loss, and validation.
               No -> inspect the feature-specific status and Live Log.

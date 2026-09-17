@@ -388,7 +388,7 @@ const PLAIN_CODE_BLOCKS = [
   { page: "features/encounter-capture.md", sha256: "7670ddaeb06a92493c7156e32a8eb3bf286fb146597d34530d28b7486ec1eb94", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
   { page: "features/weaving.md", sha256: "74576ddc34a330808aa09f8bbc76348f573f3686a2eec2555060dc5651c3bee5", rationale: "A mathematical formula, not executable syntax." },
   { page: "features/weaving.md", sha256: "4fa825b4a104e43a5c6c4fff848dfd7f8192486b146e1ce02ee9f551694e62b1", rationale: "An authorization process flow, not executable syntax." },
-  { page: "getting-started/troubleshooting.md", sha256: "e50cf28c0e09a126c52f782601c8fce3e8de4d0d734cdbb596c883ff1750a918", rationale: "A diagnostic decision tree, not executable syntax." },
+  { page: "getting-started/troubleshooting.md", sha256: "2041b1a45d75c539e4eff851077493e0b0253d4843625e49eb50fefdc90b1ae5", rationale: "A diagnostic decision tree, not executable syntax." },
   { page: "reference/pixel-bus-protocol.md", sha256: "e159118f0007ffa610a1afedeb56051affb6758336b096c99e6456a0b828e3e4", rationale: "Protocol geometry formulas, not executable syntax." },
 ];
 
@@ -1600,7 +1600,10 @@ const DOCUMENTATION_DIAGRAMS = [
       "is the ESO window focused and Game Context Gameplay?",
       "is PixelBeacon Installed (current)?",
       "is PixelBeacon Signal detected?",
-      "is native binding evidence valid for the requested action?",
+      "are the platform input path and native binding evidence valid?",
+      "is native binding evidence Unavailable?",
+      "update or reload PixelBeacon and restore the shared signal first",
+      "use the platform input guidance and native binding state table",
       "is encounter capture or import the first failing observation?",
       "inspect the feature-specific status and Live Log",
     ],
