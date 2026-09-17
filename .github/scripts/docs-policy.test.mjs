@@ -436,14 +436,19 @@ test("S080 requires bounded wordmark, accessible hidden text, and narrow metadat
   assert.match(validateLandingCss(css.replace("grid-template-columns: 1fr;", "grid-template-columns: repeat(4, 1fr);")).join("\n"), /narrow/i);
 });
 
-test("S080 and S081 documentation checks follow metadata and brand authorities", () => {
+test("S080, S081, and S111 documentation checks follow their authorities", () => {
+  const visualizationAudit = { candidates: [{ authority: [".github/workflows/release.yml", "src/local_service.rs"] }] };
   const triggers = `on:\n  push:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "release.toml"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  pull_request:\n    paths:\n      - "Cargo.toml"\n      - "CHANGELOG.md"\n      - "release.toml"\n      - "assets/eso-weave-banner.png"\n      - "assets/brand/eso-weave-mark.svg"\n      - "assets/brand/eso-weave-glyph.svg"\n  workflow_dispatch:\n`;
-  assert.deepEqual(validateDocumentationAuthorityTriggers(triggers), []);
+  const completeTriggers = triggers.replaceAll('      - "release.toml"\n', '      - "release.toml"\n      - ".github/workflows/release.yml"\n      - "src/local_service.rs"\n');
+  assert.deepEqual(validateDocumentationAuthorityTriggers(completeTriggers, visualizationAudit), []);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll('      - "Cargo.toml"\n', "")).join("\n"), /Cargo\.toml.*push.*pull_request/i);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replace('      - "CHANGELOG.md"\n', "")).join("\n"), /CHANGELOG\.md.*push/i);
   assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll('      - "release.toml"\n', "")).join("\n"), /release\.toml.*push.*pull_request/i);
   for (const authority of ["assets/eso-weave-banner.png", "assets/brand/eso-weave-mark.svg", "assets/brand/eso-weave-glyph.svg"]) {
     assert.match(validateDocumentationAuthorityTriggers(triggers.replaceAll(`      - "${authority}"\n`, "")).join("\n"), new RegExp(`${authority.replace(/[./-]/gu, "\\$&")}.*push.*pull_request`, "i"));
+  }
+  for (const authority of [".github/workflows/release.yml", "src/local_service.rs"]) {
+    assert.match(validateDocumentationAuthorityTriggers(completeTriggers.replaceAll(`      - "${authority}"\n`, ""), visualizationAudit).join("\n"), /S111.*push.*pull_request/i);
   }
 });
 
@@ -2965,8 +2970,8 @@ function visualizationAuditFixture() {
     summary_path: "docs/src/SUMMARY.md",
     audited_at: "2026-09-17",
     pages: [
-      { path: "docs/src/README.md", title: "Home", section: "root", current_medium: "Prose links", decision: "candidate", rationale: "Cross-page path needs evaluation.", candidate_ids: ["approved-path"] },
-      { path: "docs/src/features/README.md", title: "Features", section: "features", current_medium: "Navigation list", decision: "candidate", rationale: "The exact lookup form was evaluated and rejected.", candidate_ids: ["rejected-lookup"] },
+      { path: "docs/src/README.md", title: "Home", section: "root", current_medium: "Prose links", decision: "candidate", rationale: "Cross-page path needs evaluation.", candidate_ids: ["approved-path", "rejected-lookup"] },
+      { path: "docs/src/features/README.md", title: "Features", section: "features", current_medium: "Navigation list", decision: "candidate", rationale: "The exact lookup form was evaluated and rejected.", candidate_ids: ["approved-path", "rejected-lookup"] },
     ],
     candidates: [approved, rejected],
     clusters: [

@@ -3706,18 +3706,23 @@ export function validateWorkflowText(workflow) {
   return errors;
 }
 
-export function validateDocumentationAuthorityTriggers(workflow) {
+export function validateDocumentationAuthorityTriggers(workflow, visualizationAudit) {
   const errors = [];
   const triggerText = workflow.split(/^permissions:/mu)[0] ?? workflow;
   const triggers = yamlBlocks(triggerText, 2);
-  for (const [slice, authority] of [
+  const authorities = [
     ["S080", "Cargo.toml"],
     ["S080", "CHANGELOG.md"],
     ["S091", "release.toml"],
     ["S081", "assets/eso-weave-banner.png"],
     ["S081", "assets/brand/eso-weave-mark.svg"],
     ["S081", "assets/brand/eso-weave-glyph.svg"],
-  ]) {
+  ];
+  const visualizationAuthorities = new Set(visualizationAudit?.candidates?.flatMap((candidate) => candidate.authority ?? []) ?? []);
+  for (const authority of visualizationAuthorities) {
+    if (typeof authority === "string" && !authority.startsWith("docs/")) authorities.push(["S111", authority]);
+  }
+  for (const [slice, authority] of authorities) {
     const missing = [];
     for (const event of ["push", "pull_request"]) {
       const block = triggers.get(event) ?? "";
@@ -3857,6 +3862,7 @@ export function validateVisualizationAudit(manifest, summaryMarkdown, options = 
     errors.push("S111 candidate identifiers must be unique kebab-case values");
   }
   const pageSet = new Set(pagePaths);
+  const pageByPath = new Map(pages.map((page) => [page?.path, page]));
   const referencedCandidates = new Set();
   const sections = new Set(["root", "getting-started", "features", "concepts", "reference", "development"]);
   for (const page of pages) {
@@ -3908,6 +3914,11 @@ export function validateVisualizationAudit(manifest, summaryMarkdown, options = 
     }
     if (!new Set(["approved", "rejected"]).has(candidate?.decision)) {
       errors.push(`S111 candidate ${label} has an invalid decision`);
+    }
+    for (const candidatePage of [candidate?.destination, ...(candidate?.supporting_pages ?? [])]) {
+      if (!pageByPath.get(candidatePage)?.candidate_ids?.includes(candidate?.id)) {
+        errors.push(`S111 candidate ${label} destination and supporting pages must reference the candidate: ${candidatePage}`);
+      }
     }
     if (!referencedCandidates.has(candidate?.id)) {
       errors.push(`S111 candidate ${label} must be referenced by an audited page`);
@@ -4082,7 +4093,7 @@ async function run() {
     ...validateBrandStandardVisualCss(css),
     ...validateSyntaxHighlightingCss(css),
     ...validateWorkflowText(workflow),
-    ...validateDocumentationAuthorityTriggers(workflow),
+    ...validateDocumentationAuthorityTriggers(workflow, visualizationAudit),
     ...validateCatalogCandidateWorkflow(await readFile(catalogWorkflowPath, "utf8")),
     ...(await validateCorpusRepository(repositoryRoot, ledger)),
     ...(await validateContentCoverageRepository(repositoryRoot, coverage)),
