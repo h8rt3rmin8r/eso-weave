@@ -12,8 +12,8 @@ Sequence:
 3. S106 implements issue #177 by projecting every canonical current
    player-state observation through the HTTP adapter and adding maintained
    source-inventory coverage.
-4. Issue #178 adds canonical resources to the mounted MCP adapter and proves
-   transport parity against the same snapshot authority.
+4. S107 implements issue #178 by adding canonical resources to the mounted MCP
+   adapter and proving transport parity against the same snapshot authority.
 5. Issue #179 adds one bounded read-only SQLite query service and parity across
    HTTP and MCP.
 6. Issue #180 publishes user and integrator documentation and closes the sequence

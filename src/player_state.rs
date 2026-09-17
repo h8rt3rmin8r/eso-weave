@@ -136,7 +136,7 @@ impl Default for Capabilities {
             http_operations: ["capabilities", "player_state"],
             database_ids: ["catalog", "encounters"],
             query_execution: false,
-            mcp_player_state: false,
+            mcp_player_state: true,
             pixel_bus: PixelBusCapabilities {
                 supported_layout_revisions: [1, 2, 3, 4, 5, 6],
                 negotiated_layout: false,

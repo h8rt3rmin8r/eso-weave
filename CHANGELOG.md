@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S107 exposes `esoweave://capabilities` and `esoweave://player-state` as the
+  only fixed resources on the authenticated stateless MCP endpoint. Both return
+  one canonical JSON text document from the S106 immutable snapshot authority,
+  preserve the active service generation and all knowledge and freshness
+  semantics, and match their HTTP counterparts field for field. Official RMCP
+  client coverage verifies initialize, exact discovery metadata, reads,
+  revision recovery, non-reflective unknown-resource errors, and existing
+  lifecycle and transport guards. Database resources and queries remain
+  unavailable for issue #179 (issue #178, epic #174).
+
 - S106 adds a dedicated immutable canonical player-state publisher and
   authenticated `GET /api/v1`, `/api/v1/capabilities`, and
   `/api/v1/player-state` adapters. The schema covers every maintained S104
@@ -131,6 +141,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-17: Implement MCP player state as two native fixed resources over the
+  existing snapshot publisher, with no resource templates, subscriptions,
+  notifications, prompts, tools, mutable sessions, or second cache. Enable
+  RMCP's client and Reqwest Streamable HTTP transport only for dev builds so
+  contract tests cover the official client handshake and wire behavior while
+  release builds retain the server-only dependency surface.
 
 - 2026-09-17: Give external player state its own transport-independent snapshot
   authority instead of serializing `AppView`, whose presentation strings and

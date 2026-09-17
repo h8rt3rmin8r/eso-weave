@@ -66,6 +66,9 @@ x11rb = "0.14"
 winresource = "0.1"
 
 [dev-dependencies]
+# Runs S107 contract tests through RMCP's official client and Streamable HTTP
+# transport. Release builds retain the server-only dependency feature set.
+rmcp = { version = "=3.4.0", default-features = false, features = ["client", "transport-streamable-http-client-reqwest"] }
 # Headless egui harness for the rendered-frame sizing tests (slice 030). Zero
 # features are enabled by default, so no GPU, windowing, or image stack enters the
 # test build; the version tracks the eframe/egui release. Recorded as a dated

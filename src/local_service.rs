@@ -25,12 +25,12 @@ use axum::routing::any;
 use axum::{Json, Router};
 use rmcp::transport::streamable_http_server::session::never::NeverSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
-use rmcp::ServerHandler;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::mcp_state::PlayerStateMcp;
 use crate::player_state::SnapshotPublisher;
 
 /// Fixed production port selected by ADR 0002.
@@ -798,11 +798,6 @@ struct ApiState {
     generation: u64,
 }
 
-#[derive(Clone, Default)]
-struct LifecycleMcp;
-
-impl ServerHandler for LifecycleMcp {}
-
 fn build_router(
     effective: SocketAddr,
     credential: String,
@@ -821,8 +816,9 @@ fn build_router(
     mcp_config.json_response = true;
     mcp_config.cancellation_token = cancellation.clone();
     mcp_config.max_request_body_bytes = MAX_REQUEST_BODY_BYTES;
+    let mcp_handler = PlayerStateMcp::new(publisher.clone(), generation);
     let mcp = StreamableHttpService::new(
-        || Ok(LifecycleMcp),
+        move || Ok(mcp_handler.clone()),
         Arc::new(NeverSessionManager::default()),
         mcp_config,
     );

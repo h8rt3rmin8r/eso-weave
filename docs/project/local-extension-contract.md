@@ -1,10 +1,10 @@
 # Local Extension Implementation Contract
 
 Status: Accepted by ADR 0002 on 2026-09-15. S105 ships the authenticated
-lifecycle host and minimal MCP initialization surface. S106 adds the canonical
-immutable player-state publisher and authenticated HTTP capabilities and
-snapshot adapters. MCP resources and database queries remain in the dependent
-slices below.
+lifecycle host. S106 adds the canonical immutable player-state publisher and
+authenticated HTTP capabilities and snapshot adapters. S107 adds the two fixed
+read-only MCP resources over that same authority. Database queries remain in
+the dependent slices below.
 
 ## Fixed stack and topology
 
@@ -46,8 +46,8 @@ The full authority is [the database query contract](../../specs/104-local-extens
    discovery, status, and the shared runtime host.
 2. S106 implements issue #177 with the canonical immutable state projection and
    HTTP adapters.
-3. Issue #178 adds canonical resources through the mounted RMCP service and proves
-   state parity against the same snapshot revision.
+3. S107 implements issue #178 with canonical resources through the mounted RMCP
+   service and proves state parity against the same snapshot revision.
 4. Issue #179 implements one defended query executor and both transport adapters.
 5. Issue #180 publishes shipped user and integrator documentation and cross-surface end-to-end parity tests.
 
