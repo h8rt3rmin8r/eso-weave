@@ -902,6 +902,7 @@ name = "eso-weave"
 version = "0.16.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "dirs",
  "eframe",
  "egui-wgpu",

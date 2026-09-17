@@ -3,20 +3,23 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use eso_weave::database_query::DatabaseQueryService;
 use eso_weave::local_service::{
     valid_credential, DiscoveryRecord, LocalServiceConfig, LocalServiceController,
     LocalServicePrefs, ServiceFailureCode, ServicePhase, ServiceStatus, DISCOVERY_FILE_NAME,
 };
 use eso_weave::player_state::{bootstrap_content, observed, SnapshotPublisher};
-use rmcp::model::{ErrorCode, ReadResourceRequestParams, ResourceContents};
+use rmcp::model::{CallToolRequestParams, ErrorCode, ReadResourceRequestParams, ResourceContents};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::{ServiceError, ServiceExt};
+use rusqlite::Connection;
 
 const TEST_CREDENTIAL: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 const CAPABILITIES_RESOURCE_URI: &str = "esoweave://capabilities";
 const PLAYER_STATE_RESOURCE_URI: &str = "esoweave://player-state";
+const DATABASES_RESOURCE_URI: &str = "esoweave://databases";
 
 #[test]
 fn preferences_default_off_and_create_one_stable_credential() {
@@ -137,7 +140,12 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
     assert_eq!(capabilities["schema_version"], "1.0.0");
     assert_eq!(
         capabilities["http_operations"],
-        serde_json::json!(["capabilities", "player_state"])
+        serde_json::json!([
+            "capabilities",
+            "player_state",
+            "databases",
+            "query_database"
+        ])
     );
 
     let state = request(
@@ -243,6 +251,14 @@ fn mcp_client_discovers_reads_and_matches_http_state() {
         "",
     )))
     .unwrap();
+    let http_databases: serde_json::Value = serde_json::from_str(response_body(&request(
+        authority,
+        "GET",
+        "/api/v1/databases",
+        &[("Authorization", &format!("Bearer {TEST_CREDENTIAL}"))],
+        "",
+    )))
+    .unwrap();
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -262,11 +278,11 @@ fn mcp_client_discovers_reads_and_matches_http_state() {
             .expect("resources advertised");
         assert_eq!(resources_capability.subscribe, None);
         assert_eq!(resources_capability.list_changed, None);
-        assert_eq!(server.capabilities.tools, None);
+        assert!(server.capabilities.tools.is_some());
         assert_eq!(server.capabilities.prompts, None);
 
         let resources = client.list_all_resources().await.unwrap();
-        assert_eq!(resources.len(), 2);
+        assert_eq!(resources.len(), 3);
         assert_resource(
             &resources[0],
             CAPABILITIES_RESOURCE_URI,
@@ -279,13 +295,21 @@ fn mcp_client_discovers_reads_and_matches_http_state() {
             "player-state",
             "ESO Weave Player State",
         );
+        assert_resource(
+            &resources[2],
+            DATABASES_RESOURCE_URI,
+            "databases",
+            "ESO Weave Databases",
+        );
 
         let mcp_capabilities = read_json_resource(&client, CAPABILITIES_RESOURCE_URI).await;
         let mcp_state = read_json_resource(&client, PLAYER_STATE_RESOURCE_URI).await;
+        let mcp_databases = read_json_resource(&client, DATABASES_RESOURCE_URI).await;
         assert_eq!(mcp_capabilities, http_capabilities);
         assert_eq!(mcp_state, http_state);
+        assert_eq!(mcp_databases, http_databases);
         assert_eq!(mcp_capabilities["mcp_player_state"], true);
-        assert_eq!(mcp_capabilities["query_execution"], false);
+        assert_eq!(mcp_capabilities["query_execution"], true);
         assert_eq!(mcp_state["snapshot_revision"], 2);
         assert_eq!(mcp_state["service_generation"], connection.generation);
         assert_eq!(mcp_state["game"]["runtime"]["value"], "active");
@@ -355,6 +379,154 @@ fn mcp_client_without_bearer_cannot_initialize() {
             StreamableHttpClientTransportConfig::with_uri(connection.mcp_url),
         );
         assert!(().serve(transport).await.is_err());
+    });
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn http_and_mcp_database_inventory_queries_and_errors_match() {
+    let dir = tempfile::tempdir().unwrap();
+    let catalog = dir.path().join("catalog.sqlite");
+    let connection = Connection::open(&catalog).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE entity (id INTEGER PRIMARY KEY, kind TEXT NOT NULL);
+             INSERT INTO entity VALUES (1, 'skill'), (2, 'item'), (3, 'skill');",
+        )
+        .unwrap();
+    drop(connection);
+    let queries = DatabaseQueryService::new(catalog, None);
+    let mut controller = LocalServiceController::new_with_services(
+        LocalServiceConfig {
+            config_dir: Some(dir.path().to_owned()),
+            port: 0,
+            shutdown_timeout: Duration::from_millis(500),
+        },
+        SnapshotPublisher::default(),
+        queries,
+    );
+    assert!(controller.start(TEST_CREDENTIAL));
+    let connection = wait_for(&controller, ServicePhase::Running)
+        .connection
+        .unwrap();
+    let authority = connection
+        .http_base_url
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/api/v1")
+        .unwrap();
+    let auth = format!("Bearer {TEST_CREDENTIAL}");
+    let http_inventory = request(
+        authority,
+        "GET",
+        "/api/v1/databases",
+        &[("Authorization", &auth)],
+        "",
+    );
+    assert!(
+        http_inventory.starts_with("HTTP/1.1 200"),
+        "{http_inventory}"
+    );
+    let http_inventory: serde_json::Value =
+        serde_json::from_str(response_body(&http_inventory)).unwrap();
+    assert_eq!(http_inventory["databases"][0]["available"], true);
+    assert_eq!(http_inventory["databases"][1]["available"], false);
+
+    let query = serde_json::json!({
+        "sql": "SELECT id, kind FROM entity WHERE kind = ?1 ORDER BY id",
+        "parameters": [{"type": "text", "value": "skill"}],
+        "row_limit": 10
+    });
+    let http_query = request(
+        authority,
+        "POST",
+        "/api/v1/databases/catalog/query",
+        &[
+            ("Authorization", &auth),
+            ("Content-Type", "application/json"),
+        ],
+        &query.to_string(),
+    );
+    assert!(http_query.starts_with("HTTP/1.1 200"), "{http_query}");
+    let mut http_query: serde_json::Value =
+        serde_json::from_str(response_body(&http_query)).unwrap();
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(connection.mcp_url.clone())
+                .auth_header(TEST_CREDENTIAL),
+        );
+        let client = ().serve(transport).await.unwrap();
+        let inventory = read_json_resource(&client, DATABASES_RESOURCE_URI).await;
+        assert_eq!(inventory, http_inventory);
+        let tools = client.list_all_tools().await.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "query_database");
+        let annotations = tools[0].annotations.as_ref().unwrap();
+        assert_eq!(annotations.read_only_hint, Some(true));
+        assert_eq!(annotations.destructive_hint, Some(false));
+        let parameter_variants = tools[0].input_schema["properties"]["parameters"]["items"]
+            ["oneOf"]
+            .as_array()
+            .unwrap();
+        assert_eq!(parameter_variants.len(), 3);
+        assert_eq!(parameter_variants[0]["properties"]["type"]["const"], "null");
+        assert_eq!(
+            parameter_variants[1]["properties"]["value"]["type"],
+            "string"
+        );
+        assert_eq!(
+            parameter_variants[2]["properties"]["value"]["type"],
+            "boolean"
+        );
+
+        let mut arguments = query.as_object().unwrap().clone();
+        arguments.insert("database_id".into(), serde_json::json!("catalog"));
+        let mcp_query = client
+            .call_tool(CallToolRequestParams::new("query_database").with_arguments(arguments))
+            .await
+            .unwrap();
+        assert_eq!(mcp_query.is_error, Some(false));
+        let mut mcp_query = mcp_query.structured_content.unwrap();
+        http_query["elapsed_ms"] = serde_json::json!(0);
+        mcp_query["elapsed_ms"] = serde_json::json!(0);
+        assert_eq!(mcp_query, http_query);
+
+        let denied_arguments = serde_json::json!({
+            "database_id": "catalog",
+            "sql": "DELETE FROM entity",
+            "parameters": []
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let mcp_denied = client
+            .call_tool(
+                CallToolRequestParams::new("query_database").with_arguments(denied_arguments),
+            )
+            .await
+            .unwrap();
+        assert_eq!(mcp_denied.is_error, Some(true));
+        let mcp_denied = mcp_denied.structured_content.unwrap();
+        let http_denied = request(
+            authority,
+            "POST",
+            "/api/v1/databases/catalog/query",
+            &[
+                ("Authorization", &auth),
+                ("Content-Type", "application/json"),
+            ],
+            r#"{"sql":"DELETE FROM entity","parameters":[]}"#,
+        );
+        assert!(http_denied.starts_with("HTTP/1.1 403"), "{http_denied}");
+        let http_denied: serde_json::Value =
+            serde_json::from_str(response_body(&http_denied)).unwrap();
+        assert_eq!(mcp_denied, http_denied);
+        client.cancel().await.unwrap();
     });
     controller.shutdown().unwrap();
 }
@@ -576,6 +748,72 @@ fn shutdown_reserves_time_to_join_after_a_stalled_connection() {
     assert!(!dir.path().join(DISCOVERY_FILE_NAME).exists());
     drop(stalled);
     assert!(TcpListener::bind(address).is_ok());
+}
+
+#[test]
+fn stopped_generation_interrupts_an_in_flight_database_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let catalog = dir.path().join("catalog.sqlite");
+    drop(Connection::open(&catalog).unwrap());
+    let queries = DatabaseQueryService::new(catalog, None);
+    let mut controller = LocalServiceController::new_with_services(
+        LocalServiceConfig {
+            config_dir: Some(dir.path().to_owned()),
+            port: 0,
+            shutdown_timeout: Duration::from_millis(500),
+        },
+        SnapshotPublisher::default(),
+        queries,
+    );
+    controller.start(TEST_CREDENTIAL);
+    let running = wait_for(&controller, ServicePhase::Running);
+    let address = running
+        .connection
+        .unwrap()
+        .mcp_url
+        .trim_start_matches("http://")
+        .trim_end_matches("/mcp")
+        .to_owned();
+    let body = serde_json::json!({
+        "sql": "WITH RECURSIVE counter(value) AS (VALUES(0) UNION ALL SELECT value + 1 FROM counter WHERE value < 1000000000) SELECT sum(value) FROM counter"
+    })
+    .to_string();
+    let mut stream = TcpStream::connect(&address).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream
+        .write_all(
+            format!(
+                "POST /api/v1/databases/catalog/query HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {TEST_CREDENTIAL}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(50));
+
+    let started = Instant::now();
+    controller.stop();
+    wait_for(&controller, ServicePhase::Stopped);
+    assert!(started.elapsed() < Duration::from_millis(500));
+    let mut response = String::new();
+    let read = stream.read_to_string(&mut response);
+    assert!(
+        read.is_ok()
+            || read.as_ref().is_err_and(|error| matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::UnexpectedEof
+            )),
+        "{read:?}"
+    );
+    if !response.is_empty() {
+        assert!(response.starts_with("HTTP/1.1 503"), "{response}");
+        assert!(response.contains("service_stopping"), "{response}");
+    }
+    controller.shutdown().unwrap();
 }
 
 #[test]

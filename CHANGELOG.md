@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- S108 adds one shared, bounded read-only SQLite query service for the fixed
+  `catalog` and `encounters` database inventory. Authenticated HTTP and MCP
+  clients receive equivalent safe schema discovery, typed parameter binding,
+  exact value encodings, canonical errors, and fully materialized results.
+  Layered SQLite defenses reject mutation and schema control, while global
+  concurrency, duration, row, byte, SQL, parameter, and request bounds protect
+  the desktop lifecycle (issue #179, epic #174).
+
 - S107 exposes `esoweave://capabilities` and `esoweave://player-state` as the
   only fixed resources on the authenticated stateless MCP endpoint. Both return
   one canonical JSON text document from the S106 immutable snapshot authority,
@@ -141,6 +149,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-17: Implement database access through one transport-neutral service
+  that opens a defended short-lived read-only SQLite connection per operation
+  and executes synchronous work on Tokio blocking workers behind one shared
+  two-permit admission gate. Enable only rusqlite's safe authorizer and runtime
+  limit features plus standard base64 encoding. Keep current database paths in
+  a private replaceable registry so later catalog generations are visible
+  without exposing paths or retaining old connections.
 
 - 2026-09-17: Implement MCP player state as two native fixed resources over the
   existing snapshot publisher, with no resource templates, subscriptions,

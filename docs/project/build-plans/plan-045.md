@@ -14,8 +14,8 @@ Sequence:
    source-inventory coverage.
 4. S107 implements issue #178 by adding canonical resources to the mounted MCP
    adapter and proving transport parity against the same snapshot authority.
-5. Issue #179 adds one bounded read-only SQLite query service and parity across
-   HTTP and MCP.
+5. S108 implements issue #179 with one bounded read-only SQLite query service
+   and parity across HTTP and MCP.
 6. Issue #180 publishes user and integrator documentation and closes the sequence
    with cross-surface end-to-end tests.
 

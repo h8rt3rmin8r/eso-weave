@@ -29,6 +29,7 @@ use crate::beacon::{self, BeaconPrefs, BeaconStatus};
 use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
 use crate::config::{self, LevelName, Notice, Settings};
+use crate::database_query::DatabaseQueryService;
 use crate::fishing::{FishingController, FishingSink, FishingState, StopReason};
 use crate::game::{
     BeaconFreshness, FocusObservation, GameContext, GameObservations, GameRuntime, GameState,
@@ -2012,6 +2013,7 @@ pub struct AppModel {
     window: Option<WindowGeometry>,
     hud_retention: RefCell<HudRetentionState>,
     player_state: SnapshotPublisher,
+    database_queries: DatabaseQueryService,
     local_service: Option<LocalServiceController>,
 }
 
@@ -2056,9 +2058,41 @@ impl AppModel {
         game: GameState,
         log: LogHandle,
         reader_update_tx: Sender<LiveReaderConfig>,
+        settings: Settings,
+        config_dir: Option<PathBuf>,
+        clock: Instant,
+    ) -> Self {
+        Self::new_with_game_and_queries(
+            input,
+            weave,
+            fishing,
+            fishing_sink,
+            potion,
+            game,
+            log,
+            reader_update_tx,
+            settings,
+            config_dir,
+            clock,
+            DatabaseQueryService::default(),
+        )
+    }
+
+    /// Creates the model with the production database-query authority.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_game_and_queries(
+        input: Arc<InputEngine>,
+        weave: Arc<Mutex<WeaveEngine>>,
+        fishing: Arc<Mutex<FishingController>>,
+        fishing_sink: Box<dyn FishingSink + Send>,
+        potion: Arc<Mutex<AutoPotionController>>,
+        game: GameState,
+        log: LogHandle,
+        reader_update_tx: Sender<LiveReaderConfig>,
         mut settings: Settings,
         config_dir: Option<PathBuf>,
         clock: Instant,
+        database_queries: DatabaseQueryService,
     ) -> Self {
         let beacon_prefs = beacon::prefs_from_value(&settings.beacon);
         let mut local_prefs = LocalServicePrefs::load(&settings.local_service);
@@ -2094,9 +2128,10 @@ impl AppModel {
         }
         let player_state = SnapshotPublisher::default();
         let local_service = config_dir.clone().map(|dir| {
-            LocalServiceController::new_with_publisher(
+            LocalServiceController::new_with_services(
                 LocalServiceConfig::production(Some(dir)),
                 player_state.clone(),
+                database_queries.clone(),
             )
         });
         let (data_addon_status, data_addon_inspection_available, data_addon_error) =
@@ -2148,6 +2183,7 @@ impl AppModel {
             window: None,
             hud_retention: RefCell::new(HudRetentionState::default()),
             player_state,
+            database_queries,
             local_service,
         };
         model.publish_player_state();
@@ -2674,6 +2710,11 @@ impl AppModel {
     /// Installs the version-bound read-only catalog service selected at startup.
     pub fn set_catalog(&mut self, catalog: CatalogAccess) {
         self.catalog = catalog;
+    }
+
+    /// Updates the private path used by later external catalog queries.
+    pub fn set_catalog_query_path(&self, path: PathBuf) {
+        self.database_queries.set_catalog_path(path);
     }
 
     /// Returns the typed catalog seam for future consumers.

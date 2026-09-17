@@ -3,8 +3,8 @@
 Status: Accepted by ADR 0002 on 2026-09-15. S105 ships the authenticated
 lifecycle host. S106 adds the canonical immutable player-state publisher and
 authenticated HTTP capabilities and snapshot adapters. S107 adds the two fixed
-read-only MCP resources over that same authority. Database queries remain in
-the dependent slices below.
+read-only MCP resources over that same authority. S108 adds one defended
+database query service plus the HTTP and MCP inventory and query adapters.
 
 ## Fixed stack and topology
 
@@ -48,7 +48,8 @@ The full authority is [the database query contract](../../specs/104-local-extens
    HTTP adapters.
 3. S107 implements issue #178 with canonical resources through the mounted RMCP
    service and proves state parity against the same snapshot revision.
-4. Issue #179 implements one defended query executor and both transport adapters.
+4. S108 implements issue #179 with one defended query executor and both
+   transport adapters.
 5. Issue #180 publishes shipped user and integrator documentation and cross-surface end-to-end parity tests.
 
 Detailed lifecycle transitions and middleware order are [the service lifecycle contract](../../specs/104-local-extension-contract/contracts/service-lifecycle.md). Implementations may refine internal names, but changing a fixed external behavior, security boundary, limit, or compatibility rule requires an ADR update before code diverges.
