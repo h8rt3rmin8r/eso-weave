@@ -93,3 +93,11 @@ The implemented asset, page placement, enforcement code, governance records, and
 ### Hosted Review Deviation
 
 The first Codex review identified a P1 accessibility gap in the adjacent fallback. I deviated from the pre-implementation plan to keep the fenced tree byte-unchanged because that plan left startup, native-binding, and encounter choices implicit in later sibling sections. The corrected tree now represents all five figure branches and the unmatched continuation directly. The authorized second review then found that the combined input route omitted platform-path failures and over-prescribed binding repair for unavailable evidence. The final route covers platform guidance and sends unavailable native evidence through PixelBeacon and shared-signal recovery before any binding change. Policy freezes those exact route prompts plus the new intentional plain-block digest. These changes preserve the detailed symptom guidance and improve conformance with FR-006, FR-009, and SC-005.
+
+### Hosted Review Evidence
+
+- The opening Codex review examined `892adff`, raised one P1 accessibility finding, and the finding was fixed in `1bf09c5`, answered, and resolved.
+- The single authorized second `@Codex review` examined `1bf09c5`, raised one P1 and one P2 input-route finding, and both were fixed in `5b44d58`, answered, and resolved.
+- No third review round was requested.
+- Documentation, issue-link, trust, dependency, Ubuntu, Windows, CodeQL analysis, and CodeQL checks passed on the corrected implementation head.
+- The pull request is mergeable and remains unmerged for the operator's final review and merge ritual.

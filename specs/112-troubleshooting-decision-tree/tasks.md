@@ -53,11 +53,11 @@
 - [x] T032 Commit S112 with issue linkage and the required attribution trailer
 - [x] T033 Push the feature branch and open the official pull request closing #220
 - [x] T034 Add the pull request to the delivery project and move issue #220 plus the PR to PR review
-- [ ] T035 Wait for hosted CI, Codex, and security results and answer every review comment
-- [ ] T036 Apply and verify required review changes, resolve every completed thread, and push updates
-- [ ] T037 Trigger at most one authorized second `@Codex review` and process it completely
-- [ ] T038 Confirm required checks are green, reviews are satisfied, the branch is clean, and the pull request is mergeable
-- [ ] T039 Stop for the operator's final review and merge ritual
+- [x] T035 Wait for hosted CI, Codex, and security results and answer every review comment
+- [x] T036 Apply and verify required review changes, resolve every completed thread, and push updates
+- [x] T037 Trigger at most one authorized second `@Codex review` and process it completely
+- [x] T038 Confirm required checks are green, reviews are satisfied, the branch is clean, and the pull request is mergeable
+- [x] T039 Stop for the operator's final review and merge ritual
 
 ## Dependencies
 
