@@ -63,9 +63,9 @@
 
 ## Phase 8: Publication and Hosted Review
 
-- [ ] T037 Commit the verified S109 implementation and push `codex/s109-extension-docs-e2e`
-- [ ] T038 Open the official pull request with `Closes #180`, scope, evidence, and explicit exclusions
-- [ ] T039 Advance issue #180 project Stage to PR review
+- [x] T037 Commit the verified S109 implementation and push `codex/s109-extension-docs-e2e`
+- [x] T038 Open the official pull request with `Closes #180`, scope, evidence, and explicit exclusions
+- [x] T039 Advance issue #180 project Stage to PR review
 - [ ] T040 Wait for hosted CI, Codex, and security review results and answer every review comment
 - [ ] T041 Apply and verify any required review changes, resolve every review thread, and push updates
 - [ ] T042 Trigger at most one authorized second Codex review, then process it to completion
