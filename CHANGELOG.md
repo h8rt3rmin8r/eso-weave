@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-17
+
+### Highlights
+
+- Follow native ESO bindings for combat weaving, Fishing Interact, and Auto
+  Potion Quickslot across keyboard, mouse, wheel, and modifier chords, while
+  stale evidence continues to fail closed.
+- Capture one encounter or a continuous session through the unified ESO Weave
+  Data addon, retaining raw evidence, deterministic replay, interruption state,
+  and historical presentation.
+- Integrate local tools through an opt-in authenticated loopback HTTP and MCP
+  service with player state, resources, and bounded read-only queries.
+- Configure Ultimate alongside Health, Magicka, and Stamina for Auto Potion,
+  retain requested potion enablement across restarts, and keep stale HUD values
+  visible without granting them action authority.
+- Use expanded offline documentation and troubleshooting guidance alongside a
+  hardened supply chain and reliable bounded Windows service shutdown.
+
 ### Added
 
 - S112 adds one accessible troubleshooting decision tree that routes five
@@ -195,6 +213,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture fixture with that same authority (issue #165).
 
 ### Decisions
+
+- 2026-09-17: Replace the pre-protection direct release push with a reviewed
+  release-branch rollover. `cargo release` now creates the version commit but
+  neither a tag nor a push; after the pull request merges, the exact `main`
+  commit must pass CI, documentation checks, and CodeQL before the maintainer
+  creates and pushes its annotated release tag. This preserves enforced branch
+  protection, the human merge ritual, and post-merge verification without
+  granting the release workflow write access to `main`.
 
 - 2026-09-17: Implement database access through one transport-neutral service
   that opens a defended short-lived read-only SQLite connection per operation

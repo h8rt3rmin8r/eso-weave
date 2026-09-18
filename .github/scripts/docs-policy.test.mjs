@@ -355,7 +355,11 @@ test("S080 accepts the authoritative landing identity and metadata snapshot", ()
   }), []);
 });
 
-const releaseRolloverFixture = `[[pre-release-replacements]]
+const releaseRolloverFixture = `allow-branch = ["codex/*-release"]
+tag = false
+push = false
+
+[[pre-release-replacements]]
 file = "docs/src/README.md"
 search = "<dt>Applies to</dt>\\\\s*<dd>v[0-9]+\\\\.[0-9]+\\\\.[0-9]+</dd>"
 replace = "<dt>Applies to</dt>\\n    <dd>v{{version}}</dd>"
@@ -374,15 +378,23 @@ replace = "\\\"tool_version\\\": \\\"{{version}}\\\""
 exactly = 1
 `;
 
-test("S091 requires atomic documentation snapshot rollover", () => {
+test("S091 and S114 require a protected atomic release rollover", () => {
   assert.deepEqual(validateReleaseRollover(releaseRolloverFixture), []);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace('["codex/*-release"]', '["main"]')).join("\n"), /release branch/i);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace("tag = false", "tag = true")).join("\n"), /post-merge annotated tag/i);
+  assert.match(validateReleaseRollover(releaseRolloverFixture.replace("push = false", "push = true")).join("\n"), /must not push/i);
   assert.match(validateReleaseRollover(releaseRolloverFixture.replace("exactly = 1", "exactly = 2")).join("\n"), /cardinality.*version/i);
   assert.match(validateReleaseRollover(releaseRolloverFixture.replace('file = "docs/src/README.md"', 'file = "README.md"')).join("\n"), /documentation version/i);
   assert.match(validateReleaseRollover(releaseRolloverFixture.replace("<dt>Applies to</dt>", "<dt>Any field</dt>")).join("\n"), /documentation version/i);
   assert.match(validateReleaseRollover(releaseRolloverFixture.replace("{{date}}", "fixed-date")).join("\n"), /release date.*replacement/i);
   const broadExtra = `${releaseRolloverFixture}\n[[pre-release-replacements]]\nfile = "docs/src/README.md"\nsearch = "v[0-9.]+"\nreplace = "v{{version}}"\nexactly = 1\n`;
   assert.match(validateReleaseRollover(broadExtra).join("\n"), /only the two approved/i);
-  const duplicate = `${releaseRolloverFixture}\n${releaseRolloverFixture.split("\n\n")[0]}\n`;
+  const duplicate = `${releaseRolloverFixture}\n[[pre-release-replacements]]
+file = "docs/src/README.md"
+search = "<dt>Applies to</dt>\\\\s*<dd>v[0-9]+\\\\.[0-9]+\\\\.[0-9]+</dd>"
+replace = "<dt>Applies to</dt>\\n    <dd>v{{version}}</dd>"
+exactly = 1
+`;
   assert.match(validateReleaseRollover(duplicate).join("\n"), /only the two approved|documentation version/i);
   const missingCapture = releaseRolloverFixture.replace(/\n\[\[pre-release-replacements\]\]\nfile = "specs\/073-reviewed-catalog-pipeline\/fixtures\/capture-request\.json"[\s\S]*$/u, "\n");
   assert.match(validateReleaseRollover(missingCapture).join("\n"), /collector-capture tool version/i);
