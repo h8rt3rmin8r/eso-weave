@@ -36,7 +36,7 @@
 ## Phase 5: Local Delivery Boundary
 
 - [x] T022 Commit as `feat(116): prevent status text overlap` with issue linkage and attribution
-- [ ] T023 Present the pre-push breakdown and exact push command
-- [ ] T024 After explicit authorization, push and open `S116: Prevent status text overlap` with `Closes #231`
+- [x] T023 Present the pre-push breakdown and exact push command
+- [x] T024 After explicit authorization, push and open `S116: Prevent status text overlap` with `Closes #231`
 - [ ] T025 Process required hosted checks and every review thread without requesting an unauthorized second Codex round
 - [ ] T026 Stop for the operator's final review and merge ritual when checks and reviews are satisfied
