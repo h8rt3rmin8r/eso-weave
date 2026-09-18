@@ -312,6 +312,15 @@ pub fn heading(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add(egui::Label::new(egui::RichText::new(text).heading()))
 }
 
+/// Returns the exact SemiBold body font used by emphasized labels.
+pub fn strong_label_font(ui: &egui::Ui) -> egui::FontId {
+    let size = ui.style().text_styles[&egui::TextStyle::Body].size;
+    egui::FontId::new(
+        size,
+        egui::FontFamily::Name(super::theme::HEADING_FAMILY.into()),
+    )
+}
+
 /// Renders an emphasized label (SemiBold at body size, primary text color) for
 /// section titles and column headers.
 ///
@@ -321,14 +330,16 @@ pub fn heading(ui: &mut egui::Ui, text: &str) -> egui::Response {
 /// On the dark base that reads as an almost invisible brown, so emphasis labels
 /// are colored from the palette here instead.
 pub fn label_strong(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
-    let size = ui.style().text_styles[&egui::TextStyle::Body].size;
-    let font = egui::FontId::new(
-        size,
-        egui::FontFamily::Name(super::theme::HEADING_FAMILY.into()),
-    );
+    let font = strong_label_font(ui);
     ui.add(egui::Label::new(
         egui::RichText::new(text).font(font).color(palette.text),
     ))
+}
+
+/// Renders an emphasized label that elides visible text at its UI boundary.
+pub fn label_strong_truncated(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
+    let font = strong_label_font(ui);
+    ui.add(egui::Label::new(egui::RichText::new(text).font(font).color(palette.text)).truncate())
 }
 
 /// Renders a small muted inline help line beneath a control.

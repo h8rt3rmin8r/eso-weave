@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- S116 measures and bounds shared dashboard status-label columns, clips every
+  row cell, preserves complete accessible labels when visible text truncates,
+  and adds component plus full-surface collision gates across themes, widths,
+  addon states, and enlarged logical text (issue #231).
+
 ## [0.17.0] - 2026-09-17
 
 ### Highlights
