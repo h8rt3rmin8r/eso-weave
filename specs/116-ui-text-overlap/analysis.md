@@ -41,3 +41,11 @@ the shared measured-column and clipping contract is applied.
 
 The complete `app_ui_sizing` integration target passes all 49 tests, including
 the three new collision gates and the exact accessible-label assertions.
+
+## Hosted verification
+
+Pull request #232 passed issue linkage, trust policy, dependency review,
+documentation, Ubuntu, Windows, and CodeQL checks. The automatic Codex review
+and the one authorized final `@Codex` round both returned an account usage-limit
+notice with no code finding or review thread. No further review round was
+requested.
