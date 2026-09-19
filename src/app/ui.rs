@@ -166,8 +166,10 @@ const LOG_WIDTH_BONUS: f32 = 100.0;
 const MODAL_FRAME_MARGIN: f32 = 8.0;
 
 const DASHBOARD_NARROW_GAP: f32 = 4.0;
-const DASHBOARD_LABEL_WIDTH: f32 = 118.0;
 const DASHBOARD_RESOURCE_GAP: f32 = 6.0;
+const DASHBOARD_CELL_GAP: f32 = 12.0;
+const DASHBOARD_LABEL_PADDING: f32 = 2.0;
+const DASHBOARD_MIN_VALUE_WIDTH: f32 = 72.0;
 const LIFECYCLE_BUTTON_WIDTH: f32 = 76.0;
 const DATA_LIFECYCLE_BUTTON_WIDTH: f32 = 104.0;
 const LIFECYCLE_BUTTON_GAP: f32 = 4.0;
@@ -175,6 +177,44 @@ const DASHBOARD_INTERACTION_WIDTH: f32 = 2.0 * LIFECYCLE_BUTTON_WIDTH + LIFECYCL
 const DATA_DASHBOARD_INTERACTION_WIDTH: f32 =
     2.0 * DATA_LIFECYCLE_BUTTON_WIDTH + LIFECYCLE_BUTTON_GAP;
 const DASHBOARD_FRAME_VERTICAL_OVERHEAD: f32 = 14.0;
+
+pub const LIVE_HUD_STATUS_TITLES: &[&str] = &[
+    strings::HUD_FRESHNESS_TITLE,
+    strings::MENU_TITLE,
+    strings::COMBAT_TITLE,
+    strings::MOVEMENT_TITLE,
+    strings::ROLL_DODGE_TITLE,
+    strings::LIFE_TITLE,
+    strings::WEAPON_BAR_TITLE,
+    strings::QUICKSLOT_TITLE,
+];
+
+pub const SYSTEM_STATE_STATUS_TITLES: &[&str] = &[
+    strings::GAME_TITLE,
+    strings::TRAVEL_TITLE,
+    strings::WORLD_TITLE,
+    strings::STATUS_TITLE,
+    strings::BEACON_TITLE,
+    strings::DATA_ADDON_TITLE,
+    strings::DATA_ADDON_REMEDIATION_TITLE,
+    strings::BEACON_SIGNAL_TITLE,
+    strings::CATALOG_TITLE,
+    strings::FISHING_TITLE,
+    strings::AUTO_POTION_TITLE,
+];
+
+pub const DATA_DETAILS_STATUS_TITLES: &[&str] = &[
+    strings::DATA_ADDON_TITLE,
+    strings::DATA_ADDON_OWNERSHIP_TITLE,
+    strings::DATA_ADDON_COMPATIBILITY_TITLE,
+    strings::DATA_ADDON_ENABLED_TITLE,
+    strings::DATA_ADDON_LOADED_TITLE,
+    strings::DATA_ADDON_RELOAD_TITLE,
+    strings::DATA_ADDON_RUNTIME_TITLE,
+    strings::DATA_ADDON_CATALOG_TITLE,
+    strings::DATA_ADDON_ENCOUNTER_TITLE,
+    strings::DATA_ADDON_REMEDIATION_TITLE,
+];
 
 /// The log text row height (points) used to size the six-line log minimum. Read
 /// from the monospace text style (its size is the same in either theme), falling
@@ -1761,9 +1801,10 @@ impl EsoWeaveApp {
         dashboard_frame(palette)
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
+                let label_width = dashboard_group_label_width(ui, LIVE_HUD_STATUS_TITLES, 0.0);
                 widgets::heading(ui, strings::LIVE_HUD_TITLE);
                 if let Some(freshness) = &view.hud_freshness {
-                    dashboard_status_row(ui, palette, freshness, 0.0, |_| {});
+                    dashboard_status_row(ui, palette, freshness, label_width, 0.0, |_| {});
                 }
                 widgets::resource_group(
                     ui,
@@ -1790,7 +1831,7 @@ impl EsoWeaveApp {
                 widgets::ultimate_meter(ui, palette, strings::ULTIMATE_TITLE, &view.ultimate);
                 ui.add_space(DASHBOARD_RESOURCE_GAP);
                 ui.spacing_mut().item_spacing.y = 2.0;
-                game_context_row(ui, palette, &view.menu);
+                game_context_row(ui, palette, &view.menu, label_width);
                 dashboard_metric_row(
                     ui,
                     palette,
@@ -1800,6 +1841,7 @@ impl EsoWeaveApp {
                         view.combat.role,
                         strings::COMBAT_TOOLTIP,
                     ),
+                    label_width,
                     0.0,
                     |_| {},
                 );
@@ -1812,6 +1854,7 @@ impl EsoWeaveApp {
                         view.movement.role,
                         strings::MOVEMENT_TOOLTIP,
                     ),
+                    label_width,
                     0.0,
                     |_| {},
                 );
@@ -1824,6 +1867,7 @@ impl EsoWeaveApp {
                         view.roll_dodge.role,
                         strings::ROLL_DODGE_TOOLTIP,
                     ),
+                    label_width,
                     0.0,
                     |_| {},
                 );
@@ -1836,6 +1880,7 @@ impl EsoWeaveApp {
                         view.life.role,
                         strings::LIFE_TOOLTIP,
                     ),
+                    label_width,
                     0.0,
                     |_| {},
                 );
@@ -1857,6 +1902,7 @@ impl EsoWeaveApp {
                         view.weapon_bar.role,
                         strings::WEAPON_BAR_TOOLTIP,
                     ),
+                    label_width,
                     0.0,
                     |_| {},
                 );
@@ -1880,6 +1926,7 @@ impl EsoWeaveApp {
                         view.quickslot.state.role,
                         strings::QUICKSLOT_TOOLTIP,
                     ),
+                    label_width,
                     0.0,
                     |_| {},
                 );
@@ -1920,6 +1967,11 @@ impl EsoWeaveApp {
                                 return;
                             }
                             ui.spacing_mut().item_spacing.y = 2.0;
+                            let label_width = dashboard_group_label_width(
+                                ui,
+                                SYSTEM_STATE_STATUS_TITLES,
+                                DATA_DASHBOARD_INTERACTION_WIDTH,
+                            );
                             let game_summary = format!(
                                 "{} | {}",
                                 view.runtime_line.state_text, view.installation_line.state_text
@@ -1939,6 +1991,7 @@ impl EsoWeaveApp {
                                     game_role,
                                     strings::GAME_RUNTIME_TOOLTIP,
                                 ),
+                                label_width,
                                 0.0,
                                 |_| {},
                             );
@@ -1951,6 +2004,7 @@ impl EsoWeaveApp {
                                     view.travel.role,
                                     strings::TRAVEL_TOOLTIP,
                                 ),
+                                label_width,
                                 0.0,
                                 |_| {},
                             );
@@ -1963,6 +2017,7 @@ impl EsoWeaveApp {
                                     view.world.role,
                                     strings::WORLD_TOOLTIP,
                                 ),
+                                label_width,
                                 0.0,
                                 |_| {},
                             );
@@ -1972,6 +2027,7 @@ impl EsoWeaveApp {
                                 ui,
                                 palette,
                                 &view.status_line,
+                                label_width,
                                 DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     if widgets::toggle_switch_named(
@@ -1993,6 +2049,7 @@ impl EsoWeaveApp {
                                 ui,
                                 palette,
                                 &view.beacon_line,
+                                label_width,
                                 DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     ui.spacing_mut().item_spacing.x = LIFECYCLE_BUTTON_GAP;
@@ -2029,6 +2086,7 @@ impl EsoWeaveApp {
                                 ui,
                                 palette,
                                 &view.data_addon.lifecycle_line,
+                                label_width,
                                 DATA_DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     ui.spacing_mut().item_spacing.x = LIFECYCLE_BUTTON_GAP;
@@ -2074,6 +2132,7 @@ impl EsoWeaveApp {
                                 ui,
                                 palette,
                                 &view.data_addon.remediation_line,
+                                label_width,
                                 DATA_DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     if view.data_addon.primary_action
@@ -2100,17 +2159,26 @@ impl EsoWeaveApp {
                                 ui,
                                 palette,
                                 &view.beacon_signal_line,
+                                label_width,
                                 0.0,
                                 |_| {},
                             );
 
-                            dashboard_status_row(ui, palette, &view.catalog_line, 0.0, |_| {});
+                            dashboard_status_row(
+                                ui,
+                                palette,
+                                &view.catalog_line,
+                                label_width,
+                                0.0,
+                                |_| {},
+                            );
 
                             let mut fishing_on = view.fishing_active;
                             dashboard_status_row(
                                 ui,
                                 palette,
                                 &view.fishing_line,
+                                label_width,
                                 DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     if widgets::toggle_switch_named(
@@ -2138,6 +2206,7 @@ impl EsoWeaveApp {
                                     view.auto_potion.role,
                                     strings::AUTO_POTION_TOOLTIP,
                                 ),
+                                label_width,
                                 DASHBOARD_INTERACTION_WIDTH,
                                 |ui| {
                                     if widgets::toggle_switch_named(
@@ -2223,6 +2292,8 @@ impl EsoWeaveApp {
                     "Each line has its own evidence boundary. Installation and ESO process state never prove enablement, loading, or collection.",
                 );
                 ui.separator();
+                let label_width =
+                    dashboard_group_label_width(ui, DATA_DETAILS_STATUS_TITLES, 0.0);
                 for line in [
                     &view.lifecycle_line,
                     &view.ownership_line,
@@ -2235,7 +2306,7 @@ impl EsoWeaveApp {
                     &view.encounter_line,
                     &view.remediation_line,
                 ] {
-                    dashboard_status_row(ui, &palette, line, 0.0, |_| {});
+                    dashboard_status_row(ui, &palette, line, label_width, 0.0, |_| {});
                 }
                 ui.separator();
                 if ui.button("Close Data Details").clickable().clicked() {
@@ -3553,6 +3624,7 @@ fn dashboard_status_row(
     ui: &mut egui::Ui,
     palette: &crate::app::theme::Palette,
     line: &StatusLine,
+    label_width: f32,
     interaction_width: f32,
     interaction: impl FnOnce(&mut egui::Ui),
 ) {
@@ -3560,9 +3632,39 @@ fn dashboard_status_row(
         ui,
         palette,
         dashboard_metric(line.title, &line.state_text, line.role, line.tooltip),
+        label_width,
         interaction_width,
         interaction,
     );
+}
+
+pub fn dashboard_group_label_width(
+    ui: &egui::Ui,
+    titles: &[&str],
+    maximum_interaction_width: f32,
+) -> f32 {
+    let font = widgets::strong_label_font(ui);
+    let desired = titles
+        .iter()
+        .map(|title| {
+            ui.painter()
+                .layout_no_wrap((*title).to_owned(), font.clone(), egui::Color32::WHITE)
+                .size()
+                .x
+        })
+        .fold(0.0_f32, f32::max)
+        + DASHBOARD_LABEL_PADDING;
+    let gap_count = if maximum_interaction_width > 0.0 {
+        2.0
+    } else {
+        1.0
+    };
+    let maximum = (ui.available_width()
+        - maximum_interaction_width
+        - gap_count * DASHBOARD_CELL_GAP
+        - DASHBOARD_MIN_VALUE_WIDTH)
+        .max(0.0);
+    desired.min(maximum)
 }
 
 /// Content rendered by one dashboard metric row.
@@ -3590,6 +3692,8 @@ pub fn dashboard_metric<'a>(
 /// Exact allocations produced by a dashboard metric row.
 #[derive(Debug, Clone, Copy)]
 pub struct DashboardRowGeometry {
+    pub row: egui::Rect,
+    pub label: egui::Rect,
     pub value: egui::Rect,
     pub interaction: Option<egui::Rect>,
 }
@@ -3601,6 +3705,7 @@ pub fn dashboard_metric_row(
     ui: &mut egui::Ui,
     palette: &crate::app::theme::Palette,
     metric: DashboardMetric<'_>,
+    label_width: f32,
     interaction_width: f32,
     interaction: impl FnOnce(&mut egui::Ui),
 ) -> DashboardRowGeometry {
@@ -3612,18 +3717,19 @@ pub fn dashboard_metric_row(
     } = metric;
     let row_height = ui.spacing().interact_size.y;
     let color = crate::app::theme::status_color(palette, role);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 12.0;
-        let (label_rect, _) = ui.allocate_exact_size(
-            egui::vec2(DASHBOARD_LABEL_WIDTH, row_height),
-            egui::Sense::hover(),
-        );
+    let row = ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = DASHBOARD_CELL_GAP;
+        let (label_rect, _) =
+            ui.allocate_exact_size(egui::vec2(label_width, row_height), egui::Sense::hover());
         let mut label_ui = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(label_rect)
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
-        widgets::label_strong(&mut label_ui, palette, title).on_hover_text(tooltip);
+        label_ui.set_clip_rect(label_rect);
+        widgets::label_strong_truncated(&mut label_ui, palette, title)
+            .on_hover_text(title)
+            .on_hover_text(tooltip);
 
         let interaction_reserve = if interaction_width > 0.0 {
             interaction_width + ui.spacing().item_spacing.x
@@ -3638,6 +3744,7 @@ pub fn dashboard_metric_row(
                 .max_rect(value_rect)
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
+        value_ui.set_clip_rect(value_rect);
         value_ui.label(egui::RichText::new("●").color(color));
         let response = value_ui
             .add(
@@ -3661,23 +3768,30 @@ pub fn dashboard_metric_row(
                     .max_rect(interaction_rect)
                     .layout(egui::Layout::left_to_right(egui::Align::Min)),
             );
+            interaction_ui.set_clip_rect(interaction_rect);
             interaction(&mut interaction_ui);
             Some(interaction_rect)
         } else {
             None
         };
         DashboardRowGeometry {
+            row: egui::Rect::NOTHING,
+            label: label_rect,
             value: value_rect,
             interaction: interaction_rect,
         }
-    })
-    .inner
+    });
+    DashboardRowGeometry {
+        row: row.response.rect,
+        ..row.inner
+    }
 }
 
 fn game_context_row(
     ui: &mut egui::Ui,
     palette: &crate::app::theme::Palette,
     view: &crate::app::MenuView,
+    label_width: f32,
 ) {
     dashboard_metric_row(
         ui,
@@ -3688,6 +3802,7 @@ fn game_context_row(
             view.role,
             strings::MENU_TOOLTIP,
         ),
+        label_width,
         0.0,
         |_| {},
     );

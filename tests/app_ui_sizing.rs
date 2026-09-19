@@ -629,7 +629,9 @@ fn s093_outdated_data_addon_offers_update_repair_and_uninstall() {
 
 #[test]
 fn dashboard_value_cell_uses_the_trailing_space_and_preserves_full_text() {
-    use eso_weave::app::ui::{dashboard_metric, dashboard_metric_row, DashboardRowGeometry};
+    use eso_weave::app::ui::{
+        dashboard_group_label_width, dashboard_metric, dashboard_metric_row, DashboardRowGeometry,
+    };
     use eso_weave::app::StatusRole;
 
     const FULL_STATE: &str = "Bar 2 | front Two-Handed Greatsword | back Restoration Staff | Ready";
@@ -645,6 +647,7 @@ fn dashboard_value_cell_uses_the_trailing_space_and_preserves_full_text() {
                         state.0 = true;
                         return;
                     }
+                    let label_width = dashboard_group_label_width(ui, &["Weapon Bar"], 0.0);
                     let geometry = dashboard_metric_row(
                         ui,
                         &palette,
@@ -654,6 +657,7 @@ fn dashboard_value_cell_uses_the_trailing_space_and_preserves_full_text() {
                             StatusRole::Healthy,
                             "Full detail",
                         ),
+                        label_width,
                         0.0,
                         |_| {},
                     );
@@ -679,6 +683,383 @@ fn dashboard_value_cell_uses_the_trailing_space_and_preserves_full_text() {
         );
         assert!(geometry.value.width() > previous_width);
         previous_width = geometry.value.width();
+    }
+}
+
+fn collect_visible_text_shapes(
+    shape: &egui::epaint::Shape,
+    clip_rect: egui::Rect,
+    observations: &mut Vec<(String, egui::Rect)>,
+) {
+    match shape {
+        egui::epaint::Shape::Text(text) => {
+            let visible = text.visual_bounding_rect().intersect(clip_rect);
+            if visible.is_positive() {
+                observations.push((text.galley.text().to_owned(), visible));
+            }
+        }
+        egui::epaint::Shape::Vec(shapes) => {
+            for shape in shapes {
+                collect_visible_text_shapes(shape, clip_rect, observations);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn visible_text_shapes<State>(harness: &Harness<'_, State>) -> Vec<(String, egui::Rect)> {
+    let mut observations = Vec::new();
+    for clipped in &harness.output().shapes {
+        collect_visible_text_shapes(&clipped.shape, clipped.clip_rect, &mut observations);
+    }
+    observations
+}
+
+fn assert_visible_text_does_not_overlap<State>(harness: &Harness<'_, State>, context: &str) {
+    let observations = visible_text_shapes(harness);
+    assert_text_observations_do_not_overlap(&observations, context);
+}
+
+fn assert_visible_text_does_not_overlap_in_rect<State>(
+    harness: &Harness<'_, State>,
+    container: egui::Rect,
+    context: &str,
+) {
+    let observations = visible_text_shapes(harness)
+        .into_iter()
+        .filter_map(|(text, rect)| {
+            let visible = rect.intersect(container);
+            visible.is_positive().then_some((text, visible))
+        })
+        .collect::<Vec<_>>();
+    assert_text_observations_do_not_overlap(&observations, context);
+}
+
+fn assert_text_observations_do_not_overlap(observations: &[(String, egui::Rect)], context: &str) {
+    for left in 0..observations.len() {
+        for right in (left + 1)..observations.len() {
+            let (left_text, left_rect) = &observations[left];
+            let (right_text, right_rect) = &observations[right];
+            let intersection = left_rect.intersect(*right_rect);
+            assert!(
+                intersection.width() <= 0.5 || intersection.height() <= 0.5,
+                "{context}: painted text overlaps: {left_text:?} {left_rect:?} and \
+                 {right_text:?} {right_rect:?}, intersection {intersection:?}"
+            );
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AddonSurfaceState {
+    Missing,
+    Installed,
+    Outdated,
+    Incompatible,
+    RemediationRequired,
+}
+
+impl AddonSurfaceState {
+    const ALL: [Self; 5] = [
+        Self::Missing,
+        Self::Installed,
+        Self::Outdated,
+        Self::Incompatible,
+        Self::RemediationRequired,
+    ];
+
+    fn system_label(self) -> &'static str {
+        match self {
+            Self::Missing => "Not installed",
+            Self::Installed => "Installed",
+            Self::Outdated => "Installed (outdated)",
+            Self::Incompatible | Self::RemediationRequired => "Installed",
+        }
+    }
+
+    fn modal_label(self) -> &'static str {
+        match self {
+            Self::Missing => "Not installed",
+            Self::Installed | Self::Outdated => "Current",
+            Self::Incompatible => "Update available",
+            Self::RemediationRequired => "Unmanaged",
+        }
+    }
+
+    fn expected_action(self) -> &'static str {
+        match self {
+            Self::Missing => "Install Data",
+            Self::Installed => "Repair Data",
+            Self::Outdated => "Update",
+            Self::Incompatible => "Update Data",
+            Self::RemediationRequired => "Data Details",
+        }
+    }
+}
+
+fn addon_surface_settings(theme: Theme, state: AddonSurfaceState) -> (tempfile::TempDir, Settings) {
+    let root = tempfile::tempdir().unwrap();
+
+    if !matches!(state, AddonSurfaceState::Missing) {
+        let beacon_directory = root.path().join("PixelBeacon");
+        std::fs::create_dir_all(&beacon_directory).unwrap();
+        let manifest = if matches!(state, AddonSurfaceState::Outdated) {
+            format!("## Title: PixelBeacon\n{MANAGED_MARKER}\n## Version: 1\n")
+        } else {
+            MANIFEST.to_owned()
+        };
+        std::fs::write(beacon_directory.join("PixelBeacon.txt"), manifest).unwrap();
+    }
+
+    match state {
+        AddonSurfaceState::Missing => {}
+        AddonSurfaceState::Installed | AddonSurfaceState::Outdated => {
+            eso_weave::data_addon::install(
+                root.path(),
+                eso_weave::data_addon::RunningState::NotRunning,
+                beacon::DEFAULT_API_VERSION,
+            )
+            .unwrap();
+        }
+        AddonSurfaceState::Incompatible => {
+            eso_weave::data_addon::install(
+                root.path(),
+                eso_weave::data_addon::RunningState::NotRunning,
+                beacon::DEFAULT_API_VERSION,
+            )
+            .unwrap();
+            std::fs::write(
+                root.path()
+                    .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
+                    .join(eso_weave::data_addon::CATALOG_FILE),
+                "-- incompatible managed package\n",
+            )
+            .unwrap();
+        }
+        AddonSurfaceState::RemediationRequired => {
+            let data_directory = root
+                .path()
+                .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER);
+            std::fs::create_dir_all(&data_directory).unwrap();
+            std::fs::write(
+                data_directory.join(eso_weave::data_addon::MANIFEST_FILE),
+                "## Title: Unmanaged ESO Weave Data\n",
+            )
+            .unwrap();
+        }
+    }
+
+    let settings = Settings {
+        beacon: beacon::prefs_to_value(&BeaconPrefs {
+            path_override: Some(root.path().to_path_buf()),
+            environment: Environment::Live,
+        }),
+        ui: eso_weave::app::settings_form::ui_to_value(&UiPrefs {
+            theme,
+            ..UiPrefs::default()
+        }),
+        ..Settings::default()
+    };
+    (root, settings)
+}
+
+#[test]
+fn expanded_system_state_surface_rejects_painted_text_overlap() {
+    for theme in [Theme::Dark, Theme::Light] {
+        for text_scale in [1.0, 1.25] {
+            for width in [760.0, DASHBOARD_WIDE_MIN, 900.0, 1200.0] {
+                for state in AddonSurfaceState::ALL {
+                    let (_root, settings) = addon_surface_settings(theme, state);
+                    let mut harness = harness_for_app(
+                        test_app_with_settings(settings),
+                        egui::vec2(width, 1200.0),
+                    );
+                    if text_scale != 1.0 {
+                        harness.ctx.all_styles_mut(|style| {
+                            for font in style.text_styles.values_mut() {
+                                font.size *= text_scale;
+                            }
+                        });
+                    }
+                    for _ in 0..SETTLE {
+                        harness.step();
+                    }
+                    assert!(
+                        harness.query_all_by_label(state.system_label()).count() >= 1,
+                        "missing full-surface state label for {state:?}"
+                    );
+                    harness.get_by_role_and_label(
+                        egui::accesskit::Role::Button,
+                        state.expected_action(),
+                    );
+                    let (_, system) = harness
+                        .state()
+                        .dashboard_rects()
+                        .expect("expanded dashboard geometry");
+                    assert_visible_text_does_not_overlap_in_rect(
+                        &harness,
+                        system,
+                        &format!(
+                            "System and State, {state:?}, {theme:?}, {text_scale}x, {width} points"
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn data_details_modal_rejects_painted_text_overlap() {
+    const MODAL_TITLE: &str = "ESO Weave Data Details";
+
+    for theme in [Theme::Dark, Theme::Light] {
+        for text_scale in [1.0, 1.25] {
+            for width in [520.0, 760.0, 900.0, 1200.0] {
+                for state in AddonSurfaceState::ALL {
+                    let (_root, settings) = addon_surface_settings(theme, state);
+                    let mut app = test_app_with_settings(settings);
+                    app.set_data_addon_details_open(true);
+                    let mut harness = harness_for_app(app, egui::vec2(width, 1200.0));
+                    if text_scale != 1.0 {
+                        harness.ctx.all_styles_mut(|style| {
+                            for font in style.text_styles.values_mut() {
+                                font.size *= text_scale;
+                            }
+                        });
+                    }
+                    for _ in 0..SETTLE {
+                        harness.step();
+                    }
+                    harness.get_by_label(MODAL_TITLE);
+                    assert!(
+                        harness.query_all_by_label(state.modal_label()).count() >= 1,
+                        "missing modal state label for {state:?}"
+                    );
+                    for title in eso_weave::app::ui::DATA_DETAILS_STATUS_TITLES {
+                        assert!(
+                            harness.query_all_by_label(title).count() >= 1,
+                            "missing complete accessible modal label {title:?}"
+                        );
+                    }
+
+                    // The modal is painted after the dashboard. Starting at its unique
+                    // heading scopes the flattened paint list to the foreground layer
+                    // and avoids treating intentionally obscured dashboard text as a
+                    // collision with modal content.
+                    let observations = visible_text_shapes(&harness);
+                    let start = observations
+                        .iter()
+                        .position(|(text, _)| text == MODAL_TITLE)
+                        .expect("modal title paint");
+                    assert_text_observations_do_not_overlap(
+                        &observations[start..],
+                        &format!(
+                            "Data Details, {state:?}, {theme:?}, {text_scale}x, {width} points"
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn dashboard_status_row_rejects_painted_text_overlap() {
+    use eso_weave::app::ui::{
+        dashboard_group_label_width, dashboard_metric, dashboard_metric_row,
+        DATA_DETAILS_STATUS_TITLES, LIVE_HUD_STATUS_TITLES, SYSTEM_STATE_STATUS_TITLES,
+    };
+    use eso_weave::app::StatusRole;
+
+    let groups = [
+        ("live HUD", LIVE_HUD_STATUS_TITLES, 0.0),
+        ("system and state", SYSTEM_STATE_STATUS_TITLES, 212.0),
+        ("data details", DATA_DETAILS_STATUS_TITLES, 0.0),
+    ];
+
+    for theme in [Theme::Dark, Theme::Light] {
+        for text_scale in [1.0, 1.25] {
+            for (group_name, titles, interaction_width) in groups {
+                for width in [360.0, 520.0, 680.0, 900.0, 1200.0] {
+                    for title in titles {
+                        let palette = eso_weave::app::theme::palette(theme);
+                        let mut initialized = false;
+                        let mut harness = Harness::builder()
+                            .with_size(egui::vec2(width, 80.0))
+                            .build_ui_state(
+                                move |ui,
+                                      geometry: &mut Option<
+                                    eso_weave::app::ui::DashboardRowGeometry,
+                                >| {
+                                    if !initialized {
+                                        eso_weave::app::theme::install_fonts(ui.ctx());
+                                        eso_weave::app::theme::apply(ui.ctx(), theme);
+                                        for font in ui.style_mut().text_styles.values_mut() {
+                                            font.size *= text_scale;
+                                        }
+                                        initialized = true;
+                                        return;
+                                    }
+                                    let label_width =
+                                        dashboard_group_label_width(ui, titles, interaction_width);
+                                    *geometry = Some(dashboard_metric_row(
+                                        ui,
+                                        &palette,
+                                        dashboard_metric(
+                                            title,
+                                            "Installed (outdated)",
+                                            StatusRole::Warning,
+                                            "Status",
+                                        ),
+                                        label_width,
+                                        interaction_width,
+                                        |ui| {
+                                            if interaction_width > 0.0 {
+                                                let _ = ui.button("Repair Data");
+                                            }
+                                        },
+                                    ));
+                                },
+                                None,
+                            );
+                        harness.step();
+                        harness.get_by_label(title);
+                        harness.get_by_label("Installed (outdated)");
+                        let geometry = harness.state().expect("dashboard row geometry");
+                        assert!(geometry.row.contains_rect(geometry.label));
+                        assert!(geometry.row.contains_rect(geometry.value));
+                        assert!(geometry.label.right() <= geometry.value.left());
+                        if let Some(interaction) = geometry.interaction {
+                            assert!(geometry.row.contains_rect(interaction));
+                            assert!(geometry.value.right() <= interaction.left());
+                        }
+                        for (text, rect) in visible_text_shapes(&harness) {
+                            let owner = if text == *title {
+                                geometry.label
+                            } else if text == "●" || text == "Installed (outdated)" {
+                                geometry.value
+                            } else if text == "Repair Data" {
+                                geometry.interaction.expect("interaction allocation")
+                            } else {
+                                continue;
+                            };
+                            assert!(
+                                owner.expand(0.5).contains_rect(rect),
+                                "{group_name}, {theme:?}, {text_scale}x, {width} points: \
+                                 {text:?} paints outside {owner:?}: {rect:?}"
+                            );
+                        }
+                        assert_visible_text_does_not_overlap(
+                            &harness,
+                            &format!(
+                                "{group_name}, {theme:?}, {text_scale}x, {width} points, {title}"
+                            ),
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 
