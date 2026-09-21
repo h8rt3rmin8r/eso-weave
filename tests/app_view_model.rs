@@ -2126,7 +2126,7 @@ fn modal_extent_fits_small_grows_and_caps() {
 
     // A mid window (below the pixel cap): more pixels than the small window, but a
     // smaller fraction of the window.
-    let mid = modal_extent(1200.0, 440.0, 1000.0, 0.92);
+    let mid = modal_extent(1000.0, 440.0, 1000.0, 0.92);
     assert!(mid > small, "modal grows in pixels with the window");
     assert!(mid < 1000.0, "mid window is below the pixel cap");
     assert!(

@@ -7,12 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- S117 adopts official package `eso-weave-brand-1.0.0-bb2.0.0` across the
+  application, offline documentation, and applicable Windows and Linux assets.
+  The runtime now uses governed semantic light and dark roles, 44-point
+  interaction targets, 2-point focus treatment, Inter display/body weights,
+  and Geist Mono technical metadata. Exact package, asset, and recovery hashes
+  are enforced by local policy and regression tests (issue #233).
+
 ### Fixed
 
 - S116 measures and bounds shared dashboard status-label columns, clips every
   row cell, preserves complete accessible labels when visible text truncates,
   and adds component plus full-surface collision gates across themes, widths,
   addon states, and enlarged logical text (issue #231).
+
+### Decisions
+
+- 2026-09-21: S117 extends the pinned documentation workflow to validate the
+  exact brand adoption record whenever governed assets, policy, or runtime
+  theme sources change. This keeps package provenance and artifact hashes in
+  the hosted required-check path instead of relying on a developer-only gate.
+- 2026-09-21: S117 replaces the pinned classic Win32 `assets/icon.ico` with
+  the package's generated classic application icon, while retaining the
+  already-current official Linux, AppImage, installer, runtime, documentation,
+  banner, compatibility-logo, and social reference bytes.
+- 2026-09-21: S117 adds the licensed Geist Mono Regular face and retains the
+  exact checksummed BrandBuilder 2.0.0 recovery distribution. The repository
+  stores a bounded consumer adoption record instead of mirroring unrelated web,
+  mobile, Apple, macOS, MSIX, Tauri, and Wails suites.
+- 2026-09-21: S117 follows `brand.json` and Interface Canon for the light
+  background, card, muted-text, and destructive roles because those
+  higher-authority values conflict with the generated egui adapter. The
+  deviation is machine-recorded until a later adapter release resolves it.
 
 ## [0.17.0] - 2026-09-17
 

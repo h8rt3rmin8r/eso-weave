@@ -1,9 +1,9 @@
 //! Brand theme for the egui GUI (presentation only).
 //!
-//! Maps the "Arcane gold on ink" brand tokens (see
+//! Maps the pinned BrandBuilder 2.0 semantic contract (see
 //! `docs/src/development/brand-standard.md`) to egui visuals and style for the dark
-//! (default) and light modes, and installs the bundled Inter font. This layer
-//! carries no correctness-bearing logic; it only styles the view.
+//! (default) and light modes, and installs the bundled Inter and Geist Mono fonts.
+//! This layer carries no correctness-bearing logic; it only styles the view.
 
 use eframe::egui::{self, Color32, Stroke};
 
@@ -20,21 +20,23 @@ pub struct Palette {
     /// Whether this is the dark theme.
     pub dark: bool,
     /// Window and base surface.
-    pub base: Color32,
+    pub background: Color32,
     /// Panels and control fills.
-    pub panel: Color32,
-    /// Hover and active fills.
-    pub elevated: Color32,
+    pub card: Color32,
+    /// Popovers and temporary overlays.
+    pub overlay: Color32,
+    /// Secondary control surface.
+    pub secondary: Color32,
+    /// Hover surface.
+    pub hover: Color32,
     /// Borders and separators.
-    pub stroke: Color32,
+    pub border: Color32,
     /// Primary action color.
-    pub gold: Color32,
-    /// Gold hover and active.
-    pub gold_hover: Color32,
-    /// Text drawn on a filled gold surface.
-    pub gold_text: Color32,
-    /// Supporting accent.
-    pub teal: Color32,
+    pub primary: Color32,
+    /// Text drawn on a filled primary surface.
+    pub on_primary: Color32,
+    /// Active-state emphasis and focus.
+    pub emphasis: Color32,
     /// Primary text.
     pub text: Color32,
     /// Secondary text.
@@ -46,7 +48,9 @@ pub struct Palette {
     /// Status: warning.
     pub warn: Color32,
     /// Status: error and signal lost.
-    pub err: Color32,
+    pub destructive: Color32,
+    /// Text drawn on a destructive fill.
+    pub on_destructive: Color32,
     /// Health meter fill.
     pub health: Color32,
     /// Stamina meter fill.
@@ -62,42 +66,46 @@ pub fn palette(theme: Theme) -> Palette {
     match theme {
         Theme::Dark => Palette {
             dark: true,
-            base: rgb(0x0E, 0x11, 0x16),
-            panel: rgb(0x15, 0x1B, 0x23),
-            elevated: rgb(0x1C, 0x25, 0x30),
-            stroke: rgb(0x2A, 0x33, 0x40),
-            gold: rgb(0xF2, 0xB0, 0x3C),
-            gold_hover: rgb(0xFB, 0xCB, 0x6B),
-            gold_text: rgb(0x24, 0x17, 0x04),
-            teal: rgb(0x2D, 0xD4, 0xBF),
-            text: rgb(0xE6, 0xED, 0xF3),
-            muted: rgb(0x8B, 0x97, 0xA7),
+            background: rgb(0x0E, 0x11, 0x16),
+            card: rgb(0x17, 0x1C, 0x24),
+            overlay: rgb(0x0A, 0x0D, 0x12),
+            secondary: rgb(0x1D, 0x24, 0x30),
+            hover: rgb(0x25, 0x2E, 0x3B),
+            border: rgb(0x26, 0x26, 0x26),
+            primary: rgb(0x2D, 0xD4, 0xBF),
+            on_primary: Color32::BLACK,
+            emphasis: rgb(0x2D, 0xD4, 0xBF),
+            text: Color32::WHITE,
+            muted: rgb(0x9A, 0x9A, 0x9A),
             ok: rgb(0x34, 0xD3, 0x99),
             ready: rgb(0x34, 0xD3, 0x99),
-            warn: rgb(0xFB, 0x9E, 0x3C),
-            err: rgb(0xF8, 0x71, 0x71),
-            health: rgb(0xF8, 0x71, 0x71),
+            warn: rgb(0xF2, 0xB0, 0x3C),
+            destructive: rgb(0xE9, 0x50, 0x5F),
+            on_destructive: Color32::BLACK,
+            health: rgb(0xE9, 0x50, 0x5F),
             stamina: rgb(0x34, 0xD3, 0x99),
             magicka: rgb(0x60, 0xA5, 0xFA),
             ultimate: rgb(0xA7, 0x8B, 0xFA),
         },
         Theme::Light => Palette {
             dark: false,
-            base: rgb(0xF7, 0xF5, 0xF0),
-            panel: rgb(0xFF, 0xFF, 0xFF),
-            elevated: rgb(0xEC, 0xE8, 0xDE),
-            stroke: rgb(0xDC, 0xD9, 0xD0),
-            gold: rgb(0xE7, 0xA4, 0x2C),
-            gold_hover: rgb(0xC6, 0x87, 0x1F),
-            gold_text: rgb(0x24, 0x17, 0x04),
-            teal: rgb(0x0D, 0x94, 0x88),
-            text: rgb(0x14, 0x11, 0x0B),
-            muted: rgb(0x6B, 0x64, 0x55),
+            background: rgb(0xF8, 0xF8, 0xF6),
+            card: Color32::WHITE,
+            overlay: Color32::WHITE,
+            secondary: rgb(0xF0, 0xEF, 0xED),
+            hover: rgb(0xF0, 0xEF, 0xED),
+            border: rgb(0xE5, 0xE5, 0xE5),
+            primary: rgb(0x98, 0x60, 0x00),
+            on_primary: Color32::WHITE,
+            emphasis: rgb(0x98, 0x60, 0x00),
+            text: rgb(0x0A, 0x0A, 0x0A),
+            muted: rgb(0x6B, 0x6B, 0x6B),
             ok: rgb(0x05, 0x96, 0x69),
             ready: rgb(0x04, 0x78, 0x57),
-            warn: rgb(0xB4, 0x53, 0x09),
-            err: rgb(0xDC, 0x26, 0x26),
-            health: rgb(0xB9, 0x1C, 0x1C),
+            warn: rgb(0x98, 0x60, 0x00),
+            destructive: rgb(0xC0, 0x29, 0x3A),
+            on_destructive: Color32::WHITE,
+            health: rgb(0xC0, 0x29, 0x3A),
             stamina: rgb(0x04, 0x78, 0x57),
             magicka: rgb(0x1D, 0x4E, 0xD8),
             ultimate: rgb(0x6D, 0x28, 0xD9),
@@ -108,28 +116,30 @@ pub fn palette(theme: Theme) -> Palette {
 /// Applies the brand visuals and spacing for a theme to the egui context.
 pub fn apply(ctx: &egui::Context, theme: Theme) {
     let p = palette(theme);
+    ctx.set_theme(if p.dark {
+        egui::ThemePreference::Dark
+    } else {
+        egui::ThemePreference::Light
+    });
     let mut v = if p.dark {
         egui::Visuals::dark()
     } else {
         egui::Visuals::light()
     };
 
-    v.panel_fill = p.base;
-    v.window_fill = p.panel;
-    v.faint_bg_color = p.elevated;
-    v.extreme_bg_color = if p.dark {
-        rgb(0x0A, 0x0D, 0x11)
-    } else {
-        p.panel
-    };
-    v.hyperlink_color = p.teal;
+    v.panel_fill = p.background;
+    v.window_fill = p.card;
+    v.faint_bg_color = p.secondary;
+    v.extreme_bg_color = p.overlay;
+    v.hyperlink_color = p.emphasis;
     v.warn_fg_color = p.warn;
-    v.error_fg_color = p.err;
-    v.window_stroke = Stroke::new(1.0, p.stroke);
-    v.selection.bg_fill = p.gold.gamma_multiply(0.35);
-    v.selection.stroke = Stroke::new(1.0, p.gold);
+    v.error_fg_color = p.destructive;
+    v.window_corner_radius = egui::CornerRadius::same(12);
+    v.window_stroke = Stroke::new(1.0, p.border);
+    v.selection.bg_fill = p.primary.gamma_multiply(0.35);
+    v.selection.stroke = Stroke::new(2.0, p.emphasis);
 
-    let radius = egui::CornerRadius::same(6);
+    let radius = egui::CornerRadius::same(8);
 
     // Every state keeps the same size-affecting inputs (zero interaction
     // expansion and a 1.0 border stroke width, which feeds the widget inner
@@ -137,41 +147,41 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     // the layout never reflows on hover. Only appearance (fill and stroke color)
     // differs between states.
     let n = &mut v.widgets.noninteractive;
-    n.bg_fill = p.panel;
-    n.weak_bg_fill = p.panel;
-    n.bg_stroke = Stroke::new(1.0, p.stroke);
+    n.bg_fill = p.card;
+    n.weak_bg_fill = p.card;
+    n.bg_stroke = Stroke::new(1.0, p.border);
     n.fg_stroke = Stroke::new(1.0, p.text);
     n.corner_radius = radius;
     n.expansion = 0.0;
 
     let i = &mut v.widgets.inactive;
-    i.bg_fill = p.elevated;
-    i.weak_bg_fill = p.elevated;
-    i.bg_stroke = Stroke::new(1.0, p.stroke);
+    i.bg_fill = p.secondary;
+    i.weak_bg_fill = p.secondary;
+    i.bg_stroke = Stroke::new(1.0, p.border);
     i.fg_stroke = Stroke::new(1.0, p.text);
     i.corner_radius = radius;
     i.expansion = 0.0;
 
     let h = &mut v.widgets.hovered;
-    h.bg_fill = p.elevated;
-    h.weak_bg_fill = p.elevated;
-    h.bg_stroke = Stroke::new(1.0, p.gold);
+    h.bg_fill = p.hover;
+    h.weak_bg_fill = p.hover;
+    h.bg_stroke = Stroke::new(1.0, p.emphasis);
     h.fg_stroke = Stroke::new(1.0, p.text);
     h.corner_radius = radius;
     h.expansion = 0.0;
 
     let a = &mut v.widgets.active;
-    a.bg_fill = p.gold;
-    a.weak_bg_fill = p.gold;
-    a.bg_stroke = Stroke::new(1.0, p.gold_hover);
-    a.fg_stroke = Stroke::new(1.0, p.gold_text);
+    a.bg_fill = p.primary;
+    a.weak_bg_fill = p.primary;
+    a.bg_stroke = Stroke::new(2.0, p.emphasis);
+    a.fg_stroke = Stroke::new(1.0, p.on_primary);
     a.corner_radius = radius;
     a.expansion = 0.0;
 
     let o = &mut v.widgets.open;
-    o.bg_fill = p.elevated;
-    o.weak_bg_fill = p.elevated;
-    o.bg_stroke = Stroke::new(1.0, p.gold);
+    o.bg_fill = p.hover;
+    o.weak_bg_fill = p.hover;
+    o.bg_stroke = Stroke::new(2.0, p.emphasis);
     o.fg_stroke = Stroke::new(1.0, p.text);
     o.corner_radius = radius;
     o.expansion = 0.0;
@@ -179,21 +189,9 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     ctx.set_visuals(v);
 
     ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
-        // Interactive controls (buttons, toggles, dropdowns) are set from one place
-        // here so they shrink consistently (issue #7). The height is a reduction of
-        // the former 22.0 baseline, floored so the control font is never clipped;
-        // toggle_switch and the combo helper both derive their height from
-        // interact_size.y, so this single change propagates everywhere.
-        let base_interact_height = 22.0;
-        let body_line_height = style
-            .text_styles
-            .get(&egui::TextStyle::Body)
-            .map(|f| f.size)
-            .unwrap_or(14.0);
-        style.spacing.button_padding = egui::vec2(10.0, 4.0);
-        style.spacing.interact_size.y =
-            crate::app::reduced_interact_height(base_interact_height, body_line_height);
+        style.spacing.item_spacing = egui::vec2(12.0, 12.0);
+        style.spacing.button_padding = egui::vec2(12.0, 6.0);
+        style.spacing.interact_size = egui::vec2(44.0, 44.0);
         // Section headings use the bundled SemiBold weight at a larger size, so
         // they read as headings rather than bold body text.
         style.text_styles.insert(
@@ -205,6 +203,8 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
 
 /// The named font family used for section headings (Inter SemiBold).
 pub const HEADING_FAMILY: &str = "InterSemiBold";
+/// The named font family used for identifiers and technical metadata.
+pub const MONO_FAMILY: &str = "GeistMono";
 
 /// Installs the bundled Inter font as the proportional family, keeping the
 /// framework default fonts as glyph fallback, and registers the Medium and
@@ -229,6 +229,13 @@ pub fn install_fonts(ctx: &egui::Context) {
         ))
         .into(),
     );
+    fonts.font_data.insert(
+        MONO_FAMILY.to_owned(),
+        egui::FontData::from_static(include_bytes!(
+            "../../assets/brand/fonts/GeistMono-Regular.ttf"
+        ))
+        .into(),
+    );
     fonts
         .families
         .entry(egui::FontFamily::Proportional)
@@ -243,6 +250,22 @@ pub fn install_fonts(ctx: &egui::Context) {
         egui::FontFamily::Name("InterMedium".into()),
         vec!["InterMedium".to_owned(), "Inter".to_owned()],
     );
+    fonts.families.insert(
+        egui::FontFamily::Monospace,
+        vec![
+            MONO_FAMILY.to_owned(),
+            "Inter".to_owned(),
+            "Hack".to_owned(),
+        ],
+    );
+    fonts.families.insert(
+        egui::FontFamily::Name(MONO_FAMILY.into()),
+        vec![
+            MONO_FAMILY.to_owned(),
+            "Inter".to_owned(),
+            "Hack".to_owned(),
+        ],
+    );
     ctx.set_fonts(fonts);
 }
 
@@ -252,9 +275,9 @@ pub fn status_color(p: &Palette, role: StatusRole) -> Color32 {
     match role {
         StatusRole::Healthy => p.ok,
         StatusRole::Warning => p.warn,
-        StatusRole::Active => p.teal,
+        StatusRole::Active => p.emphasis,
         StatusRole::Muted => p.muted,
-        StatusRole::Error => p.err,
+        StatusRole::Error => p.destructive,
     }
 }
 
@@ -288,20 +311,74 @@ mod tests {
     }
 
     #[test]
+    fn palette_matches_brandbuilder_2_contract() {
+        let dark = palette(Theme::Dark);
+        assert_eq!(dark.background, rgb(0x0E, 0x11, 0x16));
+        assert_eq!(dark.card, rgb(0x17, 0x1C, 0x24));
+        assert_eq!(dark.overlay, rgb(0x0A, 0x0D, 0x12));
+        assert_eq!(dark.secondary, rgb(0x1D, 0x24, 0x30));
+        assert_eq!(dark.hover, rgb(0x25, 0x2E, 0x3B));
+        assert_eq!(dark.border, rgb(0x26, 0x26, 0x26));
+        assert_eq!(dark.primary, rgb(0x2D, 0xD4, 0xBF));
+        assert_eq!(dark.on_primary, Color32::BLACK);
+        assert_eq!(dark.emphasis, rgb(0x2D, 0xD4, 0xBF));
+        assert_eq!(dark.text, Color32::WHITE);
+        assert_eq!(dark.muted, rgb(0x9A, 0x9A, 0x9A));
+        assert_eq!(dark.destructive, rgb(0xE9, 0x50, 0x5F));
+        assert_eq!(dark.on_destructive, Color32::BLACK);
+
+        let light = palette(Theme::Light);
+        assert_eq!(light.background, rgb(0xF8, 0xF8, 0xF6));
+        assert_eq!(light.card, Color32::WHITE);
+        assert_eq!(light.overlay, Color32::WHITE);
+        assert_eq!(light.secondary, rgb(0xF0, 0xEF, 0xED));
+        assert_eq!(light.hover, rgb(0xF0, 0xEF, 0xED));
+        assert_eq!(light.border, rgb(0xE5, 0xE5, 0xE5));
+        assert_eq!(light.primary, rgb(0x98, 0x60, 0x00));
+        assert_eq!(light.on_primary, Color32::WHITE);
+        assert_eq!(light.emphasis, rgb(0x98, 0x60, 0x00));
+        assert_eq!(light.text, rgb(0x0A, 0x0A, 0x0A));
+        assert_eq!(light.muted, rgb(0x6B, 0x6B, 0x6B));
+        assert_eq!(light.destructive, rgb(0xC0, 0x29, 0x3A));
+        assert_eq!(light.on_destructive, Color32::WHITE);
+    }
+
+    #[test]
+    fn applied_theme_enforces_governed_interaction_target_and_focus_width() {
+        for theme in [Theme::Dark, Theme::Light] {
+            let ctx = egui::Context::default();
+            apply(&ctx, theme);
+            let egui_theme = if matches!(theme, Theme::Dark) {
+                egui::Theme::Dark
+            } else {
+                egui::Theme::Light
+            };
+            let style = ctx.style_of(egui_theme);
+            assert!(style.spacing.interact_size.x >= 44.0);
+            assert!(style.spacing.interact_size.y >= 44.0);
+            assert!(style.visuals.selection.stroke.width >= 2.0);
+            assert_eq!(
+                style.visuals.window_corner_radius,
+                egui::CornerRadius::same(12)
+            );
+        }
+    }
+
+    #[test]
     fn palette_is_legible_in_both_themes() {
         for theme in [Theme::Dark, Theme::Light] {
             let p = palette(theme);
             assert!(
-                contrast(p.text, p.base) >= 7.0,
+                contrast(p.text, p.background) >= 7.0,
                 "primary text on base is not legible for {theme:?}"
             );
             assert!(
-                contrast(p.text, p.panel) >= 4.5,
+                contrast(p.text, p.card) >= 4.5,
                 "resource text on panel is not legible for {theme:?}"
             );
             assert!(
-                contrast(p.gold_text, p.gold) >= 4.0,
-                "text on a gold button is not legible for {theme:?}"
+                contrast(p.on_primary, p.primary) >= 4.5,
+                "text on a primary button is not legible for {theme:?}"
             );
             for (name, fill) in [
                 ("health", p.health),
@@ -310,16 +387,16 @@ mod tests {
                 ("ultimate", p.ultimate),
             ] {
                 assert!(
-                    contrast(fill, p.panel) >= 3.0,
+                    contrast(fill, p.card) >= 3.0,
                     "{name} fill does not meet non-text contrast for {theme:?}"
                 );
             }
             assert!(
-                contrast(p.muted, p.panel) >= 3.0,
+                contrast(p.muted, p.card) >= 3.0,
                 "meter boundary does not meet non-text contrast for {theme:?}"
             );
             assert!(
-                contrast(p.ready, p.panel) >= 4.5,
+                contrast(p.ready, p.card) >= 4.5,
                 "Ready text does not meet normal-text contrast for {theme:?}"
             );
         }

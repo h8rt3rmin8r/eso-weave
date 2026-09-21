@@ -1396,15 +1396,14 @@ export function validateLandingCss(css) {
 }
 
 const BRAND_STANDARD_TOKENS = [
-  ["Ink base", "#0E1116"], ["Panel", "#151B23"], ["Elevated", "#1C2530"],
-  ["Stroke", "#2A3340"], ["Gold (action)", "#F2B03C"], ["Gold hover", "#FBCB6B"],
-  ["Gold deep", "#D18F22"], ["Teal (support)", "#2DD4BF"], ["Text", "#E6EDF3"],
-  ["Muted", "#8B97A7"], ["Status ok", "#34D399"], ["Status warn", "#FB9E3C"],
-  ["Status err", "#F87171"], ["Base", "#F7F5F0"], ["Panel", "#FFFFFF"],
-  ["Elevated", "#ECE8DE"], ["Stroke", "#DCD9D0"], ["Gold (action)", "#E7A42C"],
-  ["Gold deep", "#C6871F"], ["Teal (support)", "#0D9488"], ["Text", "#14110B"],
-  ["Muted", "#6B6455"], ["Status ok", "#059669"], ["Status warn", "#B45309"],
-  ["Status err", "#DC2626"],
+  ["Background", "#0E1116"], ["Card", "#171C24"], ["Overlay", "#0A0D12"],
+  ["Secondary", "#1D2430"], ["Hover", "#252E3B"], ["Primary", "#2DD4BF"],
+  ["On primary", "#000000"], ["Foreground", "#FFFFFF"], ["Muted foreground", "#9A9A9A"],
+  ["Destructive", "#E9505F"], ["Border / input", "#262626"],
+  ["Background", "#F8F8F6"], ["Card", "#FFFFFF"], ["Overlay", "#FFFFFF"],
+  ["Secondary", "#F0EFED"], ["Hover", "#F0EFED"], ["Primary", "#986000"],
+  ["On primary", "#FFFFFF"], ["Foreground", "#0A0A0A"], ["Muted foreground", "#6B6B6B"],
+  ["Destructive", "#C0293A"], ["Border / input", "#E5E5E5"],
 ];
 
 const BRAND_STANDARD_ASSETS = [
@@ -1440,6 +1439,9 @@ export function validateBrandStandard({
 
   for (const phrase of ["Full-color banner", "Badged mark", "Badge-less glyph", "generated compatibility outputs, not masters", "Preserve aspect ratio", "clear space", "Minimum sizes", "Do not recolor"]) {
     if (!markdown.toLowerCase().includes(phrase.toLowerCase())) errors.push(`S081 Brand Standard is missing guidance: ${phrase}`);
+  }
+  for (const phrase of ["eso-weave-brand-1.0.0-bb2.0.0", "BrandBuilder 2.0.0", "Geist Mono", "32 CSS pixels for the badged mark", "artificial crossing overlay"]) {
+    if (!markdown.toLowerCase().includes(phrase.toLowerCase())) errors.push(`S117 Brand Standard is missing governed guidance: ${phrase}`);
   }
   for (const filename of ["eso-weave-logo-clear.png", "eso-weave-logo-white.png"]) {
     if (!markdown.includes(`\`${filename}\``)) errors.push(`S081 compatibility status must name ${filename}`);
@@ -1491,7 +1493,7 @@ export function validateBrandStandardVisualCss(css) {
   const surface = css.match(/\.brand-surface\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
   if (!/border:\s*1px\s+solid/iu.test(surface)) errors.push("S081 asset surfaces require a visible boundary");
   if (!/\.brand-surface--dark\s*\{[\s\S]*?background:\s*#0e1116/iu.test(css) ||
-      !/\.brand-surface--light\s*\{[\s\S]*?background:\s*#f7f5f0/iu.test(css)) {
+      !/\.brand-surface--light\s*\{[\s\S]*?background:\s*#f8f8f6/iu.test(css)) {
     errors.push("S081 asset gallery requires explicit dark and light backgrounds");
   }
   const image = css.match(/\.brand-surface\s+img\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body ?? "";
@@ -3618,7 +3620,7 @@ export function validateTextHygiene(relative, bytes) {
 
 export function validateBrandCss(css) {
   const errors = [];
-  for (const token of ["--eso-ink", "--eso-gold", "--eso-teal"]) {
+  for (const token of ["--eso-ink", "--eso-panel", "--eso-primary", "--eso-text", "--eso-muted"]) {
     if (!css.includes(token)) errors.push(`brand CSS missing ${token}`);
   }
   if (!css.includes(":focus-visible")) errors.push("brand CSS missing focus-visible styling");
@@ -3632,7 +3634,7 @@ export function validateBrandCss(css) {
     block.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "iu"))?.[1];
   const contrastPairs = [
     ["dark text", property(root, "eso-text"), property(root, "eso-ink")],
-    ["dark links", property(root, "eso-teal"), property(root, "eso-ink")],
+    ["dark links", property(root, "eso-primary"), property(root, "eso-ink")],
     ["light text", property(light, "fg"), property(light, "bg")],
     ["light links", property(light, "links"), property(light, "bg")],
   ];
@@ -3660,6 +3662,12 @@ export function validateBrandCss(css) {
   }
   if (!/@font-face[\s\S]*font-family:\s*"Inter"[\s\S]*Inter-SemiBold\.ttf/iu.test(css)) {
     errors.push("brand CSS missing local Inter SemiBold font face");
+  }
+  if (!/@font-face[\s\S]*font-family:\s*"Inter"[\s\S]*Inter-Medium\.ttf/iu.test(css)) {
+    errors.push("brand CSS missing local Inter Medium font face");
+  }
+  if (!/@font-face[\s\S]*font-family:\s*"Geist Mono"[\s\S]*GeistMono-Regular\.ttf/iu.test(css)) {
+    errors.push("brand CSS missing local Geist Mono Regular font face");
   }
   return errors;
 }
