@@ -19,6 +19,10 @@ function fixture() {
     ["assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill", recovery],
     ["assets/icon.ico", icon],
   ]);
+  const expectedArtifacts = new Map([
+    ["assets/brand/fonts/GeistMono-Regular.ttf", sha256(font)],
+    ["assets/icon.ico", sha256(icon)],
+  ]);
   const record = {
     schema_version: 1,
     package: { ...EXPECTED_PACKAGE },
@@ -52,11 +56,17 @@ function fixture() {
     runtime_tokens: {
       dark: {
         background: "#0E1116", card: "#171C24", overlay: "#0A0D12",
-        primary: "#2DD4BF", on_primary: "#000000", destructive: "#E9505F",
+        secondary: "#1D2430", hover: "#252E3B", foreground: "#FFFFFF",
+        muted_foreground: "#9A9A9A", primary: "#2DD4BF", on_primary: "#000000",
+        emphasis: "#2DD4BF", destructive: "#E9505F", on_destructive: "#000000",
+        border: "#262626", focus: "#2DD4BF",
       },
       light: {
         background: "#F8F8F6", card: "#FFFFFF", overlay: "#FFFFFF",
-        primary: "#986000", on_primary: "#FFFFFF", destructive: "#C0293A",
+        secondary: "#F0EFED", hover: "#F0EFED", foreground: "#0A0A0A",
+        muted_foreground: "#6B6B6B", primary: "#986000", on_primary: "#FFFFFF",
+        emphasis: "#986000", destructive: "#C0293A", on_destructive: "#FFFFFF",
+        border: "#E5E5E5", focus: "#986000",
       },
     },
     adapter_deviations: [{
@@ -65,46 +75,64 @@ function fixture() {
       authority: "brand.json and enforcement/interface-canon.json",
     }],
   };
-  return { files, record };
+  return { expectedArtifacts, files, record };
 }
 
 test("S117 accepts the exact package, authority, tokens, recovery, and artifacts", async () => {
-  const { files, record } = fixture();
+  const { expectedArtifacts, files, record } = fixture();
   assert.deepEqual(await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256 },
+    { recoverySha256: record.recovery.sha256, expectedArtifacts },
   ), []);
 });
 
 test("S117 rejects moving package identity and generated-adapter light values", async () => {
-  const { files, record } = fixture();
+  const { expectedArtifacts, files, record } = fixture();
   record.package.archive_sha256 = "0".repeat(64);
   record.runtime_tokens.light.background = "#FFFFFF";
   record.runtime_tokens.light.card = "#F8F8F6";
   record.runtime_tokens.light.destructive = "#E9505F";
+  record.runtime_tokens.light.focus = "#2DD4BF";
   const failures = (await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256 },
+    { recoverySha256: record.recovery.sha256, expectedArtifacts },
   )).join("\n");
   assert.match(failures, /archive SHA-256/i);
   assert.match(failures, /light background/i);
   assert.match(failures, /light card/i);
   assert.match(failures, /light destructive/i);
+  assert.match(failures, /light focus/i);
 });
 
 test("S117 rejects missing recovery bytes and artifact drift", async () => {
-  const { files, record } = fixture();
+  const { expectedArtifacts, files, record } = fixture();
   files.delete(record.recovery.path);
   files.set("assets/icon.ico", Buffer.from("drift"));
   const failures = (await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256 },
+    { recoverySha256: record.recovery.sha256, expectedArtifacts },
   )).join("\n");
   assert.match(failures, /recovery.*missing/i);
   assert.match(failures, /assets\/icon\.ico.*SHA-256/i);
+});
+
+test("S117 rejects an omitted binding and a self-declared replacement digest", async () => {
+  const { expectedArtifacts, files, record } = fixture();
+  record.artifacts.shift();
+  const replacement = Buffer.from("replacement icon");
+  files.set("assets/icon.ico", replacement);
+  record.artifacts[0].sha256 = sha256(replacement);
+  const failures = (await validateAdoptionRecord(
+    record,
+    async (path) => files.get(path),
+    { recoverySha256: record.recovery.sha256, expectedArtifacts },
+  )).join("\n");
+  assert.match(failures, /GeistMono-Regular\.ttf.*missing from the pinned inventory/i);
+  assert.match(failures, /assets\/icon\.ico SHA-256 must be/i);
+  assert.match(failures, /assets\/icon\.ico SHA-256 is/i);
 });
 
 test("S117 committed repository satisfies the brand-kit contract", async () => {

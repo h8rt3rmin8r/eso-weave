@@ -41,19 +41,60 @@ const EXPECTED_TOKENS = Object.freeze({
     background: "#0E1116",
     card: "#171C24",
     overlay: "#0A0D12",
+    secondary: "#1D2430",
+    hover: "#252E3B",
+    foreground: "#FFFFFF",
+    muted_foreground: "#9A9A9A",
     primary: "#2DD4BF",
     on_primary: "#000000",
+    emphasis: "#2DD4BF",
     destructive: "#E9505F",
+    on_destructive: "#000000",
+    border: "#262626",
+    focus: "#2DD4BF",
   },
   light: {
     background: "#F8F8F6",
     card: "#FFFFFF",
     overlay: "#FFFFFF",
+    secondary: "#F0EFED",
+    hover: "#F0EFED",
+    foreground: "#0A0A0A",
+    muted_foreground: "#6B6B6B",
     primary: "#986000",
     on_primary: "#FFFFFF",
+    emphasis: "#986000",
     destructive: "#C0293A",
+    on_destructive: "#FFFFFF",
+    border: "#E5E5E5",
+    focus: "#986000",
   },
 });
+
+const EXPECTED_ARTIFACTS = new Map([
+  ["assets/brand/LICENSE-BRAND.md", "bd1107a804108bbe02955ca64000945322a6fc2456b45b795dac11a253c0023a"],
+  ["assets/brand/fonts/Inter-Regular.ttf", "529be850e06f62f8904f22bda77e45bde4834498fdbec4ff4201fa3177447a3a"],
+  ["assets/brand/fonts/Inter-Medium.ttf", "6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"],
+  ["assets/brand/fonts/Inter-SemiBold.ttf", "2de533bda937a063c595b07c6bd9b70c8c5087d0649a1c8330f7ac11fcc05602"],
+  ["assets/brand/fonts/GeistMono-Regular.ttf", "990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"],
+  ["assets/brand/eso-weave-glyph.svg", "552f3203f0001b15e3adea9b720cb2f78be1427a12410f3e304170d973fef5ea"],
+  ["assets/brand/eso-weave-mark.svg", "696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"],
+  ["assets/icon.ico", "3b3830fb98662d7e1fb0277e38d94072bfc67f9eac81a2f03433e6f11ee3c20a"],
+  ["assets/brand/window-icon-256.png", "c029b18d5541c5e5f2c363836152f0cc69325d187657cc385d0095cd4edabeee"],
+  ["packaging/linux/eso-weave.png", "c029b18d5541c5e5f2c363836152f0cc69325d187657cc385d0095cd4edabeee"],
+  ["packaging/appimage/AppDir/eso-weave.png", "c029b18d5541c5e5f2c363836152f0cc69325d187657cc385d0095cd4edabeee"],
+  ["packaging/windows/dialog.bmp", "2ee9e8edebcb02b3d4db491d255220738b59e350add51e47297554c6933191e6"],
+  ["packaging/windows/banner.bmp", "d5354c4c8ce56d0e669020c3279ab89450dc96bc383bc2fbb77042e27eaca978"],
+  ["assets/eso-weave-banner.png", "fe6f1bb45c0aafce463ecb182ba15b74017c6834496409bd809ef9aad15829e4"],
+  ["assets/eso-weave-logo-clear.png", "8fbb63301d99fd5fe2c18bd404967e6d7c5c97b1c6851e7b165b79d9f55c205d"],
+  ["assets/eso-weave-logo-white.png", "5bc07099259bf7fde39c2a7b2fa7cd2d6dac517b7c5fd8a14a32a213b82579d2"],
+  ["assets/eso-weave-social.png", "e45a1ede2cb83ffcee1392e9aff188a57a51013b23e6e0ead65aae35551a9ef0"],
+  ["docs/src/assets/brand/eso-weave-glyph.svg", "552f3203f0001b15e3adea9b720cb2f78be1427a12410f3e304170d973fef5ea"],
+  ["docs/src/assets/brand/eso-weave-mark.svg", "696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"],
+  ["docs/src/assets/brand/eso-weave-banner.png", "fe6f1bb45c0aafce463ecb182ba15b74017c6834496409bd809ef9aad15829e4"],
+  ["docs/src/assets/brand/fonts/Inter-Medium.ttf", "6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"],
+  ["docs/src/assets/brand/fonts/GeistMono-Regular.ttf", "990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"],
+]);
 
 const RECOVERY_SHA256 = "26578eb150a9c24d9e625fb77b192e0415a6ac8faf67c83834ac914f2da15e90";
 
@@ -85,7 +126,7 @@ async function validateFile(binding, readBytes, label, failures) {
 export async function validateAdoptionRecord(
   record,
   readBytes,
-  { recoverySha256 = RECOVERY_SHA256 } = {},
+  { recoverySha256 = RECOVERY_SHA256, expectedArtifacts = EXPECTED_ARTIFACTS } = {},
 ) {
   const failures = [];
   if (record?.schema_version !== 1) failures.push("schema_version must be 1");
@@ -122,11 +163,18 @@ export async function validateAdoptionRecord(
     for (const artifact of record.artifacts) {
       if (paths.has(artifact.path)) failures.push(`artifact ${artifact.path} is duplicated`);
       paths.add(artifact.path);
-      if (!/^[0-9a-f]{64}$/u.test(artifact.sha256 ?? "")) {
-        failures.push(`artifact ${artifact.path} has an invalid SHA-256`);
+      const expectedSha256 = expectedArtifacts.get(artifact.path);
+      if (!expectedSha256) {
+        failures.push(`artifact ${artifact.path} is not in the pinned inventory`);
         continue;
       }
-      await validateFile(artifact, readBytes, "artifact", failures);
+      if (artifact.sha256 !== expectedSha256) {
+        failures.push(`artifact ${artifact.path} SHA-256 must be ${expectedSha256}`);
+      }
+      await validateFile({ ...artifact, sha256: expectedSha256 }, readBytes, "artifact", failures);
+    }
+    for (const expectedPath of expectedArtifacts.keys()) {
+      if (!paths.has(expectedPath)) failures.push(`artifact ${expectedPath} is missing from the pinned inventory`);
     }
   }
 
