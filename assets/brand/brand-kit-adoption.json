@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "package": {
+    "id": "eso-weave-brand-1.0.0-bb2.0.0",
+    "filename": "eso-weave-brand-1.0.0-bb2.0.0.zip",
+    "brand_slug": "eso-weave",
+    "brand_version": "1.0.0",
+    "brandbuilder_version": "2.0.0",
+    "url": "https://brand.shruggie.tech/eso-weave/downloads/eso-weave-brand-1.0.0-bb2.0.0.zip",
+    "archive_sha256": "b37ac1459666ae33d772229bd5247699c2c845971eabed267ff85465b68a1ba1",
+    "source_revision": "f974fbb5c532a3394980be4dd985aee86e7e2c9e",
+    "release_tag": "v2.0.0"
+  },
+  "versions": {
+    "brand_canon": "1.2.1",
+    "interface_canon": "1.0.0",
+    "component_recipes": "1.1.0",
+    "web_react_adapter": "1.1.0",
+    "egui_adapter": "1.0.0",
+    "compiler": "2.0.0",
+    "brand": "1.0.0"
+  },
+  "authority": [
+    "brand.json",
+    "enforcement/bundle.json",
+    "enforcement/release-impact.json",
+    "enforcement/interface-canon.json",
+    "enforcement/component-recipes.json",
+    "enforcement/version-policy.json",
+    "enforcement/documentation-contract.json",
+    "enforcement/consumer-contract.json"
+  ],
+  "migration": {
+    "required": ["palette", "typography", "documentation", "recovery"],
+    "optional_adopted": ["platform_assets.windows_classic", "platform_assets.linux_reference", "egui"],
+    "optional_not_applicable": ["web_react", "android", "apple", "macos", "msix", "tauri", "wails"],
+    "unaffected": ["identity"]
+  },
+  "recovery": {
+    "path": "assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill",
+    "source": "enforcement/distributions/shruggie-brandbuilder-2.0.0.skill",
+    "extract_to": "enforcement/brandbuilder",
+    "sha256": "26578eb150a9c24d9e625fb77b192e0415a6ac8faf67c83834ac914f2da15e90"
+  },
+  "runtime_tokens": {
+    "dark": {
+      "background": "#0E1116",
+      "card": "#171C24",
+      "overlay": "#0A0D12",
+      "secondary": "#1D2430",
+      "hover": "#252E3B",
+      "foreground": "#FFFFFF",
+      "muted_foreground": "#9A9A9A",
+      "primary": "#2DD4BF",
+      "on_primary": "#000000",
+      "emphasis": "#2DD4BF",
+      "destructive": "#E9505F",
+      "on_destructive": "#000000",
+      "border": "#262626",
+      "focus": "#2DD4BF"
+    },
+    "light": {
+      "background": "#F8F8F6",
+      "card": "#FFFFFF",
+      "overlay": "#FFFFFF",
+      "secondary": "#F0EFED",
+      "hover": "#F0EFED",
+      "foreground": "#0A0A0A",
+      "muted_foreground": "#6B6B6B",
+      "primary": "#986000",
+      "on_primary": "#FFFFFF",
+      "emphasis": "#986000",
+      "destructive": "#C0293A",
+      "on_destructive": "#FFFFFF",
+      "border": "#E5E5E5",
+      "focus": "#986000"
+    }
+  },
+  "geometry": {
+    "interaction_target_minimum": 44,
+    "focus_width": 2,
+    "focus_offset": 2,
+    "control_spacing": 12,
+    "component_spacing": 24,
+    "control_radius": 8,
+    "panel_radius": 12,
+    "reduced_mark_below_px": 32
+  },
+  "adapter_deviations": [
+    {
+      "source": "native/egui/src/tokens.rs",
+      "roles": ["surface.background", "surface.card", "text.muted", "action.destructive"],
+      "authority": "brand.json and enforcement/interface-canon.json",
+      "reason": "The generated light bindings conflict with the kit's declared authority order. S117 follows the higher-authority light aliases and records the generated defect instead of reproducing it."
+    }
+  ],
+  "artifacts": [
+    {"path":"assets/brand/LICENSE-BRAND.md","source":"LICENSE-BRAND.md","role":"brand-and-font-license-boundary","disposition":"adopted","sha256":"bd1107a804108bbe02955ca64000945322a6fc2456b45b795dac11a253c0023a"},
+    {"path":"assets/brand/fonts/Inter-Regular.ttf","source":"fonts/Inter-Regular.ttf","role":"body-400","disposition":"already-current","sha256":"529be850e06f62f8904f22bda77e45bde4834498fdbec4ff4201fa3177447a3a"},
+    {"path":"assets/brand/fonts/Inter-Medium.ttf","source":"fonts/Inter-Medium.ttf","role":"body-display-500","disposition":"already-current","sha256":"6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"},
+    {"path":"assets/brand/fonts/Inter-SemiBold.ttf","source":"fonts/Inter-SemiBold.ttf","role":"display-600","disposition":"already-current","sha256":"2de533bda937a063c595b07c6bd9b70c8c5087d0649a1c8330f7ac11fcc05602"},
+    {"path":"assets/brand/fonts/GeistMono-Regular.ttf","source":"fonts/ttf/GeistMono-Regular.ttf","role":"mono-400","disposition":"adopted","sha256":"990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"},
+    {"path":"assets/brand/eso-weave-glyph.svg","source":"assets/source/eso-weave-glyph.svg","role":"authoritative-glyph","disposition":"retained-master","sha256":"552f3203f0001b15e3adea9b720cb2f78be1427a12410f3e304170d973fef5ea"},
+    {"path":"assets/brand/eso-weave-mark.svg","source":"assets/source/eso-weave-mark.svg","role":"authoritative-mark","disposition":"retained-master","sha256":"696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"},
+    {"path":"assets/icon.ico","source":"icons/windows/classic/app.ico","role":"windows-classic-icon","disposition":"adopted","sha256":"3b3830fb98662d7e1fb0277e38d94072bfc67f9eac81a2f03433e6f11ee3c20a"},
+    {"path":"assets/brand/window-icon-256.png","source":"assets/reference/window-icon-256.png","role":"runtime-window-icon","disposition":"already-current","sha256":"c029b18d5541c5e5f2c363836152f0cc69325d187657cc385d0095cd4edabeee"},
+    {"path":"packaging/linux/eso-weave.png","source":"assets/reference/linux.png","role":"linux-desktop-icon","disposition":"already-current","sha256":"c029b18d5541c5e5f2c363836152f0cc69325d187657cc385d0095cd4edabeee"},
+    {"path":"packaging/appimage/AppDir/eso-weave.png","source":"assets/reference/appimage.png","role":"appimage-icon","disposition":"already-current","sha256":"c029b18d5541c5e5f2c363836152f0cc69325d187657cc385d0095cd4edabeee"},
+    {"path":"packaging/windows/dialog.bmp","source":"assets/reference/windows-dialog.bmp","role":"windows-installer-dialog","disposition":"already-current","sha256":"2ee9e8edebcb02b3d4db491d255220738b59e350add51e47297554c6933191e6"},
+    {"path":"packaging/windows/banner.bmp","source":"assets/reference/windows-banner.bmp","role":"windows-installer-banner","disposition":"already-current","sha256":"d5354c4c8ce56d0e669020c3279ab89450dc96bc383bc2fbb77042e27eaca978"},
+    {"path":"assets/eso-weave-banner.png","source":"assets/reference/banner.png","role":"banner","disposition":"already-current","sha256":"fe6f1bb45c0aafce463ecb182ba15b74017c6834496409bd809ef9aad15829e4"},
+    {"path":"assets/eso-weave-logo-clear.png","source":"assets/reference/logo-clear.png","role":"compatibility-logo-clear","disposition":"already-current","sha256":"8fbb63301d99fd5fe2c18bd404967e6d7c5c97b1c6851e7b165b79d9f55c205d"},
+    {"path":"assets/eso-weave-logo-white.png","source":"assets/reference/logo-white.png","role":"compatibility-logo-white","disposition":"already-current","sha256":"5bc07099259bf7fde39c2a7b2fa7cd2d6dac517b7c5fd8a14a32a213b82579d2"},
+    {"path":"assets/eso-weave-social.png","source":"assets/reference/social.png","role":"social-preview","disposition":"already-current","sha256":"e45a1ede2cb83ffcee1392e9aff188a57a51013b23e6e0ead65aae35551a9ef0"},
+    {"path":"docs/src/assets/brand/eso-weave-glyph.svg","source":"assets/source/eso-weave-glyph.svg","role":"documentation-glyph","disposition":"already-current","sha256":"552f3203f0001b15e3adea9b720cb2f78be1427a12410f3e304170d973fef5ea"},
+    {"path":"docs/src/assets/brand/eso-weave-mark.svg","source":"assets/source/eso-weave-mark.svg","role":"documentation-mark","disposition":"already-current","sha256":"696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"},
+    {"path":"docs/src/assets/brand/eso-weave-banner.png","source":"assets/reference/banner.png","role":"documentation-banner","disposition":"already-current","sha256":"fe6f1bb45c0aafce463ecb182ba15b74017c6834496409bd809ef9aad15829e4"},
+    {"path":"docs/src/assets/brand/fonts/Inter-Medium.ttf","source":"fonts/Inter-Medium.ttf","role":"documentation-body-display-500","disposition":"adopted","sha256":"6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"},
+    {"path":"docs/src/assets/brand/fonts/GeistMono-Regular.ttf","source":"fonts/ttf/GeistMono-Regular.ttf","role":"documentation-mono-400","disposition":"adopted","sha256":"990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"}
+  ]
+}

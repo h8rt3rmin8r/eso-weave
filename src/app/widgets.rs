@@ -99,7 +99,7 @@ fn paint_meter_track(
 ) {
     let radius = egui::CornerRadius::same(4);
     ui.painter()
-        .rect_filled(geometry.track, radius, palette.panel);
+        .rect_filled(geometry.track, radius, palette.card);
     if let Some(fraction) = fraction {
         let filled = egui::Rect::from_min_max(
             geometry.track.min,
@@ -114,7 +114,7 @@ fn paint_meter_track(
     }
     for segment in geometry.quarters {
         ui.painter()
-            .line_segment(segment, egui::Stroke::new(1.0, palette.stroke));
+            .line_segment(segment, egui::Stroke::new(1.0, palette.border));
     }
     ui.painter()
         .rect_stroke(geometry.track, radius, stroke, egui::StrokeKind::Inside);
@@ -248,7 +248,7 @@ pub fn ultimate_meter(
     response.on_hover_text(crate::app::strings::ULTIMATE_TOOLTIP)
 }
 
-/// A colorized physical toggle switch. Renders a pill track (gold when on, muted
+/// A colorized physical toggle switch. Renders a pill track (primary when on, muted
 /// when off) with a sliding knob. Returns the response so the caller can detect
 /// changes and attach a hover tooltip.
 pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool, palette: &Palette) -> egui::Response {
@@ -276,13 +276,17 @@ pub fn toggle_switch_named(
     if ui.is_rect_visible(rect) {
         let how_on = ui.ctx().animate_bool(response.id, *on);
         let radius = 0.5 * rect.height();
-        let track = if *on { palette.gold } else { palette.elevated };
+        let track = if *on {
+            palette.primary
+        } else {
+            palette.secondary
+        };
         ui.painter()
             .rect_filled(rect, egui::CornerRadius::same(radius as u8), track);
         let circle_x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), how_on);
         let center = egui::pos2(circle_x, rect.center().y);
         let knob = if *on {
-            palette.gold_text
+            palette.on_primary
         } else {
             palette.muted
         };
@@ -326,8 +330,8 @@ pub fn strong_label_font(ui: &egui::Ui) -> egui::FontId {
 ///
 /// This intentionally avoids egui's `RichText::strong()`: its color comes from
 /// `strong_text_color()`, which is `widgets.active.text_color()`, and the brand
-/// theme sets that to `gold_text` (the dark ink used for text on a gold button).
-/// On the dark base that reads as an almost invisible brown, so emphasis labels
+/// theme sets that to `on_primary` for text on a filled primary action.
+/// On a base surface that can be unreadable, so emphasis labels
 /// are colored from the palette here instead.
 pub fn label_strong(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
     let font = strong_label_font(ui);
@@ -399,7 +403,7 @@ impl Toast {
                         ui.label(
                             egui::RichText::new(&self.message)
                                 .font(font)
-                                .color(palette.base),
+                                .color(palette.background),
                         );
                     });
             });

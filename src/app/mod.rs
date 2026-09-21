@@ -1521,23 +1521,6 @@ pub const LOG_MIN_LINES: f32 = 6.0;
 /// agree on the space reserved around the text.
 pub const LOG_FRAME_MARGIN: f32 = 6.0;
 
-/// The fraction to scale interactive control heights by, a reduction of about
-/// twenty percent (see issue #7). Applied once in [`theme::apply`] so buttons,
-/// toggles, and dropdowns shrink consistently.
-pub const CONTROL_HEIGHT_SCALE: f32 = 0.8;
-
-/// The minimum interior padding (points) kept above and below a control's text
-/// line, so a reduced control height never clips its label.
-const CONTROL_MIN_TEXT_PADDING: f32 = 3.0;
-
-/// The reduced interactive-control height (points) for a base height and the
-/// control font's line height: about [`CONTROL_HEIGHT_SCALE`] of the base, but
-/// never so short that the text line plus its minimum padding would be clipped.
-/// Pure and deterministic. See issue #7 (FR-011, FR-012).
-pub fn reduced_interact_height(base: f32, font_line_height: f32) -> f32 {
-    (base * CONTROL_HEIGHT_SCALE).max(font_line_height + CONTROL_MIN_TEXT_PADDING)
-}
-
 /// The minimum live-log panel height (points) that shows [`LOG_MIN_LINES`] lines
 /// of log text at the given row height, plus the frame's top and bottom margins.
 /// Strictly increasing in `row_height`. Pure. See issue #5 (FR-005).
@@ -1683,7 +1666,7 @@ pub fn log_max_height_no_overlap(window_height: f32, content_height: f32) -> f32
 pub fn modal_extent(window: f32, min_px: f32, max_px: f32, max_frac: f32) -> f32 {
     // Grow at a fraction of the window's growth past the minimum, so the occupied
     // fraction decreases as the window enlarges.
-    const GROWTH: f32 = 0.55;
+    const GROWTH: f32 = 0.8;
     let grown = min_px + (window - min_px).max(0.0) * GROWTH;
     grown.clamp(min_px, max_px).min(window * max_frac)
 }

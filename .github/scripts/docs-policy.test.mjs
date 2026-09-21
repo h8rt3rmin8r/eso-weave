@@ -95,15 +95,14 @@ function unwrapDocumentationScreenshot(markdown, record, page) {
 }
 
 const brandTokens = [
-  ["Ink base", "#0E1116"], ["Panel", "#151B23"], ["Elevated", "#1C2530"],
-  ["Stroke", "#2A3340"], ["Gold (action)", "#F2B03C"], ["Gold hover", "#FBCB6B"],
-  ["Gold deep", "#D18F22"], ["Teal (support)", "#2DD4BF"], ["Text", "#E6EDF3"],
-  ["Muted", "#8B97A7"], ["Status ok", "#34D399"], ["Status warn", "#FB9E3C"],
-  ["Status err", "#F87171"], ["Base", "#F7F5F0"], ["Panel", "#FFFFFF"],
-  ["Elevated", "#ECE8DE"], ["Stroke", "#DCD9D0"], ["Gold (action)", "#E7A42C"],
-  ["Gold deep", "#C6871F"], ["Teal (support)", "#0D9488"], ["Text", "#14110B"],
-  ["Muted", "#6B6455"], ["Status ok", "#059669"], ["Status warn", "#B45309"],
-  ["Status err", "#DC2626"],
+  ["Background", "#0E1116"], ["Card", "#171C24"], ["Overlay", "#0A0D12"],
+  ["Secondary", "#1D2430"], ["Hover", "#252E3B"], ["Primary", "#2DD4BF"],
+  ["On primary", "#000000"], ["Foreground", "#FFFFFF"], ["Muted foreground", "#9A9A9A"],
+  ["Destructive", "#E9505F"], ["Border / input", "#262626"],
+  ["Background", "#F8F8F6"], ["Card", "#FFFFFF"], ["Overlay", "#FFFFFF"],
+  ["Secondary", "#F0EFED"], ["Hover", "#F0EFED"], ["Primary", "#986000"],
+  ["On primary", "#FFFFFF"], ["Foreground", "#0A0A0A"], ["Muted foreground", "#6B6B6B"],
+  ["Destructive", "#C0293A"], ["Border / input", "#E5E5E5"],
 ];
 
 const brandRow = ([role, hex]) => `| ${role} | <span class="brand-swatch" role="img" aria-label="${role}, ${hex} color swatch" style="--swatch-color: ${hex}"></span> \`${hex}\` | Use |`;
@@ -126,17 +125,18 @@ The files \`eso-weave-logo-clear.png\` and \`eso-weave-logo-white.png\` are gene
 [Download full-color banner](../assets/brand/eso-weave-banner.png)
 [Download badged mark](../assets/brand/eso-weave-mark.svg)
 [Download badge-less glyph](../assets/brand/eso-weave-glyph.svg)
-Preserve aspect ratio. Use clear space equal to one strand width. Minimum sizes are 16 CSS pixels for the badged mark, 32 CSS pixels for the glyph, and 160 CSS pixels for the banner. Do not recolor.
+Package eso-weave-brand-1.0.0-bb2.0.0 uses BrandBuilder 2.0.0. Geist Mono is the metadata face.
+Preserve aspect ratio. Use clear space equal to one strand width. Minimum sizes are 32 CSS pixels for the badged mark, 32 CSS pixels for the glyph, and 160 CSS pixels for the banner. Do not recolor. Never add an artificial crossing overlay.
 
 ### Dark (default)
 | Role | Hex | Use |
 | --- | --- | --- |
-${brandTokens.slice(0, 13).map(brandRow).join("\n")}
+${brandTokens.slice(0, 11).map(brandRow).join("\n")}
 
 ### Light
 | Role | Hex | Use |
 | --- | --- | --- |
-${brandTokens.slice(13).map(brandRow).join("\n")}
+${brandTokens.slice(11).map(brandRow).join("\n")}
 `;
 const brandAssetBytes = Uint8Array.from([1, 3, 5, 7]);
 const brandArguments = (markdown = brandMarkdown) => ({
@@ -171,8 +171,8 @@ test("S081 rejects asset drift, missing identity guidance, and light-surface gly
 
 test("S081 rejects missing, recolored, and mislabeled palette chips", () => {
   assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace(brandRow(brandTokens[0]), ""))).join("\n"), /Ink base|palette/i);
-  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("--swatch-color: #F7F5F0", "--swatch-color: #000000"))).join("\n"), /Base|fill/i);
-  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("Status err, #DC2626 color swatch", "Error red"))).join("\n"), /Status err|accessible/i);
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("--swatch-color: #F8F8F6", "--swatch-color: #000000"))).join("\n"), /Background|fill/i);
+  assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("Destructive, #C0293A color swatch", "Error red"))).join("\n"), /Destructive|accessible/i);
 });
 
 test("S081 requires generated semantics and all local asset outputs", () => {
@@ -183,7 +183,7 @@ test("S081 requires generated semantics and all local asset outputs", () => {
 });
 
 test("S081 requires bounded swatches, contained images, and narrow gallery reflow", () => {
-  const css = `.brand-asset-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.brand-surface { border: 1px solid #65758b; }\n.brand-surface--dark { background: #0e1116; }\n.brand-surface--light { background: #f7f5f0; }\n.brand-surface img { display: block; height: auto; max-width: 100%; }\n.brand-surface--light .brand-asset--mark { grid-column: 1 / -1; }\n.brand-swatch { background: var(--swatch-color); border: 1px solid #65758b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); display: inline-block; height: 1.1rem; width: 1.1rem; }\n@media (max-width: 40rem) { .brand-asset-gallery { grid-template-columns: 1fr; } }`;
+  const css = `.brand-asset-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.brand-surface { border: 1px solid #65758b; }\n.brand-surface--dark { background: #0e1116; }\n.brand-surface--light { background: #f8f8f6; }\n.brand-surface img { display: block; height: auto; max-width: 100%; }\n.brand-surface--light .brand-asset--mark { grid-column: 1 / -1; }\n.brand-swatch { background: var(--swatch-color); border: 1px solid #65758b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); display: inline-block; height: 1.1rem; width: 1.1rem; }\n@media (max-width: 40rem) { .brand-asset-gallery { grid-template-columns: 1fr; } }`;
   assert.deepEqual(validateBrandStandardVisualCss(css), []);
   assert.match(validateBrandStandardVisualCss(css.replace("border: 1px solid #65758b; box-shadow", "box-shadow")).join("\n"), /swatch.*boundary/i);
   assert.match(validateBrandStandardVisualCss(css.replace("max-width: 100%;", "max-width: none;")).join("\n"), /image/i);
@@ -1504,14 +1504,16 @@ test("rejects missing and escaping local CSS resources", async (t) => {
 test("requires brand tokens, visible focus, reduced motion, and responsive targets", () => {
   const validCss = `
     :root {
-      --eso-ink: #0e1116; --eso-gold: #f2b03c; --eso-teal: #2dd4bf;
-      --eso-text: #e6edf3; --eso-focus: #f2b03c;
+      --eso-ink: #0e1116; --eso-panel: #171c24; --eso-primary: #2dd4bf;
+      --eso-text: #ffffff; --eso-muted: #9a9a9a; --eso-focus: #2dd4bf;
     }
     @font-face { font-family: "Inter"; src: url("../assets/brand/fonts/Inter-Regular.ttf"); }
+    @font-face { font-family: "Inter"; src: url("../assets/brand/fonts/Inter-Medium.ttf"); }
     @font-face { font-family: "Inter"; src: url("../assets/brand/fonts/Inter-SemiBold.ttf"); }
+    @font-face { font-family: "Geist Mono"; src: url("../assets/brand/fonts/GeistMono-Regular.ttf"); }
     .light, .rust {
-      --bg: #f7f5f0; --fg: #14110b; --links: #075e57;
-      --sidebar-bg: #ffffff; --table-header-bg: #ece8de; --eso-focus: #704800;
+      --bg: #f8f8f6; --fg: #0a0a0a; --links: #986000;
+      --sidebar-bg: #ffffff; --table-header-bg: #f0efed; --eso-focus: #986000;
     }
     :focus-visible { outline: 3px solid var(--eso-focus); }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
@@ -1522,18 +1524,20 @@ test("requires brand tokens, visible focus, reduced motion, and responsive targe
 });
 
 test("rejects text and link colors below WCAG AA normal-text contrast", () => {
-  assert.ok(contrastRatio("#e6edf3", "#0e1116") >= 4.5);
+  assert.ok(contrastRatio("#ffffff", "#0e1116") >= 4.5);
   assert.ok(contrastRatio("#2dd4bf", "#0e1116") >= 4.5);
-  assert.ok(contrastRatio("#14110b", "#f7f5f0") >= 4.5);
-  assert.ok(contrastRatio("#075e57", "#f7f5f0") >= 4.5);
+  assert.ok(contrastRatio("#0a0a0a", "#f8f8f6") >= 4.5);
+  assert.ok(contrastRatio("#986000", "#f8f8f6") >= 4.5);
 
   const lowContrast = `
     :root {
-      --eso-ink: #777777; --eso-gold: #f2b03c; --eso-teal: #888888;
-      --eso-text: #888888; --eso-focus: #888888;
+      --eso-ink: #777777; --eso-panel: #888888; --eso-primary: #888888;
+      --eso-text: #888888; --eso-muted: #888888; --eso-focus: #888888;
     }
     @font-face { font-family: "Inter"; src: url("../assets/brand/fonts/Inter-Regular.ttf"); }
+    @font-face { font-family: "Inter"; src: url("../assets/brand/fonts/Inter-Medium.ttf"); }
     @font-face { font-family: "Inter"; src: url("../assets/brand/fonts/Inter-SemiBold.ttf"); }
+    @font-face { font-family: "Geist Mono"; src: url("../assets/brand/fonts/GeistMono-Regular.ttf"); }
     .light, .rust {
       --bg: #ffffff; --fg: #eeeeee; --links: #eeeeee;
       --sidebar-bg: #ffffff; --table-header-bg: #eeeeee; --eso-focus: #eeeeee;

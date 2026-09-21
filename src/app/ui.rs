@@ -66,7 +66,7 @@ impl Clickable for egui::Response {
     }
 }
 
-/// A gold-filled primary action button (dark text on the brand accent), for the
+/// A primary-filled action button (on-primary text on the brand accent), for the
 /// main affirmative controls. Secondary and destructive actions stay neutral.
 fn lifecycle_button(
     ui: &mut egui::Ui,
@@ -75,12 +75,12 @@ fn lifecycle_button(
     primary: bool,
 ) -> egui::Response {
     let mut button = egui::Button::new(if primary {
-        egui::RichText::new(text).color(palette.gold_text)
+        egui::RichText::new(text).color(palette.on_primary)
     } else {
         egui::RichText::new(text)
     });
     if primary {
-        button = button.fill(palette.gold);
+        button = button.fill(palette.primary);
     }
     ui.add_sized(
         [LIFECYCLE_BUTTON_WIDTH, ui.spacing().interact_size.y],
@@ -96,12 +96,12 @@ fn data_lifecycle_button(
     primary: bool,
 ) -> egui::Response {
     let mut button = egui::Button::new(if primary {
-        egui::RichText::new(text).color(palette.gold_text)
+        egui::RichText::new(text).color(palette.on_primary)
     } else {
         egui::RichText::new(text)
     });
     if primary {
-        button = button.fill(palette.gold);
+        button = button.fill(palette.primary);
     }
     ui.add_sized(
         [DATA_LIFECYCLE_BUTTON_WIDTH, ui.spacing().interact_size.y],
@@ -112,9 +112,9 @@ fn data_lifecycle_button(
 
 fn dashboard_frame(palette: &crate::app::theme::Palette) -> egui::Frame {
     egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(egui::Stroke::new(1.0, palette.stroke))
-        .corner_radius(egui::CornerRadius::same(8))
+        .fill(palette.card)
+        .stroke(egui::Stroke::new(1.0, palette.border))
+        .corner_radius(egui::CornerRadius::same(12))
         .inner_margin(egui::Margin {
             left: 10,
             right: 10,
@@ -1267,7 +1267,10 @@ impl EsoWeaveApp {
             let scope = ui.scope(|ui| {
                 // Menu bar.
                 let menu_bar = egui::MenuBar::new().ui(ui, |ui| {
-                    ui.menu_button(strings::MENU_FILE, |ui| {
+                    egui::containers::menu::MenuButton::from_button(
+                        egui::Button::new(strings::MENU_FILE).min_size(egui::vec2(44.0, 44.0)),
+                    )
+                    .ui(ui, |ui| {
                         if ui
                             .button(strings::MENU_SETTINGS)
                             .on_hover_text(strings::MENU_SETTINGS_TOOLTIP)
@@ -1304,9 +1307,12 @@ impl EsoWeaveApp {
                             exit = true;
                         }
                     })
-                    .response
+                    .0
                     .clickable();
-                    ui.menu_button(strings::MENU_VIEW, |ui| {
+                    egui::containers::menu::MenuButton::from_button(
+                        egui::Button::new(strings::MENU_VIEW).min_size(egui::vec2(44.0, 44.0)),
+                    )
+                    .ui(ui, |ui| {
                         if ui
                             .checkbox(&mut self.log_panel_open, strings::MENU_LOG_TOGGLE)
                             .on_hover_text(strings::MENU_LOG_TOGGLE_TOOLTIP)
@@ -1342,9 +1348,12 @@ impl EsoWeaveApp {
                             }
                         }
                     })
-                    .response
+                    .0
                     .clickable();
-                    ui.menu_button(strings::MENU_HELP, |ui| {
+                    egui::containers::menu::MenuButton::from_button(
+                        egui::Button::new(strings::MENU_HELP).min_size(egui::vec2(44.0, 44.0)),
+                    )
+                    .ui(ui, |ui| {
                         if ui
                             .button(strings::MENU_DOCUMENTATION)
                             .on_hover_text(strings::MENU_DOCUMENTATION_TOOLTIP)
@@ -1366,7 +1375,7 @@ impl EsoWeaveApp {
                             }
                         }
                     })
-                    .response
+                    .0
                     .clickable();
                 });
                 // The menu bar spans the available width (measured, not assumed: it
@@ -2395,7 +2404,7 @@ impl EsoWeaveApp {
 
             if let Some(candidate) = &selected_summary {
                 ui.group(|ui| {
-                    ui.label(format!(
+                    ui.monospace(format!(
                         "Catalog {} | schema {} | {} sources",
                         candidate.catalog_version, candidate.catalog_schema, candidate.source_count
                     ));
@@ -2407,7 +2416,7 @@ impl EsoWeaveApp {
                         candidate.ready_icons,
                         candidate.placeholder_icons
                     ));
-                    ui.label(format!(
+                    ui.monospace(format!(
                         "Integrity identity: {}...",
                         &candidate.candidate_sha256[..12]
                     ));
@@ -2678,7 +2687,7 @@ impl EsoWeaveApp {
                     ui.label(
                         "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state.",
                     );
-                    ui.label(format!(
+                    ui.monospace(format!(
                         "{} mode | {} | revision {}",
                         capture_mode_label(state.selected_mode),
                         capture_controller_state_label(state.state),
@@ -2694,14 +2703,14 @@ impl EsoWeaveApp {
                             .map_or("none", capture_session_status_label)
                     ));
                     if let Some(session_id) = &state.session_id {
-                        ui.small(format!(
+                        ui.label(egui::RichText::new(format!(
                             "Session {} | {} terminal encounter{} | {} interruption{}",
                             session_id,
                             state.completed_encounter_count,
                             if state.completed_encounter_count == 1 { "" } else { "s" },
                             state.interruption_count,
                             if state.interruption_count == 1 { "" } else { "s" }
-                        ));
+                        )).small().monospace());
                     }
                     if let Some(failure) = state.failure_reason {
                         ui.strong(format!(
@@ -2932,14 +2941,10 @@ impl EsoWeaveApp {
         // maximum (so it looks right from the minimum window up to a QHD ultrawide
         // display) and never exceeding the window.
         let modal_w = modal_extent(screen.width(), 460.0, 1040.0, 0.92);
-        // The maximum height rose from 880 to 1120 in slice 039. The settings body
-        // grew by an auto-potion group of five settings plus a keybinding row for
-        // the new toggle, taking it past the FR-017 bound that at least half the
-        // body is visible at the modal maximum. Slice 030 recorded that margin as
-        // thin and that any added settings row would need the maximum raised; this
-        // is that. It is still capped at 92 percent of the window, so a small
-        // display is unaffected.
-        let modal_h = modal_extent(screen.height(), 400.0, 1120.0, 0.92);
+        // BrandBuilder's 44-point interaction floor increases the complete settings
+        // body. The maximum preserves the existing half-visible-body contract on
+        // large displays while the 92 percent cap leaves small displays unchanged.
+        let modal_h = modal_extent(screen.height(), 400.0, 1800.0, 0.92);
         // The room above the body (heading, separator, close row) is measured from
         // the laid-out chrome rather than reserved as a constant: the old fixed 52
         // points understated the real chrome by about half, so the modal overshot

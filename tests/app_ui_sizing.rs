@@ -108,6 +108,26 @@ fn harness_for_app(app: EsoWeaveApp, size: egui::Vec2) -> Harness<'static, EsoWe
 /// Number of frames to settle the two-frame stability gate before reading state.
 const SETTLE: usize = 6;
 
+/// Settles layout, then applies the minimum size the real viewport would honor.
+fn settle_at_enforced_minimum(
+    harness: &mut Harness<'static, EsoWeaveApp>,
+    current: egui::Vec2,
+) -> egui::Vec2 {
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    let minimum = harness
+        .state()
+        .last_min_sent()
+        .expect("a minimum should have been sent");
+    let target = egui::vec2(current.x.max(minimum.x), current.y.max(minimum.y));
+    harness.input_mut().screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, target));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    target
+}
+
 #[test]
 fn help_menu_exposes_the_offline_documentation_action() {
     let mut harness = harness_at(egui::vec2(760.0, 1000.0));
@@ -318,9 +338,7 @@ fn collapsing_system_state_with_log_open_never_overlaps_and_restores_the_log() {
     let mut harness = harness_at(egui::vec2(1400.0, 1100.0));
     harness.step();
     harness.state_mut().set_log_panel_open(true);
-    for _ in 0..SETTLE {
-        harness.step();
-    }
+    settle_at_enforced_minimum(&mut harness, egui::vec2(1400.0, 1100.0));
     assert_no_overlap(harness.state(), "expanded dashboard before collapse");
 
     harness.get_by_label("System and State").click_accesskit();
@@ -513,7 +531,8 @@ fn lifecycle_action_matrix_keeps_one_column_and_dispatches_install() {
     let uninstall = current
         .get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall")
         .rect();
-    assert_eq!(install_rect.size(), uninstall.size());
+    assert!((install_rect.width() - uninstall.width()).abs() <= 1.0);
+    assert!((install_rect.height() - uninstall.height()).abs() <= 1.0);
     assert!((install_rect.left() - uninstall.left()).abs() <= 1.0);
     assert!(current
         .query_by_role_and_label(egui::accesskit::Role::Button, "Install")
@@ -1574,9 +1593,7 @@ fn log_pane_never_covers_controls_during_a_splitter_drag() {
     let mut harness = harness_at(egui::vec2(900.0, 1000.0));
     harness.step();
     harness.state_mut().set_log_panel_open(true);
-    for _ in 0..SETTLE {
-        harness.step();
-    }
+    settle_at_enforced_minimum(&mut harness, egui::vec2(900.0, 1000.0));
     assert_no_overlap(harness.state(), "before the drag");
 
     // Drag the splitter upward far past the boundary, a step at a time, checking
@@ -1659,9 +1676,7 @@ fn log_never_overlaps_during_a_width_only_switch_to_the_taller_layout() {
     let mut harness = harness_at(egui::vec2(1400.0, 1100.0));
     harness.step();
     harness.state_mut().set_log_panel_open(true);
-    for _ in 0..SETTLE {
-        harness.step();
-    }
+    settle_at_enforced_minimum(&mut harness, egui::vec2(1400.0, 1100.0));
     assert_eq!(
         harness.state().last_dashboard_layout(),
         Some(DashboardLayout::Wide)
@@ -1710,13 +1725,10 @@ fn log_never_overlaps_during_a_width_only_switch_to_the_taller_layout() {
 /// so nothing out of range is persisted or restored.
 #[test]
 fn committed_log_height_is_clamped_before_it_is_stored() {
-    let window_h = 1000.0;
-    let mut harness = harness_at(egui::vec2(900.0, window_h));
+    let mut harness = harness_at(egui::vec2(900.0, 1000.0));
     harness.step();
     harness.state_mut().set_log_panel_open(true);
-    for _ in 0..SETTLE {
-        harness.step();
-    }
+    let window_h = settle_at_enforced_minimum(&mut harness, egui::vec2(900.0, 1000.0)).y;
 
     let splitter_y = harness.state().last_log_top().expect("log pane open");
     harness.hover_at(egui::pos2(450.0, splitter_y));
@@ -1884,7 +1896,7 @@ fn modal_grows_with_the_window_then_stops_at_its_maximum() {
     // group and a keybinding row, past the FR-017 half-visible bound, and raising
     // the maximum is the resolution slice 030 recorded for exactly that.
     assert!(
-        huge.y <= 1120.0 + 1.0,
+        huge.y <= 1800.0 + 1.0,
         "modal height {} exceeded its maximum",
         huge.y
     );
@@ -1917,6 +1929,24 @@ fn modal_shows_at_least_half_the_settings_body_at_maximum() {
          visible ({:.0} percent); FR-017 requires at least half",
         100.0 * visible / body
     );
+}
+
+#[test]
+fn brandbuilder_interactive_responses_meet_the_target_floor() {
+    let mut harness = harness_at(egui::vec2(1200.0, 1400.0));
+    settle_at_enforced_minimum(&mut harness, egui::vec2(1200.0, 1400.0));
+    for (role, label) in [
+        (egui::accesskit::Role::Button, "File"),
+        (egui::accesskit::Role::Button, "Help"),
+        (egui::accesskit::Role::CheckBox, "ESO Weave"),
+        (egui::accesskit::Role::CheckBox, "Fishing"),
+    ] {
+        let rect = harness.get_by_role_and_label(role, label).rect();
+        assert!(
+            rect.width() >= 44.0 && rect.height() >= 44.0,
+            "{label} response is {rect:?}, below the 44 point target floor"
+        );
+    }
 }
 
 /// FR-004, FR-005: the enforced minimum follows the content when a transient

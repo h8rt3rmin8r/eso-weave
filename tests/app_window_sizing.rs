@@ -6,8 +6,8 @@
 
 use eso_weave::app::{
     cap_to_work_area, clamp_log_height, content_min_size, intrinsic_extent, log_min_height,
-    measurement_stable, open_log_reserve, reduced_interact_height, split_log_height,
-    window_growth_request, CONTENT_PADDING, LOG_FRAME_MARGIN, LOG_MIN_LINES,
+    measurement_stable, open_log_reserve, split_log_height, window_growth_request, CONTENT_PADDING,
+    LOG_FRAME_MARGIN, LOG_MIN_LINES,
 };
 
 // US1 / issue #8: content_min_size (boot floor until stable, then measured wins).
@@ -163,19 +163,6 @@ fn split_log_height_clamps_to_min_and_available() {
     // A non-positive previous window height falls back to clamping the current.
     let fallback = split_log_height(0.0, 800.0, 200.0, content_h, log_min);
     assert_eq!(fallback, 200.0_f32.clamp(log_min, 800.0 - content_h));
-}
-
-// US4 / issue #7: reduced_interact_height (contract C6).
-
-#[test]
-fn reduced_interact_height_reduces_but_never_clips() {
-    // About a 20 percent reduction when the font leaves room.
-    assert!((reduced_interact_height(22.0, 14.0) - 17.6).abs() < 0.001);
-    // Never shorter than the text line height (a large font raises the floor).
-    let tall_font = 30.0;
-    assert!(reduced_interact_height(22.0, tall_font) >= tall_font);
-    // Monotonic in the base height.
-    assert!(reduced_interact_height(30.0, 14.0) > reduced_interact_height(22.0, 14.0));
 }
 
 // Slice 030 / issue #12: the intrinsic extent and the two guards around it.
