@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Adopt the official BrandBuilder 2.0 visual system across the desktop,
+  embedded documentation, installers, and Linux packages, including governed
+  light and dark colors, typography, focus treatment, and application icons.
+- Keep dashboard status labels, indicators, and values separated across
+  supported themes, window widths, addon states, and enlarged text settings.
+
 ### Changed
 
 - S117 adopts official package `eso-weave-brand-1.0.0-bb2.0.0` across the
