@@ -103,6 +103,7 @@ Product resource meters retain distinct health, stamina, magicka, and ultimate c
 - Display: Inter Medium 500 and SemiBold 600.
 - Body and labels: Inter Regular 400 and Medium 500.
 - Technical metadata: Geist Mono Regular 400 for identifiers, timestamps, paths, status metadata, code, and hashes.
+- License notices: `assets/brand/fonts/OFL.txt` covers Inter, while `assets/brand/fonts/GeistMono-OFL.txt` and its documentation copy preserve the Geist Project copyright and SIL OFL 1.1 text alongside both bundled Geist Mono copies.
 - Keep framework fallback fonts after the approved family for symbols and uncommon glyphs.
 - Do not request undeclared weights or fetch a font at runtime.
 

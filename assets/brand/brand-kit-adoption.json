@@ -100,6 +100,7 @@
     {"path":"assets/brand/fonts/Inter-Medium.ttf","source":"fonts/Inter-Medium.ttf","role":"body-display-500","disposition":"already-current","sha256":"6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"},
     {"path":"assets/brand/fonts/Inter-SemiBold.ttf","source":"fonts/Inter-SemiBold.ttf","role":"display-600","disposition":"already-current","sha256":"2de533bda937a063c595b07c6bd9b70c8c5087d0649a1c8330f7ac11fcc05602"},
     {"path":"assets/brand/fonts/GeistMono-Regular.ttf","source":"fonts/ttf/GeistMono-Regular.ttf","role":"mono-400","disposition":"adopted","sha256":"990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"},
+    {"path":"assets/brand/fonts/GeistMono-OFL.txt","source":"https://github.com/vercel/geist-font/blob/main/OFL.txt","role":"mono-license-notice","disposition":"adopted","sha256":"f2001a42a9a4f3f569c8a78cf7362e0da86966537b16e6fc48ee5532f3e32e6c"},
     {"path":"assets/brand/eso-weave-glyph.svg","source":"assets/source/eso-weave-glyph.svg","role":"authoritative-glyph","disposition":"retained-master","sha256":"552f3203f0001b15e3adea9b720cb2f78be1427a12410f3e304170d973fef5ea"},
     {"path":"assets/brand/eso-weave-mark.svg","source":"assets/source/eso-weave-mark.svg","role":"authoritative-mark","disposition":"retained-master","sha256":"696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"},
     {"path":"assets/icon.ico","source":"icons/windows/classic/app.ico","role":"windows-classic-icon","disposition":"adopted","sha256":"3b3830fb98662d7e1fb0277e38d94072bfc67f9eac81a2f03433e6f11ee3c20a"},
@@ -116,6 +117,7 @@
     {"path":"docs/src/assets/brand/eso-weave-mark.svg","source":"assets/source/eso-weave-mark.svg","role":"documentation-mark","disposition":"already-current","sha256":"696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"},
     {"path":"docs/src/assets/brand/eso-weave-banner.png","source":"assets/reference/banner.png","role":"documentation-banner","disposition":"already-current","sha256":"fe6f1bb45c0aafce463ecb182ba15b74017c6834496409bd809ef9aad15829e4"},
     {"path":"docs/src/assets/brand/fonts/Inter-Medium.ttf","source":"fonts/Inter-Medium.ttf","role":"documentation-body-display-500","disposition":"adopted","sha256":"6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"},
-    {"path":"docs/src/assets/brand/fonts/GeistMono-Regular.ttf","source":"fonts/ttf/GeistMono-Regular.ttf","role":"documentation-mono-400","disposition":"adopted","sha256":"990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"}
+    {"path":"docs/src/assets/brand/fonts/GeistMono-Regular.ttf","source":"fonts/ttf/GeistMono-Regular.ttf","role":"documentation-mono-400","disposition":"adopted","sha256":"990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"},
+    {"path":"docs/src/assets/brand/fonts/GeistMono-OFL.txt","source":"https://github.com/vercel/geist-font/blob/main/OFL.txt","role":"documentation-mono-license-notice","disposition":"adopted","sha256":"f2001a42a9a4f3f569c8a78cf7362e0da86966537b16e6fc48ee5532f3e32e6c"}
   ]
 }

@@ -47,6 +47,8 @@ function fixture() {
     ],
     recovery: {
       path: "assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill",
+      source: "enforcement/distributions/shruggie-brandbuilder-2.0.0.skill",
+      extract_to: "enforcement/brandbuilder",
       sha256: sha256(recovery),
     },
     artifacts: [
@@ -83,7 +85,7 @@ test("S117 accepts the exact package, authority, tokens, recovery, and artifacts
   assert.deepEqual(await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256, expectedArtifacts },
+    { expectedRecovery: { ...record.recovery }, expectedArtifacts },
   ), []);
 });
 
@@ -97,7 +99,7 @@ test("S117 rejects moving package identity and generated-adapter light values", 
   const failures = (await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256, expectedArtifacts },
+    { expectedRecovery: { ...record.recovery }, expectedArtifacts },
   )).join("\n");
   assert.match(failures, /archive SHA-256/i);
   assert.match(failures, /light background/i);
@@ -113,7 +115,7 @@ test("S117 rejects missing recovery bytes and artifact drift", async () => {
   const failures = (await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256, expectedArtifacts },
+    { expectedRecovery: { ...record.recovery }, expectedArtifacts },
   )).join("\n");
   assert.match(failures, /recovery.*missing/i);
   assert.match(failures, /assets\/icon\.ico.*SHA-256/i);
@@ -128,11 +130,28 @@ test("S117 rejects an omitted binding and a self-declared replacement digest", a
   const failures = (await validateAdoptionRecord(
     record,
     async (path) => files.get(path),
-    { recoverySha256: record.recovery.sha256, expectedArtifacts },
+    { expectedRecovery: { ...record.recovery }, expectedArtifacts },
   )).join("\n");
   assert.match(failures, /GeistMono-Regular\.ttf.*missing from the pinned inventory/i);
   assert.match(failures, /assets\/icon\.ico SHA-256 must be/i);
   assert.match(failures, /assets\/icon\.ico SHA-256 is/i);
+});
+
+test("S117 rejects recovery path and extraction-contract drift", async () => {
+  const { expectedArtifacts, files, record } = fixture();
+  const expectedRecovery = { ...record.recovery };
+  record.recovery.path = "assets/brand/recovery/moved.skill";
+  record.recovery.source = "elsewhere/moved.skill";
+  record.recovery.extract_to = "elsewhere";
+  files.set(record.recovery.path, files.get(expectedRecovery.path));
+  const failures = (await validateAdoptionRecord(
+    record,
+    async (path) => files.get(path),
+    { expectedRecovery, expectedArtifacts },
+  )).join("\n");
+  assert.match(failures, /recovery path must be/i);
+  assert.match(failures, /recovery source must be/i);
+  assert.match(failures, /recovery extract_to must be/i);
 });
 
 test("S117 committed repository satisfies the brand-kit contract", async () => {

@@ -77,6 +77,7 @@ const EXPECTED_ARTIFACTS = new Map([
   ["assets/brand/fonts/Inter-Medium.ttf", "6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"],
   ["assets/brand/fonts/Inter-SemiBold.ttf", "2de533bda937a063c595b07c6bd9b70c8c5087d0649a1c8330f7ac11fcc05602"],
   ["assets/brand/fonts/GeistMono-Regular.ttf", "990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"],
+  ["assets/brand/fonts/GeistMono-OFL.txt", "f2001a42a9a4f3f569c8a78cf7362e0da86966537b16e6fc48ee5532f3e32e6c"],
   ["assets/brand/eso-weave-glyph.svg", "552f3203f0001b15e3adea9b720cb2f78be1427a12410f3e304170d973fef5ea"],
   ["assets/brand/eso-weave-mark.svg", "696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f"],
   ["assets/icon.ico", "3b3830fb98662d7e1fb0277e38d94072bfc67f9eac81a2f03433e6f11ee3c20a"],
@@ -94,9 +95,15 @@ const EXPECTED_ARTIFACTS = new Map([
   ["docs/src/assets/brand/eso-weave-banner.png", "fe6f1bb45c0aafce463ecb182ba15b74017c6834496409bd809ef9aad15829e4"],
   ["docs/src/assets/brand/fonts/Inter-Medium.ttf", "6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151"],
   ["docs/src/assets/brand/fonts/GeistMono-Regular.ttf", "990f0e094fe02b8872429209c09abf4c03d22183c33c2a2ddb891dc7f086271c"],
+  ["docs/src/assets/brand/fonts/GeistMono-OFL.txt", "f2001a42a9a4f3f569c8a78cf7362e0da86966537b16e6fc48ee5532f3e32e6c"],
 ]);
 
-const RECOVERY_SHA256 = "26578eb150a9c24d9e625fb77b192e0415a6ac8faf67c83834ac914f2da15e90";
+const EXPECTED_RECOVERY = Object.freeze({
+  path: "assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill",
+  source: "enforcement/distributions/shruggie-brandbuilder-2.0.0.skill",
+  extract_to: "enforcement/brandbuilder",
+  sha256: "26578eb150a9c24d9e625fb77b192e0415a6ac8faf67c83834ac914f2da15e90",
+});
 
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -126,7 +133,7 @@ async function validateFile(binding, readBytes, label, failures) {
 export async function validateAdoptionRecord(
   record,
   readBytes,
-  { recoverySha256 = RECOVERY_SHA256, expectedArtifacts = EXPECTED_ARTIFACTS } = {},
+  { expectedRecovery = EXPECTED_RECOVERY, expectedArtifacts = EXPECTED_ARTIFACTS } = {},
 ) {
   const failures = [];
   if (record?.schema_version !== 1) failures.push("schema_version must be 1");
@@ -150,9 +157,7 @@ export async function validateAdoptionRecord(
   }
 
   const recovery = record?.recovery;
-  if (recovery?.sha256 !== recoverySha256) {
-    failures.push(`recovery SHA-256 must be ${recoverySha256}`);
-  }
+  compareObject(recovery, expectedRecovery, "recovery", failures);
   if (recovery?.path) await validateFile(recovery, readBytes, "recovery", failures);
   else failures.push("recovery path is missing");
 

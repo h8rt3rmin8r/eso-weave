@@ -315,20 +315,32 @@ mod tests {
         let dark = palette(Theme::Dark);
         assert_eq!(dark.background, rgb(0x0E, 0x11, 0x16));
         assert_eq!(dark.card, rgb(0x17, 0x1C, 0x24));
+        assert_eq!(dark.overlay, rgb(0x0A, 0x0D, 0x12));
         assert_eq!(dark.secondary, rgb(0x1D, 0x24, 0x30));
+        assert_eq!(dark.hover, rgb(0x25, 0x2E, 0x3B));
         assert_eq!(dark.border, rgb(0x26, 0x26, 0x26));
         assert_eq!(dark.primary, rgb(0x2D, 0xD4, 0xBF));
         assert_eq!(dark.on_primary, Color32::BLACK);
+        assert_eq!(dark.emphasis, rgb(0x2D, 0xD4, 0xBF));
+        assert_eq!(dark.text, Color32::WHITE);
+        assert_eq!(dark.muted, rgb(0x9A, 0x9A, 0x9A));
         assert_eq!(dark.destructive, rgb(0xE9, 0x50, 0x5F));
+        assert_eq!(dark.on_destructive, Color32::BLACK);
 
         let light = palette(Theme::Light);
         assert_eq!(light.background, rgb(0xF8, 0xF8, 0xF6));
         assert_eq!(light.card, Color32::WHITE);
+        assert_eq!(light.overlay, Color32::WHITE);
         assert_eq!(light.secondary, rgb(0xF0, 0xEF, 0xED));
+        assert_eq!(light.hover, rgb(0xF0, 0xEF, 0xED));
         assert_eq!(light.border, rgb(0xE5, 0xE5, 0xE5));
         assert_eq!(light.primary, rgb(0x98, 0x60, 0x00));
         assert_eq!(light.on_primary, Color32::WHITE);
+        assert_eq!(light.emphasis, rgb(0x98, 0x60, 0x00));
+        assert_eq!(light.text, rgb(0x0A, 0x0A, 0x0A));
+        assert_eq!(light.muted, rgb(0x6B, 0x6B, 0x6B));
         assert_eq!(light.destructive, rgb(0xC0, 0x29, 0x3A));
+        assert_eq!(light.on_destructive, Color32::WHITE);
     }
 
     #[test]
