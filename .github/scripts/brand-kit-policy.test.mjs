@@ -16,7 +16,7 @@ function fixture() {
   const icon = Buffer.from("icon");
   const files = new Map([
     ["assets/brand/fonts/GeistMono-Regular.ttf", font],
-    ["assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill", recovery],
+    ["assets/brand/recovery/shruggie-brandbuilder-2.0.1.skill", recovery],
     ["assets/icon.ico", icon],
   ]);
   const expectedArtifacts = new Map([
@@ -31,8 +31,8 @@ function fixture() {
       interface_canon: "1.0.0",
       component_recipes: "1.1.0",
       web_react_adapter: "1.1.0",
-      egui_adapter: "1.0.0",
-      compiler: "2.0.0",
+      egui_adapter: "1.0.1",
+      compiler: "2.0.1",
       brand: "1.0.0",
     },
     authority: [
@@ -46,8 +46,8 @@ function fixture() {
       "enforcement/consumer-contract.json",
     ],
     recovery: {
-      path: "assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill",
-      source: "enforcement/distributions/shruggie-brandbuilder-2.0.0.skill",
+      path: "assets/brand/recovery/shruggie-brandbuilder-2.0.1.skill",
+      source: "enforcement/distributions/shruggie-brandbuilder-2.0.1.skill",
       extract_to: "enforcement/brandbuilder",
       sha256: sha256(recovery),
     },
@@ -71,6 +71,13 @@ function fixture() {
         border: "#E5E5E5", focus: "#986000",
       },
     },
+    native_density: {
+      profile: "fine-pointer-comfortable",
+      control_height: 28,
+      item_spacing: { horizontal: 8, vertical: 2 },
+      button_padding: { horizontal: 8, vertical: 4 },
+      conservative_target: 44,
+    },
     adapter_deviations: [{
       source: "native/egui/src/tokens.rs",
       roles: ["surface.background", "surface.card", "text.muted", "action.destructive"],
@@ -80,7 +87,7 @@ function fixture() {
   return { expectedArtifacts, files, record };
 }
 
-test("S117 accepts the exact package, authority, tokens, recovery, and artifacts", async () => {
+test("S119 accepts the exact package, authority, density, recovery, and artifacts", async () => {
   const { expectedArtifacts, files, record } = fixture();
   assert.deepEqual(await validateAdoptionRecord(
     record,
@@ -89,7 +96,7 @@ test("S117 accepts the exact package, authority, tokens, recovery, and artifacts
   ), []);
 });
 
-test("S117 rejects moving package identity and generated-adapter light values", async () => {
+test("S119 rejects moving package identity and generated-adapter light values", async () => {
   const { expectedArtifacts, files, record } = fixture();
   record.package.archive_sha256 = "0".repeat(64);
   record.runtime_tokens.light.background = "#FFFFFF";
@@ -108,7 +115,7 @@ test("S117 rejects moving package identity and generated-adapter light values", 
   assert.match(failures, /light focus/i);
 });
 
-test("S117 rejects missing recovery bytes and artifact drift", async () => {
+test("S119 rejects missing recovery bytes and artifact drift", async () => {
   const { expectedArtifacts, files, record } = fixture();
   files.delete(record.recovery.path);
   files.set("assets/icon.ico", Buffer.from("drift"));
@@ -121,7 +128,7 @@ test("S117 rejects missing recovery bytes and artifact drift", async () => {
   assert.match(failures, /assets\/icon\.ico.*SHA-256/i);
 });
 
-test("S117 rejects an omitted binding and a self-declared replacement digest", async () => {
+test("S119 rejects an omitted binding and a self-declared replacement digest", async () => {
   const { expectedArtifacts, files, record } = fixture();
   record.artifacts.shift();
   const replacement = Buffer.from("replacement icon");
@@ -137,7 +144,7 @@ test("S117 rejects an omitted binding and a self-declared replacement digest", a
   assert.match(failures, /assets\/icon\.ico SHA-256 is/i);
 });
 
-test("S117 rejects recovery path and extraction-contract drift", async () => {
+test("S119 rejects recovery path and extraction-contract drift", async () => {
   const { expectedArtifacts, files, record } = fixture();
   const expectedRecovery = { ...record.recovery };
   record.recovery.path = "assets/brand/recovery/moved.skill";
@@ -151,9 +158,22 @@ test("S117 rejects recovery path and extraction-contract drift", async () => {
   )).join("\n");
   assert.match(failures, /recovery path must be/i);
   assert.match(failures, /recovery source must be/i);
-  assert.match(failures, /recovery extract_to must be/i);
+  assert.match(failures, /recovery extract to must be/i);
 });
 
-test("S117 committed repository satisfies the brand-kit contract", async () => {
+test("S119 rejects fine-pointer density drift", async () => {
+  const { expectedArtifacts, files, record } = fixture();
+  record.native_density.control_height = 44;
+  record.native_density.item_spacing.vertical = 12;
+  const failures = (await validateAdoptionRecord(
+    record,
+    async (path) => files.get(path),
+    { expectedRecovery: { ...record.recovery }, expectedArtifacts },
+  )).join("\n");
+  assert.match(failures, /control height/i);
+  assert.match(failures, /item spacing vertical/i);
+});
+
+test("S119 committed repository satisfies the brand-kit contract", async () => {
   assert.deepEqual(await validateRepository(), []);
 });

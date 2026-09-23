@@ -4,15 +4,15 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const EXPECTED_PACKAGE = Object.freeze({
-  id: "eso-weave-brand-1.0.0-bb2.0.0",
-  filename: "eso-weave-brand-1.0.0-bb2.0.0.zip",
+  id: "eso-weave-brand-1.0.0-bb2.0.1",
+  filename: "eso-weave-brand-1.0.0-bb2.0.1.zip",
   brand_slug: "eso-weave",
   brand_version: "1.0.0",
-  brandbuilder_version: "2.0.0",
-  url: "https://brand.shruggie.tech/eso-weave/downloads/eso-weave-brand-1.0.0-bb2.0.0.zip",
-  archive_sha256: "b37ac1459666ae33d772229bd5247699c2c845971eabed267ff85465b68a1ba1",
-  source_revision: "f974fbb5c532a3394980be4dd985aee86e7e2c9e",
-  release_tag: "v2.0.0",
+  brandbuilder_version: "2.0.1",
+  url: "https://brand.shruggie.tech/eso-weave/downloads/eso-weave-brand-1.0.0-bb2.0.1.zip",
+  archive_sha256: "1b1ba26e57472573d31e2dc7dd20ac2f30a6eb89e7fb8d1e1c9b0ea0fe46c595",
+  source_revision: "801ed912aaa8bbc66c12d8a97b5487fcddb0d9da",
+  release_tag: "v2.0.1",
 });
 
 const EXPECTED_VERSIONS = Object.freeze({
@@ -20,8 +20,8 @@ const EXPECTED_VERSIONS = Object.freeze({
   interface_canon: "1.0.0",
   component_recipes: "1.1.0",
   web_react_adapter: "1.1.0",
-  egui_adapter: "1.0.0",
-  compiler: "2.0.0",
+  egui_adapter: "1.0.1",
+  compiler: "2.0.1",
   brand: "1.0.0",
 });
 
@@ -71,6 +71,14 @@ const EXPECTED_TOKENS = Object.freeze({
   },
 });
 
+const EXPECTED_NATIVE_DENSITY = Object.freeze({
+  profile: "fine-pointer-comfortable",
+  control_height: 28,
+  item_spacing: Object.freeze({ horizontal: 8, vertical: 2 }),
+  button_padding: Object.freeze({ horizontal: 8, vertical: 4 }),
+  conservative_target: 44,
+});
+
 const EXPECTED_ARTIFACTS = new Map([
   ["assets/brand/LICENSE-BRAND.md", "bd1107a804108bbe02955ca64000945322a6fc2456b45b795dac11a253c0023a"],
   ["assets/brand/fonts/Inter-Regular.ttf", "529be850e06f62f8904f22bda77e45bde4834498fdbec4ff4201fa3177447a3a"],
@@ -99,17 +107,19 @@ const EXPECTED_ARTIFACTS = new Map([
 ]);
 
 const EXPECTED_RECOVERY = Object.freeze({
-  path: "assets/brand/recovery/shruggie-brandbuilder-2.0.0.skill",
-  source: "enforcement/distributions/shruggie-brandbuilder-2.0.0.skill",
+  path: "assets/brand/recovery/shruggie-brandbuilder-2.0.1.skill",
+  source: "enforcement/distributions/shruggie-brandbuilder-2.0.1.skill",
   extract_to: "enforcement/brandbuilder",
-  sha256: "26578eb150a9c24d9e625fb77b192e0415a6ac8faf67c83834ac914f2da15e90",
+  sha256: "5d712a07bab9f535207f1a4b81704ae8790274907919d1e38a83f8e4aa395742",
 });
 
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 function compareObject(actual, expected, label, failures) {
   for (const [key, value] of Object.entries(expected)) {
-    if (actual?.[key] !== value) failures.push(`${label} ${key} must be ${value}`);
+    if (actual?.[key] !== value) {
+      failures.push(`${label} ${key.replaceAll("_", " ")} must be ${value}`);
+    }
   }
 }
 
@@ -139,6 +149,9 @@ export async function validateAdoptionRecord(
   if (record?.schema_version !== 1) failures.push("schema_version must be 1");
 
   compareObject(record?.package, EXPECTED_PACKAGE, "package", failures);
+  if (!/^[0-9a-f]{64}$/u.test(record?.package?.archive_sha256 ?? "")) {
+    failures.push("archive SHA-256 must be 64 lowercase hexadecimal characters");
+  }
   if (record?.package?.archive_sha256 !== EXPECTED_PACKAGE.archive_sha256) {
     failures.push(`archive SHA-256 must be ${EXPECTED_PACKAGE.archive_sha256}`);
   }
@@ -155,6 +168,29 @@ export async function validateAdoptionRecord(
       }
     }
   }
+
+  compareObject(
+    record?.native_density,
+    {
+      profile: EXPECTED_NATIVE_DENSITY.profile,
+      control_height: EXPECTED_NATIVE_DENSITY.control_height,
+      conservative_target: EXPECTED_NATIVE_DENSITY.conservative_target,
+    },
+    "native density",
+    failures,
+  );
+  compareObject(
+    record?.native_density?.item_spacing,
+    EXPECTED_NATIVE_DENSITY.item_spacing,
+    "native density item spacing",
+    failures,
+  );
+  compareObject(
+    record?.native_density?.button_padding,
+    EXPECTED_NATIVE_DENSITY.button_padding,
+    "native density button padding",
+    failures,
+  );
 
   const recovery = record?.recovery;
   compareObject(recovery, expectedRecovery, "recovery", failures);
@@ -214,7 +250,7 @@ async function main() {
     for (const failure of failures) console.error(`brand-kit-policy: ${failure}`);
     process.exitCode = 1;
   } else {
-    console.log("brand-kit-policy: exact S117 adoption record and artifact hashes verified");
+    console.log("brand-kit-policy: exact S119 adoption record, density, and artifact hashes verified");
   }
 }
 

@@ -1932,7 +1932,7 @@ fn modal_shows_at_least_half_the_settings_body_at_maximum() {
 }
 
 #[test]
-fn brandbuilder_interactive_responses_meet_the_target_floor() {
+fn brandbuilder_fine_pointer_responses_meet_the_desktop_target() {
     let mut harness = harness_at(egui::vec2(1200.0, 1400.0));
     settle_at_enforced_minimum(&mut harness, egui::vec2(1200.0, 1400.0));
     for (role, label) in [
@@ -1943,8 +1943,8 @@ fn brandbuilder_interactive_responses_meet_the_target_floor() {
     ] {
         let rect = harness.get_by_role_and_label(role, label).rect();
         assert!(
-            rect.width() >= 44.0 && rect.height() >= 44.0,
-            "{label} response is {rect:?}, below the 44 point target floor"
+            rect.width() >= 28.0 && rect.height() >= 28.0,
+            "{label} response is {rect:?}, below the 28 point fine-pointer target"
         );
     }
 }

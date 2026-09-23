@@ -1939,6 +1939,11 @@ impl EsoWeaveApp {
                     0.0,
                     |_| {},
                 );
+                // The disclosure header in the adjacent card retains one
+                // governed vertical spacing unit. Reserve the same unit here
+                // so both dashboard cards remain equal under the compact
+                // BrandBuilder fine-pointer profile.
+                ui.add_space(ui.spacing().item_spacing.y);
             })
             .response
             .rect

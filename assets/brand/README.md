@@ -1,8 +1,8 @@
 # ESO Weave brand assets
 
-This directory contains the runtime identity masters, local fonts, exact BrandBuilder recovery bytes, and the S117 adoption record for official package `eso-weave-brand-1.0.0-bb2.0.0`.
+This directory contains the runtime identity masters, local fonts, exact BrandBuilder recovery bytes, and the S119 adoption record for official package `eso-weave-brand-1.0.0-bb2.0.1`.
 
-The package came from `https://brand.shruggie.tech/eso-weave/downloads/eso-weave-brand-1.0.0-bb2.0.0.zip` and has SHA-256 `b37ac1459666ae33d772229bd5247699c2c845971eabed267ff85465b68a1ba1`. See [the published brand standard](../../docs/src/development/brand-standard.md) for implementation guidance.
+The package came from `https://brand.shruggie.tech/eso-weave/downloads/eso-weave-brand-1.0.0-bb2.0.1.zip`. Its SHA-256 is `1b1ba26e57472573d31e2dc7dd20ac2f30a6eb89e7fb8d1e1c9b0ea0fe46c595`, also pinned in `brand-kit-adoption.json`. See [the published brand standard](../../docs/src/development/brand-standard.md) for implementation guidance.
 
 ## Authority and integrity
 
@@ -11,13 +11,13 @@ The package came from `https://brand.shruggie.tech/eso-weave/downloads/eso-weave
 - `eso-weave-mark.svg` is the authoritative badged reduced mark. Its SHA-256 is `696d256c4ec0eae9aed315a1b489bbf5115ec33827e966a6e993708bf3f3109f`.
 - `fonts/` contains Inter 400/500/600 and Geist Mono 400 under the SIL Open Font License. `OFL.txt` retains the Inter notice, `GeistMono-OFL.txt` retains the Geist Project copyright and license notice, and `LICENSE-BRAND.md` retains the kit's authoritative reserved-mark and font-license boundary.
 - `window-icon-256.png` is the official runtime reference byte.
-- `recovery/shruggie-brandbuilder-2.0.0.skill` is the exact offline recovery distribution. Its SHA-256 is `26578eb150a9c24d9e625fb77b192e0415a6ac8faf67c83834ac914f2da15e90`.
+- `recovery/shruggie-brandbuilder-2.0.1.skill` is the exact offline recovery distribution. Its SHA-256 is `5d712a07bab9f535207f1a4b81704ae8790274907919d1e38a83f8e4aa395742`.
 
 Do not edit, normalize, trace, simplify, or replace either authoritative SVG. Do not add an artificial crossing overlay, knockout, outline, or substrate separator to a single-ink derivative.
 
 ## Platform assets
 
-S117 adopts the kit's generated classic Win32 ICO at `assets/icon.ico`. Existing runtime, Linux, AppImage, Windows installer, banner, logo, documentation, and social assets already match the kit's official reference bytes. MSIX and other non-shipping platform suites are not retained.
+S117 adopted the kit's generated classic Win32 ICO at `assets/icon.ico`. S119 confirms that the runtime, Linux, AppImage, Windows installer, banner, logo, documentation, and social assets remain byte-identical in 2.0.1. MSIX and other non-shipping platform suites are not retained.
 
 Committed files under `packaging/**` and the classic application icon are pinned artifacts. Any changed byte requires a dated decision in `CHANGELOG.md`.
 
