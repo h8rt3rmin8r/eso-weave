@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Restore comfortable desktop control sizing after v0.17.1 applied oversized
+  touch targets throughout the interface. This release uses the corrected
+  BrandBuilder 2.0.1 fine-pointer layout while preserving readable text,
+  focus treatment, and dashboard alignment.
+
 ### Fixed
 
 - S119 adopts BrandBuilder 2.0.1's corrected egui density for precise-pointer
