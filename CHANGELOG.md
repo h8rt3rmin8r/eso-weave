@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- S119 adopts BrandBuilder 2.0.1's corrected egui density for precise-pointer
+  desktop use. Normal controls now use the governed 28-point comfortable
+  height, 8-by-4 point button padding, and 8-by-2 point item spacing instead
+  of applying the 44-point conservative touch target globally. Dashboard card
+  alignment, focus treatment, palette, typography, resource meters, identity,
+  and product behavior remain unchanged (issue #241).
+
+### Decisions
+
+- 2026-09-22: S119 repins native brand provenance to BrandBuilder 2.0.1 and
+  egui adapter 1.0.1, retains the exact checksummed 2.0.1 recovery
+  distribution, and preserves all unchanged consumed identity, font, palette,
+  and platform asset bytes. ESO Weave uses the fine-pointer comfortable
+  profile because it supports keyboard and precise-pointer desktop input and
+  does not expose validated touch capability detection.
+
 ## [0.17.1] - 2026-09-21
 
 ### Highlights

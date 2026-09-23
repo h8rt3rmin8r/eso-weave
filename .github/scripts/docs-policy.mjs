@@ -1440,8 +1440,8 @@ export function validateBrandStandard({
   for (const phrase of ["Full-color banner", "Badged mark", "Badge-less glyph", "generated compatibility outputs, not masters", "Preserve aspect ratio", "clear space", "Minimum sizes", "Do not recolor"]) {
     if (!markdown.toLowerCase().includes(phrase.toLowerCase())) errors.push(`S081 Brand Standard is missing guidance: ${phrase}`);
   }
-  for (const phrase of ["eso-weave-brand-1.0.0-bb2.0.0", "BrandBuilder 2.0.0", "Geist Mono", "32 CSS pixels for the badged mark", "artificial crossing overlay"]) {
-    if (!markdown.toLowerCase().includes(phrase.toLowerCase())) errors.push(`S117 Brand Standard is missing governed guidance: ${phrase}`);
+  for (const phrase of ["eso-weave-brand-1.0.0-bb2.0.1", "BrandBuilder 2.0.1", "Geist Mono", "28 logical points", "8 by 4 point button padding", "8 logical points horizontally and 2 points vertically", "44 by 44 logical points", "32 CSS pixels for the badged mark", "artificial crossing overlay"]) {
+    if (!markdown.toLowerCase().includes(phrase.toLowerCase())) errors.push(`S119 Brand Standard is missing governed guidance: ${phrase}`);
   }
   for (const filename of ["eso-weave-logo-clear.png", "eso-weave-logo-white.png"]) {
     if (!markdown.includes(`\`${filename}\``)) errors.push(`S081 compatibility status must name ${filename}`);

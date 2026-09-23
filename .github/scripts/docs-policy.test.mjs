@@ -125,7 +125,8 @@ The files \`eso-weave-logo-clear.png\` and \`eso-weave-logo-white.png\` are gene
 [Download full-color banner](../assets/brand/eso-weave-banner.png)
 [Download badged mark](../assets/brand/eso-weave-mark.svg)
 [Download badge-less glyph](../assets/brand/eso-weave-glyph.svg)
-Package eso-weave-brand-1.0.0-bb2.0.0 uses BrandBuilder 2.0.0. Geist Mono is the metadata face.
+Package eso-weave-brand-1.0.0-bb2.0.1 uses BrandBuilder 2.0.1. Geist Mono is the metadata face.
+Fine-pointer controls are 28 logical points high with 8 by 4 point button padding. Item spacing is 8 logical points horizontally and 2 points vertically. Conservative touch targets are 44 by 44 logical points.
 Preserve aspect ratio. Use clear space equal to one strand width. Minimum sizes are 32 CSS pixels for the badged mark, 32 CSS pixels for the glyph, and 160 CSS pixels for the banner. Do not recolor. Never add an artificial crossing overlay.
 
 ### Dark (default)
@@ -167,6 +168,13 @@ test("S081 rejects asset drift, missing identity guidance, and light-surface gly
   assert.match(validateBrandStandard({ ...brandArguments(), publishedGlyph: Uint8Array.from([9]) }).join("\n"), /glyph.*bytes/i);
   assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace("generated compatibility outputs, not masters", "logos"))).join("\n"), /compatibility.*masters/i);
   assert.match(validateBrandStandard(brandArguments(brandMarkdown.replace('<figure class="brand-surface brand-surface--light" aria-label="Light surface">', '<figure class="brand-surface brand-surface--light" aria-label="Light surface">\n<img src="../assets/brand/eso-weave-glyph.svg" alt="glyph on light">'))).join("\n"), /glyph.*light/i);
+});
+
+test("S119 rejects stale kit identity and missing native density guidance", () => {
+  const stale = brandMarkdown.replace("eso-weave-brand-1.0.0-bb2.0.1", "eso-weave-brand-1.0.0-bb2.0.0");
+  assert.match(validateBrandStandard(brandArguments(stale)).join("\n"), /S119.*bb2\.0\.1/u);
+  const missingDensity = brandMarkdown.replace("28 logical points", "44 logical points");
+  assert.match(validateBrandStandard(brandArguments(missingDensity)).join("\n"), /S119.*28 logical points/u);
 });
 
 test("S081 rejects missing, recolored, and mislabeled palette chips", () => {

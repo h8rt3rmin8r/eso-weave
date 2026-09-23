@@ -1,6 +1,6 @@
 //! Brand theme for the egui GUI (presentation only).
 //!
-//! Maps the pinned BrandBuilder 2.0 semantic contract (see
+//! Maps the pinned BrandBuilder 2.0.1 semantic contract (see
 //! `docs/src/development/brand-standard.md`) to egui visuals and style for the dark
 //! (default) and light modes, and installs the bundled Inter and Geist Mono fonts.
 //! This layer carries no correctness-bearing logic; it only styles the view.
@@ -189,9 +189,13 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     ctx.set_visuals(v);
 
     ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(12.0, 12.0);
-        style.spacing.button_padding = egui::vec2(12.0, 6.0);
-        style.spacing.interact_size = egui::vec2(44.0, 44.0);
+        // ESO Weave is a keyboard and precise-pointer desktop application, so
+        // it uses BrandBuilder's comfortable fine-pointer profile. Consumers
+        // with touch, coarse, mixed, or unknown pointer input retain the
+        // separate 44-point conservative target.
+        style.spacing.item_spacing = egui::vec2(8.0, 2.0);
+        style.spacing.button_padding = egui::vec2(8.0, 4.0);
+        style.spacing.interact_size = egui::vec2(28.0, 28.0);
         // Section headings use the bundled SemiBold weight at a larger size, so
         // they read as headings rather than bold body text.
         style.text_styles.insert(
@@ -344,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn applied_theme_enforces_governed_interaction_target_and_focus_width() {
+    fn applied_theme_uses_governed_fine_pointer_density_and_focus_width() {
         for theme in [Theme::Dark, Theme::Light] {
             let ctx = egui::Context::default();
             apply(&ctx, theme);
@@ -354,8 +358,9 @@ mod tests {
                 egui::Theme::Light
             };
             let style = ctx.style_of(egui_theme);
-            assert!(style.spacing.interact_size.x >= 44.0);
-            assert!(style.spacing.interact_size.y >= 44.0);
+            assert_eq!(style.spacing.interact_size, egui::vec2(28.0, 28.0));
+            assert_eq!(style.spacing.item_spacing, egui::vec2(8.0, 2.0));
+            assert_eq!(style.spacing.button_padding, egui::vec2(8.0, 4.0));
             assert!(style.visuals.selection.stroke.width >= 2.0);
             assert_eq!(
                 style.visuals.window_corner_radius,
