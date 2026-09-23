@@ -39,7 +39,7 @@ ureq = "3"
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 rmcp = { version = "=3.4.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 tokio = { version = "=1.53.1", features = ["net", "rt", "sync", "time"] }
-tokio-util = { version = "=0.7.16", features = ["rt"] }
+tokio-util = { version = "=0.7.19", features = ["rt"] }
 getrandom = "0.3"
 
 [target.'cfg(windows)'.dependencies]
