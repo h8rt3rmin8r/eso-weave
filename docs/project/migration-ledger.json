@@ -1674,9 +1674,10 @@
       "lifecycle": "Active",
       "destination": "docs/project/build-plans/plan-048.md",
       "specs": [
-        "specs/112-troubleshooting-decision-tree"
+        "specs/112-troubleshooting-decision-tree",
+        "specs/120-combat-recovery-and-api-compatibility"
       ],
-      "evidence": "Issue #220 tracks active S112 delivery of the first approved documentation visualization; Plan 048 remains active for issues #220 through #223."
+      "evidence": "Issue #220 delivered S112; Plan 048 preserves remaining figure issues #221 through #223. On 2026-10-05 the owner prioritized S120 for issue #248, issue #251, and issue #250 before the reserved figure sequence."
     }
   ],
   "safetyCrosswalk": [

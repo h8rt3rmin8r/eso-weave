@@ -8,6 +8,7 @@
 //! running-game probe sit behind thin per-platform backends.
 
 pub mod api_check;
+mod version_source;
 pub use crate::game::steam;
 #[cfg(target_os = "linux")]
 mod linux;
@@ -40,10 +41,10 @@ pub const LUA: &str = include_str!("../../addon/PixelBeacon/PixelBeacon.lua");
 /// The compiled default numeric ESO API version, the current live value. It is
 /// the always-available fallback so a manifest can always be rendered with no
 /// network access and no stored value, and it is refreshed as release upkeep.
-pub const DEFAULT_API_VERSION: u32 = 101050;
+pub const DEFAULT_API_VERSION: u32 = 101051;
 /// The live ESO game client version that [`DEFAULT_API_VERSION`] corresponds to,
 /// the baseline the network bump-detection signal is compared against.
-pub const DEFAULT_GAME_VERSION: api_check::GameVersion = api_check::GameVersion::new([12, 0, 6, 0]);
+pub const DEFAULT_GAME_VERSION: api_check::GameVersion = api_check::GameVersion::new([12, 1, 5, 0]);
 
 /// The ESO game environment selecting the AddOns subdirectory.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -251,10 +252,22 @@ pub fn rewrite_api_version(existing: &str, effective: u32) -> String {
     out.join("\n")
 }
 
-/// Renders the full addon manifest for install with the given numeric API version
-/// as its primary `## APIVersion:` token.
-pub fn render_manifest(effective: u32) -> String {
-    rewrite_api_version(MANIFEST, effective)
+/// Renders reviewed declarations; the legacy observation argument cannot expand support.
+pub fn render_manifest(_observed_api: u32) -> String {
+    // Network/cache observations cannot grant support for an unreviewed API.
+    MANIFEST.to_owned()
+}
+
+/// Only reviewed embedded declarations establish package support.
+pub fn supports_api(api: u32) -> bool {
+    MANIFEST
+        .lines()
+        .find_map(|line| line.strip_prefix("## APIVersion:"))
+        .is_some_and(|tokens| {
+            tokens
+                .split_whitespace()
+                .any(|token| token.parse::<u32>() == Ok(api))
+        })
 }
 
 /// Rewrites only the first `local BLOCK_PX = <n>` line of `existing`, setting the

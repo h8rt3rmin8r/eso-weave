@@ -1,5 +1,8 @@
 <!--
 Sync Impact Report
+- S120 wording amendment: 5.0.0 -> 5.0.1 on 2026-10-05. Principle V
+  reconciles established S100-S102 native-control/player-state evidence with
+  the existing PixelBeacon surface. No new in-game feature or transport.
 - Version change: 4.0.0 -> 5.0.0
 - Amendment: replace one-shot-only encounter authority with exactly two explicit,
   bounded modes: single encounter and continuous until manually disabled or a
@@ -111,11 +114,14 @@ prevents the misdiagnosed hangs that backgrounded test runs have caused.
 
 The ESO Weave desktop application runs outside the game. It MUST NOT read or
 write game process memory, intercept network or packet traffic, orchestrate
-multiple accounts, or depend on an addon for the weave engine. Its only allowed
+multiple accounts. Weave sequencing and input synthesis remain in the desktop;
+the existing native-control and player-state evidence comes from PixelBeacon.
+Its only allowed
 addon surfaces are:
 
-- PixelBeacon, which publishes a minimal local screen-signal contract used only
-  by fishing.
+- PixelBeacon, which publishes the existing bounded local screen-signal contract
+  for native action bindings, player-state display and input gates, fishing, and
+  auto-potion observations. It cannot receive commands or synthesize input.
 - ESO Weave Data, which contains independently activated catalog-discovery and
   encounter-capture modules behind one managed package boundary. The catalog
   module reads documented public addon API values into bounded local
@@ -220,4 +226,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 5.0.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-09-15
+**Version**: 5.0.1 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-10-05

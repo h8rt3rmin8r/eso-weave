@@ -114,5 +114,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs\117-brand-kit-v2-adoption\plan.md
+at specs/120-combat-recovery-and-api-compatibility/plan.md
 <!-- SPECKIT END -->

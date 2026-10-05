@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S120 adds selected Live/PTS client and numeric addon API observations, with
+  bounded revision-pinned sources and persistent supported, unsupported, or
+  unknown diagnostics for both companion packages (issue #251).
+
+### Fixed
+
+- S120 excludes positively identified controller assignments from desktop
+  binding conflicts, restoring the demonstrated admission path for keyboard
+  skills and mouse light attacks. PixelBeacon package 23 declares reviewed APIs
+  101051 and 101050; update the managed addon and reload ESO (issue #248).
+- Remove the transient HUD freshness row that shifted the gauges. Retention and
+  input gating remain intact; loss, cause change, expiry, and recovery are logged
+  once per transition (issue #250).
+
+### Decisions
+
+- 2026-10-05: S120 separates source observations from package support. Startup
+  checks no longer stamp observed or cached future APIs into installed manifests;
+  managed updates use reviewed embedded declarations. The source window is 30
+  days, each of two reads has a five-second timeout, and failed checks remain
+  unknown. A scoped constitution 5.0.1 wording correction reconciles existing
+  S100-S102 PixelBeacon evidence with desktop-owned sequencing and synthesis.
+  Repository fixtures cover the repair; installed real-game behavior is unobserved.
+
 ## [0.17.2] - 2026-09-23
 
 ### Highlights

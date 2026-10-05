@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [048](plan-048.md) | Active | S112 through S115 approved documentation visualizations, issues #220 through #223 |
+| [048](plan-048.md) | Active | S120 recovery priority, then reserved S113 through S115 documentation figures |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five
@@ -25,6 +25,8 @@ and Plan 046 completed the Ultimate Auto Potion watch in S110. Plan 047 then
 completed the full documentation visualization audit in S111. Those plans are
 archived. Plan 048 implements the four approved figures one atomic slice at a
 time, beginning with the S112 troubleshooting decision tree.
+The owner-approved S120 recovery bundle interrupts the remaining figure sequence;
+S113 through S115 retain their reservations for later documentation work.
 
 Installed v0.15.1 verification in issue #110, catalog-field verification in
 issue #129, live Combat Metrics verification in issue #131, and native-log

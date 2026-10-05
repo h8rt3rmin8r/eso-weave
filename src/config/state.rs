@@ -119,6 +119,9 @@ pub fn sanitize_geometry(geo: WindowGeometry, bounds: RestoreBounds) -> Geometry
 /// backward compatible: an old `state.json` without this section loads as default.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ApiVersionCache {
+    /// Historical channel-specific facts; startup must check again before support is confirmed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<crate::beacon::api_check::VersionEvidence>,
     /// The highest numeric API version resolved so far; `None` before first run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_known_api_version: Option<u32>,

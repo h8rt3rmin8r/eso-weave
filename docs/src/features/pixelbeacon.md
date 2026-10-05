@@ -60,7 +60,8 @@ Discovery never writes outside the resolved AddOns directory.
 ## Installation and update
 
 Install writes embedded files only beneath `AddOns/PixelBeacon/` and renders the
-manifest with the resolved ESO API version. Installing over a managed older copy
+manifest with the reviewed API declarations bundled with this application.
+Installing over a managed older copy
 is an update. If the AddOns directory does not exist, installation refuses rather
 than creating it.
 
@@ -85,8 +86,8 @@ before asking ESO Weave to install a managed copy.
 
 Removal deletes the PixelBeacon directory only when the manifest contains
 `## X-ESO-Weave-Managed: true`. An unmanaged or unreadable directory is never
-deleted. Managed-marker checks also protect automatic API and block-size edits.
-Install, Update, API refresh, and block-size redeploy recheck ownership at the
+deleted. Managed-marker checks also protect block-size edits.
+Install, Update, and block-size redeploy recheck ownership at the
 write boundary and refuse an unproven target without modifying it. Updating an
 outdated managed copy replaces its embedded files in place; it does not delete
 the directory first. Lua is prepared before the manifest commit marker. A failed
@@ -104,20 +105,30 @@ relog before expecting the change in game.
 
 ## API version upkeep
 
-The manifest carries the addon version, one or more ESO API versions, and the
-managed marker. At startup, ESO Weave uses the greater of its stored last-known
-API version and a compiled default. A valid manifest therefore requires neither
-network access nor prior state.
+The manifest carries the PixelBeacon package version, reviewed ESO addon API
+declarations, and the managed marker. This build declares APIs 101051 and 101050.
+The client release, addon API, Pixel Bus protocol, and package version are
+different identities. A client patch can change without changing the addon API.
 
-For a managed installation with an older primary API token, ESO Weave rewrites
-only the `## APIVersion` line, retains greater tokens, and drops lesser ones. A
-background startup check reads the official `esoui/esoui` live client version as
-a bump-detection signal. It never guesses an undisclosed numeric API version,
-never downgrades the manifest, and does not block startup on network failure.
+At startup, a background check reads up to eight recent commits for the selected
+Live or PTS environment from published `esoui/esoui` UI sources. It finds the
+numeric client release even when the head is a merge commit, then reads numeric
+API documentation pinned to that exact revision. Each read is limited to five
+seconds; stale, future-dated, malformed, or unavailable evidence remains unknown.
+Sources older than 30 days cannot confirm current compatibility.
+The check does not block startup on network failure.
 
-**Version-sensitive:** ESO API and client versions can change independently of
-an ESO Weave release. The network observation is only a bump signal; compiled
-and last-known values preserve offline startup.
+The PixelBeacon status in System and State summarizes API compatibility for both companion
+packages. **Game API** in **Data Details** provides the numeric evidence, separately from
+installed package compatibility. An unsupported API requires an ESO Weave
+update. An unknown check can be retried by checking the connection and restarting;
+remembered unsupported observations retain their update guidance. A supported
+bundled API does not prove that the installed addon is current or loaded.
+
+Use **Update** for an outdated managed PixelBeacon, then `/reloadui` or relog
+when ESO is running. Startup checks do not rewrite installed declarations or
+turn an observed future API into a claim of support. Offline installation uses
+the reviewed embedded declarations without requiring network access.
 
 ## Fishing signal and quickslot diagnostics
 

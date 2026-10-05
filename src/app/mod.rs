@@ -24,7 +24,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::beacon::api_check::ApiCheckOutcome;
+use crate::beacon::api_check::{ApiCheckOutcome, VersionEvidence};
 use crate::beacon::{self, BeaconPrefs, BeaconStatus};
 use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 use crate::config::state::{ApiVersionCache, SessionState, WindowGeometry, CURRENT_STATE_VERSION};
@@ -1674,6 +1674,8 @@ pub fn modal_extent(window: f32, min_px: f32, max_px: f32, max_frac: f32) -> f32
 /// The derived display state for one frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppView {
+    /// Persistent companion-package API diagnostic in the existing addon section.
+    pub addon_api_line: StatusLine,
     /// The app-state indicator and button.
     pub app_state: AppStateLabel,
     /// The fishing indicator and button.
@@ -1993,9 +1995,11 @@ pub struct AppModel {
     log_filter: LevelName,
     scheduler: SaveScheduler,
     api_version: ApiVersionCache,
+    api_evidence: Option<VersionEvidence>,
     catalog: CatalogAccess,
     window: Option<WindowGeometry>,
     hud_retention: RefCell<HudRetentionState>,
+    hud_diagnostic_cause: Cell<Option<StaleHudCause>>,
     player_state: SnapshotPublisher,
     database_queries: DatabaseQueryService,
     local_service: Option<LocalServiceController>,
@@ -2160,12 +2164,14 @@ impl AppModel {
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
             api_version: ApiVersionCache::default(),
+            api_evidence: None,
             catalog: CatalogAccess::empty(
                 CatalogDiagnosticKind::Unavailable,
                 "Catalog has not been checked",
             ),
             window: None,
             hud_retention: RefCell::new(HudRetentionState::default()),
+            hud_diagnostic_cause: Cell::new(None),
             player_state,
             database_queries,
             local_service,
@@ -2570,6 +2576,7 @@ impl AppModel {
             fishing_label.button = "Stop Fishing";
         }
         let mut view = AppView {
+            addon_api_line: self.addon_api_line(),
             app_state: app_state_label(suspended),
             fishing: fishing_label,
             status_line: status_line_app(suspended),
@@ -2621,6 +2628,27 @@ impl AppModel {
             log_filter: self.log_filter,
         };
         self.apply_hud_retention(&mut view, &game, presentation_loss_at_ms, now_ms);
+        let api_summary = match self.api_evidence.filter(|evidence| {
+            evidence.is_current(
+                self.beacon_prefs.environment,
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+            )
+        }) {
+            Some(evidence)
+                if beacon::supports_api(evidence.api_version)
+                    && crate::data_addon::supports_api(evidence.api_version) =>
+            {
+                "API supported"
+            }
+            Some(_) => "API unsupported; update ESO Weave",
+            None => "API unknown; open Data Details",
+        };
+        view.beacon_line.state_text = format!("{api_summary} | {}", view.beacon_line.state_text);
+        if view.addon_api_line.role == StatusRole::Warning
+            && view.beacon_line.role != StatusRole::Error
+        {
+            view.beacon_line.role = StatusRole::Warning;
+        }
         view
     }
 
@@ -2632,7 +2660,16 @@ impl AppModel {
         now_ms: u64,
     ) {
         let current = HudPresentation::capture(view);
-        let Some(cause) = stale_hud_cause(game) else {
+        let cause = stale_hud_cause(game);
+        if self.hud_diagnostic_cause.replace(cause) != cause {
+            match cause {
+                Some(cause) => {
+                    tracing::info!(target: "eso_weave::hud", "HUD observations unavailable: {}", cause.text())
+                }
+                None => tracing::info!(target: "eso_weave::hud", "HUD observations recovered"),
+            }
+        }
+        let Some(cause) = cause else {
             let mut retention = self.hud_retention.borrow_mut();
             retention.last_coherent = Some(current);
             retention.stale = None;
@@ -2673,6 +2710,7 @@ impl AppModel {
             .saturating_add(u64::from(seconds).saturating_mul(1_000));
         let deadline_ms = interval.original_deadline_ms.min(configured_deadline_ms);
         if now_ms >= deadline_ms {
+            tracing::info!(target: "eso_weave::hud", "Retained HUD presentation expired");
             *retention = HudRetentionState::default();
             return;
         }
@@ -3193,6 +3231,7 @@ impl AppModel {
     /// gate remains authoritative.
     pub fn restore_session(&mut self, state: SessionState) {
         self.api_version = state.api_version;
+        self.api_evidence = None;
         self.window = state.window;
         if state.suspended != self.input.is_suspended() {
             if state.suspended {
@@ -3213,13 +3252,64 @@ impl AppModel {
         self.potion.lock().unwrap().set_enabled(state.auto_potion);
     }
 
-    /// The effective numeric API version for rendering a manifest: the higher of
-    /// the last known value and the compiled default. Never below the default.
+    /// Reviewed package API baseline, independent of network/cache observations.
     pub fn effective_api_version(&self) -> u32 {
-        self.api_version
-            .last_known_api_version
-            .unwrap_or(0)
-            .max(beacon::DEFAULT_API_VERSION)
+        beacon::DEFAULT_API_VERSION
+    }
+
+    fn addon_api_line(&self) -> StatusLine {
+        let evidence = self.api_evidence.filter(|evidence| {
+            evidence.is_current(
+                self.beacon_prefs.environment,
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+            )
+        });
+        let (state_text, role) = match evidence {
+            Some(evidence)
+                if beacon::supports_api(evidence.api_version)
+                    && crate::data_addon::supports_api(evidence.api_version) =>
+            {
+                (
+                    format!(
+                        "Bundled addons support API {} ({}, client {})",
+                        evidence.api_version,
+                        evidence.environment.segment(),
+                        evidence.game_version
+                    ),
+                    StatusRole::Healthy,
+                )
+            }
+            Some(evidence) => (
+                format!(
+                    "API {} is not supported ({}, client {}); update ESO Weave",
+                    evidence.api_version,
+                    evidence.environment.segment(),
+                    evidence.game_version
+                ),
+                StatusRole::Warning,
+            ),
+            None => {
+                let previous = self
+                    .api_version
+                    .evidence
+                    .filter(|evidence| evidence.environment == self.beacon_prefs.environment);
+                let text = match previous {
+                    Some(evidence)
+                        if !beacon::supports_api(evidence.api_version)
+                            || !crate::data_addon::supports_api(evidence.api_version) =>
+                    {
+                        format!(
+                            "Unknown now; last API {} not supported; update ESO Weave",
+                            evidence.api_version
+                        )
+                    }
+                    _ => "Unknown: check pending or unavailable; restart to retry".to_owned(),
+                };
+                (text, StatusRole::Warning)
+            }
+        };
+        StatusLine { title: "Game API", state_text, role,
+            tooltip: "Compatibility of the bundled PixelBeacon and ESO Weave Data packages with published game UI sources. Client release and addon API are separate. Installed packages may still need Update and /reloadui; an unknown check does not confirm support." }
     }
 
     /// Resolves collector paths for the background worker. The UI never displays
@@ -3261,10 +3351,18 @@ impl AppModel {
 
     /// Applies a startup version-check outcome: updates the cache and, when it
     /// changed, marks the session store dirty so the value is persisted through the
-    /// existing coalesced save path. The bump notice is emitted by the check thread
-    /// via tracing and shown in the live log; nothing is surfaced here.
+    /// existing coalesced save path. Current evidence is separate from historical
+    /// observations and drives existing addon status/details on every start.
     pub fn apply_api_check(&mut self, outcome: ApiCheckOutcome) {
+        self.api_evidence = outcome.evidence.filter(|evidence| {
+            outcome.fresh
+                && evidence.is_current(
+                    self.beacon_prefs.environment,
+                    time::OffsetDateTime::now_utc().unix_timestamp(),
+                )
+        });
         let updated = ApiVersionCache {
+            evidence: self.api_evidence.or(self.api_version.evidence),
             last_known_api_version: Some(outcome.last_known_api_version),
             last_seen_game_version: outcome
                 .last_seen_game_version

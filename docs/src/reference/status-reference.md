@@ -116,9 +116,15 @@ the application.
 
 ## Game Context and player state
 
-| Field and text | Meaning | Automation impact |
+The existing PixelBeacon status summarizes API support, uncertainty, or an
+application-update action for both companion packages. Data Details reports the
+numeric API and client evidence separately from installed package compatibility.
+
+| Field and text | Meaning | Automation impact or next action |
 | --- | --- | --- |
-| HUD Freshness: **Stale: cause (Ns)** | Player-state values are the last coherent rendered snapshot; cause names runtime, focus, or signal loss and `N` is whole-second age | Display-only; current evidence has already blocked applicable input-producing paths |
+| Game API: **Bundled addons support API...** | Published selected-channel evidence matches reviewed PixelBeacon and ESO Weave Data declarations | Installed package state and input gates remain separate |
+| Game API: **API... is not supported** | The observed numeric API is outside reviewed declarations | Update ESO Weave; a saved observation does not dismiss this warning |
+| Game API: **Unknown...** | Check pending, unavailable, stale, malformed, or for another environment | Check connection and restart; remembered unsupported API guidance remains visible |
 | Game Context: **Gameplay** | Active, focused game with fresh no-menu observation | Can authorize input with the other gates |
 | Game Context: **Unfocused** | ESO lacks keyboard focus | No focused-game interception or autonomous input |
 | Game Context: **Signal unavailable** or **Unknown** | Surface evidence is missing or inconclusive | Does not authorize generated input |

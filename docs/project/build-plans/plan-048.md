@@ -2,6 +2,23 @@
 
 Status: Active
 
+## Owner-approved Recovery Priority (2026-10-05)
+
+S112's initial figure delivery preceded the independent S116-S119 UI/release
+work. The owner now prioritizes S120 (`120-combat-recovery-and-api-compatibility`)
+for issues #248, #251, and #250 before the remaining figure sessions below.
+Complete the full spec-kit sequence, automated parity, authorized push and
+official PR, at most two Codex review rounds, all external findings, and green
+CI before owner final review and merge. No live-game checks or release are part
+of S120. Repository evidence must remain distinct from unobserved installed
+behavior.
+
+After S120, resume documentation planning. Issue #249 and issue #222 are the
+proposed next coherent bundle; record any regrouping at that kickoff. Reserved
+S113-S115 numbers and remaining figure issues are preserved and are not complete.
+
+## Reserved Figure Sequence
+
 Sequence:
 
 1. S112 implements issue #220 by adding the accessible troubleshooting decision

@@ -102,7 +102,8 @@ Missing, invalid, stale, or corrupt telemetry becomes unavailable and does not
 authorize automated input.
 
 The Live HUD may continue showing the last coherent values after a loss. Check
-the **HUD Freshness** row: **Stale** names the cause and age. These values are
+the logs for loss, cause changes, expiry, and recovery. No temporary notification
+appears above the gauges. These values are
 display-only and do not keep weaving, Fishing, or Auto Potion authorized. Fresh
 observations replace them immediately; the configured **Stale Retention
 (seconds)** interval then expires to the ordinary unavailable view. Set it to 0
@@ -118,13 +119,19 @@ The evidence distinguishes these states for each native ESO action:
 | --- | --- | --- |
 | Unavailable | PixelBeacon is old, the signal is stale or malformed, or ESO has not loaded binding data | Update PixelBeacon, reload ESO, and restore the shared signal first |
 | Unbound | ESO has no keyboard or mouse assignment for the action | Bind the action in ESO's Controls menu |
-| Conflicting | More than one distinct native assignment exists | Leave one intended keyboard or mouse chord in ESO |
+| Conflicting | More than one distinct desktop assignment exists | Leave one intended keyboard or mouse chord in ESO |
 | Unsupported | The only assignment is gamepad, combined, hold, unknown, or otherwise outside the portable registry | Choose an ordinary keyboard key or supported mouse control in ESO |
 | Valid | One supported primary and normalized modifier set was decoded | The corresponding weave, Fishing, or Auto Potion action is usable now |
 
 Do not install a custom binding addon or edit `Bindings.xml` to repair evidence.
 PixelBeacon uses only ESO's read-only runtime binding APIs and deliberately has no
 binding mutation or persistence path.
+
+Keyboard or mouse bindings can coexist with positively identified controller
+bindings. Controller bindings do not create desktop conflicts. Controller-only
+actions remain unsupported; unrecognized device evidence does not authorize a
+guessed desktop control. Update PixelBeacon and reload ESO to receive this
+discovery repair.
 
 If valid combat evidence still passes through, confirm the skill row is enabled
 and required Attack or Block evidence is also valid. Release extra physical

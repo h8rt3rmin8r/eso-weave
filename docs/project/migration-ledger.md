@@ -34,7 +34,8 @@ manifest, so changing a count cannot hide an omission or substitution.
   sequence, Plan 045 completed the local extension surface, Plan 046 completed
   the Ultimate Auto Potion resource watch, and Plan 047 completed the full
   documentation visualization audit. Plan 048 is active for the four approved
-  visualization implementations, beginning with S112. Independent release
+  visualization implementations, beginning with S112, and now prioritizes the
+  approved S120 combat, API compatibility, and HUD recovery bundle. Independent release
   verification does not reactivate a
   completed plan. The policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.

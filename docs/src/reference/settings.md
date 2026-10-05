@@ -11,8 +11,9 @@ period; there is no Save button. Exact labels below match the interface.
 | Always on Top | Off by default | Keeps the ESO Weave window above other windows immediately |
 | Stale Retention (seconds) | 120; 0 through 999 | Keeps the last coherent player-state presentation visible after runtime, focus, or signal loss; 0 clears immediately |
 
-Retained values show a **HUD Freshness** row with their stale cause and
-whole-second age. Fresh coherent observations replace them immediately. This
+HUD loss, cause changes, retention expiry, and recovery are recorded in logs;
+no temporary freshness row shifts the gauges. Fresh coherent observations replace
+retained values immediately. This
 setting changes presentation only; current game evidence still blocks weaving,
 Fishing, Auto Potion, and every other input-producing path at once.
 
