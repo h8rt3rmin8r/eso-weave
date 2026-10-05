@@ -83,9 +83,35 @@ new Live/PTS offline-restart and legacy-state regression failed before the
 correction. Independent channel history now retains both unresolved warnings,
 and a supported observation clears only its own channel's warning.
 
-Remote CI and the second external review are still pending. No local parity
-result is presented as a hosted or installed result.
+The correction was committed as `d5d285a`, with formatting, Clippy and all 1,031
+tests passing. The first review finding received a reply and its thread was
+resolved. The second and final authorized Codex round completed on `d5d285a` at
+2026-10-05 19:54 UTC with no further major issues. No third round was requested.
 
-Review budget: initial automatic Codex review plus at most one explicitly
-requested second round. Security bot findings also require replies and completed
-threads. Final merge remains the owner's responsibility.
+Initial hosted Linux, dependency, documentation and closing-issue attempts failed
+before executing repository steps. Their annotations reported that a hosted
+runner was not acquired. The owner resumed work after the GitHub Actions incident
+was resolved. Targeted retries preserved the successful Windows result.
+
+Hosted Windows CI, documentation, dependency review, trust/issue policy and
+CodeQL checks passed on `d5d285a`. The PR security-alert query returned no open
+alerts. Linux CI then passed its full test and release-build steps; the complete
+CI run was green at 2026-10-05 23:35 UTC. No local parity result is presented as
+an installed result.
+
+Implementation CI receipts:
+
+- Linux/Windows and dependency review: [run 37366057806](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37366057806).
+- Documentation: [run 37366057655](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37366057655).
+- CodeQL: [run 37366057661](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37366057661).
+- Trust boundary: [run 37366055538](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37366055538).
+- Issue linkage: [run 37366224639](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37366224639).
+
+This final receipt changes only the slice's evidence and task records. The
+implementation remains the reviewed `d5d285a` content. The final owner handoff
+must also wait for green hosted checks on the receipt commit; no third Codex
+round is authorized. [PR #252](https://github.com/h8rt3rmin8r/eso-weave/pull/252)
+remains open for the owner's final review and merge.
+
+The two-round review budget is exhausted. Final merge remains the owner's
+responsibility; no release or live-game verification was performed.

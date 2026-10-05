@@ -29,7 +29,7 @@
 ## Phase 5: Documentation and Delivery
 
 - [x] T013 Update affected `docs/src/` guidance, `CHANGELOG.md`, research/evidence receipts, and task outcomes with observed versus unobserved status (FR-014, SC-005).
-- [ ] T014 Run fmt/clippy/all locked tests, documentation and text hygiene checks; commit, authorized push/official PR, handle every review and at most one additional Codex round, then green-CI owner handoff (SC-005).
+- [x] T014 Run fmt/clippy/all locked tests, documentation and text hygiene checks; commit, authorized push/official PR, handle every review and at most one additional Codex round, then green-CI owner handoff (SC-005). Implementation CI is green; see `evidence.md`. Final receipt commit checks must also be green before the owner handoff.
 
 ## Dependencies and Execution
 
