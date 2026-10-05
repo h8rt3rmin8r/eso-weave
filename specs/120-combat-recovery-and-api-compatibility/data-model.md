@@ -12,6 +12,8 @@ Channel (Live or PTS), observed head revision and timestamp, client release from
 
 For each package, compare independently observed numeric API against reviewed embedded declarations and installed declarations when present. Unknown evidence stays unknown; unsupported reviewed API needs an application update; supported embedded but outdated installed package needs install/update and reload. Remembered values are historical only. Recompute on each startup rather than using last-seen client as warning suppression.
 
+Session state preserves independent Live and PTS evidence. The legacy single observation remains readable and is migrated to its channel before a successful observation can replace it. Offline checks retain each channel's unresolved warning; a supported observation clears only that channel's warning. Cached evidence never establishes current support.
+
 ## Diagnostic state
 
 Last logged loss cause is separate from retained values/deadlines. Same cause produces no new log event. Changes and recovery produce one event; retention expiry produces one event as its snapshot is discarded.

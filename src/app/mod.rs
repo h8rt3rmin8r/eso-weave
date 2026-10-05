@@ -3291,8 +3291,7 @@ impl AppModel {
             None => {
                 let previous = self
                     .api_version
-                    .evidence
-                    .filter(|evidence| evidence.environment == self.beacon_prefs.environment);
+                    .historical_evidence(self.beacon_prefs.environment);
                 let text = match previous {
                     Some(evidence)
                         if !beacon::supports_api(evidence.api_version)
@@ -3361,13 +3360,14 @@ impl AppModel {
                     time::OffsetDateTime::now_utc().unix_timestamp(),
                 )
         });
-        let updated = ApiVersionCache {
-            evidence: self.api_evidence.or(self.api_version.evidence),
-            last_known_api_version: Some(outcome.last_known_api_version),
-            last_seen_game_version: outcome
-                .last_seen_game_version
-                .or(self.api_version.last_seen_game_version),
-        };
+        let mut updated = self.api_version;
+        if let Some(evidence) = self.api_evidence {
+            updated.remember_evidence(evidence);
+        }
+        updated.last_known_api_version = Some(outcome.last_known_api_version);
+        updated.last_seen_game_version = outcome
+            .last_seen_game_version
+            .or(self.api_version.last_seen_game_version);
         if updated != self.api_version {
             self.api_version = updated;
             self.scheduler.mark_session(Instant::now());

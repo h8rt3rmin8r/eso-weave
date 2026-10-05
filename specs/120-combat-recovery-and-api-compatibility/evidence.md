@@ -66,7 +66,7 @@ No release, merge, or live application/game execution is part of S120.
 
 Local `cargo fmt --all -- --check`, full all-target/all-feature Clippy with
 warnings denied, and `cargo test --all --locked` passed on Windows. The complete
-suite passed 1,030 counted tests with zero failures or ignored tests and includes
+suite passed 1,031 counted tests with zero failures or ignored tests and includes
 the deterministic documentation scene validator. All existing
 input/ownership/retention checks remain enabled.
 
@@ -77,8 +77,14 @@ passed for all 39 changed/new text files, and `git diff --check` passed.
 Headless generated-site diagram, layout, syntax, figure, and table smoke
 sentinels all passed.
 
-Remote CI and external review are still pending. No local parity result is
-presented as a hosted or installed result.
+PR #252 publishes S120. The first Codex review completed on `f7303a7` and found
+one P2 issue: a PTS observation could overwrite historical Live evidence. The
+new Live/PTS offline-restart and legacy-state regression failed before the
+correction. Independent channel history now retains both unresolved warnings,
+and a supported observation clears only its own channel's warning.
+
+Remote CI and the second external review are still pending. No local parity
+result is presented as a hosted or installed result.
 
 Review budget: initial automatic Codex review plus at most one explicitly
 requested second round. Security bot findings also require replies and completed

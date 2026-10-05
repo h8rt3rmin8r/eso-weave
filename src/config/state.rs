@@ -119,9 +119,15 @@ pub fn sanitize_geometry(geo: WindowGeometry, bounds: RestoreBounds) -> Geometry
 /// backward compatible: an old `state.json` without this section loads as default.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ApiVersionCache {
-    /// Historical channel-specific facts; startup must check again before support is confirmed.
+    /// Legacy single observation, retained for backward-compatible state files.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<crate::beacon::api_check::VersionEvidence>,
+    /// Independent historical Live observation, never proof of current support.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_evidence: Option<crate::beacon::api_check::VersionEvidence>,
+    /// Independent historical PTS observation, never proof of current support.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pts_evidence: Option<crate::beacon::api_check::VersionEvidence>,
     /// The highest numeric API version resolved so far; `None` before first run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_known_api_version: Option<u32>,
@@ -129,6 +135,35 @@ pub struct ApiVersionCache {
     /// the first successful fetch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_seen_game_version: Option<GameVersion>,
+}
+
+impl ApiVersionCache {
+    pub fn historical_evidence(
+        self,
+        environment: crate::beacon::Environment,
+    ) -> Option<crate::beacon::api_check::VersionEvidence> {
+        let history = match environment {
+            crate::beacon::Environment::Live => self.live_evidence,
+            crate::beacon::Environment::Pts => self.pts_evidence,
+        };
+        history
+            .filter(|evidence| evidence.environment == environment)
+            .or_else(|| {
+                self.evidence
+                    .filter(|evidence| evidence.environment == environment)
+            })
+    }
+
+    /// Migrate the old observation before recording a different channel.
+    pub fn remember_evidence(&mut self, evidence: crate::beacon::api_check::VersionEvidence) {
+        self.live_evidence = self.historical_evidence(crate::beacon::Environment::Live);
+        self.pts_evidence = self.historical_evidence(crate::beacon::Environment::Pts);
+        match evidence.environment {
+            crate::beacon::Environment::Live => self.live_evidence = Some(evidence),
+            crate::beacon::Environment::Pts => self.pts_evidence = Some(evidence),
+        }
+        self.evidence = Some(evidence);
+    }
 }
 
 /// Session state file name within the config directory.

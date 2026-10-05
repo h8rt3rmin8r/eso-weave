@@ -1387,6 +1387,116 @@ fn s120_compatibility_is_separate_from_cached_client_and_survives_restart() {
 }
 
 #[test]
+fn s120_api_history_preserves_both_environments_across_offline_restarts() {
+    use eso_weave::beacon::api_check::{ApiCheckOutcome, GameVersion, VersionEvidence};
+    use eso_weave::config::state::SessionState;
+    for legacy_cache in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let mut harness = retention_harness(root.path(), 3);
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let live = VersionEvidence {
+            environment: Environment::Live,
+            game_version: GameVersion::new([12, 1, 5, 0]),
+            api_version: 101099,
+            source_revision: [1; 20],
+            source_updated_at: now,
+            checked_at: now,
+        };
+        let outcome = ApiCheckOutcome {
+            evidence: Some(live),
+            last_known_api_version: 101099,
+            last_seen_game_version: Some(live.game_version),
+            fresh: true,
+        };
+        if legacy_cache {
+            // Upgrade from the original single-observation state format.
+            let state: SessionState = serde_json::from_value(serde_json::json!({
+                "api_version": {"evidence": live}
+            }))
+            .unwrap();
+            harness.model.restore_session(state);
+        } else {
+            harness.model.apply_api_check(outcome);
+        }
+        let mut form = harness.model.settings_form();
+        form.beacon.environment = Environment::Pts;
+        harness
+            .model
+            .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+        harness.model.apply_api_check(ApiCheckOutcome {
+            evidence: Some(VersionEvidence {
+                environment: Environment::Pts,
+                api_version: 101098,
+                ..live
+            }),
+            ..outcome
+        });
+        let state: SessionState = serde_json::from_str(
+            &serde_json::to_string(&harness.model.current_session_state()).unwrap(),
+        )
+        .unwrap();
+        let mut restarted = retention_harness(root.path(), 3);
+        restarted.model.restore_session(state);
+        let offline = ApiCheckOutcome {
+            evidence: None,
+            fresh: false,
+            ..outcome
+        };
+        restarted.model.apply_api_check(offline);
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("last API 101099 not supported"));
+        let mut form = restarted.model.settings_form();
+        form.beacon.environment = Environment::Pts;
+        restarted
+            .model
+            .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+        restarted.model.apply_api_check(offline);
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("last API 101098 not supported"));
+        restarted.model.apply_api_check(ApiCheckOutcome {
+            evidence: Some(VersionEvidence {
+                environment: Environment::Pts,
+                api_version: 101051,
+                ..live
+            }),
+            ..outcome
+        });
+        let state: SessionState = serde_json::from_str(
+            &serde_json::to_string(&restarted.model.current_session_state()).unwrap(),
+        )
+        .unwrap();
+        restarted.model.restore_session(state);
+        restarted.model.apply_api_check(offline);
+        assert!(!restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("not supported"));
+        let mut form = restarted.model.settings_form();
+        form.beacon.environment = Environment::Live;
+        restarted
+            .model
+            .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+        restarted.model.apply_api_check(offline);
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("last API 101099 not supported"));
+    }
+}
+
+#[test]
 fn s120_hud_logs_transitions_once_including_expiry_and_zero_retention() {
     for seconds in [0, 3] {
         let root = tempfile::tempdir().unwrap();
