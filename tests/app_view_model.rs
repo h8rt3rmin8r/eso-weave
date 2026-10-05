@@ -1098,6 +1098,7 @@ struct RetentionHarness {
     fishing: Arc<Mutex<FishingController>>,
     potion: Arc<Mutex<eso_weave::potion::AutoPotionController>>,
     _dispatch: tracing::Dispatch,
+    log: eso_weave::logging::LogHandle,
 }
 
 #[test]
@@ -1240,7 +1241,7 @@ fn retention_harness(root: &std::path::Path, seconds: u16) -> RetentionHarness {
         Box::new(MockFishingSink::new()),
         potion.clone(),
         game.clone(),
-        log,
+        log.clone(),
         reader_update_tx,
         settings,
         Some(root.to_path_buf()),
@@ -1254,6 +1255,278 @@ fn retention_harness(root: &std::path::Path, seconds: u16) -> RetentionHarness {
         fishing,
         potion,
         _dispatch: dispatch,
+        log,
+    }
+}
+
+#[test]
+fn s120_compatibility_is_separate_from_cached_client_and_survives_restart() {
+    use eso_weave::beacon::api_check::{ApiCheckOutcome, GameVersion, VersionEvidence};
+    let root = tempfile::tempdir().unwrap();
+    let mut harness = retention_harness(root.path(), 3);
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let evidence = VersionEvidence {
+        environment: Environment::Live,
+        game_version: GameVersion::new([12, 1, 5, 0]),
+        api_version: 101099,
+        source_revision: [1; 20],
+        source_updated_at: now,
+        checked_at: now,
+    };
+    let outcome = ApiCheckOutcome {
+        evidence: Some(evidence),
+        last_known_api_version: 101099,
+        last_seen_game_version: Some(evidence.game_version),
+        fresh: true,
+    };
+    harness.model.apply_api_check(outcome);
+    assert!(harness
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("not supported"));
+    let state = serde_json::from_str(
+        &serde_json::to_string(&harness.model.current_session_state()).unwrap(),
+    )
+    .unwrap();
+    let mut restarted = retention_harness(root.path(), 3);
+    restarted.model.restore_session(state);
+    assert!(restarted
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("last API 101099 not supported"));
+    assert!(restarted
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("Unknown"));
+    restarted.model.apply_api_check(outcome);
+    assert!(restarted
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("not supported"));
+    assert_eq!(
+        restarted.model.effective_api_version(),
+        beacon::DEFAULT_API_VERSION
+    );
+    let supported = ApiCheckOutcome {
+        evidence: Some(VersionEvidence {
+            api_version: 101051,
+            ..evidence
+        }),
+        ..outcome
+    };
+    restarted.model.apply_api_check(supported);
+    assert!(restarted
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("Bundled addons support API"));
+    for bad in [
+        VersionEvidence {
+            environment: Environment::Pts,
+            ..evidence
+        },
+        VersionEvidence {
+            source_updated_at: now - 31 * 86400,
+            ..evidence
+        },
+        VersionEvidence {
+            checked_at: now + 86_400,
+            ..evidence
+        },
+    ] {
+        restarted.model.apply_api_check(ApiCheckOutcome {
+            evidence: Some(bad),
+            ..outcome
+        });
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("Unknown"));
+    }
+    restarted.model.apply_api_check(ApiCheckOutcome {
+        evidence: None,
+        fresh: false,
+        ..outcome
+    });
+    assert!(restarted
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("Unknown"));
+    let mut form = restarted.model.settings_form();
+    form.beacon.environment = Environment::Pts;
+    restarted
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+    restarted.model.apply_api_check(ApiCheckOutcome {
+        evidence: Some(VersionEvidence {
+            environment: Environment::Pts,
+            api_version: 101051,
+            ..evidence
+        }),
+        ..outcome
+    });
+    assert!(restarted
+        .model
+        .view()
+        .addon_api_line
+        .state_text
+        .contains("(pts, client 12.1.5)"));
+}
+
+#[test]
+fn s120_api_history_preserves_both_environments_across_offline_restarts() {
+    use eso_weave::beacon::api_check::{ApiCheckOutcome, GameVersion, VersionEvidence};
+    use eso_weave::config::state::SessionState;
+    for legacy_cache in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let mut harness = retention_harness(root.path(), 3);
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let live = VersionEvidence {
+            environment: Environment::Live,
+            game_version: GameVersion::new([12, 1, 5, 0]),
+            api_version: 101099,
+            source_revision: [1; 20],
+            source_updated_at: now,
+            checked_at: now,
+        };
+        let outcome = ApiCheckOutcome {
+            evidence: Some(live),
+            last_known_api_version: 101099,
+            last_seen_game_version: Some(live.game_version),
+            fresh: true,
+        };
+        if legacy_cache {
+            // Upgrade from the original single-observation state format.
+            let state: SessionState = serde_json::from_value(serde_json::json!({
+                "api_version": {"evidence": live}
+            }))
+            .unwrap();
+            harness.model.restore_session(state);
+        } else {
+            harness.model.apply_api_check(outcome);
+        }
+        let mut form = harness.model.settings_form();
+        form.beacon.environment = Environment::Pts;
+        harness
+            .model
+            .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+        harness.model.apply_api_check(ApiCheckOutcome {
+            evidence: Some(VersionEvidence {
+                environment: Environment::Pts,
+                api_version: 101098,
+                ..live
+            }),
+            ..outcome
+        });
+        let state: SessionState = serde_json::from_str(
+            &serde_json::to_string(&harness.model.current_session_state()).unwrap(),
+        )
+        .unwrap();
+        let mut restarted = retention_harness(root.path(), 3);
+        restarted.model.restore_session(state);
+        let offline = ApiCheckOutcome {
+            evidence: None,
+            fresh: false,
+            ..outcome
+        };
+        restarted.model.apply_api_check(offline);
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("last API 101099 not supported"));
+        let mut form = restarted.model.settings_form();
+        form.beacon.environment = Environment::Pts;
+        restarted
+            .model
+            .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+        restarted.model.apply_api_check(offline);
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("last API 101098 not supported"));
+        restarted.model.apply_api_check(ApiCheckOutcome {
+            evidence: Some(VersionEvidence {
+                environment: Environment::Pts,
+                api_version: 101051,
+                ..live
+            }),
+            ..outcome
+        });
+        let state: SessionState = serde_json::from_str(
+            &serde_json::to_string(&restarted.model.current_session_state()).unwrap(),
+        )
+        .unwrap();
+        restarted.model.restore_session(state);
+        restarted.model.apply_api_check(offline);
+        assert!(!restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("not supported"));
+        let mut form = restarted.model.settings_form();
+        form.beacon.environment = Environment::Live;
+        restarted
+            .model
+            .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+        restarted.model.apply_api_check(offline);
+        assert!(restarted
+            .model
+            .view()
+            .addon_api_line
+            .state_text
+            .contains("last API 101099 not supported"));
+    }
+}
+
+#[test]
+fn s120_hud_logs_transitions_once_including_expiry_and_zero_retention() {
+    for seconds in [0, 3] {
+        let root = tempfile::tempdir().unwrap();
+        let harness = retention_harness(root.path(), seconds);
+        tracing::dispatcher::with_default(&harness._dispatch, || {
+            harness.model.view_at(0);
+            harness.game.signal_lost(1_000);
+            for now in [1_000, 2_000, 3_000, 4_000, 5_000] {
+                harness.model.view_at(now);
+            }
+            harness.game.observe_heartbeat(6_000);
+            harness
+                .game
+                .observe_surface(SurfaceObservation::Observed(MenuSurface::None), 6_000);
+            harness.game.observe_world(WorldState::Active);
+            harness.model.view_at(6_000);
+            harness.model.view_at(6_001);
+        });
+        let logs = harness
+            .log
+            .recent(100)
+            .into_iter()
+            .filter(|event| event.target == "eso_weave::hud")
+            .collect::<Vec<_>>();
+        assert_eq!(logs.len(), if seconds == 0 { 2 } else { 3 });
+        assert!(logs[0].message.contains("unavailable"));
+        assert!(logs.last().unwrap().message.contains("recovered"));
+        if seconds != 0 {
+            assert!(logs[1].message.contains("expired"));
+        }
     }
 }
 

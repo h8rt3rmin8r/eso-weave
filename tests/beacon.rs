@@ -67,16 +67,16 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_twenty_two() {
+fn embedded_manifest_version_is_twenty_three() {
     // S100 appends eleven native binding evidence blocks.
-    assert_eq!(embedded_version(), 22);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(22));
+    assert_eq!(embedded_version(), 23);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(23));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 22);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(22));
+    assert_eq!(embedded_version(), 23);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(23));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -472,7 +472,10 @@ fn parses_primary_api_version_token() {
         parse_api_version_primary("## APIVersion: 101050 101054\n"),
         Some(101050)
     );
-    assert_eq!(parse_api_version_primary(MANIFEST), Some(101050));
+    assert_eq!(
+        parse_api_version_primary(MANIFEST),
+        Some(DEFAULT_API_VERSION)
+    );
     assert_eq!(parse_api_version_primary("## Title: X\n"), None);
     assert_eq!(parse_api_version_primary("## APIVersion: nope\n"), None);
 }
@@ -510,11 +513,25 @@ fn render_manifest_with_default_matches_embedded() {
 }
 
 #[test]
-fn install_writes_resolved_api_version() {
+fn s120_observed_future_api_cannot_expand_package_support() {
+    let root = tmp();
+    beacon::install(root.path(), RunningState::NotRunning, 101099).unwrap();
+    assert_eq!(
+        fs::read_to_string(root.path().join(SUBFOLDER).join(MANIFEST_FILE)).unwrap(),
+        MANIFEST
+    );
+    assert!(MANIFEST.contains("## APIVersion: 101051 101050"));
+}
+
+#[test]
+fn install_writes_reviewed_api_versions() {
     let root = tmp();
     beacon::install(root.path(), RunningState::NotRunning, 101070).unwrap();
     let manifest = fs::read_to_string(beacon_dir(root.path()).join(MANIFEST_FILE)).unwrap();
-    assert_eq!(parse_api_version_primary(&manifest), Some(101070));
+    assert_eq!(
+        parse_api_version_primary(&manifest),
+        Some(DEFAULT_API_VERSION)
+    );
     assert!(has_managed_marker(&manifest));
     assert_eq!(beacon::status(root.path()), BeaconStatus::ManagedUpToDate);
 }
@@ -1108,7 +1125,7 @@ fn native_binding_discovery_executes_under_lua_51_semantics() {
             if name == "ACTION_BUTTON_3" then return 1, 2, 3 end
             return nil, nil, nil
         end
-        function GetMaxBindingsPerAction() return 2 end
+        function GetMaxBindingsPerAction() return 4 end
         function GetActionBindingInfo(_, _, _, index)
             local slot = __slots[index]
             if slot == nil then
@@ -1144,6 +1161,33 @@ fn native_binding_discovery_executes_under_lua_51_semantics() {
         local unsupported = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
         assert(unsupported.code == 3 and unsupported.modifiers == 0)
 
+        -- Controller assignments are independent of desktop action controls.
+        -- Deliberately use slots 1 and 4 rather than assuming slot ownership.
+        __slots = {
+            { 9999, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID },
+            { KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID },
+            { KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID },
+            { KEY_Q, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID },
+        }
+        local mixed = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(mixed.code == 42 and mixed.modifiers == 0,
+            "controller assignment must not conflict with desktop control")
+        __skillRGB = { ESO_WEAVE_TEST_EXPORTS.bindingCell(1, mixed) }
+        __slots[4] = { KEY_MOUSE_LEFT, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID }
+        local mixedAttack = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(mixedAttack.code == 200, "mouse attack plus controller must remain valid")
+        __attackRGB = { ESO_WEAVE_TEST_EXPORTS.bindingCell(8, mixedAttack) }
+        __slots[4] = { KEY_Q, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID }
+
+        __slots[2] = { KEY_E, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID }
+        local desktopConflict = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(desktopConflict.code == 2)
+
+        __slots[2] = { KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID, KEY_INVALID }
+        IsKeyCodeGamepadKey = nil
+        local unknownKind = ESO_WEAVE_TEST_EXPORTS.discoverNativeBinding("ACTION_BUTTON_3")
+        assert(unknownKind.code == 2, "unknown device kind must remain ambiguous")
+
         local red, green, blue = ESO_WEAVE_TEST_EXPORTS.bindingCell(1, valid)
         assert(red == 34 and green == 170 and blue == 53)
 
@@ -1154,6 +1198,104 @@ fn native_binding_discovery_executes_under_lua_51_semantics() {
     )
     .exec()
     .unwrap();
+
+    // Actual Lua cell -> protocol decoder -> routing -> hook admission -> worker.
+    use eso_weave::input::{
+        BindingTable, Decision, InputEngine, Key, KeyEvent, KeyboardControl, MouseControl,
+        NativeAction, NativeBindingSet, NativeControl, Origin, Transition,
+    };
+    use eso_weave::pixelbus::{
+        decode_native_binding_cell, LifeState, PixelBusEvent, Rgb, RollDodgeState, TravelState,
+        WorldState,
+    };
+    use eso_weave::weave::{RealSink, WeaveConfig, WeaveEngine};
+    let (sr, sg, sb, ar, ag, ab): (u8,u8,u8,u8,u8,u8) = lua.load(
+        "return __skillRGB[1], __skillRGB[2], __skillRGB[3], __attackRGB[1], __attackRGB[2], __attackRGB[3]")
+        .eval().unwrap();
+    let mut bindings = NativeBindingSet::new_unavailable();
+    bindings.set(
+        NativeAction::Skill1,
+        decode_native_binding_cell(
+            NativeAction::Skill1,
+            Rgb {
+                r: sr,
+                g: sg,
+                b: sb,
+            },
+            0,
+        ),
+    );
+    bindings.set(
+        NativeAction::Attack,
+        decode_native_binding_cell(
+            NativeAction::Attack,
+            Rgb {
+                r: ar,
+                g: ag,
+                b: ab,
+            },
+            0,
+        ),
+    );
+    let (input, rx) = InputEngine::new(BindingTable::default(), 4);
+    input.set_game_active(true);
+    input.set_focused(true);
+    input.set_menu_gated(false);
+    let mut weave = WeaveEngine::new(WeaveConfig::default());
+    let mut fishing =
+        eso_weave::fishing::FishingController::new(eso_weave::fishing::FishingConfig::default());
+    let mut potion = eso_weave::potion::AutoPotionController::new(
+        eso_weave::potion::AutoPotionConfig::default(),
+    );
+    let mut fishing_sink = eso_weave::fishing::MockFishingSink::new();
+    for event in [
+        PixelBusEvent::Bindings(bindings),
+        PixelBusEvent::Life(LifeState::Alive),
+        PixelBusEvent::RollDodge(RollDodgeState::Inactive),
+        PixelBusEvent::World(WorldState::Active),
+        PixelBusEvent::Travel(TravelState::Inactive),
+    ] {
+        eso_weave::app::routing::route_reader_event(
+            event,
+            &mut weave,
+            &mut fishing,
+            &mut potion,
+            &input,
+            0,
+            &mut fishing_sink,
+        );
+    }
+    weave.apply_activity(&input);
+    assert_eq!(
+        input.classify(KeyEvent {
+            key: Key::Q,
+            transition: Transition::Down,
+            origin: Origin::Real
+        }),
+        Decision::Suppress
+    );
+    let admitted = rx.try_recv_authorized().unwrap();
+    let backend = eso_weave::input::mock::MockBackend::new();
+    let captured = backend.synthesized_native.clone();
+    let mut sink = RealSink::new(backend, input.weave_gates());
+    sink.set_admitted_epoch(admitted.authorization_epoch());
+    weave.handle(
+        admitted.action(),
+        admitted.combat_plan().unwrap(),
+        &mut sink,
+    );
+    assert_eq!(
+        *captured.lock().unwrap(),
+        vec![
+            (NativeControl::Mouse(MouseControl::Left), Transition::Down),
+            (NativeControl::Mouse(MouseControl::Left), Transition::Up),
+            (
+                NativeControl::Keyboard(KeyboardControl::Q),
+                Transition::Down
+            ),
+            (NativeControl::Keyboard(KeyboardControl::Q), Transition::Up)
+        ]
+    );
 }
 
 #[test]
@@ -1418,7 +1560,7 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 22);
+    assert_eq!(beacon::embedded_version(), 23);
 }
 
 #[test]
@@ -1454,7 +1596,7 @@ fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
         baseline < active,
         "recall must be rebaselined before world activation"
     );
-    assert_eq!(beacon::embedded_version(), 22);
+    assert_eq!(beacon::embedded_version(), 23);
 }
 
 #[test]
@@ -1588,7 +1730,7 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
         "the addon references a sprint API that does not exist"
     );
-    assert_eq!(beacon::embedded_version(), 22);
+    assert_eq!(beacon::embedded_version(), 23);
 
     let detector = lua
         .split("local function allActiveSlotsHaveNonCostFailure()")

@@ -190,6 +190,57 @@ fn install_native(input: &InputEngine) {
 }
 
 #[test]
+fn s120_equivalent_binding_evidence_preserves_pending_output_and_changes_cancel() {
+    for changed in [false, true] {
+        let (input, rx) = InputEngine::new(BindingTable::default(), 4);
+        open_input_safety(&input);
+        install_native(&input);
+        let weave = WeaveEngine::new(WeaveConfig::default());
+        weave.apply_activity(&input);
+        assert_eq!(input.classify(down(Key::Digit1)), Decision::Suppress);
+        let queued = rx.try_recv_authorized().unwrap();
+        let backend = MockBackend::new();
+        let captured = backend.synthesized_native.clone();
+        let mut sink = RealSink::new(backend, input.weave_gates());
+        sink.set_admitted_epoch(queued.authorization_epoch());
+        sink.begin_sequence();
+        let plan = queued.combat_plan().unwrap();
+        sink.emit(InputOp::Chord(plan.attack.unwrap(), Transition::Down));
+        if changed {
+            input.set_native_bindings(NativeBindingSet::new_unavailable());
+            assert_ne!(input.authorization_epoch(), queued.authorization_epoch());
+        } else {
+            install_native(&input);
+            weave.apply_activity(&input);
+            assert_eq!(input.authorization_epoch(), queued.authorization_epoch());
+        }
+        sink.wait(10);
+        sink.emit(InputOp::Chord(plan.attack.unwrap(), Transition::Up));
+        sink.emit(InputOp::Chord(plan.skill, Transition::Down));
+        sink.emit(InputOp::Chord(plan.skill, Transition::Up));
+        let output = captured.lock().unwrap();
+        assert_eq!(
+            &output[..2],
+            &[
+                (plan.attack.unwrap().primary, Transition::Down),
+                (plan.attack.unwrap().primary, Transition::Up)
+            ]
+        );
+        if changed {
+            assert_eq!(output.len(), 2);
+        } else {
+            assert_eq!(
+                &output[2..],
+                &[
+                    (plan.skill.primary, Transition::Down),
+                    (plan.skill.primary, Transition::Up)
+                ]
+            );
+        }
+    }
+}
+
+#[test]
 fn native_chord_sink_owns_only_missing_modifiers_in_canonical_order() {
     let (input, _rx) = InputEngine::new(BindingTable::default(), 4);
     open_input_safety(&input);

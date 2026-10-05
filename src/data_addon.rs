@@ -30,6 +30,17 @@ pub const BOOTSTRAP: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.lua
 pub const CATALOG: &str = include_str!("../addon/EsoWeaveData/Catalog.lua");
 pub const ENCOUNTER: &str = include_str!("../addon/EsoWeaveData/Encounter.lua");
 
+pub fn supports_api(api: u32) -> bool {
+    MANIFEST
+        .lines()
+        .find_map(|line| line.strip_prefix("## APIVersion:"))
+        .is_some_and(|tokens| {
+            tokens
+                .split_whitespace()
+                .any(|token| token.parse::<u32>() == Ok(api))
+        })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DataAddonStatus {
@@ -392,28 +403,25 @@ fn parse_primary_api_version(manifest: &str) -> Option<u32> {
     })
 }
 
-fn render_manifest(api_version: u32) -> String {
-    let mut versions = vec![api_version];
-    for known in [101051, 101050] {
-        if !versions.contains(&known) {
-            versions.push(known);
-        }
+fn render_manifest(observed_api: u32) -> String {
+    // Preserve a reviewed primary preference, never add an observed future API.
+    if !supports_api(observed_api) {
+        return MANIFEST.to_owned();
     }
-    let replacement = format!(
-        "## APIVersion: {}",
-        versions
-            .iter()
-            .map(u32::to_string)
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
     MANIFEST
         .lines()
         .map(|line| {
-            if line.starts_with("## APIVersion:") {
-                replacement.as_str()
+            if let Some(tokens) = line.strip_prefix("## APIVersion:") {
+                let mut reviewed = vec![observed_api.to_string()];
+                reviewed.extend(
+                    tokens
+                        .split_whitespace()
+                        .filter(|token| token.parse::<u32>() != Ok(observed_api))
+                        .map(str::to_owned),
+                );
+                format!("## APIVersion: {}", reviewed.join(" "))
             } else {
-                line
+                line.to_owned()
             }
         })
         .collect::<Vec<_>>()

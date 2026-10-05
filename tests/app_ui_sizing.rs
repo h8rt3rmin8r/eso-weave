@@ -35,7 +35,69 @@ fn test_app() -> EsoWeaveApp {
     test_app_with_settings(Settings::default())
 }
 
+#[test]
+fn s120_hud_freshness_row_never_appears_and_gauges_do_not_shift() {
+    use eso_weave::game::{FocusObservation, Presence, ProcessObservation, SurfaceObservation};
+    use eso_weave::pixelbus::{MenuSurface, WorldState};
+    let (app, game) = test_app_and_game(Settings::default());
+    game.update_processes(
+        ProcessObservation {
+            game: Presence::Present,
+            launcher: Presence::Absent,
+            focus: FocusObservation::Focused,
+        },
+        0,
+    );
+    game.observe_heartbeat(0);
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 0);
+    game.observe_world(WorldState::Active);
+    let mut harness = harness_for_app(app, egui::vec2(1200.0, 1000.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    let initial_y = harness
+        .query_by_label("Health: Signal unavailable")
+        .expect("health meter")
+        .rect()
+        .min
+        .y;
+    game.signal_lost(1);
+    harness.step();
+    assert!(harness
+        .query_by_value(eso_weave::app::strings::HUD_FRESHNESS_TITLE)
+        .is_none());
+    assert_eq!(
+        harness
+            .query_by_label("Health: Signal unavailable")
+            .expect("health meter")
+            .rect()
+            .min
+            .y,
+        initial_y
+    );
+    game.observe_heartbeat(2);
+    game.observe_surface(SurfaceObservation::Observed(MenuSurface::None), 2);
+    game.observe_world(WorldState::Active);
+    harness.step();
+    assert!(harness
+        .query_by_value(eso_weave::app::strings::HUD_FRESHNESS_TITLE)
+        .is_none());
+    assert_eq!(
+        harness
+            .query_by_label("Health: Signal unavailable")
+            .expect("health meter")
+            .rect()
+            .min
+            .y,
+        initial_y
+    );
+}
+
 fn test_app_with_settings(settings: Settings) -> EsoWeaveApp {
+    test_app_and_game(settings).0
+}
+
+fn test_app_and_game(settings: Settings) -> (EsoWeaveApp, eso_weave::game::GameState) {
     let (engine, _rx) = InputEngine::new(BindingTable::default(), 16);
     let weave = Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default())));
     let fishing = Arc::new(Mutex::new(FishingController::new(FishingConfig::default())));
@@ -62,7 +124,8 @@ fn test_app_with_settings(settings: Settings) -> EsoWeaveApp {
     std::mem::forget(toggle_tx);
     std::mem::forget(api_tx);
     std::mem::forget(_reader_updates);
-    EsoWeaveApp::new(model, toggle_rx, api_rx, None)
+    let game = model.game_state();
+    (EsoWeaveApp::new(model, toggle_rx, api_rx, None), game)
 }
 
 /// Renders `frames` frames at the given window size and returns the app, so its
@@ -791,7 +854,7 @@ impl AddonSurfaceState {
         match self {
             Self::Missing => "Not installed",
             Self::Installed => "Installed",
-            Self::Outdated => "Installed (outdated)",
+            Self::Outdated => "API unknown; open Data Details | Installed (outdated)",
             Self::Incompatible | Self::RemediationRequired => "Installed",
         }
     }

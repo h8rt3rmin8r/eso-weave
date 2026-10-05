@@ -179,7 +179,6 @@ const DATA_DASHBOARD_INTERACTION_WIDTH: f32 =
 const DASHBOARD_FRAME_VERTICAL_OVERHEAD: f32 = 14.0;
 
 pub const LIVE_HUD_STATUS_TITLES: &[&str] = &[
-    strings::HUD_FRESHNESS_TITLE,
     strings::MENU_TITLE,
     strings::COMBAT_TITLE,
     strings::MOVEMENT_TITLE,
@@ -591,12 +590,8 @@ impl EsoWeaveApp {
     fn drain_api_checks(&mut self) {
         while let Ok(outcome) = self.api_rx.try_recv() {
             self.catalog_status_ready = true;
-            self.catalog_observed_live = outcome.last_seen_game_version;
-            self.catalog_check_freshness = if outcome.fresh {
-                CheckFreshness::Fresh
-            } else {
-                CheckFreshness::Offline
-            };
+            (self.catalog_observed_live, self.catalog_check_freshness) =
+                catalog_live_observation(outcome);
             self.model.apply_api_check(outcome);
         }
         self.refresh_catalog_availability();
@@ -1812,9 +1807,6 @@ impl EsoWeaveApp {
                 ui.set_min_width(ui.available_width());
                 let label_width = dashboard_group_label_width(ui, LIVE_HUD_STATUS_TITLES, 0.0);
                 widgets::heading(ui, strings::LIVE_HUD_TITLE);
-                if let Some(freshness) = &view.hud_freshness {
-                    dashboard_status_row(ui, palette, freshness, label_width, 0.0, |_| {});
-                }
                 widgets::resource_group(
                     ui,
                     palette,
@@ -2291,7 +2283,8 @@ impl EsoWeaveApp {
     }
 
     fn data_addon_details_modal(&mut self, ctx: &egui::Context) {
-        let view = self.model.view().data_addon;
+        let full_view = self.model.view();
+        let view = full_view.data_addon;
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
         let modal = egui::Modal::new(egui::Id::new("eso_weave_data_addon_details")).show(
             ctx,
@@ -2312,6 +2305,7 @@ impl EsoWeaveApp {
                     &view.lifecycle_line,
                     &view.ownership_line,
                     &view.compatibility_line,
+                    &full_view.addon_api_line,
                     &view.enabled_line,
                     &view.loaded_line,
                     &view.reload_line,
@@ -3890,10 +3884,68 @@ fn live_state_label(state: LiveUpdateState) -> &'static str {
     }
 }
 
+fn catalog_live_observation(
+    outcome: ApiCheckOutcome,
+) -> (Option<crate::catalog::version::GameVersion>, CheckFreshness) {
+    // A PTS source is useful for addon diagnostics, never a Live catalog update.
+    if outcome
+        .evidence
+        .is_some_and(|evidence| evidence.environment == crate::beacon::Environment::Pts)
+    {
+        (None, CheckFreshness::Offline)
+    } else {
+        (
+            outcome.last_seen_game_version,
+            if outcome.fresh {
+                CheckFreshness::Fresh
+            } else {
+                CheckFreshness::Offline
+            },
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::should_accept_history_detail;
     use crate::encounter::EncounterIdentity;
+
+    #[test]
+    fn s120_pts_observation_cannot_establish_a_fresh_live_catalog_check() {
+        use super::CheckFreshness;
+        use crate::beacon::api_check::{ApiCheckOutcome, GameVersion, VersionEvidence};
+        use crate::beacon::Environment;
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        let version = GameVersion::new([13, 0, 0, 0]);
+        let outcome = ApiCheckOutcome {
+            evidence: Some(VersionEvidence {
+                environment: Environment::Pts,
+                game_version: version,
+                api_version: 101099,
+                source_revision: [1; 20],
+                source_updated_at: now,
+                checked_at: now,
+            }),
+            last_known_api_version: 101099,
+            last_seen_game_version: Some(version),
+            fresh: true,
+        };
+        assert_eq!(
+            super::catalog_live_observation(outcome),
+            (None, CheckFreshness::Offline)
+        );
+        let live = ApiCheckOutcome {
+            evidence: Some(VersionEvidence {
+                environment: Environment::Live,
+                ..outcome.evidence.unwrap()
+            }),
+            ..outcome
+        };
+        assert_eq!(
+            super::catalog_live_observation(live),
+            (Some(version), CheckFreshness::Fresh)
+        );
+    }
 
     #[test]
     fn catalog_replacement_discards_an_in_flight_detail_from_the_old_catalog() {

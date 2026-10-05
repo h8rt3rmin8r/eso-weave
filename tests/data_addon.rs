@@ -9,6 +9,18 @@ use eso_weave::data_addon::{
 };
 use mlua::Lua;
 
+#[test]
+fn s120_future_api_observations_do_not_change_reviewed_data_declarations() {
+    let sandbox = Sandbox::new();
+    install(sandbox.addons(), RunningState::NotRunning, 101099).unwrap();
+    assert_eq!(
+        fs::read_to_string(sandbox.data_addon().join(MANIFEST_FILE)).unwrap(),
+        eso_weave::data_addon::MANIFEST
+    );
+    assert!(eso_weave::data_addon::supports_api(101051));
+    assert!(!eso_weave::data_addon::supports_api(101099));
+}
+
 struct Sandbox(PathBuf);
 
 static NEXT_SANDBOX: AtomicU64 = AtomicU64::new(1);

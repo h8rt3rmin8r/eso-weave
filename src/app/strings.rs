@@ -43,7 +43,7 @@ pub const STATUS_TOOLTIP: &str =
 pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
-    "Install state of the bundled PixelBeacon companion addon that renders the pixel signal.";
+    "PixelBeacon install state and API compatibility of both bundled companion addons. Open Data Details for the numeric game API, client release, and next action; package installation does not prove current API support or loading.";
 pub const BEACON_UNMANAGED_TOOLTIP: &str =
     "ESO Weave did not modify this unmanaged PixelBeacon target. Move or remove it manually before using Install.";
 pub const DATA_ADDON_TOOLTIP: &str =

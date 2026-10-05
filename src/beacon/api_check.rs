@@ -1,95 +1,42 @@
-//! ESO API version check: the startup automation that keeps the PixelBeacon
-//! manifest API version current.
-//!
-//! The exact numeric API version is only published behind bot challenges a plain
-//! client cannot pass, so the network fetch reads the live game client version
-//! string from the official esoui/esoui GitHub live branch and uses it purely to
-//! detect that a client API change shipped. The numeric value written into the
-//! manifest resolves locally as the maximum of the stored last known value and the
-//! compiled [`super::DEFAULT_API_VERSION`]. The networked source sits behind the
-//! [`GameVersionSource`] seam; [`run_check`] and the parser are pure and tested
-//! against a mock source and an injected AddOns root, and never panic.
-
-use std::path::Path;
-use std::time::Duration;
-
+//! Startup compatibility observations, independent of managed package support.
+#[cfg(test)]
+use super::version_source::parse_evidence;
+pub use super::version_source::{GithubLiveSource, VersionEvidence};
+use super::{DEFAULT_API_VERSION, DEFAULT_GAME_VERSION};
 pub use crate::catalog::version::{parse_commit_message_version, GameVersion};
+use std::path::Path;
 
-use super::{
-    has_managed_marker, parse_api_version_primary, rewrite_api_version, status, BeaconStatus,
-    DEFAULT_API_VERSION, DEFAULT_GAME_VERSION, MANIFEST_FILE, SUBFOLDER,
-};
-
-/// A non-fatal failure of the network version source.
 #[derive(thiserror::Error, Debug)]
 pub enum ApiCheckError {
-    /// The HTTP request failed or returned a non-success status.
     #[error("http error: {0}")]
     Http(String),
-    /// The response body could not be read.
     #[error("body error: {0}")]
     Body(String),
-    /// The response could not be parsed into a game version.
     #[error("parse error: {0}")]
     Parse(String),
 }
 
-/// A source of the current live ESO game client version.
+pub struct VersionObservation {
+    pub game_version: GameVersion,
+    pub evidence: Option<VersionEvidence>,
+}
+
 pub trait GameVersionSource {
-    /// Fetches the current live game version, or a non-fatal error.
     fn fetch(&self) -> Result<GameVersion, ApiCheckError>;
-}
-
-/// The production source: the head commit of the official esoui/esoui `live`
-/// branch, whose commit message begins with the live game version string.
-pub struct GithubLiveSource {
-    url: String,
-    user_agent: String,
-    timeout: Duration,
-}
-
-impl Default for GithubLiveSource {
-    fn default() -> Self {
-        Self {
-            url: "https://api.github.com/repos/esoui/esoui/commits/live".to_string(),
-            user_agent: format!(
-                "eso-weave/{} (+https://github.com/h8rt3rmin8r/eso-weave)",
-                env!("CARGO_PKG_VERSION")
-            ),
-            timeout: Duration::from_secs(5),
-        }
-    }
-}
-
-impl GameVersionSource for GithubLiveSource {
-    fn fetch(&self) -> Result<GameVersion, ApiCheckError> {
-        let body = ureq::get(&self.url)
-            .config()
-            .timeout_global(Some(self.timeout))
-            .build()
-            .header("User-Agent", &self.user_agent)
-            .header("Accept", "application/vnd.github+json")
-            .call()
-            .map_err(|err| ApiCheckError::Http(err.to_string()))?
-            .body_mut()
-            .read_to_string()
-            .map_err(|err| ApiCheckError::Body(err.to_string()))?;
-        let json: serde_json::Value =
-            serde_json::from_str(&body).map_err(|err| ApiCheckError::Parse(err.to_string()))?;
-        let message = json
-            .get("commit")
-            .and_then(|commit| commit.get("message"))
-            .and_then(|message| message.as_str())
-            .ok_or_else(|| ApiCheckError::Parse("response had no commit.message".to_string()))?;
-        parse_commit_message_version(message)
-            .ok_or_else(|| ApiCheckError::Parse(format!("unparseable version in {message:?}")))
+    fn fetch_observation(&self) -> Result<VersionObservation, ApiCheckError> {
+        self.fetch().map(|game_version| VersionObservation {
+            game_version,
+            evidence: None,
+        })
     }
 }
 
 /// The result of a version check, handed to the GUI for persistence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ApiCheckOutcome {
-    /// The resolved effective numeric API version to persist as last known.
+    /// Independently sourced API facts, absent on an unsuccessful source check.
+    pub evidence: Option<VersionEvidence>,
+    /// Legacy numeric cache, retained as history and never used to grant support.
     pub last_known_api_version: u32,
     /// The newest game version observed, if the fetch succeeded.
     pub last_seen_game_version: Option<GameVersion>,
@@ -97,95 +44,107 @@ pub struct ApiCheckOutcome {
     pub fresh: bool,
 }
 
-/// Runs the startup version check: resolves the effective numeric API version,
-/// keeps the on-disk manifest current (ownership-gated, never downgrading), fetches
-/// the game version for bump detection, and returns the values to persist.
+/// Runs the startup compatibility observation without modifying installed addons.
+/// Reviewed package updates occur through the existing managed lifecycle.
 ///
-/// Never blocks beyond the source timeout and never panics; all filesystem and
-/// network errors are swallowed into logs and the returned outcome.
+/// Production uses two reads bounded to five seconds each; source errors are
+/// returned as unknown with a log record and historical values preserved.
 pub fn run_check(
     source: &dyn GameVersionSource,
-    addons_root: Option<&Path>,
+    _addons_root: Option<&Path>,
     stored_last_known: Option<u32>,
     stored_last_seen_game: Option<GameVersion>,
 ) -> ApiCheckOutcome {
     let effective = stored_last_known.unwrap_or(0).max(DEFAULT_API_VERSION);
 
-    if let Some(root) = addons_root {
-        update_installed_manifest(root, effective);
-    }
-
     let mut last_seen = stored_last_seen_game;
-    let fresh = match source.fetch() {
-        Ok(fetched) => {
-            let baseline = stored_last_seen_game
-                .unwrap_or(DEFAULT_GAME_VERSION)
-                .max(DEFAULT_GAME_VERSION);
+    let mut evidence = None;
+    let fresh = match source.fetch_observation() {
+        Ok(observation) => {
+            let fetched = observation.game_version;
+            evidence = observation.evidence;
+            let baseline = DEFAULT_GAME_VERSION;
             if fetched > baseline {
                 tracing::warn!(
                     target: "beacon",
                     "ESO client {fetched} is newer than this build's {DEFAULT_GAME_VERSION}; \
-                     update ESO Weave to refresh the addon API version"
+                     check addon API compatibility in Addons"
                 );
             }
-            if last_seen.is_none_or(|seen| fetched > seen) {
-                last_seen = Some(fetched);
-            }
+            last_seen = Some(fetched);
             true
         }
         Err(err) => {
-            tracing::debug!(target: "beacon", "API version check fetch failed: {err}");
+            tracing::warn!(target: "beacon", "Addon API compatibility is unknown: {err}");
             false
         }
     };
 
     ApiCheckOutcome {
+        evidence,
         last_known_api_version: effective,
         last_seen_game_version: last_seen,
         fresh,
     }
 }
 
-/// Rewrites the on-disk manifest APIVersion line to `effective` when the addon is
-/// installed, the manifest carries the managed marker, and its primary token is
-/// older than `effective`. The full ownership classification governs the write;
-/// an unmanaged, linked, or unreadable target is never written, and an
-/// equal-or-newer primary is left untouched (no downgrade, no churn).
-fn update_installed_manifest(addons_root: &Path, effective: u32) {
-    if !matches!(
-        status(addons_root),
-        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch
-    ) {
-        return;
-    }
-    let manifest_path = addons_root.join(SUBFOLDER).join(MANIFEST_FILE);
-    let existing = match std::fs::read_to_string(&manifest_path) {
-        Ok(text) => text,
-        Err(_) => return,
-    };
-    if !has_managed_marker(&existing) {
-        return;
-    }
-    let current = parse_api_version_primary(&existing).unwrap_or(0);
-    if current >= effective {
-        return;
-    }
-    let updated = rewrite_api_version(&existing, effective);
-    match std::fs::write(&manifest_path, updated) {
-        Ok(()) => tracing::info!(
-            target: "beacon",
-            "updated PixelBeacon APIVersion from {current} to {effective}"
-        ),
-        Err(err) => tracing::warn!(target: "beacon", "APIVersion manifest update failed: {err}"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::beacon::{MANAGED_MARKER, MANIFEST};
+    use crate::beacon::{MANAGED_MARKER, MANIFEST, MANIFEST_FILE, SUBFOLDER};
     use std::fs;
     use tempfile::TempDir;
+
+    fn history() -> String {
+        serde_json::json!([
+            {"sha": "6639eb2adecc0480557d9068579319919a0c3fe6",
+             "commit": {"message": "Merge branch 'pts' into live",
+                        "committer": {"date": "2026-09-28T19:44:27Z"}}},
+            {"sha": "c6a91c390a9acee843560542923c69d06c438cd3",
+             "commit": {"message": "12.1.5",
+                        "committer": {"date": "2026-09-28T19:44:27Z"}}}
+        ])
+        .to_string()
+    }
+
+    #[test]
+    fn s120_merge_head_uses_numeric_history_and_independent_api() {
+        let now = 1_791_244_800; // 2026-10-05 UTC
+        let evidence = parse_evidence(
+            &history(),
+            "{TOC:maxLevel=3}\nh1. ESO UI Documentation for API Version 101051\n",
+            super::super::Environment::Live,
+            now,
+        )
+        .unwrap();
+        assert_eq!(evidence.game_version, GameVersion::new([12, 1, 5, 0]));
+        assert_eq!(evidence.api_version, 101051);
+        assert_eq!(evidence.environment, super::super::Environment::Live);
+        assert_eq!(evidence.checked_at, now);
+    }
+
+    #[test]
+    fn s120_missing_malformed_stale_and_future_evidence_is_unknown() {
+        let now = 1_791_244_800;
+        let doc = "h1. ESO UI Documentation for API Version 101051\n";
+        for body in [
+            "[]".to_owned(),
+            "{}".to_owned(),
+            history().replace("6639eb2", "../evil"),
+            history().replace("2026-09-28", "2026-08-01"),
+            history().replace("2026-09-28", "2026-12-01"),
+        ] {
+            assert!(parse_evidence(&body, doc, super::super::Environment::Live, now).is_err());
+        }
+        for bad in [
+            "",
+            "h1. ESO UI Documentation for API Version 12.1.5",
+            "h1. ESO UI Documentation for API Version 101051 extra",
+            "h1. ESO UI Documentation for API Version 0",
+        ] {
+            assert!(parse_evidence(&history(), bad, super::super::Environment::Pts, now).is_err());
+        }
+    }
 
     struct MockSource(Result<GameVersion, ApiCheckError>);
 
@@ -245,7 +204,7 @@ mod tests {
     fn install_managed(root: &Path, primary_line: &str) {
         let dir = root.join(SUBFOLDER);
         fs::create_dir_all(&dir).unwrap();
-        let manifest = MANIFEST.replace("## APIVersion: 101050 101054", primary_line);
+        let manifest = MANIFEST.replace("## APIVersion: 101051 101050", primary_line);
         assert!(manifest.contains(MANAGED_MARKER));
         fs::write(dir.join(MANIFEST_FILE), manifest).unwrap();
     }
@@ -255,14 +214,12 @@ mod tests {
     }
 
     #[test]
-    fn rewrites_when_primary_older_and_marker_present() {
+    fn s120_check_does_not_grant_support_to_an_older_installed_package() {
         let root = TempDir::new().unwrap();
         install_managed(root.path(), "## APIVersion: 101040");
         let outcome = run_check(&ok_source([12, 0, 6, 0]), Some(root.path()), None, None);
         assert_eq!(outcome.last_known_api_version, DEFAULT_API_VERSION);
-        assert!(
-            read_manifest(root.path()).contains(&format!("## APIVersion: {DEFAULT_API_VERSION}"))
-        );
+        assert!(read_manifest(root.path()).contains("## APIVersion: 101040"));
     }
 
     #[test]
@@ -291,7 +248,7 @@ mod tests {
         install_managed(root.path(), "## APIVersion: 101040");
         let outcome = run_check(&err_source(), Some(root.path()), Some(101070), None);
         assert_eq!(outcome.last_known_api_version, 101070);
-        assert!(read_manifest(root.path()).contains("## APIVersion: 101070"));
+        assert!(read_manifest(root.path()).contains("## APIVersion: 101040"));
     }
 
     #[test]

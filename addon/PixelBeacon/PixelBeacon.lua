@@ -461,46 +461,52 @@ function nativeBindings.discover(actionName)
     local distinct = {}
     local count = 0
     local candidate = nil
+    local controllerSeen = false
     for bindingIndex = 1, maxBindings do
         local primary, mod1, mod2, mod3, mod4 = GetActionBindingInfo(
             layerIndex, categoryIndex, actionIndex, bindingIndex
         )
         if primary ~= nil and primary ~= KEY_INVALID then
-            local modifiers = {}
-            for _, modifier in ipairs({
-                mod1 or KEY_INVALID,
-                mod2 or KEY_INVALID,
-                mod3 or KEY_INVALID,
-                mod4 or KEY_INVALID,
-            }) do
-                if modifier ~= nil and modifier ~= KEY_INVALID then
-                    modifiers[#modifiers + 1] = modifier
+            -- ESO stores desktop and controller assignments on the same action.
+            -- Only positively classified controller controls can be excluded.
+            if type(IsKeyCodeGamepadKey) == "function" and IsKeyCodeGamepadKey(primary) then
+                controllerSeen = true
+            else
+                local modifiers = {}
+                for _, modifier in ipairs({
+                    mod1 or KEY_INVALID,
+                    mod2 or KEY_INVALID,
+                    mod3 or KEY_INVALID,
+                    mod4 or KEY_INVALID,
+                }) do
+                    if modifier ~= nil and modifier ~= KEY_INVALID then
+                        modifiers[#modifiers + 1] = modifier
+                    end
                 end
-            end
-            local signature = nativeBindings.signature(primary, modifiers)
-            if not distinct[signature] then
-                distinct[signature] = true
-                count = count + 1
-                local portable = nativeBindings.controls[primary]
-                local modifierBits = nativeBindings.portableModifierBits(modifiers)
-                local unsupportedKind = type(IsKeyCodeGamepadKey) == "function"
-                    and IsKeyCodeGamepadKey(primary)
-                local unsupportedChord = type(IsKeyCodeChordKey) == "function"
-                    and IsKeyCodeChordKey(primary)
-                local unsupportedHold = type(IsKeyCodeHoldKey) == "function"
-                    and IsKeyCodeHoldKey(primary)
-                if portable == nil or modifierBits == nil
-                    or nativeBindings.modifierBits[primary] ~= nil
-                    or unsupportedKind or unsupportedChord or unsupportedHold then
-                    candidate = { code = nativeBindings.unsupported, modifiers = 0 }
-                else
-                    candidate = { code = portable, modifiers = modifierBits }
+                local signature = nativeBindings.signature(primary, modifiers)
+                if not distinct[signature] then
+                    distinct[signature] = true
+                    count = count + 1
+                    local portable = nativeBindings.controls[primary]
+                    local modifierBits = nativeBindings.portableModifierBits(modifiers)
+                    local unsupportedChord = type(IsKeyCodeChordKey) == "function"
+                        and IsKeyCodeChordKey(primary)
+                    local unsupportedHold = type(IsKeyCodeHoldKey) == "function"
+                        and IsKeyCodeHoldKey(primary)
+                    if portable == nil or modifierBits == nil
+                        or nativeBindings.modifierBits[primary] ~= nil
+                        or unsupportedChord or unsupportedHold then
+                        candidate = { code = nativeBindings.unsupported, modifiers = 0 }
+                    else
+                        candidate = { code = portable, modifiers = modifierBits }
+                    end
                 end
             end
         end
     end
     if count == 0 then
-        return { code = nativeBindings.unbound, modifiers = 0 }
+        return { code = controllerSeen and nativeBindings.unsupported or nativeBindings.unbound,
+            modifiers = 0 }
     elseif count > 1 then
         return { code = nativeBindings.conflicting, modifiers = 0 }
     end

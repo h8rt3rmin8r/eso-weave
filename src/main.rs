@@ -530,12 +530,14 @@ fn main() {
         model.restore_session(state);
     }
 
-    // Startup ESO API version check: runs off the GUI thread, keeps the on-disk
-    // manifest current (marker-gated, never downgrading), detects a client bump,
-    // and hands the values to persist back to the GUI. Never blocks the window.
+    // Startup compatibility evidence runs off the GUI thread for the selected
+    // environment. It diagnoses client/API changes without modifying installed
+    // declarations, then hands observations to the GUI for display/persistence.
     thread::spawn(move || {
         let addons = eso_weave::beacon::resolve_addons_dir(&api_beacon_prefs).ok();
-        let source = eso_weave::beacon::api_check::GithubLiveSource::default();
+        let source = eso_weave::beacon::api_check::GithubLiveSource::for_environment(
+            api_beacon_prefs.environment,
+        );
         let outcome = eso_weave::beacon::api_check::run_check(
             &source,
             addons.as_deref(),
