@@ -70,7 +70,10 @@ ESO's native combat-log files belong to a separate provisional import route.
    suppress the damage-concentration prompt only. The bounded result contains
    at most two review questions about damage concentration and effect uptime.
    **Review prompts available**, **Review prompts have limitations**, and
-   **Review prompts unavailable** describe the policy outcome. Prompts repeat
+   **Review prompts unavailable** describe the policy outcome. If analysis passes
+   its checks but produces no questions, **No review prompts for this recording**
+   avoids implying that an available or limited prompt is actually shown. The
+   adjacent reasons explain omitted targets or unmet thresholds. Prompts repeat
    relevant qualifications and source/version identities. They do not establish
    a cause, promise improvement, prove Combat Metrics parity or generate input.
 

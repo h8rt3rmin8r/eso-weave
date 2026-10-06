@@ -25,7 +25,7 @@ enter these messages. [Shared wording contract](contracts/messaging.md).
 | same, loss ranges | Sequences X-Y (reason) | Sequence/limit codes unexplained | Missing observations X-Y, plain reason and exact code retained for reproducibility | encounter-data-and-metrics |
 | same, all loss reasons | capture-overflow, record-limit, byte-limit, string-limit, unsupported-value, clock-reset, runtime-interrupted, user-stopped, callback-failed | Technical codes only | Recording/storage/size limit, unrecordable game value, backward clock, interruption/stop/failure; unknown code explicitly a declared gap. Exact code kept in parentheses | encounter-capture |
 | same, missing metric and units | Unavailable, %, damage/s, effective healing/s | Scoped value already honest | Retain unavailable and explicit units; UI explains damage and effective healing, numeric game IDs | encounter-data-and-metrics |
-| same, recommendation ready/qualified/suppressed | Evidence status: Ready/Qualified/Suppressed | Evidence gate jargon | Review prompts available / have limitations / unavailable | encounter-data-and-metrics |
+| same, recommendation ready/qualified/suppressed | Evidence status: Ready/Qualified/Suppressed | Evidence gate jargon | Review prompts available / have limitations / unavailable; a non-suppressed empty result explicitly says No review prompts for this recording | encounter-data-and-metrics |
 | same, no advice due gate or threshold; advice present | s090-v1 gates / thresholds / deterministic review prompts | Policy identifier obscures outcome | No prompts because analysis requirements not met, reasons below; no available prompts, with reasons covering omitted targets or unmet thresholds; questions help review and do not establish cause/optimal rotation | encounter-data-and-metrics |
 | same, two prompt bodies/titles | dominant damage share / low effect uptime and compare intention | Concrete scoped observations | Retain exact numeric ability/effect, percentage and intention questions; UI explains IDs/uptime and displays full technical citation in secondary disclosure | encounter-data-and-metrics |
 | same, qualification | provisional, qualified review prompt | Qualified unexplained | Provisional review prompt with limitations, repeats exact applicable reason/gaps beside prompt | encounter-data-and-metrics |
@@ -62,3 +62,8 @@ labels. Public generator branches are all listed above, including errors reached
 through worker results. Tests retain import atomicity/idempotency, kind/API
 matching, exact loss and all recommendation evidence gates. New diagnostic and
 loss-presentation fixtures require setup/save actions and explained omissions.
+
+Final consistency correction: a Ready or Qualified analysis can contain zero
+questions. Its status now names the empty result, while the existing summary and
+reasons explain omissions. Suppressed analyses keep their unavailable status.
+The generated report, gates, qualification and source citations are unchanged.

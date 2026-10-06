@@ -798,6 +798,13 @@ fn s121_empty_prompts_and_suppressed_loss_do_not_claim_thresholds_or_visible_adv
         .summary
         .contains("No ability damage share or effect uptime met"));
     assert!(view.summary.contains("omitted prompts or unmet thresholds"));
+    assert_eq!(view.status, "No review prompts for this recording");
+    let mut ready_empty = report.clone();
+    ready_empty.availability = eso_weave::recommendation::RecommendationAvailability::Ready;
+    assert_eq!(
+        recommendation_presentation(&ready_empty).status,
+        "No review prompts for this recording"
+    );
 }
 
 fn open_history_and_select(harness: &mut Harness<'static, EsoWeaveApp>) {

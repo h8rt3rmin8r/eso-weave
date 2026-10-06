@@ -347,9 +347,10 @@ pub struct AdvicePresentation {
 
 pub fn recommendation_presentation(report: &RecommendationReport) -> RecommendationPresentation {
     let status = match report.availability {
+        RecommendationAvailability::Suppressed => "Review prompts unavailable",
+        _ if report.advice.is_empty() => "No review prompts for this recording",
         RecommendationAvailability::Ready => "Review prompts available",
         RecommendationAvailability::Qualified => "Review prompts have limitations",
-        RecommendationAvailability::Suppressed => "Review prompts unavailable",
     };
     let summary = match report.availability {
         RecommendationAvailability::Suppressed => {

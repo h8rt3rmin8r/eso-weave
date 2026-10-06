@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s121-encounter-logging-and-addon-clarity`
 **Created**: 2026-10-05
-**Status**: Implemented and reviewed; owner final review and merge pending
+**Status**: Implemented; two Codex rounds complete; late presentation correction included for owner final review
 **Input**: Owner-authorized S121, issues #249 and #222, full spec-kit/autopilot delivery and official PR with at most two Codex review rounds.
 
 ## User Scenarios & Testing

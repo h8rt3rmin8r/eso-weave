@@ -129,3 +129,26 @@ remain the reviewed `2e680c0` content. Final owner handoff must wait for success
 hosted checks on this documentation-only receipt commit. Review count stays at
 two, with no third trigger. The owner's final review and merge remain pending;
 no release or live-game/installed-package verification is included.
+
+## Late consistency correction after the second review
+
+The final source read found a remaining empty-result contradiction: a Ready or
+Qualified report with zero questions still had an available/limited status, next
+to a summary saying no questions were available. Only presentation now uses
+`No review prompts for this recording` for a non-suppressed empty result;
+suppressed, nonempty Ready and nonempty Qualified states keep their messages.
+Analysis rules, report availability, citations and qualification are unchanged.
+
+The existing combined-gate/unknown-target fixture was extended for empty Ready
+and Qualified statuses. It failed against the prior presentation and passed with
+the correction. Canonical help and the generator audit describe the empty state.
+This correction is after Codex round 2 and is explicitly not externally re-reviewed;
+the two-round cap remains binding. Full local parity and hosted gates must pass,
+and the owner must include this presentation correction in the final review.
+
+Late-correction local parity passes: formatting, Clippy, all 1,039 locked Rust
+tests, all 164 documentation policy/renderer/brand tests, spelling, book examples
+and build, generated-site policy, and all five headless browser sentinels.
+Hosted checks on this correction remain a required final-handoff gate. No
+additional receipt-only commit or review trigger is needed after they pass;
+GitHub retains the definitive final-head check results.
