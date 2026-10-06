@@ -29,6 +29,10 @@ official PR, two-review-round cap and owner merge. No field check or release.
 
 ## Reserved Figure Sequence
 
+The sequence below preserves the original reservations, not the current kickoff
+numbers. S115/#222 moved into merged S121; S113/#223 and S114/#221 move into
+owner-authorized S122 as recorded below.
+
 Sequence:
 
 1. S112 implements issue #220 by adding the accessible troubleshooting decision
@@ -52,3 +56,15 @@ parity. Native-log ingestion remains provisional and does not block these figure
 
 The official S112 implementation record is
 [PR #225](https://github.com/h8rt3rmin8r/eso-weave/pull/225).
+
+## Owner-approved S122 Regrouping (2026-10-06)
+
+S121 merged as #253 and closed #249/#222. The live post-merge assessment found
+no new issues and only #221/#223 open. The owner authorized S122
+(`122-catalog-and-extension-authority-maps`) to deliver both remaining figures
+with shared policy, offline, topology, narrow and 200 percent zoom coverage.
+Each remains an independently reviewable figure with a complete equivalent and
+source/update authorities. The unused S113/S114 reservations are historical,
+not completed slices. Full spec-kit/autopilot, automatic push/official PR, all
+findings, green CI and at most two review rounds apply. Final review/merge remains
+with the owner; no release or field check. Plan048 awaits that integration.

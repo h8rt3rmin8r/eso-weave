@@ -5,6 +5,69 @@ review candidate. It composes the bounded collector importer, deterministic
 catalog compiler, verifier, semantic diff, and local icon cache. It does not add
 another source parser and cannot change the catalog used by the application.
 
+## Evidence lifecycle and runtime selection
+
+The catalog evidence lifecycle separates preparing review artifacts from the later user action
+that changes the selected catalog. Read each branch together with the text below.
+
+<figure class="docs-flow-diagram">
+
+![Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only](../assets/diagrams/catalog-evidence-lifecycle.svg)
+
+</figure>
+
+### Catalog lifecycle text equivalent
+
+1. **Alternative evidence inputs** enter the pipeline. Pinned source snapshots
+   carry exact version, revision, hash and declared rights. Alternatively, bounded
+   catalog collector evidence comes from a complete saved envelope. The
+   [restricted importer](discovery-collector.md) parses data without executing
+   Lua, checks identity, chunks and provenance, then normalizes the records.
+   Pinned sources do not pass through the addon collector. Collector coverage
+   remains limited to the declared account, character, unlock, locale, channel
+   and API scope; review cannot broaden that coverage or its rights.
+2. **Normalized bundle** validation requires channel, provenance, versions,
+   sources and coverage to agree with the request. Live and PTS remain independent
+   through acquisition, bundle, optional baseline, compiled database, manifest
+   and directory identity. Optional immutable remote acquisition is bounded and
+   hash-checked as described below; any stale-cache fallback must be explicitly
+   allowed and recorded.
+3. **Verified review candidate** preparation compiles the catalog, checks its
+   schema, integrity and semantic checksum, compares a same-channel baseline,
+   and enforces removal and redistribution thresholds. The exact nine-file
+   review directory is immutable and identified by canonical manifest SHA-256.
+   An existing matching candidate is verified and reused, not replaced.
+   **Reports are redacted**, omitting captures, normalized contents, localized
+   values, absolute paths and image bytes. The SQLite catalog can still contain
+   user-collected values: **Collector values remain local-only** under their
+   [source rights](../reference/catalog-sources-and-rights.md). Image objects
+   stay in the separate user-local immutable cache; a review candidate does not
+   turn them into release assets.
+4. **Explicit install decision** is separate from building, discovering or
+   verifying the candidate. The user acknowledges a trusted review or release
+   origin and chooses installation. Hash integrity does not authenticate the
+   download origin. The desktop accepts compatible supported Live candidates;
+   **PTS review preview only** is a terminal branch with no runtime selection
+   or automatic promotion into Live.
+5. **Atomic Live selection** stages regular files, copies and re-verifies the
+   candidate, publishes an immutable version and opens the database read-only
+   before atomically replacing the small `selection.json` record. The prior
+   target, which can be another verified Live version or the bundled catalog,
+   is retained. Cancellation before selection or a failed validation preserves
+   the previous selection. The selection commit itself is non-interruptible.
+   Neither packaged catalog bytes nor an existing open database are replaced
+   in place.
+6. **Explicit rollback** re-verifies and reopens the previous Live or bundled
+   target, then commits another selection generation. Accepted immutable versions
+   remain available outside staging recovery. A receipt-storage failure is
+   reported without undoing a successful selection; invalid saved selection
+   visibly falls back to bundled data. The
+   [user-initiated update workflow](catalog-updates.md) owns these selection,
+   cancellation, recovery and rollback details.
+
+Building a review candidate never activates it. Here, publishing a candidate
+means installing its review directory, not selecting it for desktop use.
+
 ## Request and source gates
 
 Every request fixes the mode, Live or PTS channel, game version, API version,

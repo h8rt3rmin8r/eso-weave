@@ -4,12 +4,12 @@ S088 provides one local, accessible expansion interaction and one caption hierar
 
 ## Maintained inventory
 
-The canonical source contains 23 image placements.
+The canonical source contains 25 image placements.
 
 | Kind | Placements | Interactive | Caption contract |
 | --- | ---: | --- | --- |
 | Screenshots and synthetic illustration | 11 | Yes | One adjacent caption per figure |
-| Flow diagrams | 6 | Yes | Complete adjacent prose equivalent |
+| Flow diagrams | 8 | Yes | Complete adjacent prose equivalent |
 | Brand examples | 5 | Yes | One group caption per brand surface |
 | Landing wordmark | 1 | No | Decorative empty alternative beside the accessible heading |
 
@@ -33,7 +33,7 @@ The close button receives focus on open. Tab and Shift+Tab stay on that sole int
 
 ## Geometry and captions
 
-The modal image uses intrinsic auto dimensions with viewport maxima. It may shrink to fit but never stretches beyond its natural dimensions. This preserves the six SVG diagram ratios, large landscape captures, and the smaller portrait Windows Properties image.
+The modal image uses intrinsic auto dimensions with viewport maxima. It may shrink to fit but never stretches beyond its natural dimensions. This preserves the eight SVG diagram ratios, large landscape captures, and the smaller portrait Windows Properties image.
 
 Screenshot and brand captions use `0.9em` with a `1.55` line height. mdBook uses a 10-pixel root and 16-pixel body copy, so `0.9em` computes to 14.4 pixels. The initially suggested `0.9rem` would compute to only 9 pixels and is intentionally not used. Borders, padding, and surface colors remain component-specific, and strong brand lead-ins remain bold without italicizing entire captions.
 
@@ -41,7 +41,7 @@ Print rules hide the expansion badge and dialog while leaving the source image a
 
 ## Automated evidence
 
-Source policy accounts for all 22 meaningful placements, the one decorative exception, and all 13 captions. Script and CSS mutations cover selector boundaries, native-dialog construction, idempotence, mdBook wrapper replacement, accessible name and description, close paths, sequential focus, focus return, intrinsic sizing, caption scale, caption line height, strong lead-ins, print neutralization, and no-script legacy-chrome suppression.
+Source policy accounts for all 24 meaningful placements, the one decorative exception, and all 13 captions. Script and CSS mutations cover selector boundaries, native-dialog construction, idempotence, mdBook wrapper replacement, accessible name and description, close paths, sequential focus, focus return, intrinsic sizing, caption scale, caption line height, strong lead-ins, print neutralization, and no-script legacy-chrome suppression.
 
 The dependency-free browser smoke reuses one hidden host Chrome process and the generated local site. Its 20-cell S088 matrix covers:
 
@@ -54,11 +54,22 @@ The dependency-free browser smoke reuses one hidden host Chrome process and the 
 
 Each observation proves one semantic trigger, one native modal, no legacy checkbox or clone, persistent affordance, accessible label and caption association, initial close-button focus, background inertness, intrinsic aspect ratio, no upscaling, viewport containment, source and modal caption size and contrast, the matching light or dark brand surface, and no page-level overflow introduced by the figure system.
 
-Separate trusted CDP keyboard and pointer journeys prove Enter and Space opening, forward and reverse Tab containment, Escape closing, close-button closing, backdrop hit testing, and exact focus return. Dedicated observations prove readable associated captions and contained images at 200 percent browser scale, static source images and captions with script resources blocked, and clean print media with interaction chrome hidden. The 48-cell diagram paint matrix and 40-cell syntax matrix continue to pass in the same browser run.
+Separate trusted CDP keyboard and pointer journeys prove Enter and Space opening, forward and reverse Tab containment, Escape closing, close-button closing, backdrop hit testing, and exact focus return. Dedicated observations prove readable associated captions and contained images at 200 percent browser scale, static source images and captions with script resources blocked, and clean print media with interaction chrome hidden. The 64-cell diagram paint matrix and 40-cell syntax matrix continue to pass in the same browser run.
 
 The figure system adds no dependency, remote resource, browser download, or second viewer. GitHub Pages and release builds continue to consume the same generated documentation bytes.
 
 ## Maintenance rules
+
+S122 adds the catalog lifecycle and local-extension authority map as the seventh
+and eighth flow figures. Both reuse the native dialog, add no caption, and retain
+the existing 13-caption contract. Source/generated policy scopes each full prose
+equivalent to its adjacent heading, requiring critical trust, channel, rights and
+read-only labels. Four probes cover both figures in Navy and Light at 320 CSS
+pixels and 200 percent scale, with measured effective SVG font sizes, containment
+and complete no-script equivalents. The current paint matrix has 64 cells and
+topology matrix eight observations. Source authorities and update triggers are
+maintained in `diagram-rendering-compatibility.md` under S122.
+
 
 S121's sixth flow figure is the encounter lineage at
 `docs/src/reference/encounter-data-and-metrics.md`. It uses the same native
@@ -66,8 +77,8 @@ dialog and no extra caption, preserving the 13-caption contract. Its complete
 text equivalent carries every stage and qualification. Source/generated policy
 requires exact local bytes, versioned metric/recommendation labels, matching
 Live/PTS and API, unresolved IDs, and a visibly provisional native-log path.
-The diagram paint matrix now has 48 cells and the direct-SVG topology matrix
-six observations. A dedicated 200 percent lineage probe uses the measured
+At S121 delivery the paint matrix had 48 cells and the direct-SVG topology matrix
+six observations. Its retained 200 percent lineage probe uses the measured
 minimum computed SVG font size to check both source and expanded effective
 label sizes, viewport containment and the nearby equivalent.
 

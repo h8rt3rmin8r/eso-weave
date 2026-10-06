@@ -160,7 +160,69 @@ Review the figure and prose together when any of these source contracts change:
 This implementation closes the #222 figure handoff without changing native
 ingestion support or establishing Combat Metrics parity. The new
 `DIA-007` manifest record deliberately updates the pinned semantic projection.
-The separately approved #221 and #223 figures remain future work.
+The separately approved #221 and #223 figures were subsequently regrouped into
+S122 by the owner on 2026-10-06, as recorded below.
+
+## S122 catalog and local-authority expansion
+
+S122 adds `catalog-evidence-lifecycle.svg` (400 by 2500) and
+`local-extension-authority-map.svg` (400 by 2440), each with labels at least
+24 SVG units, a complete adjacent equivalent and the existing figure dialog.
+The finite inventory is now eight assets, 64 paint observations and eight
+topology probes. Four new probes cover both maps in Navy and Light at 320 CSS
+pixels and 200 percent browser scale, measuring source/modal label sizes and
+containment. Script-blocked reloads require the static image and every equivalent
+anchor. Source/generated policy scopes the new equivalents to their own heading
+and verifies byte-identical local assets; DIA-008/DIA-009 deliberately extend
+the manifest projection without changing earlier content obligations.
+
+Catalog arrows represent alternative inputs, normalization, compile/verify/diff,
+review and separate explicit Live installation/selection. PTS ends at preview.
+Only the reports are redacted; local-only values retain their source rights.
+Rollback reopens a prior verified Live or bundled target, not an in-place database
+rewrite. Review the map and prose on changes to these authorities:
+
+- `src/collector/mod.rs` (`parse_capture`, `validate_envelope`) and
+  `src/collector/import.rs` (`import_capture`, `bundle_from_capture`): restricted
+  saved-data parsing, completeness, provenance and local-only rights.
+- `src/catalog/model.rs` (`normalize_and_validate`) and
+  `src/catalog_pipeline/acquire.rs` (`acquire_sources`, `publish_source_cache`,
+  `immutable_raw_uri`): source versions, channels, normalization and pin/cache gates.
+- `src/catalog_pipeline/mod.rs` (`build_candidate_with_fetcher_and_cancel`,
+  `verify_candidate`, `validate_policy`, `validate_version`, `validate_bundle_sources`,
+  `baseline_diff`, `enforce_thresholds`) and `src/catalog/compiler.rs`
+  (`build_catalog`, `verify_catalog`): immutable candidate files/identity, integrity,
+  redistribution and removal thresholds.
+- `src/catalog_update/mod.rs` (`install`, `rollback`, `write_selection`,
+  `write_atomic`, `candidate_compatibility`, `validate_catalog_access`) and
+  `src/catalog_update/contract.rs` (`CatalogSelection`): trusted origin, compatible
+  Live selection, staging/cancellation, atomic commit and prior-target recovery.
+- `docs/project/catalog-sources.json`, canonical collector/compiler/source-rights
+  and update pages, and the read-only catalog-candidate workflow: source rights,
+  image-cache isolation and automation boundaries.
+
+The local-authority map keeps discovery independent from bearer admission, both
+framings in one generation, one snapshot publisher, one bounded query service and
+application-selected fixed store identities. Review it and its equivalent on:
+
+- `src/local_service.rs` (`build_router`, `request_guard`, `owner_loop`, HTTP
+  handlers, `DiscoveryRecord`, `publish_discovery`, `cleanup_discovery`): discovery
+  fields/ownership, auth/Host/Origin/body admission, bind, generation and shutdown.
+- `src/mcp_state.rs` (`resources`, `read_resource`, `query_tool`, `call_tool`):
+  resource/tool mappings, framing and canonical result/error projection.
+- `src/player_state.rs` (`SnapshotPublisher`, `PublishedSnapshot::document`):
+  immutable revisioned observations, schema, capabilities and freshness.
+- `src/database_query.rs` (`inventory`, `execute`, `path_for`, `open_defended`,
+  `execute_blocking`, `MAX_*`): fixed identities, shared permits, bounds, typed
+  results, errors and materialization before serialization.
+- `src/main.rs` and `src/app/mod.rs`: application-selected paths, shared service
+  construction and publication. `docs/project/local-extension-contract.md`, the
+  public field inventory and local-service/database/player-state contract tests
+  remain the transport-parity authorities.
+
+No service operation, addon behavior, catalog tooling, workflow or release
+behavior is changed by either figure. Candidate integrity still does not prove
+origin trust, and observing state still supplies no gameplay-action authority.
 
 ## Renderer boundary
 

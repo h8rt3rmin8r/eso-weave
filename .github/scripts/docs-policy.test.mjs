@@ -201,6 +201,8 @@ test("S081 requires bounded swatches, contained images, and narrow gallery reflo
 });
 
 const diagramRecords = [
+  ["development/catalog-candidate-pipeline.md", "catalog-evidence-lifecycle.svg", "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only", "Catalog lifecycle text equivalent", ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"], 2500],
+  ["reference/local-api-and-mcp.md", "local-extension-authority-map.svg", "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases", "Local authority text equivalent", ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"], 2440],
   ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"], 860],
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
@@ -213,6 +215,8 @@ function diagramFixture() {
   const pages = new Map();
   const svgs = new Map();
   const labels = new Map([
+    ["catalog-evidence-lifecycle.svg", ["Pinned sources", "Collector evidence", "Normalized bundle", "Verified review candidate", "Explicit install", "Origin acknowledged", "Atomic Live selection", "Explicit rollback", "PTS preview only", "Local-only values", "Independent Live / PTS"]],
+    ["local-extension-authority-map.svg", ["Local client", "Discovery: no credential", "Copied bearer credential", "One loopback generation", "Bearer on every request", "HTTP /api/v1", "MCP /mcp", "Shared canonical authorities", "Canonical player state", "Shared query executor", "Fixed catalog and encounters", "Read-only, no actions"]],
     ["architecture-ownership.svg", ["Physical input", "Observed evidence", "Named consumers"]],
     ["action-authorization.svg", ["Physical event", "Positive gates", "Authorized", "Fails closed"]],
     ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
@@ -231,6 +235,29 @@ function diagramFixture() {
 
 test("S082 accepts exact local diagrams with complete text equivalents", () => {
   assert.deepEqual(validateDocumentationDiagrams(diagramFixture()), []);
+});
+
+test("S122 rejects omitted catalog and local-authority boundaries", () => {
+  for (const [page, asset, , , anchors] of diagramRecords.slice(0, 2)) {
+    for (const anchor of anchors) {
+      const fixture = diagramFixture();
+      fixture.pages.set(page, fixture.pages.get(page).replaceAll(anchor, "Omitted"));
+      assert.match(validateDocumentationDiagrams(fixture).join("\n"), /text equivalent/i, anchor);
+    }
+    const missing = diagramFixture();
+    missing.svgs.delete(asset);
+    assert.match(validateDocumentationDiagrams(missing).join("\n"), /SVG source is missing/i);
+  }
+  for (const [asset, anchors] of [
+    ["catalog-evidence-lifecycle.svg", ["Origin acknowledged", "PTS preview only", "Local-only values", "Independent Live / PTS"]],
+    ["local-extension-authority-map.svg", ["Discovery: no credential", "Bearer on every request", "Shared query executor", "Read-only, no actions"]],
+  ]) {
+    for (const anchor of anchors) {
+      const fixture = diagramFixture();
+      fixture.svgs.set(asset, fixture.svgs.get(asset).replaceAll(anchor, "Omitted"));
+      assert.match(validateDocumentationDiagrams(fixture).join("\n"), /SVG requires.*label/i, anchor);
+    }
+  }
 });
 
 test("S121 requires complete encounter lineage and visible version, channel and provisional gates", () => {
@@ -296,11 +323,11 @@ test("S082 rejects missing references, weak alternatives, and incomplete equival
   assert.match(validateDocumentationDiagrams(missing).join("\n"), /architecture.*reference/i);
 
   const weak = diagramFixture();
-  weak.pages.set("concepts/action-authorization.md", weak.pages.get("concepts/action-authorization.md").replace(diagramRecords[1][2], "Flow diagram"));
+  weak.pages.set("concepts/action-authorization.md", weak.pages.get("concepts/action-authorization.md").replace(diagramRecords[3][2], "Flow diagram"));
   assert.match(validateDocumentationDiagrams(weak).join("\n"), /authorization.*alternative/i);
 
   const incomplete = diagramFixture();
-  incomplete.pages.set("development/state-machines.md", weak.pages.get("development/state-machines.md").replace(diagramRecords[2][4][2], "Recovered"));
+  incomplete.pages.set("development/state-machines.md", weak.pages.get("development/state-machines.md").replace(diagramRecords[4][4][2], "Recovered"));
   assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /recovery.*text equivalent/i);
 });
 
@@ -354,9 +381,9 @@ test("S086 requires intrinsic dimensions that exactly match each viewBox", () =>
 
 function generatedDiagramFixture() {
   const source = diagramFixture().svgs;
-  const pages = new Map(diagramRecords.map(([page, asset, alt, heading]) => [
+  const pages = new Map(diagramRecords.map(([page, asset, alt, heading, anchors]) => [
     page.replace(".md", ".html"),
-    `<figure class="docs-flow-diagram"><label class="checkbox-label"><input type="checkbox" class="checkbox-img"><img src="../assets/diagrams/${asset}" alt="${alt}"><span class="img-wrapper"><img src="../assets/diagrams/${asset}" alt="${alt}"></span></label></figure><h3>${heading}</h3>`,
+    `<figure class="docs-flow-diagram"><label class="checkbox-label"><input type="checkbox" class="checkbox-img"><img src="../assets/diagrams/${asset}" alt="${alt}"><span class="img-wrapper"><img src="../assets/diagrams/${asset}" alt="${alt}"></span></label></figure><h3>${heading}</h3><p>${anchors.join(". ")}</p>`,
   ]));
   return {
     pages,
@@ -384,6 +411,23 @@ test("S086 requires generated zoom DOM, accessible clone semantics, and byte-ide
   const drifted = new Map(fixture.generatedSvgs);
   drifted.set("safety-recovery.svg", `${drifted.get("safety-recovery.svg")}\n`);
   assert.match(validateDocumentationDiagramsGenerated(fixture.pages, fixture.outputPaths, fixture.sourceSvgs, drifted, fixture.script).join("\n"), /byte-identical/i);
+});
+
+test("S122 scopes each source and generated equivalent beside its own heading", () => {
+  for (const [page, , , heading, anchors] of diagramRecords.slice(0, 2)) {
+    const source = diagramFixture();
+    const anchor = anchors[0];
+    source.pages.set(page, `${anchor}\n${source.pages.get(page).replaceAll(anchor, "Omitted")}`);
+    assert.match(validateDocumentationDiagrams(source).join("\n"), /text equivalent is missing/i);
+
+    const fixture = generatedDiagramFixture();
+    const outputPage = page.replace(".md", ".html");
+    for (const omitted of anchors) {
+      const pages = new Map(fixture.pages);
+      pages.set(outputPage, `${pages.get(outputPage).replaceAll(omitted, "Omitted")}<h2>Other section</h2><p>${omitted}</p>`);
+      assert.match(validateDocumentationDiagramsGenerated(pages, fixture.outputPaths, fixture.sourceSvgs, fixture.generatedSvgs, fixture.script).join("\n"), /S122.*text equivalent is missing/i, `${heading}: ${omitted}`);
+    }
+  }
 });
 
 test("S086 requires bounded primary sizing and intrinsic expanded sizing", () => {
@@ -2900,7 +2944,7 @@ test("S088 inventories every meaningful figure and the sole decorative image", a
     "getting-started/installation.md",
     missingScreenshotClass.get("getting-started/installation.md").replace("docs-screenshot docs-screenshot--portrait", "unclassified-figure"),
   );
-  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /22 meaningful|unclassified/i);
+  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /24 meaningful|unclassified/i);
 
   const interactiveWordmark = new Map(pages);
   interactiveWordmark.set("README.md", interactiveWordmark.get("README.md").replace('alt=""', 'alt="ESO Weave"'));

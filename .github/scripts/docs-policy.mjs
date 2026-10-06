@@ -120,8 +120,8 @@ const CONTENT_OBLIGATION_IDS = new Set([
 ]);
 const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
-const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006", "DIA-007"]);
-const CONTENT_CONTRACT_SHA256 = "e701a9027d80cebbb86501f4136ea1fd79fa67fc6cbb75666f2428986863adb1";
+const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006", "DIA-007", "DIA-008", "DIA-009"]);
+const CONTENT_CONTRACT_SHA256 = "821b3ff67357f6ce600d304b3842f154ee49ef0fecbf6175c7f55a0a0be78ed3";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -1519,6 +1519,24 @@ export function validateBrandStandardVisualCss(css) {
 
 const DOCUMENTATION_DIAGRAMS = [
   {
+    id: "S122-D01", label: "catalog evidence lifecycle",
+    page: "development/catalog-candidate-pipeline.md", outputPage: "development/catalog-candidate-pipeline.html",
+    asset: "catalog-evidence-lifecycle.svg", width: 400, height: 2500,
+    alt: "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only",
+    heading: "Catalog lifecycle text equivalent",
+    anchors: ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"],
+    svgAnchors: ["Pinned sources", "Collector evidence", "Normalized bundle", "Verified review candidate", "Explicit install", "Origin acknowledged", "Atomic Live selection", "Explicit rollback", "PTS preview only", "Local-only values", "Independent Live / PTS"],
+  },
+  {
+    id: "S122-D02", label: "local extension authority map",
+    page: "reference/local-api-and-mcp.md", outputPage: "reference/local-api-and-mcp.html",
+    asset: "local-extension-authority-map.svg", width: 400, height: 2440,
+    alt: "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases",
+    heading: "Local authority text equivalent",
+    anchors: ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"],
+    svgAnchors: ["Local client", "Discovery: no credential", "Copied bearer credential", "One loopback generation", "Bearer on every request", "HTTP /api/v1", "MCP /mcp", "Shared canonical authorities", "Canonical player state", "Shared query executor", "Fixed catalog and encounters", "Read-only, no actions"],
+  },
+  {
     id: "S121-D01",
     label: "encounter evidence lineage",
     page: "reference/encounter-data-and-metrics.md",
@@ -1675,8 +1693,11 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
       errors.push(`S082 ${record.label} diagram requires the responsive figure wrapper`);
     }
     if (!markdown.includes(`### ${record.heading}`)) errors.push(`S082 ${record.label} page requires its text equivalent heading`);
+    const equivalent = record.id.startsWith("S122-")
+      ? markdown.split(`### ${record.heading}`)[1]?.split(/\n#{1,3} /u)[0] ?? ""
+      : markdown;
     for (const anchor of record.anchors) {
-      if (!hasVisiblePhrase(markdown, anchor)) errors.push(`S082 ${record.label} text equivalent is missing: ${anchor}`);
+      if (!hasVisiblePhrase(equivalent, anchor)) errors.push(`S082 ${record.label} text equivalent is missing: ${anchor}`);
     }
     for (const anchor of record.rawAnchors ?? []) {
       if (!markdown.includes(anchor)) errors.push(`S112 ${record.label} fenced text equivalent is missing: ${anchor}`);
@@ -1747,6 +1768,13 @@ export function validateDocumentationDiagramsGenerated(pages, outputPaths, sourc
       errors.push(`S086 generated ${record.label} page requires the expected zoom DOM`);
     }
     if (!html.includes(record.heading)) errors.push(`S082 generated ${record.label} page lost its text equivalent`);
+    if (record.id.startsWith("S122-")) {
+      const heading = new RegExp(`<h3\\b[^>]*>[\\s\\S]*?${escapeRegExp(record.heading)}[\\s\\S]*?<\\/h3>`, "iu");
+      const equivalent = html.split(heading)[1]?.split(/<h[1-3]\b/iu)[0] ?? "";
+      for (const anchor of record.anchors) {
+        if (!hasVisiblePhrase(equivalent, anchor)) errors.push(`S122 generated ${record.label} text equivalent is missing: ${anchor}`);
+      }
+    }
     if (!(outputPaths instanceof Set) || !outputPaths.has(`assets/diagrams/${record.asset}`)) {
       errors.push(`S082 generated asset is missing: ${record.asset}`);
     }
@@ -2192,8 +2220,8 @@ export function validateDocumentationFigureInventory(pages) {
   }
 
   const meaningful = screenshots + diagrams + brandImages;
-  if (screenshots !== 11 || diagrams !== 6 || brandImages !== 5 || meaningful !== 22) {
-    errors.push(`S088 figure inventory requires 22 meaningful placements (11 screenshot or illustration, 6 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
+  if (screenshots !== 11 || diagrams !== 8 || brandImages !== 5 || meaningful !== 24) {
+    errors.push(`S088 figure inventory requires 24 meaningful placements (11 screenshot or illustration, 8 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
   }
   if (decorativeWordmarks !== 1) errors.push("S088 figure inventory requires exactly one empty-alt decorative wordmark");
   if (screenshotCaptions !== 11 || brandCaptions !== 2) {

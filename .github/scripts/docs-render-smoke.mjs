@@ -18,6 +18,8 @@ const DIAGRAMS = [
   { id: "S082-D04", page: "reference/pixel-bus-protocol.html", asset: "pixel-bus-validation.svg", alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals" },
   { id: "S112-D01", page: "getting-started/troubleshooting.html", asset: "troubleshooting-decision-tree.svg", alt: "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence" },
   { id: "S121-D01", page: "reference/encounter-data-and-metrics.html", asset: "encounter-evidence-lineage.svg", alt: "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts" },
+  { id: "S122-D01", page: "development/catalog-candidate-pipeline.html", asset: "catalog-evidence-lifecycle.svg", alt: "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only", equivalentId: "catalog-lifecycle-text-equivalent", phrases: ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"] },
+  { id: "S122-D02", page: "reference/local-api-and-mcp.html", asset: "local-extension-authority-map.svg", alt: "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases", equivalentId: "local-authority-text-equivalent", phrases: ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"] },
 ];
 const THEMES = ["navy", "light"];
 const VIEWPORTS = [320, 1280];
@@ -110,6 +112,19 @@ export function validateRenderingReceipt(receipt) {
   if (!(zoom?.scale >= 1.99) || !zoom?.pageContained || !zoom?.sourceContained || !zoom?.modalContained
       || !(zoom?.sourceEffectiveFontSize >= 14) || !(zoom?.modalEffectiveFontSize >= 14) || !zoom?.textEquivalentAvailable) {
     errors.push("S121 encounter lineage requires readable source and modal labels, containment and a complete text equivalent at 200 percent zoom");
+  }
+  const authorityZoom = Array.isArray(receipt?.authorityZoom) ? receipt.authorityZoom : [];
+  const requiredZoom = DIAGRAMS.filter((diagram) => diagram.id.startsWith("S122-")).flatMap((diagram) => THEMES.map((theme) => `${diagram.id}|${theme}`));
+  const actualZoom = new Set(authorityZoom.map((probe) => `${probe?.diagramId}|${probe?.theme}`));
+  if (authorityZoom.length !== requiredZoom.length || actualZoom.size !== requiredZoom.length || requiredZoom.some((key) => !actualZoom.has(key))) {
+    errors.push("S122 requires exactly four authority map zoom and no-script probes");
+  }
+  for (const probe of authorityZoom) {
+    if (!(probe?.scale >= 1.99) || !probe?.pageContained || !probe?.sourceContained || !probe?.modalContained
+        || !(probe?.sourceEffectiveFontSize >= 14) || !(probe?.modalEffectiveFontSize >= 14)
+        || !probe?.textEquivalentAvailable || !probe?.noScriptAvailable) {
+      errors.push(`S122 ${probe?.diagramId} ${probe?.theme} requires readable contained 200 percent zoom and complete no-script equivalents`);
+    }
   }
   if (Array.isArray(receipt?.failures) && receipt.failures.length > 0) errors.push(...receipt.failures.map((failure) => `S086 browser: ${failure}`));
   return [...new Set(errors)];
@@ -1044,12 +1059,12 @@ return {
 })()`;
 }
 
-function lineageZoomExpression(minimumTextFontSize) {
+function lineageZoomExpression(minimumTextFontSize, equivalentId = "encounter-lineage-text-equivalent", phrases = ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat-log ingestion remains provisional"]) {
   return `(async () => {
 const minimumTextFontSize = ${JSON.stringify(minimumTextFontSize)};
 const trigger = document.querySelector('figure.docs-flow-diagram .docs-figure-trigger');
 const source = trigger?.querySelector('img');
-const equivalent = document.querySelector('#encounter-lineage-text-equivalent');
+const equivalent = document.getElementById(${JSON.stringify(equivalentId)});
 if (!trigger || !source || !equivalent) return null;
 await source.decode();
 const fontSize = minimumTextFontSize;
@@ -1065,9 +1080,11 @@ await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame
 const viewport = visualViewport;
 const modalRectangle = expanded.getBoundingClientRect();
 const panelRectangle = panel.getBoundingClientRect();
-const content = equivalent.parentElement;
+let content = '';
+for (let sibling = equivalent.nextElementSibling; sibling && !/^H[1-3]$/.test(sibling.tagName); sibling = sibling.nextElementSibling) content += ' ' + sibling.textContent;
+content = content.replace(/\\s+/g, ' ');
 const textEquivalentAvailable = equivalent.getBoundingClientRect().height > 0
-  && ['Ordered addon observations', 'Validation and loss', 'Immutable original data', 'Kind-specific catalog lookup', 'Versioned observed metrics', 'Separate provisional recommendations', 'Native combat-log ingestion remains provisional'].every((phrase) => content.textContent.includes(phrase));
+  && ${JSON.stringify(phrases)}.every((phrase) => content.includes(phrase));
 const result = {
   scale: viewport.scale,
   pageContained: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
@@ -1631,6 +1648,32 @@ export async function run(siteRoot) {
     await nextBrowserFrames();
     const lineageLayout = receipt.layoutObservations.find((observation) => observation.diagramId === "S121-D01");
     receipt.lineageZoom = await evaluateValue(lineageZoomExpression(lineageLayout?.minimumTextFontSize), true);
+    receipt.authorityZoom = [];
+    for (const diagram of DIAGRAMS.filter((candidate) => candidate.id.startsWith("S122-"))) {
+      for (const theme of THEMES) {
+        await client.send("Emulation.setDeviceMetricsOverride", { width: 320, height: 920, deviceScaleFactor: 1, mobile: true });
+        await navigateToFigure(diagram);
+        await evaluateValue(`document.documentElement.className = ${JSON.stringify(theme)}`);
+        await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+        await nextBrowserFrames();
+        const layout = receipt.layoutObservations.find((observation) => observation.diagramId === diagram.id);
+        const probe = await evaluateValue(lineageZoomExpression(layout?.minimumTextFontSize, diagram.equivalentId, diagram.phrases), true);
+        await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+        await client.send("Network.setBlockedURLs", { urls: ["*.js"] });
+        await navigateToFigure(diagram);
+        await evaluateValue(`document.documentElement.className = ${JSON.stringify(theme)}`);
+        const noScript = await evaluateValue(figureNoScriptExpression(), true);
+        const equivalent = await evaluateValue(`(() => {
+          const heading = document.getElementById(${JSON.stringify(diagram.equivalentId)});
+          let content = '';
+          for (let sibling = heading?.nextElementSibling; sibling && !/^H[1-3]$/.test(sibling.tagName); sibling = sibling.nextElementSibling) content += ' ' + sibling.textContent;
+          content = content.replace(/\\s+/g, ' ');
+          return !!heading && heading.getBoundingClientRect().height > 0 && ${JSON.stringify(diagram.phrases)}.every((phrase) => content.includes(phrase));
+        })()`);
+        receipt.authorityZoom.push({ ...probe, diagramId: diagram.id, theme, noScriptAvailable: noScript?.sourceImagesVisible === true && equivalent });
+        await client.send("Network.setBlockedURLs", { urls: [] });
+      }
+    }
     await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
     await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
 

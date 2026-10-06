@@ -47,7 +47,10 @@ S112 implemented the troubleshooting figure from #220. S121 implements #222
 with the owned encounter-lineage SVG, complete nearby equivalent, policy
 inventory, six-diagram render/topology matrices and dedicated 200 percent
 readability probe. The original S111 decision inventory remains the historical
-approval record. #221 and #223 remain separate implementation handoffs.
+approval record. On 2026-10-06 the owner authorized S122 to bundle #221 and #223.
+Both remain independent figures, sharing eight-diagram policy/render inventory,
+complete adjacent equivalents, exact source/update authorities and two-theme
+narrow 200 percent/no-script coverage. Plan048 awaits owner integration.
 
 ## Cluster resolution
 

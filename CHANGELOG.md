@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Accessible encounter-data lineage figure connects ordered original observations,
   validation and declared loss, immutable storage, kind-specific catalog lookup,
   versioned metrics and separately qualified provisional review prompts.
+- S122 adds accessible catalog evidence lifecycle and shared HTTP/MCP authority
+  maps with complete adjacent prose, preserving source rights, channel separation,
+  explicit catalog selection and the authenticated read-only service contract
+  (issues #221 and #223).
 
 ### Fixed
 
@@ -45,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schema, ownership, retention and input behavior remain unchanged. Documentation
   policy and headless rendering scripts expand their governed inventory and
   lineage/zoom coverage for the owned SVG; no workflow or runtime dependency changes.
+- 2026-10-06: S122 regroups Plan048's remaining #221/#223 figures from unused
+  S114/S113 reservations into one owner-authorized slice. The governed flow
+  inventory expands from six to eight assets, with 64 paint cells, eight topology
+  probes and two-theme narrow 200 percent/no-script evidence for both maps.
+  Documentation policy/renderer scripts deliberately extend existing coverage;
+  no workflow, tool pin, runtime contract or release behavior changes. DIA-008
+  and DIA-009 update the manifest projection while retaining existing obligations.
 
 ## [0.17.2] - 2026-09-23
 

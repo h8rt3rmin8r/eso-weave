@@ -1,5 +1,9 @@
 # Bounded Discovery Collector
 
+The [catalog evidence lifecycle](catalog-candidate-pipeline.md#evidence-lifecycle-and-runtime-selection)
+places this collector's local-only evidence alongside pinned source snapshots
+without treating collection or candidate review as runtime selection.
+
 ESO Weave includes an optional catalog module in the marker-managed
 `EsoWeaveData` addon for collecting
 public ESO API results on the user's own system. It is a deliberate maintainer
