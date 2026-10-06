@@ -84,8 +84,31 @@ four zoom/no-script probes and four fallback-font probes. Both maps retain
 generated policy and encoding/diff checks pass. Initial Rust checks remain valid
 because no Rust source or dependencies changed in these review corrections.
 
-Initial remote docs and CodeQL workflows succeeded; cross-platform CI was still
-running at this correction checkpoint. Replies/resolutions and the one authorized
-second Codex round follow this push. Final head-specific CI, review completion
-and task T015 disposition will be recorded in the PR handoff. No third review
-round may be requested. Owner final review/merge remains pending. No release.
+Both findings received evidence-backed replies and their review threads were
+resolved after `6fcf0e6` was pushed. The one authorized second round was requested
+in [comment 6022292680](https://github.com/h8rt3rmin8r/eso-weave/pull/254#issuecomment-6022292680).
+It completed on 2026-10-06 at 18:01:47 UTC for
+`6fcf0e6649dcceb222ce7c9698f4b0ec0fbff30b`, with
+[no major issues reported](https://github.com/h8rt3rmin8r/eso-weave/pull/254#issuecomment-6022337375)
+and a thumbs-up on the PR body. Exactly two rounds were used. No unresolved
+threads or subsequent findings remained at the integration checkpoint.
+
+All nine head-specific checks passed, with the pull-request deployment check
+intentionally skipped. Remote evidence for the reviewed implementation:
+
+- [Cross-platform CI run 37507693774](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37507693774):
+  Windows and Linux checks, dependency review, tests and bundled-documentation
+  release builds passed.
+- [Documentation run 37507693727](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37507693727):
+  build, generated policy and Linux browser probes passed; deployment skipped.
+- [CodeQL run 37507693780](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37507693780):
+  Rust analysis and the CodeQL check passed. PR-ref open security-alert count: 0.
+- [Issue linkage run 37507908501](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37507908501):
+  issue linkage and proposed policy passed. Protected-base trust enforcement
+  passed separately.
+
+T001-T015 are complete. This final receipt changes only tasks/evidence records;
+it does not change the externally reviewed implementation. CI on the receipt
+commit will be checked before the owner handoff, with the exact final head/status
+recorded in the PR body. No third review round may be requested. Owner final
+review/merge remains pending. Plan048 archival and release remain excluded.

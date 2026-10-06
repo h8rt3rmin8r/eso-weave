@@ -40,7 +40,7 @@ Independent test: Policy mutations and generated browser matrix cover both maps.
 
 - [x] T013 Record chronological S122 regrouping/completion in docs/project/build-plans/ and CHANGELOG.md (FR-008/009).
 - [x] T014 Run all quickstart automated checks and text/diff hygiene; record evidence in specs/122-catalog-and-extension-authority-maps/verification.md (FR-009, SC-001/002/003/004).
-- [ ] T015 Commit/push official feature PR, handle every finding and CI with at most two review rounds; record evidence in specs/122-catalog-and-extension-authority-maps/verification.md (FR-009).
+- [x] T015 Commit/push official feature PR, handle every finding and CI with at most two review rounds; record evidence in specs/122-catalog-and-extension-authority-maps/verification.md (FR-009).
 
 ## Dependencies and Strategy
 
