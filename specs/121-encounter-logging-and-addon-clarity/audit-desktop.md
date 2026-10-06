@@ -49,6 +49,7 @@ instructions for the player to enter inside ESO, never command ingress.
 | Selected encounter detail/loading/error | Loading observed metrics; rebuild observed metrics | Loading wording retained; explain recalculation from stored observations and current catalog. Diagnostic headings clarify local history and differing recording/catalog versions. | Parent-owned generated diagnostics are audited separately. |
 | One/all encounter deletion confirmation | Immutable local raw records; cannot undo | Imported local original observations/results removed; ESO saved file, addon files, catalog kept; retained source may be imported again. | Irreversible local deletion does not imply destroying every copy. |
 | Quality/loss/metrics | Quality labels, sequence ranges, unexplained DPS/HPS/share/uptime | Define completeness, observation gaps, rate/share/uptime meanings. Parent loss explanation helper used consistently. Unknown ID count and preservation remain visible before technical disclosure. | Original observations and unknown IDs retained; no catalog name guessed. |
+| Review correction, wrapped loss explanations | The existing fixed-height virtual list clipped explanatory loss labels when they wrapped at narrow width | Projection loss diagnostics use a bounded vertical scroll area that lays out each label at its actual height; no-loss output remains None and the area remains capped at 120 points. | First Codex review found the clipping. `tests/app_encounter_history.rs::s121_wrapped_loss_diagnostics_are_fully_painted_at_minimum_width` covers ten declared gaps at 360 points, including the last label after wheel scrolling. No loss facts, recording behavior, or retention rules changed. |
 | Provenance and recommendation citations | Projection and Catalog Provenance wall of schema/version/hash fields | Explained secondary Technical details disclosures preserve every original version, checksum, ID, quality, and citation field. | No raw callback value exposure; numeric schema fields retain technical exactness. |
 | Recommendations | Parent-owned statuses and provisional prompt bodies | Render final parent presentation unchanged; source citations secondary and explained. | No thresholds, availability rules, or capabilities changed. |
 | Catalog modal introduction/empty/candidate/source details | Hash integrity disclaimer; S073 candidate; schema/source acquisition | Define catalog purpose and preserved history; complete reviewed update folder/help action; file format and checksum/source collection labels. | Maintainer workflow kept, trust checkbox and compatibility checks unchanged. |
@@ -70,6 +71,10 @@ instructions for the player to enter inside ESO, never command ingress.
 - Existing UI sizing tests cover both themes, narrow/wide, increased text size,
   all addon states, and modal painted-text overlap; setup and precise uninstall
   preservation are also asserted through accessible rendered labels.
+- First-round review correction: the 360-point, ten-gap layout regression fixture
+  fails against the former fixed-height loss list because its last wrapped label
+  cannot be fully read after scrolling. The corrected list uses actual text
+  heights; the parent verification receipt records the final green run.
 - Final integrated Rust/format/docs checks are recorded in the parent verification
   receipt. No live ESO, installed application, or field checks performed.
 
@@ -338,19 +343,19 @@ their exact line anchors identify the final implementation and original context.
 | Final | `src/app/ui.rs:3108` | `"recording reached its interruption limit"` |
 | Final | `src/app/ui.rs:3109` | `"the saved recording state could not be read"` |
 | Final | `src/app/ui.rs:3135` | `"Complete means no declared gaps in this recording, not every possible combat event. Incomplete observations can produce partial results. Unknown ability or effect IDs remain unresolved until matching catalog definitions are available."` |
-| Final | `src/app/ui.rs:3149` | `"DPS is recorded outgoing damage per second. Effective HPS is recorded effective healing per second. Ability damage share is each ability's portion of recorded damage; effect uptime is its recorded active time. These results describe the saved observations, not a complete Combat Metrics report."` |
-| Final | `src/app/ui.rs:3215` | `"Unresolved recorded IDs: {}. Matching catalog definitions are needed to interpret these IDs; original observations are retained."` |
-| Final | `src/app/ui.rs:3218` | `"Technical details: calculation versions and source identity"` |
-| Final | `src/app/ui.rs:3220` | `"These versions identify the calculation format and rules, the matching game-data catalog, and the original stored observations. SHA-256 checksums identify the exact contents; they do not prove who supplied them."` |
-| Final | `src/app/ui.rs:3282` | `"Technical details: recommendation source"` |
-| Final | `src/app/ui.rs:3285` | `"These recording IDs, checksums, and calculation versions identify the observations behind this review prompt."` |
-| Final | `src/app/ui.rs:3297` | `"Quality: {} \| Recorded observation numbers: {}-{}"` |
-| Final | `src/app/ui.rs:3885` | `"Finding saved catalog data"` |
-| Final | `src/app/ui.rs:3886` | `"Waiting for ESO to save catalog data"` |
-| Final | `src/app/ui.rs:3887` | `"Checking saved catalog data"` |
-| Final | `src/app/ui.rs:3888` | `"Preparing game-data definitions"` |
-| Final | `src/app/ui.rs:3891` | `"Checking catalog file integrity"` |
-| Final | `src/app/ui.rs:3910` | `"A Live catalog update has passed file checks and is ready for review."` |
-| Final | `src/app/ui.rs:3913` | `"Collect game definitions with ESO Weave Data inside ESO, then save addon data before building this catalog update."` |
-| Final | `src/app/ui.rs:3916` | `"The update files use a catalog format this ESO Weave version cannot read. Obtain a compatible reviewed update or update ESO Weave."` |
+| Final | `src/app/ui.rs:3152` | `"DPS is recorded outgoing damage per second. Effective HPS is recorded effective healing per second. Ability damage share is each ability's portion of recorded damage; effect uptime is its recorded active time. These results describe the saved observations, not a complete Combat Metrics report."` |
+| Final | `src/app/ui.rs:3218` | `"Unresolved recorded IDs: {}. Matching catalog definitions are needed to interpret these IDs; original observations are retained."` |
+| Final | `src/app/ui.rs:3221` | `"Technical details: calculation versions and source identity"` |
+| Final | `src/app/ui.rs:3223` | `"These versions identify the calculation format and rules, the matching game-data catalog, and the original stored observations. SHA-256 checksums identify the exact contents; they do not prove who supplied them."` |
+| Final | `src/app/ui.rs:3285` | `"Technical details: recommendation source"` |
+| Final | `src/app/ui.rs:3288` | `"These recording IDs, checksums, and calculation versions identify the observations behind this review prompt."` |
+| Final | `src/app/ui.rs:3300` | `"Quality: {} \| Recorded observation numbers: {}-{}"` |
+| Final | `src/app/ui.rs:3888` | `"Finding saved catalog data"` |
+| Final | `src/app/ui.rs:3889` | `"Waiting for ESO to save catalog data"` |
+| Final | `src/app/ui.rs:3890` | `"Checking saved catalog data"` |
+| Final | `src/app/ui.rs:3891` | `"Preparing game-data definitions"` |
+| Final | `src/app/ui.rs:3894` | `"Checking catalog file integrity"` |
+| Final | `src/app/ui.rs:3913` | `"A Live catalog update has passed file checks and is ready for review."` |
+| Final | `src/app/ui.rs:3916` | `"Collect game definitions with ESO Weave Data inside ESO, then save addon data before building this catalog update."` |
+| Final | `src/app/ui.rs:3919` | `"The update files use a catalog format this ESO Weave version cannot read. Obtain a compatible reviewed update or update ESO Weave."` |
 

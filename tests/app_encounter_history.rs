@@ -871,3 +871,104 @@ fn rendered_ready_and_qualified_recommendations_remain_separate_and_actionless()
         3
     );
 }
+
+#[test]
+fn s121_wrapped_loss_diagnostics_are_fully_painted_at_minimum_width() {
+    let root = tempfile::tempdir().unwrap();
+    let mut capture: serde_json::Value = serde_json::from_str(CAPTURE).unwrap();
+    capture["last_sequence"] = 30.into();
+    capture["stored_event_count"] = 20.into();
+    capture["omitted_event_count"] = 10.into();
+    let events = capture["events"].as_array_mut().unwrap();
+    let mut end = events.last().unwrap().clone();
+    events.truncate(9);
+    for ordinal in 0..10 {
+        let sequence = 11 + ordinal * 2;
+        events.push(serde_json::json!({
+            "session_id": "session-1788998400-500000",
+            "encounter_id": "encounter-1788998400-1",
+            "sequence": sequence,
+            "monotonic_ms": 6000 + ordinal * 250,
+            "kind": "discontinuity",
+            "payload": {
+                "missing_sequence_from": sequence - 1,
+                "missing_sequence_to": sequence - 1,
+                "reason": "capture-overflow"
+            }
+        }));
+    }
+    end["sequence"] = 30.into();
+    events.push(end);
+    let service = seeded_service_with_capture(root.path(), &capture);
+    let mut harness = harness_with_size(service, Settings::default(), egui::vec2(360.0, 3000.0));
+    open_history_and_select(&mut harness);
+    harness
+        .get_by_label("How to record and import")
+        .click_accesskit();
+    for _ in 0..6 {
+        harness.step();
+    }
+    let labels = [
+        "Missing observations 10-10 (recording limit reached; code: capture-overflow)",
+        "Missing observations 12-12 (recording limit reached; code: capture-overflow)",
+    ];
+    harness.get_by_label(labels[0]).scroll_to_me();
+    for _ in 0..12 {
+        harness.step();
+    }
+    let first = harness.get_by_label(labels[0]).rect();
+    let second = harness.get_by_label(labels[1]).rect();
+    assert!(
+        first.height() > 20.0,
+        "fixture must exercise wrapping: {first:?}"
+    );
+    assert!(
+        second.top() >= first.bottom(),
+        "diagnostics overlap: {first:?} {second:?}"
+    );
+    fn inspect(shape: &egui::epaint::Shape, clip: egui::Rect, label: &str) -> Option<bool> {
+        match shape {
+            egui::epaint::Shape::Text(text) if text.galley.text() == label => {
+                let bounds = text.visual_bounding_rect();
+                Some(clip.contains_rect(bounds))
+            }
+            egui::epaint::Shape::Vec(shapes) => {
+                shapes.iter().find_map(|shape| inspect(shape, clip, label))
+            }
+            _ => None,
+        }
+    }
+    for label in labels {
+        let fully_visible = harness
+            .output()
+            .shapes
+            .iter()
+            .find_map(|clipped| inspect(&clipped.shape, clipped.clip_rect, label));
+        assert_eq!(
+            fully_visible,
+            Some(true),
+            "wrapped loss text is clipped: {label}"
+        );
+    }
+    harness.event(egui::Event::PointerMoved(first.center()));
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        phase: egui::TouchPhase::Move,
+        delta: egui::vec2(0.0, -250.0),
+        modifiers: egui::Modifiers::NONE,
+    });
+    for _ in 0..30 {
+        harness.step();
+    }
+    let last_label = "Missing observations 28-28 (recording limit reached; code: capture-overflow)";
+    let fully_visible = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|clipped| inspect(&clipped.shape, clipped.clip_rect, last_label));
+    assert_eq!(
+        fully_visible,
+        Some(true),
+        "last wrapped loss cannot be read after scrolling"
+    );
+}

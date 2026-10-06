@@ -70,4 +70,30 @@ repository fixture and documentation rendering results only.
 
 ## Hosted checks and reviews
 
-Pending. Official PR, all hosted checks, every review disposition and at most two Codex rounds are required before owner handoff.
+Official non-draft [PR #253](https://github.com/h8rt3rmin8r/eso-weave/pull/253)
+was published from `b59fee0`. Initial Linux and Windows CI, dependency review,
+CodeQL, trust boundary and closing-issue policy checks passed. The PR-specific
+open code-scanning alert query returned an empty array.
+
+Documentation tooling installation failed twice before repository checks, while
+downloading unrelated crates (`unicode-width`, then `anstream`), with crates.io
+HTTP/2 framing errors. Failed-job-only retries were issued; no workflow, pinned
+tool version or policy gate was changed. A definitive successful documentation
+result remains required.
+
+Codex round 1 automatically ran on PR opening and completed on `b59fee0` at
+2026-10-06 00:39:46 UTC. It reported one P2 finding, review comment `4190347760`
+(thread `PRRT_kwDOTU-tqc6pRiLF`): longer explained loss labels wrapped inside a
+fixed-height virtual list, which could clip later diagnostic rows.
+
+Correction: only the loss-diagnostic list uses a normal bounded-height scroll
+area so each explanation receives its actual wrapped height. Other numeric
+virtual lists remain unchanged. A 360-point fixture imports ten declared gaps,
+checks distinct wrapped row geometry and fully painted first rows, then scrolls
+to verify the final row. The final fixture failed on the old implementation
+because the last explanation was clipped; the corrected implementation passes.
+Correction parity: formatting check and Clippy pass; `cargo test --all --locked`
+passes all 1,039 tests with zero failures or ignored tests. The complete history
+suite now has 13 passing tests. Reply/resolution, the second authorized Codex
+round and green checks on the final head are still pending. No third review
+round will be requested.

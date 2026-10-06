@@ -3133,16 +3133,19 @@ fn render_encounter_projection(
     ui.strong("Observed Data Quality");
     ui.label(quality_label(projection.observed_dps.quality));
     ui.label("Complete means no declared gaps in this recording, not every possible combat event. Incomplete observations can produce partial results. Unknown ability or effect IDs remain unresolved until matching catalog definitions are available.");
-    render_virtual_rows(
-        ui,
-        "encounter_loss_ranges",
-        &projection.observed_dps.loss_ranges,
-        |ui, range| {
-            for label in loss_labels(std::slice::from_ref(range)) {
-                ui.label(label);
-            }
-        },
-    );
+    if projection.observed_dps.loss_ranges.is_empty() {
+        ui.label("None");
+    } else {
+        // Explanations wrap at narrow widths, so each row needs its actual height.
+        egui::ScrollArea::vertical()
+            .id_salt("encounter_loss_ranges")
+            .max_height(120.0)
+            .show(ui, |ui| {
+                for label in loss_labels(&projection.observed_dps.loss_ranges) {
+                    ui.label(label);
+                }
+            });
+    }
 
     ui.separator();
     ui.heading("Observed Metrics");
