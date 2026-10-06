@@ -51,9 +51,9 @@ test("S086 rejects blank, collapsed, distorted, and clipped observations", () =>
   assert.match(validateObservation({ ...validObservation, surface: "other" }).join("\n"), /surface/i);
 });
 
-test("S086 requires the complete six-diagram receipt, SVG media types, and pass sentinel", () => {
+test("S086 requires the complete eight-diagram receipt, SVG media types, and pass sentinel", () => {
   const observations = [];
-  for (const diagramId of ["S082-D01", "S082-D02", "S082-D03", "S082-D04", "S112-D01", "S121-D01"]) {
+  for (const diagramId of ["S082-D01", "S082-D02", "S082-D03", "S082-D04", "S112-D01", "S121-D01", "S122-D01", "S122-D02"]) {
     for (const theme of ["navy", "light"]) {
       for (const viewportWidth of [320, 1280]) {
         for (const state of ["normal", "expanded"]) {
@@ -66,10 +66,24 @@ test("S086 requires the complete six-diagram receipt, SVG media types, and pass 
     schemaVersion: 1,
     sentinel: PASS_SENTINEL,
     lineageZoom: { scale: 2, pageContained: true, sourceContained: true, modalContained: true, sourceEffectiveFontSize: 30, modalEffectiveFontSize: 30, textEquivalentAvailable: true },
+    authorityZoom: ["S122-D01", "S122-D02"].flatMap((diagramId) => ["navy", "light"].map((theme) => ({ diagramId, theme, scale: 2, pageContained: true, sourceContained: true, modalContained: true, sourceEffectiveFontSize: 30, modalEffectiveFontSize: 30, textEquivalentAvailable: true, noScriptAvailable: true }))),
+    fallbackFonts: ["S122-D01", "S122-D02"].flatMap((diagramId) => ["monospace", "DejaVu Sans, sans-serif"].map((fontFamily) => ({ diagramId, fontFamily, textCount: 40, nodeLabelCount: 36, canvasContained: true, nodesContained: true, allNodeLabelsAssociated: true, minimumTextFontSize: 24 }))),
     observations,
-    requests: ["architecture-ownership.svg", "action-authorization.svg", "safety-recovery.svg", "pixel-bus-validation.svg", "troubleshooting-decision-tree.svg", "encounter-evidence-lineage.svg"].map((asset) => ({ asset, status: 200, contentType: "image/svg+xml" })),
+    requests: ["architecture-ownership.svg", "action-authorization.svg", "safety-recovery.svg", "pixel-bus-validation.svg", "troubleshooting-decision-tree.svg", "encounter-evidence-lineage.svg", "catalog-evidence-lifecycle.svg", "local-extension-authority-map.svg"].map((asset) => ({ asset, status: 200, contentType: "image/svg+xml" })),
   };
   assert.deepEqual(validateRenderingReceipt(receipt), []);
+  assert.match(validateRenderingReceipt({ ...receipt, fallbackFonts: [] }).join("\n"), /fallback font/i);
+  for (const field of ["canvasContained", "nodesContained", "allNodeLabelsAssociated"]) {
+    assert.match(validateRenderingReceipt({ ...receipt, fallbackFonts: receipt.fallbackFonts.map((probe) => ({ ...probe, [field]: false })) }).join("\n"), /fallback font/i, field);
+  }
+  assert.match(validateRenderingReceipt({ ...receipt, fallbackFonts: receipt.fallbackFonts.map((probe) => ({ ...probe, minimumTextFontSize: 12 })) }).join("\n"), /fallback font/i);
+  assert.match(validateRenderingReceipt({ ...receipt, authorityZoom: [] }).join("\n"), /S122.*zoom/i);
+  for (const field of ["textEquivalentAvailable", "noScriptAvailable", "pageContained", "sourceContained", "modalContained"]) {
+    assert.match(validateRenderingReceipt({ ...receipt, authorityZoom: receipt.authorityZoom.map((probe) => ({ ...probe, [field]: false })) }).join("\n"), /S122/i, field);
+  }
+  for (const field of ["scale", "sourceEffectiveFontSize", "modalEffectiveFontSize"]) {
+    assert.match(validateRenderingReceipt({ ...receipt, authorityZoom: receipt.authorityZoom.map((probe) => ({ ...probe, [field]: 1 })) }).join("\n"), /S122/i, field);
+  }
   assert.match(validateRenderingReceipt({ ...receipt, lineageZoom: null }).join("\n"), /lineage.*200 percent/i);
   assert.match(validateRenderingReceipt({ ...receipt, lineageZoom: { ...receipt.lineageZoom, modalEffectiveFontSize: 8 } }).join("\n"), /lineage.*200 percent/i);
   assert.match(validateRenderingReceipt({ ...receipt, lineageZoom: { ...receipt.lineageZoom, textEquivalentAvailable: false } }).join("\n"), /lineage.*200 percent/i);
@@ -173,7 +187,7 @@ test("S103 rejects compressed, incomplete, intersecting, and ambiguous layouts",
 });
 
 test("S103 requires exactly one passing layout observation per diagram", () => {
-  const observations = ["S082-D01", "S082-D02", "S082-D03", "S082-D04", "S112-D01", "S121-D01"].map((diagramId) => ({
+  const observations = ["S082-D01", "S082-D02", "S082-D03", "S082-D04", "S112-D01", "S121-D01", "S122-D01", "S122-D02"].map((diagramId) => ({
     ...validLayoutObservation,
     diagramId,
   }));
@@ -185,8 +199,8 @@ test("S103 requires exactly one passing layout observation per diagram", () => {
   };
   assert.deepEqual(validateLayoutReceipt(receipt), []);
   assert.match(validateLayoutReceipt({ ...receipt, layoutSentinel: "wrong" }).join("\n"), /sentinel/i);
-  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: observations.slice(1) }).join("\n"), /6 unique/i);
-  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: [...observations, observations[0]] }).join("\n"), /6 unique/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: observations.slice(1) }).join("\n"), /8 unique/i);
+  assert.match(validateLayoutReceipt({ ...receipt, layoutObservations: [...observations, observations[0]] }).join("\n"), /8 unique/i);
   assert.match(validateLayoutReceipt({ ...receipt, layoutFailures: ["measurement failed"] }).join("\n"), /measurement failed/i);
 });
 

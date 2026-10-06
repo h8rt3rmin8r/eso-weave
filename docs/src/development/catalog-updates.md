@@ -1,5 +1,9 @@
 # User-Initiated Catalog Updates
 
+The [catalog evidence lifecycle](catalog-candidate-pipeline.md#evidence-lifecycle-and-runtime-selection)
+shows how reviewed evidence reaches the explicit Live selection and rollback
+boundaries documented here.
+
 ESO Weave can select a verified user catalog without modifying the packaged
 catalog. Open **File > Catalog Update...** to review status, imported candidates,
 collector assistance, progress, rollback, and cleanup.

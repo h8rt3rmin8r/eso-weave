@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [048](plan-048.md) | Active | S121 messaging audit and encounter lineage, then remaining #223/#221 figures |
+| [048](plan-048.md) | Active | S122 bundles the remaining #221/#223 figures; owner merge pending |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five
@@ -30,8 +30,11 @@ S113 through S115 retain their reservations for later documentation work.
 
 S120 merged as #252. The owner then authorized S121 for #249 and #222, combining
 the full messaging repair with the formerly reserved S115 lineage figure.
-S113/#223 and S114/#221 remain separate; unused reservations are not completed
-implementation records.
+S121 merged as #253. On 2026-10-06 the owner authorized S122 to bundle the
+remaining #221 catalog lifecycle and #223 local-extension authority figures.
+S113/#223 and S114/#221 are historical unused reservations regrouped into S122;
+they are not completed implementation records. Plan048 completes after S122's
+required gates and owner merge.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence

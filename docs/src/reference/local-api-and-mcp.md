@@ -48,9 +48,9 @@ select another loopback port, so clients that automate discovery should use the
 published URLs. Reject discovery owned by a process or generation that is no
 longer current.
 
-The listener accepts only loopback Host values. Browser requests with an Origin
-must also identify a loopback origin. The service does not publish permissive
-CORS headers.
+The listener requires the exact effective loopback Host. When an Origin is
+present, it must be the HTTP or HTTPS origin for that same authority. The service
+does not publish permissive CORS headers.
 
 ## HTTP example
 
@@ -97,6 +97,59 @@ reading, tool listing, and `query_database`. It does not publish prompts,
 subscriptions, legacy SSE, or stdio transport.
 
 ## Operations
+
+The local extension authority map shows ownership and relationships; the operations table below remains
+the exact mapping between HTTP operations and MCP resources or tools.
+
+<figure class="docs-flow-diagram">
+
+![HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases](../assets/diagrams/local-extension-authority-map.svg)
+
+</figure>
+
+### Local authority text equivalent
+
+1. **Discovery is not authentication**. A local client locates the running
+   endpoints, process and generation through the interface or non-secret
+   discovery file. It copies the bearer credential separately from Settings
+   and sends it on every HTTP and MCP request, including initialization. Discovery
+   contains no credential and grants no access. Reject an old process or
+   generation and rediscover after restart.
+2. **One loopback service generation** owns the listener, runtime owner, router
+   and cancellation tree. Every operation passes the shared bearer guard, exact
+   effective Host and matching optional Origin checks, plus bounded request-body
+   handling. Both framings start and stop together. Shutdown cancels admitted
+   queries and is bounded to three seconds; discovery cleanup requires matching
+   process and generation ownership.
+3. **HTTP and MCP framing** are two adapters: HTTP adds JSON and status framing,
+   while stateless Streamable HTTP MCP wraps resources as JSON text and query
+   output as structured tool content. Both converge on **Shared canonical
+   authorities**. Their transport envelopes differ, but neither owns a separate
+   state model, database catalog or set of query limits.
+4. **Canonical player state** comes from one immutable revisioned snapshot
+   publisher, which also supplies capabilities. Compare the same
+   `snapshot_revision` and `service_generation` for transport parity; independent
+   requests may see a newer revision. Knowledge and freshness are separate, so
+   retained stale or unknown observations do not become current facts or input
+   authorization.
+5. **Shared bounded query executor** handles database inventory and one
+   parameterized read-only statement per query, using the same two-permit
+   concurrency limit. **Fixed catalog and encounters** are application-selected
+   database identities, never arbitrary client-supplied paths. Unavailable stores
+   remain listed with `available: false` and empty schema. Paths and internal
+   database definitions are not exposed by discovery.
+6. Query execution shares the bounds below: two concurrent operations, 2000 ms,
+   1000 rows, a 1048576-byte compact result envelope, 16384-byte SQL, 64 parameters
+   and a 65536-byte request body. Typed results are fully materialized and SQLite
+   statements and connections close before either transport serializes them;
+   a slow reader does not keep a database lock. Both adapters use the same
+   canonical result fields and error vocabulary. The fixed-store box is a query
+   authority relationship, not a second state update or automatic capture path.
+
+**No gameplay-action authority** is exposed: there is no remote listener, write
+operation, arbitrary database path or agent hosting. Prompts, subscriptions,
+legacy SSE and stdio are outside the existing interface. This map describes the
+current service; it adds no operations or usage restrictions.
 
 | Purpose | HTTP | MCP | Result |
 | --- | --- | --- | --- |
