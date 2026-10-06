@@ -109,7 +109,7 @@ Logging follows:
 
 `structured event -> global level and input-suppression filter -> bounded in-memory ring -> optional monthly file sink`
 
-The Live Log reads the ring after its dropdown has applied and persisted the
+The Application Log reads the ring after its dropdown has applied and persisted the
 global captured level used by both the ring and optional file sink.
 
 Documentation follows a separate read-only path:
@@ -157,8 +157,11 @@ default UI summaries do not reproduce raw payload values.
 
 Only explicit user commands inside ESO change encounter authority. The desktop
 has no binding, generated-input, clipboard, Pixel Bus, or SavedVariables command
-path. Its controller presentation is read-only and always labeled last-saved or
-historical because the file can lag current in-game state.
+path. Its controller presentation is read-only and labeled **Last saved recording
+state** from the last successfully imported saved file. Refresh and failed
+imports keep that older summary; it can predate the latest disk save or selected
+environment. The displayed **Saved channel** identifies the imported snapshot,
+not current in-game activity.
 
 Current addon-v3 schema-v2 captures include normalization profile version 1.
 The pure replay verifier derives only from that bounded profile and raw
@@ -217,7 +220,8 @@ capturing, interrupted, and failed. Mid-combat activation begins from an exact
 than fabricating callback values. Reload or relog recovery trusts only the last
 durably flushed request, marks an interruption, resumes only valid continuous
 authority, and never retries a failed session automatically. Native encounter-log
-qualification remains isolated under issue #190.
+qualification remains separate and provisional; historical issue #190 records
+its contract without proving platform behavior.
 
 Both importers parse the shared outer root through one crate-private restricted
 table grammar, validate its schema and addon version, and then select only their

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="1530" viewBox="0 0 400 1530" role="img" focusable="false" aria-labelledby="encounter-lineage-title encounter-lineage-desc" data-flow-direction="top-down">
+  <title id="encounter-lineage-title">Encounter data and result lineage</title>
+  <desc id="encounter-lineage-desc">Explicit addon recording saves ordered observations. Import validates versions, replay and declared loss before immutable original storage. A compatible kind-specific catalog supplies definitions. Observed metrics use s069-v1 and separate provisional prompts use s090-v1 evidence gates. Native combat logs remain provisional.</desc>
+  <rect width="400" height="1530" rx="12" fill="#0e1116" stroke="#65758b"/>
+  <defs><marker id="lineage-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/></marker></defs>
+  <text x="200" y="38" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#e6edf3">Where encounter results come from</text>
+
+  <rect data-node="observations" data-stage="1" x="20" y="70" width="360" height="155" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="200" y="101" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Ordered addon observations</text>
+  <text x="200" y="131" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Single fight or continuous session</text>
+  <text x="200" y="157" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Session ordinal, then source sequence</text>
+  <text x="200" y="183" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Save in ESO, then explicit desktop import</text>
+  <text x="200" y="209" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Selected raw values stay exact and local</text>
+  <path data-edge="observations-validate" data-from="observations" data-to="validation" d="M200 225 V285" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
+
+  <rect data-node="validation" data-stage="2" x="20" y="285" width="360" height="180" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="200" y="316" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Validation and loss</text>
+  <text x="200" y="346" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Supported capture and controller versions</text>
+  <text x="200" y="372" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Check ordering, identity and declared gaps</text>
+  <text x="200" y="398" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Replay current complete data before storage</text>
+  <text x="200" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#f7c3c3">Invalid batch: preserve prior history</text>
+  <text x="200" y="450" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Accepted loss stays visible as incomplete</text>
+  <path data-edge="validation-storage" data-from="validation" data-to="storage" d="M200 465 V525" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
+
+  <rect data-node="storage" data-stage="3" x="20" y="525" width="360" height="155" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+  <text x="200" y="556" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Immutable original data</text>
+  <text x="200" y="586" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">encounters.sqlite, separate from catalog</text>
+  <text x="200" y="612" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Source-byte and canonical-content SHA-256</text>
+  <text x="200" y="638" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Exact repeat: reuse; changed identity: reject</text>
+  <text x="200" y="664" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Rebuilding results never rewrites originals</text>
+  <path data-edge="storage-catalog" data-from="storage" data-to="catalog" d="M200 680 V740" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
+
+  <rect data-node="catalog" data-stage="4" x="20" y="740" width="360" height="155" rx="8" fill="#1c2530" stroke="#2dd4bf" stroke-width="2"/>
+  <text x="200" y="771" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Kind-specific catalog lookup</text>
+  <text x="200" y="801" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Live / PTS and API must match</text>
+  <text x="200" y="827" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Ability IDs use abilities; effect IDs use effects</text>
+  <text x="200" y="853" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#f2b03c">Unknown IDs stay unresolved</text>
+  <text x="200" y="879" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Catalog version and semantic hash recorded</text>
+  <path data-edge="catalog-metrics" data-from="catalog" data-to="metrics" d="M200 895 V955" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
+
+  <rect data-node="metrics" data-stage="5" x="20" y="955" width="360" height="155" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+  <text x="200" y="986" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Versioned observed metrics</text>
+  <text x="200" y="1016" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Projection schema 1, algorithm s069-v1</text>
+  <text x="200" y="1042" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Damage, healing, share, uptime and casts</text>
+  <text x="200" y="1068" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Missing duration: rates unavailable, not zero</text>
+  <text x="200" y="1094" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Loss and unresolved definitions stay visible</text>
+  <path data-edge="metrics-prompts" data-from="metrics" data-to="prompts" d="M200 1110 V1170" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
+
+  <rect data-node="prompts" data-stage="6" x="20" y="1170" width="360" height="180" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
+  <text x="200" y="1201" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#e6edf3">Separate provisional recommendations</text>
+  <text x="200" y="1231" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Policy s090-v1 checks compatible metrics</text>
+  <text x="200" y="1257" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Duration, casts, quality, loss and known IDs</text>
+  <text x="200" y="1283" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Qualify or suppress prompts when needed</text>
+  <text x="200" y="1309" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">At most two review questions, no input action</text>
+  <text x="200" y="1335" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#f2b03c">No Combat Metrics parity claim</text>
+
+  <rect x="20" y="1410" width="360" height="90" rx="8" fill="#3a1d22" stroke="#f87171" stroke-width="2"/>
+  <text x="200" y="1440" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#f7c3c3">Native combat logs: provisional</text>
+  <text x="200" y="1465" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#e6edf3">Separate candidate, outside this supported flow</text>
+  <text x="200" y="1489" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#e6edf3">Not application diagnostic logs or addon saves</text>
+</svg>

@@ -1,5 +1,90 @@
 # Encounter Data and Metrics
 
+Encounter History contains **imported copies of fights recorded by ESO Weave
+Data** on this computer. It first shows observed results, then separately
+qualified review questions. It does not display a live fight or start recording.
+For setup, mode selection, saving, import and clearing, follow
+[Encounter Capture](../features/encounter-capture.md#install-and-choose-a-mode).
+
+**Catalog** means game-data definitions for recorded IDs, such as abilities and
+effects. A catalog is separate from your fight recordings. **SavedVariables**
+means the game's saved addon data, which ESO writes on `/reloadui`, logout or
+exit. **Application Log** and **File Logging** contain application diagnostics.
+ESO's native combat-log files belong to a separate provisional import route.
+
+## Encounter evidence lineage
+
+<figure class="docs-flow-diagram">
+
+![Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts](../assets/diagrams/encounter-evidence-lineage.svg)
+
+</figure>
+
+### Encounter lineage text equivalent
+
+1. **Ordered addon observations** begin after an explicit in-game recording
+   request. Single mode records one fight; continuous mode records ordered fights
+   in one bounded session. The session's encounter ordinal orders fights, and
+   source sequence orders observations within each fight. Selected callback
+   values are retained exactly and locally, including names and identifiers when
+   ESO supplies them. Save the addon data in ESO, then explicitly import the
+   saved file on desktop. The disk snapshot can lag the current in-game state.
+2. **Validation and loss** check supported capture, controller and normalization
+   versions, session membership, identity, ordering, boundaries and declared
+   missing observations. Current complete addon-v3 schema-v2 recordings are
+   independently replayed from original observations and their normalization
+   profile before storage; their derived event stream must match. Legacy
+   recordings remain importable with replay unavailable. Partial recordings
+   (including mid-combat start or stop), declared loss or clock discontinuity
+   make replay indeterminate. Invalid batches preserve
+   prior history. Accepted incomplete recordings retain exact loss ranges and
+   interruption reasons; missing observations never become fabricated data.
+3. **Immutable original data** enters the user's `encounters.sqlite`, separate
+   from the game-data catalog. Original source-file bytes and canonical recording
+   content have separate SHA-256 identities. Session and encounter identity,
+   source versions and per-row canonical format stay attached to the recording.
+   An exact repeat is skipped; changed content under an existing identity is
+   rejected. Rebuilding results never changes original bytes. The user may
+   explicitly delete imported records; there is no automatic pruning.
+4. **Kind-specific catalog lookup** requires a schema-verified catalog with the
+   recording's exact Live or PTS channel and ESO API version. Ability IDs resolve
+   only as abilities and effect IDs only as effects, even if their numbers match.
+   Unknown IDs stay unresolved and visible. Catalog schema, version and semantic
+   SHA-256 identify the definitions used. A later compatible catalog can resolve
+   an unknown ID without rewriting a recording or changing observed values.
+   Missing, invalid or incompatible definitions leave original summaries
+   available while calculation remains unavailable.
+5. **Versioned observed metrics** use projection schema 1 and algorithm
+   `s069-v1` to calculate outgoing damage per second, effective healing per
+   second, ability damage share, effect uptime and cast order. Each result carries
+   its source sequence range, algorithm and quality. Loss means **Incomplete
+   observations**, not complete combat knowledge. Missing or zero duration makes
+   rates unavailable rather than zero; unresolved definitions remain qualified.
+   The original-data and catalog identities make the results reproducible.
+6. **Separate provisional recommendations** apply policy `s090-v1` only after
+   metrics. Supported projection and algorithm versions, consistent quality and
+   loss, at least ten seconds and three casts, and known targets gate the prompts.
+   Loss below ten percent qualifies prompts; loss at or above ten percent
+   suppresses them. Unknown IDs qualify known-target prompts and exclude unknown
+   targets; unknown abilities with at least 25 percent of observed damage
+   suppress the damage-concentration prompt only. The bounded result contains
+   at most two review questions about damage concentration and effect uptime.
+   **Review prompts available**, **Review prompts have limitations**, and
+   **Review prompts unavailable** describe the policy outcome. If analysis passes
+   its checks but produces no questions, **No review prompts for this recording**
+   avoids implying that an available or limited prompt is actually shown. The
+   adjacent reasons explain omitted targets or unmet thresholds. Prompts repeat
+   relevant qualifications and source/version identities. They do not establish
+   a cause, promise improvement, prove Combat Metrics parity or generate input.
+
+**Native combat-log ingestion remains provisional.** ESO's native encounter-log
+files are a separate candidate, outside this supported saved-addon sequence.
+Documented API controls do not establish file durability, timing or complete
+capture parity. Native logs are also separate from application diagnostic logs.
+The figure does not promote that candidate to a supported import workflow.
+
+## Implementation history and detailed contracts
+
 S069 defines the local encounter-analysis boundary: what ESO Weave collects, how
 that data remains private and reproducible, and which claims still require live
 comparison. S075 implements the explicitly armed, bounded addon capture. S076
@@ -67,14 +152,16 @@ non-executing S076 import contract.
 Opening history does not create a missing store. Raw summaries remain visible
 when the active catalog is missing, invalid, or incompatible. Selecting one
 summary rebuilds its S077 projection in memory against the current catalog path
-and displays algorithm and catalog versions, hashes, complete or degraded
-quality, exact loss ranges, known coverage, and every unknown numeric ID. All
+and displays algorithm and catalog versions, hashes, complete or incomplete
+observations, exact loss ranges, known coverage, and every unknown numeric ID. All
 values are labeled observed, and unavailable denominators remain unavailable
 rather than becoming zero. Import, listing, calculation, and deletion run on a
 serialized background worker so large captures do not block the GUI.
 
 The desktop can display validated controller metadata only as **Last saved
-capture state** or historical evidence. It cannot select a mode, toggle capture,
+recording state**, from the last successfully imported saved file. Refresh and
+failed imports retain that older summary; it can predate the newest disk save or
+selected-environment change, so check **Saved channel**. It cannot select a mode, toggle capture,
 write live SavedVariables, or acknowledge the current addon state. Current
 requested and effective state is available through `/ewencounter status` inside
 ESO.
@@ -142,8 +229,9 @@ effect, power, slot, weapon-pair, life-state, boss, and quickslot callbacks plus
 the API reads used for slot, boss-health, frame-rate, and latency normalization.
 Every callback scalar and future scalar argument is retained in positional tagged
 form. API reads retain ordered inputs and outputs. Executed Lua 5.1 tests prove
-this repository contract. Live event completeness and same-parse parity remain
-issues #129 and #131.
+this repository contract. They do not establish live event completeness or
+same-parse parity. Historical issues #129 and #131 are tracking records, not
+proof of those observations.
 
 Current addon-v3 captures carry normalization profile version 1. It supplies the
 runtime numeric constants needed to classify combat results and validate boss and
@@ -323,7 +411,7 @@ arrays to already be in authoritative sequence order, so S077 consumes that
 stricter validated form rather than accepting the S069 spike's provisional
 presentation-order variant.
 
-## Combat Metrics parity roadmap
+## Combat Metrics comparison boundary
 
 Primary evidence is pinned to ESO API 101050, LibCombat commit
 `80817e6929c7626832f9b9114d3b12bad8d642c1`, and Combat Metrics commit
@@ -331,16 +419,17 @@ Primary evidence is pinned to ESO API 101050, LibCombat commit
 event vocabulary and raw-before-derived architecture.
 
 The synthetic fixture proves only contract determinism. It does not prove
-equivalence to Combat Metrics on a real fight. A separate verification issue
-owns a same-parse live comparison, declared tolerances, representative storage
-measurements, and retention guidance.
+equivalence to Combat Metrics on a real fight. Such a claim would require a
+same-parse comparison, declared tolerances, representative storage measurements
+and retention evidence. Historical tracking issue disposition does not supply
+that evidence.
 
-Implementation work proceeds in this order: [addon capture](https://github.com/h8rt3rmin8r/eso-weave/issues/132),
+Implementation was delivered in this order: [addon capture](https://github.com/h8rt3rmin8r/eso-weave/issues/132),
 [bounded import and local persistence](https://github.com/h8rt3rmin8r/eso-weave/issues/133),
 [versioned calculation](https://github.com/h8rt3rmin8r/eso-weave/issues/134),
 [quality-aware UI](https://github.com/h8rt3rmin8r/eso-weave/issues/135), then
 [optional recommendations](https://github.com/h8rt3rmin8r/eso-weave/issues/136).
-[Live parity verification](https://github.com/h8rt3rmin8r/eso-weave/issues/131)
-follows the capture, import, and calculation path. Each stage has native GitHub
-dependencies so later product behavior cannot weaken capture integrity or
-local-data boundaries.
+[Live parity tracking](https://github.com/h8rt3rmin8r/eso-weave/issues/131)
+documents a separate comparison contract. The implemented capture, import and
+calculation path does not depend on running a field comparison, and later
+presentation cannot weaken capture integrity or local-data boundaries.

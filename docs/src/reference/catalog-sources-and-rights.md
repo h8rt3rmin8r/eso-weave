@@ -144,9 +144,11 @@ data stays separate and is never uploaded by default.
 
 The shared SavedVariables envelope is limited to 128 MiB. Catalog capture inside
 it remains limited to a 64 MiB snapshot, 500,000 records, and 64 KiB per string.
-These limits are provisional until issue
-[#129](https://github.com/h8rt3rmin8r/eso-weave/issues/129) records real size,
-serialization, stall, corruption, and logout or `/reloadui` flush evidence.
+These limits are provisional repository bounds. Real size, serialization,
+stall, corruption and logout or `/reloadui` durability require separate
+observations; historical
+[#129](https://github.com/h8rt3rmin8r/eso-weave/issues/129) describes that evidence
+contract, and its disposition is not proof of those results.
 
 S092 implements this boundary through the shared `EsoWeaveData` addon,
 its marker-gated lifecycle commands, and an importer that stages normalized JSON
@@ -154,7 +156,7 @@ without directly publishing SQLite. See the
 [bounded discovery collector](../development/discovery-collector.md) for the
 explicit workflow and limits.
 
-## Implementation handoff
+## Implemented source boundaries
 
 - The compiler in [#114](https://github.com/h8rt3rmin8r/eso-weave/issues/114)
   must retain source snapshot, record identity, channel, API version, locale,
@@ -168,7 +170,8 @@ explicit workflow and limits.
 - The candidate pipeline in
   [#117](https://github.com/h8rt3rmin8r/eso-weave/issues/117) composes those
   boundaries into immutable redacted review evidence without activating a
-  catalog. Selection and rollback remain issue #118 work.
+  catalog. [User-initiated catalog selection and rollback](../development/catalog-updates.md)
+  implement the separately confirmed workflow from issue #118.
 
-Field experiments in #129 may narrow coverage or adjust provisional limits. They
-do not block these implementation contracts and cannot silently rewrite them.
+Future measured evidence may narrow coverage or adjust provisional limits. It
+does not block these implementation contracts and cannot silently rewrite them.

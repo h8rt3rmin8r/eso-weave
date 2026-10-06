@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S120 adds selected Live/PTS client and numeric addon API observations, with
   bounded revision-pinned sources and persistent supported, unsupported, or
   unknown diagnostics for both companion packages (issue #251).
+- S121 audits and repairs encounter recording, saved-data import, addon setup,
+  catalog collection and application-log messaging across desktop, in-game
+  commands and public/bundled help. Instructions distinguish current game state
+  from the last successfully imported save and explain each stop, clear, delete
+  and removal scope.
+- Accessible encounter-data lineage figure connects ordered original observations,
+  validation and declared loss, immutable storage, kind-specific catalog lookup,
+  versioned metrics and separately qualified provisional review prompts.
 
 ### Fixed
 
@@ -32,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unknown. A scoped constitution 5.0.1 wording correction reconciles existing
   S100-S102 PixelBeacon evidence with desktop-owned sequencing and synthesis.
   Repository fixtures cover the repair; installed real-game behavior is unobserved.
+- 2026-10-05: S121 groups issues #249 and #222, preserves historical unused S115
+  reservation traceability and leaves #221/#223 separate. Existing recording,
+  schema, ownership, retention and input behavior remain unchanged. Documentation
+  policy and headless rendering scripts expand their governed inventory and
+  lineage/zoom coverage for the owned SVG; no workflow or runtime dependency changes.
 
 ## [0.17.2] - 2026-09-23
 

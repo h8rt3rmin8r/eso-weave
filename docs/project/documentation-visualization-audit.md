@@ -40,7 +40,14 @@ load to warrant a full candidate record.
 Each issue owns one independently reviewable figure, its complete text
 equivalent, offline delivery, accessibility checks, policy coverage, and update
 triggers. None changes application behavior. Issue #222 must keep native-log
-ingestion explicitly provisional while #190 remains open.
+ingestion explicitly provisional; issue disposition alone does not establish
+its qualification evidence.
+
+S112 implemented the troubleshooting figure from #220. S121 implements #222
+with the owned encounter-lineage SVG, complete nearby equivalent, policy
+inventory, six-diagram render/topology matrices and dedicated 200 percent
+readability probe. The original S111 decision inventory remains the historical
+approval record. #221 and #223 remain separate implementation handoffs.
 
 ## Cluster resolution
 

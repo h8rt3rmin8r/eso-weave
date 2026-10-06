@@ -2,7 +2,7 @@ local ADDON_NAME = "EsoWeaveData"
 local MODULE_NAMESPACE = ADDON_NAME .. "Catalog"
 local COLLECTOR_VERSION = 1
 local SCHEMA_VERSION = 1
-local COLLECTOR_CHECKSUM = "63292440be3b3020065d26189ff4cf0daa17ea5ad0ca183562e06fe1e1ee3f1b"
+local COLLECTOR_CHECKSUM = "6c90fe89eaeb6bdc746d9da50f2516e360fd9279c399c5a52594327647a39a68"
 
 local MAX_RECORDS_PER_TICK = 64
 local MAX_MILLISECONDS_PER_TICK = 4
@@ -25,7 +25,7 @@ local CATEGORY_ORDER = {
 }
 
 local function message(text)
-    d("[ESO Weave Collector] " .. text)
+    d("[ESO Weave Data: Catalog] " .. text)
 end
 
 local function addWarning(text)
@@ -120,7 +120,7 @@ local function setFailure(reason)
     EsoWeaveDataSaved.catalog.cancellation_reason = reason
     EsoWeaveDataSaved.catalog.finished_at = tostring(GetTimeStamp())
     runtime = nil
-    message("Capture failed: " .. reason)
+    message("Catalog collection failed because a game-data read or collection limit stopped it. The incomplete result cannot be imported. Use /ewcollect start live|pts to retry and replace it; encounter recordings and Encounter History are unchanged.")
 end
 
 local function addRecord(category, kind, stableId, fields)
@@ -412,7 +412,7 @@ local function finalizeCapture()
     EsoWeaveDataSaved.catalog.checkpoint = { adapter = #runtime.selected_categories, cursor = 0 }
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
     runtime = nil
-    message("Capture complete. Use /reloadui, logout, or exit before desktop import.")
+    message("Catalog collection complete. Use /reloadui, logout, or exit ESO to save addon data, then use the catalog-compiler import-collector workflow. This is game-definition data for maintainers, not an Encounter History recording.")
 end
 
 local function updateCapture()
@@ -420,7 +420,7 @@ local function updateCapture()
     if IsUnitInCombat("player") then
         EsoWeaveDataSaved.catalog.status = "paused"
         EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
-        message("Capture paused for combat. Use /ewcollect resume after combat.")
+        message("Catalog collection paused for combat. Use /ewcollect resume after combat to continue; it will not resume automatically.")
         return
     end
     local started = GetGameTimeMilliseconds()
@@ -467,21 +467,21 @@ end
 
 local function startCapture(arguments)
     if runtime then
-        message("A capture is already active.")
+        message("Catalog collection is already running or paused. Use /ewcollect status, resume after combat, or cancel before starting another collection.")
         return
     end
     if IsUnitInCombat("player") then
-        message("Capture cannot start in combat.")
+        message("Catalog collection cannot start during combat. Run /ewcollect start live|pts after combat.")
         return
     end
     local channel, selection = string.match(arguments or "", "^(%S+)%s*(.-)%s*$")
     if channel ~= "live" and channel ~= "pts" then
-        message("Choose the environment explicitly: /ewcollect start live|pts [categories].")
+        message("Choose the game environment: /ewcollect start live|pts [categories]. live is the normal game; pts is the Public Test Server. Omit categories to collect all five supported groups.")
         return
     end
     local selected, invalid = parseSelection(selection)
     if invalid then
-        message("Unknown category: " .. invalid)
+        message("Unknown catalog category. Use player-skills, crafted-abilities, item-sets, champion-skills, or companions-races-classes; omit categories for all five.")
         return
     end
     records = {}
@@ -516,26 +516,26 @@ local function startCapture(arguments)
         chunks = {},
     }
     EVENT_MANAGER:RegisterForUpdate(UPDATE_NAME, 10, updateCapture)
-    message("Capture started outside combat.")
+    message("Catalog collection started outside combat and replaces any previous inactive catalog collection. Encounter recordings and Encounter History are unchanged. Use /ewcollect status for progress.")
 end
 
 local function resumeCapture()
     if not runtime or EsoWeaveDataSaved.catalog.status ~= "paused" then
-        message("No paused in-session capture can be resumed.")
+        message("No catalog collection can be resumed in this game session. After a reload or logout, use /ewcollect start live|pts to start again and replace the previous collection.")
         return
     end
     if IsUnitInCombat("player") then
-        message("Capture cannot resume in combat.")
+        message("Catalog collection cannot resume during combat. Run /ewcollect resume after combat.")
         return
     end
     EsoWeaveDataSaved.catalog.status = "running"
     EVENT_MANAGER:RegisterForUpdate(UPDATE_NAME, 10, updateCapture)
-    message("Capture resumed.")
+    message("Catalog collection resumed. Use /ewcollect status for progress.")
 end
 
 local function cancelCapture()
     if not runtime then
-        message("No active capture to cancel.")
+        message("No running or paused catalog collection to cancel. Use /ewcollect status to inspect the retained result.")
         return
     end
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
@@ -543,31 +543,33 @@ local function cancelCapture()
     EsoWeaveDataSaved.catalog.cancellation_reason = "user-cancelled"
     EsoWeaveDataSaved.catalog.finished_at = tostring(GetTimeStamp())
     runtime = nil
-    message("Capture cancelled. The incomplete envelope cannot be imported.")
+    message("Catalog collection cancelled. Its incomplete result is retained in addon data and cannot be imported. A new /ewcollect start replaces it; /ewcollect clear confirm deletes it. Encounter recordings and Encounter History are unchanged.")
 end
 
 local function showStatus()
     local state = EsoWeaveDataSaved.catalog and EsoWeaveDataSaved.catalog.status or "idle"
     if runtime then
-        message("Status: " .. tostring(state) .. ", adapter " .. tostring(runtime.adapter)
-            .. "/" .. tostring(#runtime.selected_categories) .. ", records " .. tostring(#records))
+        message("Current catalog collection: " .. tostring(state) .. ", category group " .. tostring(runtime.adapter)
+            .. "/" .. tostring(#runtime.selected_categories) .. ", game-definition records collected: " .. tostring(#records)
+            .. ". Running collects data; paused requires /ewcollect resume after combat. This is not encounter recording.")
     else
-        message("Status: " .. tostring(state))
+        message("Retained catalog collection: " .. tostring(state)
+            .. ". Complete results need /reloadui, logout, or exit ESO before catalog-compiler import-collector. Incomplete results cannot be imported or resumed after reload. /ewcollect start live|pts replaces the retained collection; /ewcollect clear confirm deletes only catalog collection data.")
     end
 end
 
 local function clearCapture(arguments)
     if arguments ~= "confirm" then
-        message("Clear requires /ewcollect clear confirm.")
+        message("Use /ewcollect clear confirm to delete catalog collection data from this addon. Encounter recordings, Encounter History, staged files, and installed catalogs are unchanged. Use /reloadui, logout, or exit ESO to save the deletion.")
         return
     end
     if runtime then
-        message("Cancel the active capture before clearing catalog data.")
+        message("Use /ewcollect cancel before clearing a running or paused catalog collection. Then /ewcollect clear confirm deletes only its addon data.")
         return
     end
     EsoWeaveDataSaved.catalog = nil
     records = {}
-    message("Catalog capture cleared. Encounter data was preserved.")
+    message("Catalog collection data cleared from this addon. Encounter recordings, Encounter History, staged files, and installed catalogs are unchanged. Use /reloadui, logout, or exit ESO to save the deletion.")
 end
 
 local function command(arguments)
@@ -583,7 +585,8 @@ local function command(arguments)
     elseif verb == "clear" then
         clearCapture(rest)
     else
-        message("Use /ewcollect start live|pts [categories], /ewcollect status, /ewcollect resume, /ewcollect cancel, /ewcollect clear confirm, or /ewcollect help.")
+        message("Catalog collection gathers game-definition data for maintainers, not fight recordings. /ewcollect start live|pts [categories] replaces the previous inactive collection; live is the normal game and pts is the Public Test Server. Categories: player-skills, crafted-abilities, item-sets, champion-skills, companions-races-classes. Omit categories for all five.")
+        message("Use /ewcollect status for progress, /ewcollect resume after combat, /ewcollect cancel to retain an incomplete non-importable result, or /ewcollect clear confirm to delete only addon catalog data. Complete collection needs /reloadui, logout, or exit ESO before catalog-compiler import-collector. Encounter recordings and Encounter History are unchanged.")
     end
 end
 
@@ -591,7 +594,7 @@ local function onCombatState(_, inCombat)
     if inCombat and runtime and EsoWeaveDataSaved.catalog.status == "running" then
         EsoWeaveDataSaved.catalog.status = "paused"
         EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
-        message("Capture paused for combat.")
+        message("Catalog collection paused for combat. Use /ewcollect resume after combat to continue; it will not resume automatically.")
     end
 end
 
@@ -609,7 +612,7 @@ local function onLoaded(_, addonName)
     SLASH_COMMANDS["/ewcollect"] = command
     EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE .. "Combat", EVENT_PLAYER_COMBAT_STATE, onCombatState)
     EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE .. "Deactivate", EVENT_PLAYER_DEACTIVATED, onPlayerDeactivated)
-    message("Loaded. Collection is manual and local. Use /ewcollect help.")
+    message("Catalog module loaded. Game-definition collection is manual and local, intended for maintainers. Use /ewcollect help for collection, or /ewencounter help to record fights. Installing this addon does not start a new collection.")
 end
 
 EVENT_MANAGER:RegisterForEvent(MODULE_NAMESPACE, EVENT_ADD_ON_LOADED, onLoaded)

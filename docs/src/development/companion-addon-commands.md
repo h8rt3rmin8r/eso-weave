@@ -1,5 +1,11 @@
 # Companion-to-Addon Commands
 
+This page explains the maintainer control boundary. Player instructions for
+installing ESO Weave Data, recording, saving and importing are on
+[Encounter Capture](../features/encounter-capture.md). The desktop can show
+instructions and import ESO's saved addon data, while `/ewcollect` and
+`/ewencounter` commands are entered by the user inside ESO.
+
 S092 makes a no-go decision for real-time desktop-to-addon command ingress. The
 approved desktop command vocabulary is empty. Catalog and encounter capture
 remain explicit user actions through `/ewcollect` and `/ewencounter`.

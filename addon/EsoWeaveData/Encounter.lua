@@ -124,7 +124,43 @@ local function normalizationProfile(apiVersion)
 end
 
 local function message(text)
-    d("[ESO Weave Encounter] " .. text)
+    d("[ESO Weave Data: Recording] " .. text)
+end
+
+local SAVE_AND_IMPORT = "Use /reloadui, logout, or exit ESO to save addon data, then File > Encounter History > Import Saved Capture in ESO Weave for the matching Live or PTS environment."
+local PRESERVE_AND_CLEAR = "To keep finished fights, save and import them first: " .. SAVE_AND_IMPORT
+    .. " When ready to discard the addon copy, use /ewencounter clear confirm. Import is optional; clearing does not delete desktop history or catalog data."
+local MODE_LABELS = {
+    single = "single (one fight)",
+    continuous = "continuous (multiple fights until stopped)",
+}
+local STATE_LABELS = {
+    stopped = "off (stopped)",
+    waiting = "enabled, waiting for combat (waiting)",
+    capturing = "recording the current fight (capturing)",
+    interrupted = "recording interrupted (interrupted)",
+    failed = "recording stopped by an error (failed)",
+}
+local REASON_LABELS = {
+    ["storage-pressure"] = "recording storage limit reached",
+    ["encounter-limit"] = "maximum number of retained fights reached",
+    ["interruption-limit"] = "maximum number of interruption markers reached",
+    ["callback-failed"] = "a game-event handler failed",
+    ["state-invalid"] = "saved recording data is invalid",
+    ["clock-reset"] = "the game clock moved backwards",
+    ["terminal-reserve-exhausted"] = "space reserved for the end of a fight was exhausted",
+    ["capture-overflow"] = "recording capacity was exceeded",
+    ["user-stopped"] = "recording was stopped before the fight ended",
+    ["started-mid-combat"] = "recording began during combat and earlier events are missing",
+    ["unsupported-value"] = "a game-event value could not be stored",
+    ["record-limit"] = "the event size or count limit was reached",
+    ["byte-limit"] = "the recording storage limit was reached",
+    ["string-limit"] = "a game-event text value exceeded the size limit",
+    ["player-deactivated"] = "the player left the active game world",
+    ["runtime-interrupted"] = "the game UI reloaded or the session ended during recording",
+}
+local function reasonLabel(reason)
+    return (REASON_LABELS[reason] or "recording could not continue") .. " (" .. reason .. ")"
 end
 
 local function emptyController(selectedMode, selectedChannel)
@@ -501,7 +537,7 @@ local function failSession(reason, encounterOrdinal)
         saved.session.finished_at = tostring(GetTimeStamp())
     end
     touch()
-    message("Capture failed (" .. reason .. "). Retained encounter data was preserved.")
+    message("Recording stopped: " .. reasonLabel(reason) .. ". Retained fights were preserved. " .. PRESERVE_AND_CLEAR)
 end
 
 local function retainCapture(finished, ordinal)
@@ -1054,7 +1090,8 @@ local function beginCapture(startedMidCombat, ...)
         return
     end
     registerCaptureHandlers()
-    message("Capture started.")
+    message("Fight recording started" .. (startedMidCombat and "; earlier combat events are missing, so this fight will be partial. " or ". ")
+        .. "Use /ewencounter status for current status; /ewencounter toggle stops recording and keeps the data.")
 end
 
 local function stopSession(reason)
@@ -1095,7 +1132,8 @@ local function afterCombatFinished(mode, finished)
     local saved = state()
     if mode == "single" then
         stopSession(finished.status == "complete" and "single-complete" or "single-partial")
-        message("Single encounter capture stopped. Flush SavedVariables before desktop import.")
+        message("One-fight recording stopped. " .. (finished.status == "complete" and "The fight recording is complete. "
+            or "The fight recording is partial: " .. reasonLabel(finished.partial_reason) .. ". ") .. SAVE_AND_IMPORT)
         return
     end
     if not canBeginCapture(false) then
@@ -1105,7 +1143,9 @@ local function afterCombatFinished(mode, finished)
     saved.state = "waiting"
     saved.active_mode = "continuous"
     touch()
-    message("Encounter retained. Continuous capture is waiting for the next encounter.")
+    message("Fight recording retained" .. (finished.status == "complete" and ". "
+        or " with missing data: " .. reasonLabel(finished.partial_reason) .. ". ")
+        .. "Continuous recording is enabled and waiting for the next fight. /ewencounter toggle stops the session and keeps its recordings.")
 end
 
 local function handleCombatState(...)
@@ -1171,58 +1211,60 @@ end
 local function selectMode(arguments)
     local mode = string.match(arguments or "", "^(%S+)")
     if mode ~= "single" and mode ~= "continuous" then
-        message("Choose one mode: /ewencounter mode single|continuous.")
+        message("Choose /ewencounter mode single for one fight, or /ewencounter mode continuous for multiple fights until stopped.")
         return
     end
     local saved = state()
     if saved.requested_mode then
-        message("Turn capture off before changing mode.")
+        message("Use /ewencounter toggle to stop recording before changing mode. Stopping keeps recorded fights.")
         return
     end
     if saved.session or next(saved.records) ~= nil then
-        message("Import and clear the retained session before changing mode.")
+        message("A recording session is retained; clear the addon copy before changing mode. " .. PRESERVE_AND_CLEAR)
         return
     end
     saved.selected_mode = mode
     touch()
-    message("Selected " .. mode .. " encounter capture.")
+    message("Selected recording mode: " .. MODE_LABELS[mode] .. ". Choose /ewencounter channel live|pts, then /ewencounter toggle to enable it.")
 end
 
 local function selectChannel(arguments)
     local channel = string.match(arguments or "", "^(%S+)")
     if channel ~= "live" and channel ~= "pts" then
-        message("Choose a channel: /ewencounter channel live|pts.")
+        message("Choose /ewencounter channel live for the normal game, or /ewencounter channel pts for the Public Test Server. Match the game you are playing.")
         return
     end
     local saved = state()
     if saved.requested_mode then
-        message("Turn capture off before changing channel.")
+        message("Use /ewencounter toggle to stop recording before changing game environment. Stopping keeps recorded fights.")
         return
     end
     if saved.session or next(saved.records) ~= nil then
-        message("Import and clear the retained session before changing channel.")
+        message("A recording session is retained; clear the addon copy before changing game environment. " .. PRESERVE_AND_CLEAR)
         return
     end
     saved.selected_channel = channel
     touch()
-    message("Selected the " .. channel .. " encounter channel.")
+    message("Selected game environment: " .. (channel == "live" and "Live (normal game)" or "PTS (Public Test Server)")
+        .. ". /ewencounter toggle enables the chosen recording mode; it does not start automatically.")
 end
 
 local function startSession()
     local saved = state()
     if saved.state == "failed" then
-        message("Clear retained failed state before starting another session.")
+        message("The previous recording failed; clear its retained addon data before starting another session. " .. PRESERVE_AND_CLEAR)
         return
     end
     if saved.session or next(saved.records) ~= nil then
-        message("Import and clear the retained session before starting another.")
+        message("A recording session is retained; clear the addon copy before starting another. " .. PRESERVE_AND_CLEAR)
         return
     end
     if saved.selected_channel ~= "live" and saved.selected_channel ~= "pts" then
-        message("Choose live or pts before enabling capture.")
+        message("Before enabling recording, choose /ewencounter channel live for the normal game or /ewencounter channel pts for the Public Test Server.")
         return
     end
-    message("Enabling local encounter capture. Exact callback values can include names and identifiers.")
+    message("Enabling local fight recording: " .. MODE_LABELS[saved.selected_mode]
+        .. ". Recorded game events can include names and identifiers. Outside combat it waits for the next fight; during combat it starts immediately with earlier events missing.")
     local raw = GetGameTimeMilliseconds()
     local stamp = tostring(GetTimeStamp())
     local mode = saved.selected_mode
@@ -1253,54 +1295,55 @@ end
 local function toggle()
     local saved = state()
     if saved.state == "failed" then
-        message("Capture is failed. Import and clear retained evidence before retrying.")
+        message("Recording is off because the session failed. " .. PRESERVE_AND_CLEAR)
     elseif saved.requested_mode then
         if runtime then
             local finished = finishAndRetain("user-stopped", false)
             if not finished or state().state == "failed" then return end
         end
         stopSession("user-disabled")
-        message("Encounter capture stopped.")
+        message("Fight recording stopped; recorded data was kept. Stopping during a fight leaves that recording partial. " .. SAVE_AND_IMPORT)
     elseif saved.state == "stopped" then
         startSession()
     else
-        message("Encounter capture state cannot be toggled.")
+        message("Recording cannot be toggled in this state. Use /ewencounter status to see its current state and any interruption or error.")
     end
 end
 
 local function clear(arguments)
     local saved = state()
     if runtime or (saved.state ~= "stopped" and saved.state ~= "failed") then
-        message("Stop capture before clearing encounter data.")
+        message("Use /ewencounter toggle to stop recording before clearing addon recordings. Stopping keeps the data; clear confirm deletes it.")
         return
     end
     if string.match(arguments or "", "^%s*confirm%s*$") == nil then
-        message("Use /ewencounter clear confirm to delete the saved encounter envelope.")
+        message("Use /ewencounter clear confirm to delete all encounter recordings and recording state from this addon. Selected mode and environment, desktop history, and catalog data are kept. " .. SAVE_AND_IMPORT .. " Import first only if you want to keep the recordings.")
         return
     end
     local selectedMode = saved.selected_mode
     local selectedChannel = saved.selected_channel
     EsoWeaveDataSaved.encounter = emptyController(selectedMode, selectedChannel)
     state().stop_reason = "cleared"
-    message("Saved encounter session cleared locally.")
+    message("Addon encounter recordings and session state cleared. Selected mode and environment, desktop history, and catalog data were kept. Use /reloadui, logout, or exit ESO to save the deletion; /ewencounter toggle can start another session.")
 end
 
 local function showStatus()
     local saved = state()
     local session = saved.session
     local lastInterruption = saved.interruptions[#saved.interruptions]
-    message("Selected mode: " .. tostring(saved.selected_mode)
-        .. ", requested mode: " .. tostring(saved.requested_mode or "none")
-        .. ", active mode: " .. tostring(saved.active_mode or "none")
-        .. ", channel: " .. tostring(saved.selected_channel or "none")
-        .. ", state: " .. tostring(saved.state)
-        .. ", current encounter: " .. tostring(saved.current_encounter_id or "none")
-        .. ", session: " .. tostring(session and session.status or "none")
-        .. ", encounters: " .. tostring(session and session.completed_encounter_count or 0)
-        .. ", interruptions: " .. tostring(session and session.interruption_count or 0)
-        .. ", last interruption: "
-        .. tostring(lastInterruption and lastInterruption.reason or "none")
-        .. (saved.failure and ", failure: " .. saved.failure.reason or "") .. ".")
+    message("Current recording status: " .. (STATE_LABELS[saved.state] or "unknown")
+        .. "; selected mode: " .. (MODE_LABELS[saved.selected_mode] or "unknown")
+        .. "; enabled by your command (requested mode): " .. tostring(saved.requested_mode or "none")
+        .. "; currently effective mode (active mode): " .. tostring(saved.active_mode or "none")
+        .. "; game environment (channel): " .. tostring(saved.selected_channel or "none")
+        .. "; current fight (current encounter): " .. tostring(saved.current_encounter_id or "none")
+        .. "; retained session: " .. tostring(session and session.status or "none")
+        .. "; finished fights: " .. tostring(session and session.completed_encounter_count or 0)
+        .. "; partial fights: " .. tostring(session and session.degraded_encounter_count or 0)
+        .. "; interruptions: " .. tostring(session and session.interruption_count or 0)
+        .. "; last interruption: " .. (lastInterruption and reasonLabel(lastInterruption.reason) or "none")
+        .. (saved.failure and "; error: " .. reasonLabel(saved.failure.reason) or "")
+        .. ". This is current in-game status; desktop Last saved recording state can lag until /reloadui, logout, or exit ESO.")
 end
 
 local function command(arguments)
@@ -1315,17 +1358,17 @@ local function command(arguments)
             EsoWeaveDataSaved.encounter = emptyController(selectedMode, selectedChannel)
             state().stop_reason = "cleared"
             controllerInvalid = false
-            message("Invalid saved encounter state was explicitly cleared.")
+            message("Invalid addon recording data explicitly cleared. Selected mode and environment, desktop history, and catalog data were kept. Use /reloadui, logout, or exit ESO to save the deletion.")
         elseif verb == "status" then
-            message("Hard failure: state-invalid. Saved encounter state is inactive and preserved.")
+            message("Recording is inactive because saved addon data is invalid (state-invalid). Data was preserved. If you choose to discard it, /ewencounter clear confirm deletes only addon recording data; desktop history and catalog data are kept.")
         else
-            message("Saved encounter state is invalid and preserved. Use status or clear confirm.")
+            message("Saved addon recording data is invalid and preserved (state-invalid); recording is inactive. Use /ewencounter status for details, or /ewencounter clear confirm only if you choose to discard the addon recording data. Desktop history and catalog data are kept.")
         end
         return
     end
     if state().state_schema_version ~= STATE_SCHEMA_VERSION
         or state().addon_version ~= CONTROLLER_ADDON_VERSION then
-        message("Encounter state uses an unsupported version and was preserved.")
+        message("Saved addon recording data uses an unsupported version and was preserved. Recording commands, including clear, are unavailable for this data. Use a compatible ESO Weave Data version or keep a backup for recovery; desktop history and catalog data are unchanged.")
         return
     end
     if verb == "mode" then
@@ -1336,22 +1379,23 @@ local function command(arguments)
         toggle()
     elseif verb == "arm" then
         if rest ~= "live" and rest ~= "pts" then
-            message("Choose a channel: /ewencounter arm live|pts.")
+            message("Legacy one-fight start command: /ewencounter arm live|pts. live is the normal game; pts is the Public Test Server. Prefer mode single, channel live|pts, then toggle.")
             return
         end
         selectMode("single")
         selectChannel(rest)
         if not state().requested_mode then toggle() end
     elseif verb == "disarm" then
-        if state().requested_mode then toggle() else message("No encounter capture is active.") end
+        if state().requested_mode then toggle() else message("Recording is already off. Retained recordings were kept; use /ewencounter status to inspect the session.") end
     elseif verb == "stop" then
-        if state().requested_mode then toggle() else message("No encounter capture is active.") end
+        if state().requested_mode then toggle() else message("Recording is already off. Retained recordings were kept; use /ewencounter status to inspect the session.") end
     elseif verb == "status" then
         showStatus()
     elseif verb == "clear" then
         clear(rest)
     else
-        message("Use /ewencounter mode single|continuous, channel live|pts, toggle, status, clear confirm, or help.")
+        message("Fight recording: /ewencounter mode single records one fight; /ewencounter mode continuous records multiple fights until stopped. While off with no retained session, choose /ewencounter channel live (normal game) or pts (Public Test Server), then /ewencounter toggle to enable. /ewencounter status shows current in-game status; toggle stops and keeps data.")
+        message(SAVE_AND_IMPORT .. " /ewencounter clear confirm deletes only addon recordings and session state while off; selected mode and environment, desktop history, and catalog data are kept. Clearing before import discards the addon copy. Use /ewcollect help for the separate maintainer catalog workflow.")
     end
 end
 
@@ -2374,9 +2418,9 @@ local function onLoaded(_, addonName)
         guarded(handlePlayerDeactivated, ...)
     end)
     if controllerInvalid then
-        message("Loaded with state-invalid saved encounter evidence preserved and inactive.")
+        message("Recording module loaded with invalid saved addon data preserved and inactive (state-invalid). Use /ewencounter status for details; clear confirm is available only if you choose to discard the addon recordings.")
     else
-        message("Loaded. Select single or continuous mode, choose a channel, then use /ewencounter toggle.")
+        message("Recording module loaded. Use /ewencounter status for current recording status, including any resumed continuous session, or /ewencounter help for mode, environment, save, import, and clear instructions. Installing the addon does not start a new recording.")
     end
 end
 

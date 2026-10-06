@@ -415,7 +415,7 @@ fn status_line_beacon_maps_conditions() {
     let unmanaged = status_line_beacon(BeaconCondition::Unmanaged);
     assert_eq!(unmanaged.state_text, "Unmanaged (not modified)");
     assert_eq!(unmanaged.role, StatusRole::Warning);
-    assert!(unmanaged.tooltip.contains("Move or remove it manually"));
+    assert!(unmanaged.tooltip.contains("Back it up"));
     assert_eq!(
         status_line_beacon(BeaconCondition::NotInstalled).role,
         StatusRole::Muted
@@ -1955,11 +1955,11 @@ fn s093_data_addon_projection_keeps_lifecycle_and_runtime_facts_separate() {
     assert_eq!(current.runtime_line.state_text, "Available");
     assert_eq!(
         current.catalog_line.state_text,
-        "Unconfirmed (no live channel)"
+        "Unknown (check inside ESO)"
     );
     assert_eq!(
         current.encounter_line.state_text,
-        "Unconfirmed (no live channel)"
+        "Unknown (check inside ESO)"
     );
     assert_eq!(current.primary_action, Some(DataAddonPrimaryAction::Repair));
     assert!(current.uninstall_enabled);
@@ -1999,7 +1999,38 @@ fn s093_data_addon_projection_keeps_lifecycle_and_runtime_facts_separate() {
     );
     assert_eq!(unmanaged.primary_action, None);
     assert!(!unmanaged.uninstall_enabled);
-    assert!(unmanaged.remediation.contains("manually"));
+    assert!(unmanaged.remediation.contains("Back up"));
+}
+
+#[test]
+fn s121_data_addon_next_steps_explain_in_game_enablement_and_saved_data_boundary() {
+    use eso_weave::game::GameRuntime;
+    let installed = data_addon_view(
+        Some(DataAddonStatus::ManagedUpToDate),
+        true,
+        GameRuntime::Active,
+        false,
+        None,
+    );
+    assert!(installed.remediation.contains("Add-Ons"));
+    assert!(installed.remediation.contains("/ewencounter status"));
+    let reload = data_addon_view(
+        Some(DataAddonStatus::ManagedUpToDate),
+        true,
+        GameRuntime::Active,
+        true,
+        None,
+    );
+    assert!(reload.remediation.contains("/reloadui"));
+    let missing = data_addon_view(
+        Some(DataAddonStatus::NotInstalled),
+        true,
+        GameRuntime::Inactive,
+        false,
+        None,
+    );
+    assert!(missing.remediation.contains("enable"));
+    assert!(missing.remediation.contains("Add-Ons"));
 }
 
 #[test]
@@ -2113,7 +2144,7 @@ fn s093_resolution_failure_retains_last_known_data_addon_state() {
         .data_addon
         .operation_error
         .as_deref()
-        .is_some_and(|message| message.contains("last known lifecycle state is retained")));
+        .is_some_and(|message| message.contains("last known installation state")));
 }
 
 #[test]
@@ -2167,11 +2198,9 @@ fn s093_unmanaged_data_addon_rejects_stale_mutation_intents() {
     let after = model.view();
     assert_eq!(after.data_addon.ownership_line.state_text, "Unmanaged");
     assert_eq!(after.data_addon.reload_line.state_text, "Not required");
-    assert!(after
-        .data_addon
-        .operation_error
-        .as_deref()
-        .is_some_and(|message| message.contains("target is unmanaged")));
+    assert!(after.data_addon.operation_error.as_deref().is_some_and(
+        |message| message.contains("could not be recognized as an ESO Weave-managed copy")
+    ));
 }
 
 #[test]

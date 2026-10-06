@@ -659,7 +659,9 @@ fn encounter_only_rewrites_do_not_advance_catalog_freshness_or_provenance() {
     let error = service
         .build_collector_candidate(&capture, &boundary, &CancellationToken::new(), |_| {})
         .unwrap_err();
-    assert!(error.to_string().contains("collector capture is unchanged"));
+    assert!(error
+        .to_string()
+        .contains("The saved addon data has not changed"));
 }
 
 #[test]

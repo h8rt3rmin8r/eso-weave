@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [048](plan-048.md) | Active | S120 recovery priority, then reserved S113 through S115 documentation figures |
+| [048](plan-048.md) | Active | S121 messaging audit and encounter lineage, then remaining #223/#221 figures |
 
 Plans 039 and 040 completed the documentation presentation and encounter
 recommendation programs. Plan 041 completed when v0.16.0 shipped with all five
@@ -28,7 +28,12 @@ time, beginning with the S112 troubleshooting decision tree.
 The owner-approved S120 recovery bundle interrupts the remaining figure sequence;
 S113 through S115 retain their reservations for later documentation work.
 
-Installed v0.15.1 verification in issue #110, catalog-field verification in
-issue #129, live Combat Metrics verification in issue #131, and native-log
-verification in issue #190 remain independent Release verification work. They
-do not block the Plan 048 figure sequence.
+S120 merged as #252. The owner then authorized S121 for #249 and #222, combining
+the full messaging repair with the formerly reserved S115 lineage figure.
+S113/#223 and S114/#221 remain separate; unused reservations are not completed
+implementation records.
+
+Field-verification issues #110, #129, #131 and #190 were closed as not planned
+under the owner's no-field-verification direction. Their closure is not evidence
+of installed behavior or live parity. Native-log ingestion remains provisional
+and does not block the repository-backed figure work.

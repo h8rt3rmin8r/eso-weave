@@ -54,7 +54,7 @@ PixelBeacon evidence of ESO controls.
 Writes are coalesced. A change marks the relevant store dirty and one write occurs
 after the configured settling interval.
 
-Window position and size, System and State disclosure, and Live Log height are
+Window position and size, System and State disclosure, and Application Log height are
 layout preferences. Closing the window or choosing Exit forces pending window
 geometry to the session store so a final move or resize is not lost.
 
@@ -63,7 +63,7 @@ geometry to the session store so a final move or resize is not lost.
 | Value | Store | Restart behavior |
 | --- | --- | --- |
 | Modal settings, keybindings, Skills configuration | `config.json` | Restored; see Settings for current live versus restart timing |
-| Theme, Always on Top, stale-retention interval, disclosure, Live Log height | `config.json` | Restored |
+| Theme, Always on Top, stale-retention interval, disclosure, Application Log height | `config.json` | Restored |
 | Window geometry, suspension, Fishing request, Auto Potion request, API-version cache | `state.json` | Restored, but input still requires fresh safety evidence |
 | Current game and controller observations | Neither | Re-established from current runtime evidence |
 | Retained HUD snapshot, stale cause, age, and deadline | Neither | Process-local only; never restored after ESO Weave exits |

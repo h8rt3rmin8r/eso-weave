@@ -4,6 +4,11 @@ ESO Weave can select a verified user catalog without modifying the packaged
 catalog. Open **File > Catalog Update...** to review status, imported candidates,
 collector assistance, progress, rollback, and cleanup.
 
+The **catalog** is game-data definitions used to identify abilities, effects and
+other recorded IDs. Updating it does not import fights or change encounter
+recording. For that workflow, use
+[Encounter Capture](../features/encounter-capture.md).
+
 No update begins automatically. The bounded startup worker checks Live version
 evidence, discovers local candidates, verifies a saved user selection, and falls
 back to the bundled catalog without delaying the first window. Live and PTS are
@@ -45,9 +50,16 @@ the collected categories and the exclusion or one-way pseudonymization of
 account and character identity. The module uses only public addon API results
 and writes its own subtree beneath the shared SavedVariables root.
 
-After choosing **Begin capture wait**, complete a save boundary in ESO with
+Install and enable **ESO Weave Data** in the selected Live or PTS environment,
+reload ESO, then run `/ewcollect start live` (or `pts`) and
+`/ewcollect status` inside the game. Wait for completion. Combat pauses collection
+until you leave combat and run `/ewcollect resume`. Cancelling retains an
+incomplete collection; starting a later inactive run replaces the previous
+collection. These commands affect catalog data, not encounter recording.
+
+After choosing **Watch for saved catalog data**, save the completed collection in ESO with
 `/reloadui`, logout, or exit. ESO Weave does not claim to read unflushed or
-in-memory state. **Build from flushed capture** requires a later, changed, stable,
+in-memory state. **Build from saved catalog data** requires a later, changed, stable,
 complete S071 envelope; parses it as restricted data rather than Lua; never
 executes or uploads it; and sends it through the S073 pipeline. The active Live
 catalog is the zero-removal baseline, so a partial capture cannot silently reduce
@@ -56,7 +68,9 @@ action.
 
 The modal never deletes the shared SavedVariables file. **How to clear catalog
 data** directs the user to `/ewcollect clear confirm` in ESO, which clears only
-the catalog subtree and preserves encounter state. Uninstall removes only the
+the catalog subtree and preserves encounter state. It also preserves imported
+history and the active catalog; save in ESO to write the cleared state to disk.
+Uninstall removes only the
 marker-owned ESO Weave Data package directory, so both data modules become
 unavailable until reinstall; it does not change PixelBeacon or delete the
 shared SavedVariables file.

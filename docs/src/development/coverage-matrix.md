@@ -28,7 +28,7 @@ together.
 | LOG-024, LOG-025 | [PixelBeacon](../features/pixelbeacon.md) | `BeaconStatus::Unmanaged`, ownership-gated lifecycle writers, managed in-place update, and bounded API-version upkeep; [S060](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/060-safety-boundaries/spec.md) unproven-target, unmanaged-manifest, and link-boundary coverage in the [PixelBeacon tests](https://github.com/h8rt3rmin8r/eso-weave/blob/main/tests/beacon.rs), plus App Model action tests |
 | CFG-001 through CFG-005 | [Configuration](../reference/configuration.md) | Settings and state ownership, migration, write scheduling, and geometry restoration |
 | DEF-005 | [Settings Reference](../reference/settings.md) | `FishingController::apply_config`, `PixelBusReader::apply_live_config`, `wait_for_live_config`, App Model runtime application, Fishing phase tests, reader update tests, and headless Interact Key coverage |
-| CFG-006, CFG-007 | [Logging](../reference/logging.md) | Global capture level, Live Log projection, ring eviction, files, and sink failure |
+| CFG-006, CFG-007 | [Logging](../reference/logging.md) | Global capture level, Application Log projection, ring eviction, files, and sink failure |
 | PLT-001, PLT-002 | [Scope and Platform Support](../concepts/scope-and-platform.md) | Windows, X11, XWayland, and pure Wayland capability boundaries |
 | REL-001 | [Installation](../getting-started/installation.md) | Platform packages, permissions, update, removal, and checksums |
 | REL-002, REL-003 | [Release and Packaging](release-and-packaging.md) | Stable release state sequence and separation from the maintainer command ritual |

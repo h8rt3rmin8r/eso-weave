@@ -44,6 +44,19 @@ const DESKTOP_CONTROL_SOURCES: [&str; 9] = [
 ];
 const DESKTOP_UI_SOURCE: &str = include_str!("../src/app/ui.rs");
 
+#[test]
+fn s121_metric_loss_presentation_names_missing_observations_and_explains_reason() {
+    let loss = eso_weave::app::encounter_history::loss_labels(&[LossRange {
+        missing_sequence_from: 10,
+        missing_sequence_to: 11,
+        reason: "record-limit".into(),
+    }]);
+    assert!(loss[0].contains("Missing observations 10-11"));
+    assert!(loss[0].contains("recording limit"));
+    let quality = eso_weave::app::encounter_history::quality_label(MetricQuality::Degraded);
+    assert_eq!(quality, "Incomplete observations");
+}
+
 fn json_to_lua(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "nil".into(),
@@ -325,8 +338,11 @@ fn metric_presentation_names_unavailable_and_exact_degraded_loss() {
     let view = metric_presentation("Observed DPS", &result);
     assert_eq!(view.label, "Observed DPS");
     assert_eq!(view.value, "Unavailable");
-    assert_eq!(view.quality, "Degraded");
-    assert_eq!(view.loss, vec!["Sequences 10-11 (capture-overflow)"]);
+    assert_eq!(view.quality, "Incomplete observations");
+    assert_eq!(
+        view.loss,
+        vec!["Missing observations 10-11 (recording limit reached; code: capture-overflow)"]
+    );
 }
 
 #[test]
@@ -479,12 +495,14 @@ fn rendered_history_exposes_quality_and_requires_delete_confirmation() {
         .click_accesskit();
     settle(&mut harness);
     harness.get_by_label("Observed DPS");
-    harness.get_by_label("Degraded");
-    harness.get_by_label("Sequences 10-11 (capture-overflow)");
+    harness.get_by_label("Incomplete observations");
+    harness.get_by_label(
+        "Missing observations 10-11 (recording limit reached; code: capture-overflow)",
+    );
     harness.get_by_label("Provisional Recommendations");
-    harness.get_by_label("Evidence status: Suppressed");
+    harness.get_by_label("Review prompts unavailable");
     harness
-        .get_by_label("Advice is suppressed because the evidence did not pass every s090-v1 gate.");
+        .get_by_label("No review prompts are shown because this recording does not meet the analysis requirements. The reasons below explain what is missing; observed metrics remain separate.");
     assert!(harness
         .query_by_role_and_label(egui::accesskit::Role::Button, "Apply Recommendation")
         .is_none());
@@ -508,7 +526,7 @@ fn rendered_history_exposes_quality_and_requires_delete_confirmation() {
         .click_accesskit();
     settle(&mut harness);
     assert_eq!(harness.state().encounter_history_count(), 0);
-    harness.get_by_label("No local encounters. Import a terminal capture to begin.");
+    harness.get_by_label("No imported encounters yet. Record inside ESO, save addon data with /reloadui, logout, or exit, then choose Import Saved Capture.");
 }
 
 #[test]
@@ -617,10 +635,10 @@ fn rendered_batch_import_groups_ordinals_and_labels_last_saved_state() {
 
     assert_eq!(harness.state().encounter_history_count(), 2);
     harness.get_by_label("2 encounters imported.");
-    harness.get_by_label("Last saved capture state");
-    harness.get_by_label("Continuous mode | Waiting | revision 7");
+    harness.get_by_label("Last saved recording state");
+    harness.get_by_label("Continuous fights mode | Waiting for combat | revision 7");
     harness.get_by_label(
-        "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state.",
+        "This is the addon's state from the last successfully imported saved file, not current activity. Refresh and failed imports keep this older summary; check Saved channel below. Enter /ewencounter status inside ESO for current recording status.",
     );
     harness.get_by_label("Encounter 1");
     harness.get_by_label("Encounter 2");
@@ -643,7 +661,9 @@ fn rendered_batch_import_groups_ordinals_and_labels_last_saved_state() {
     settle(&mut harness);
     assert_eq!(harness.state().encounter_history_count(), 3);
     harness.get_by_label("1 encounter imported.");
-    assert!(harness.query_by_label("Last saved capture state").is_none());
+    assert!(harness
+        .query_by_label("Last saved recording state")
+        .is_none());
 }
 
 #[test]
@@ -666,18 +686,51 @@ fn desktop_action_and_configuration_surfaces_have_zero_encounter_command_ingress
             );
         }
     }
-    for source in DESKTOP_CONTROL_SOURCES {
-        assert!(!source.contains("/ewencounter"));
+    // AppModel remediation and UI may contain instructions, but configuration,
+    // routing, input actions and bindings expose no recording command.
+    for (index, source) in DESKTOP_CONTROL_SOURCES.into_iter().enumerate() {
+        if index != 1 {
+            assert!(!source.contains("/ewencounter"));
+        }
     }
     assert!(DESKTOP_UI_SOURCE.contains(
-        "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state."
+        "This is the addon's state from the last successfully imported saved file, not current activity. Refresh and failed imports keep this older summary; check Saved channel below. Enter /ewencounter status inside ESO for current recording status."
     ));
-    for forbidden in [
+    // Static instructions tell the player what to type inside ESO. The worker
+    // exposes disk/history operations only, never a game-command sender.
+    for instruction in [
         "/ewencounter toggle",
-        "/ewencounter mode",
-        "/ewencounter channel",
+        "/ewencounter mode single",
+        "/ewencounter channel live",
     ] {
-        assert!(!DESKTOP_UI_SOURCE.contains(forbidden));
+        assert!(DESKTOP_UI_SOURCE.contains(instruction));
+    }
+    let worker_source = include_str!("../src/app/encounter_history.rs");
+    let command_surface = worker_source
+        .split("enum HistoryCommand {")
+        .nth(1)
+        .unwrap()
+        .split("#[derive")
+        .next()
+        .unwrap();
+    for operation in [
+        "Refresh",
+        "Import",
+        "LoadDetail",
+        "DeleteOne",
+        "DeleteAll",
+        "Stop",
+    ] {
+        assert!(command_surface.contains(operation));
+    }
+    for forbidden in [
+        "Toggle",
+        "StartCapture",
+        "StopCapture",
+        "SetMode",
+        "SendCommand",
+    ] {
+        assert!(!command_surface.contains(forbidden));
     }
 }
 
@@ -695,7 +748,7 @@ fn recommendation_presentation_keeps_provisional_advice_and_citations_explicit()
 
     let view = recommendation_presentation(&detail.recommendations);
     assert_eq!(view.heading, "Provisional Recommendations");
-    assert_eq!(view.status, "Evidence status: Ready");
+    assert_eq!(view.status, "Review prompts available");
     assert_eq!(view.items.len(), 2);
     assert_eq!(view.items[0].title, "Review dominant observed damage share");
     assert!(view.items[0].body.contains("Ability 100"));
@@ -706,6 +759,52 @@ fn recommendation_presentation_keeps_provisional_advice_and_citations_explicit()
     assert!(view.items[0].citation.contains("s069-v1"));
     assert!(view.items[0].citation.contains("s070-live-1"));
     assert!(view.items[0].citation.contains("s090-v1"));
+}
+
+#[test]
+fn s121_empty_prompts_and_suppressed_loss_do_not_claim_thresholds_or_visible_advice() {
+    let root = tempfile::tempdir().unwrap();
+    let service = seeded_service_with_capture(root.path(), &qualified_capture());
+    let identity = EncounterIdentity::from(&service.snapshot().unwrap()[0]);
+    let mut projection = service.detail(&identity).unwrap();
+    projection.duration_ms = 9_000;
+    let report = eso_weave::recommendation::generate_recommendations(&projection);
+    assert_eq!(
+        report.availability,
+        eso_weave::recommendation::RecommendationAvailability::Suppressed
+    );
+    let loss = report
+        .reasons
+        .iter()
+        .find(|reason| {
+            reason.kind == eso_weave::recommendation::RecommendationReasonKind::DeclaredCaptureLoss
+        })
+        .unwrap();
+    assert!(!loss.message.contains("are shown"));
+    assert!(loss.message.contains("Any available prompts"));
+
+    projection.duration_ms = 10_000;
+    projection.catalog_join.known_ability_ids.clear();
+    projection.catalog_join.known_effect_ids.clear();
+    projection.catalog_join.unknown_ability_ids = vec![100];
+    projection.catalog_join.unknown_effect_ids = vec![200];
+    projection.catalog_join.unknown_ids = vec![100, 200];
+    let report = eso_weave::recommendation::generate_recommendations(&projection);
+    assert!(report.advice.is_empty());
+    assert!(report.reasons.iter().any(|reason| reason.kind
+        == eso_weave::recommendation::RecommendationReasonKind::UnknownTargetOmitted));
+    let view = recommendation_presentation(&report);
+    assert!(!view
+        .summary
+        .contains("No ability damage share or effect uptime met"));
+    assert!(view.summary.contains("omitted prompts or unmet thresholds"));
+    assert_eq!(view.status, "No review prompts for this recording");
+    let mut ready_empty = report.clone();
+    ready_empty.availability = eso_weave::recommendation::RecommendationAvailability::Ready;
+    assert_eq!(
+        recommendation_presentation(&ready_empty).status,
+        "No review prompts for this recording"
+    );
 }
 
 fn open_history_and_select(harness: &mut Harness<'static, EsoWeaveApp>) {
@@ -737,7 +836,7 @@ fn rendered_ready_and_qualified_recommendations_remain_separate_and_actionless()
     open_history_and_select(&mut ready);
     ready.get_by_label("Observed Metrics");
     ready.get_by_label("Provisional Recommendations");
-    ready.get_by_label("Evidence status: Ready");
+    ready.get_by_label("Review prompts available");
     ready.get_by_label("Review dominant observed damage share");
     ready.get_by_label("Review low observed effect uptime");
     assert!(ready
@@ -755,25 +854,128 @@ fn rendered_ready_and_qualified_recommendations_remain_separate_and_actionless()
     open_history_and_select(&mut qualified);
     qualified.get_by_label("Observed Metrics");
     qualified.get_by_label("Provisional Recommendations");
-    qualified.get_by_label("Evidence status: Qualified");
+    qualified.get_by_label("Review prompts have limitations");
     assert_eq!(
         qualified
-            .query_all_by_label("Provisional, qualified review prompt")
+            .query_all_by_label("Provisional review prompt with limitations")
             .count(),
         2
     );
     assert_eq!(
         qualified
             .query_all_by_label(
-                "Declared loss covers 1 of 12 source sequences; retained prompts are qualified."
+                "The recording is missing 1 of 12 observations. Any available prompts carry this limitation."
             )
             .count(),
         3
     );
     assert_eq!(
         qualified
-            .query_all_by_label("Sequences 10-10 (capture-overflow)")
+            .query_all_by_label(
+                "Missing observations 10-10 (recording limit reached; code: capture-overflow)"
+            )
             .count(),
         3
+    );
+}
+
+#[test]
+fn s121_wrapped_loss_diagnostics_are_fully_painted_at_minimum_width() {
+    let root = tempfile::tempdir().unwrap();
+    let mut capture: serde_json::Value = serde_json::from_str(CAPTURE).unwrap();
+    capture["last_sequence"] = 30.into();
+    capture["stored_event_count"] = 20.into();
+    capture["omitted_event_count"] = 10.into();
+    let events = capture["events"].as_array_mut().unwrap();
+    let mut end = events.last().unwrap().clone();
+    events.truncate(9);
+    for ordinal in 0..10 {
+        let sequence = 11 + ordinal * 2;
+        events.push(serde_json::json!({
+            "session_id": "session-1788998400-500000",
+            "encounter_id": "encounter-1788998400-1",
+            "sequence": sequence,
+            "monotonic_ms": 6000 + ordinal * 250,
+            "kind": "discontinuity",
+            "payload": {
+                "missing_sequence_from": sequence - 1,
+                "missing_sequence_to": sequence - 1,
+                "reason": "capture-overflow"
+            }
+        }));
+    }
+    end["sequence"] = 30.into();
+    events.push(end);
+    let service = seeded_service_with_capture(root.path(), &capture);
+    let mut harness = harness_with_size(service, Settings::default(), egui::vec2(360.0, 3000.0));
+    open_history_and_select(&mut harness);
+    harness
+        .get_by_label("How to record and import")
+        .click_accesskit();
+    for _ in 0..6 {
+        harness.step();
+    }
+    let labels = [
+        "Missing observations 10-10 (recording limit reached; code: capture-overflow)",
+        "Missing observations 12-12 (recording limit reached; code: capture-overflow)",
+    ];
+    harness.get_by_label(labels[0]).scroll_to_me();
+    for _ in 0..12 {
+        harness.step();
+    }
+    let first = harness.get_by_label(labels[0]).rect();
+    let second = harness.get_by_label(labels[1]).rect();
+    assert!(
+        first.height() > 20.0,
+        "fixture must exercise wrapping: {first:?}"
+    );
+    assert!(
+        second.top() >= first.bottom(),
+        "diagnostics overlap: {first:?} {second:?}"
+    );
+    fn inspect(shape: &egui::epaint::Shape, clip: egui::Rect, label: &str) -> Option<bool> {
+        match shape {
+            egui::epaint::Shape::Text(text) if text.galley.text() == label => {
+                let bounds = text.visual_bounding_rect();
+                Some(clip.contains_rect(bounds))
+            }
+            egui::epaint::Shape::Vec(shapes) => {
+                shapes.iter().find_map(|shape| inspect(shape, clip, label))
+            }
+            _ => None,
+        }
+    }
+    for label in labels {
+        let fully_visible = harness
+            .output()
+            .shapes
+            .iter()
+            .find_map(|clipped| inspect(&clipped.shape, clipped.clip_rect, label));
+        assert_eq!(
+            fully_visible,
+            Some(true),
+            "wrapped loss text is clipped: {label}"
+        );
+    }
+    harness.event(egui::Event::PointerMoved(first.center()));
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        phase: egui::TouchPhase::Move,
+        delta: egui::vec2(0.0, -250.0),
+        modifiers: egui::Modifiers::NONE,
+    });
+    for _ in 0..30 {
+        harness.step();
+    }
+    let last_label = "Missing observations 28-28 (recording limit reached; code: capture-overflow)";
+    let fully_visible = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|clipped| inspect(&clipped.shape, clipped.clip_rect, last_label));
+    assert_eq!(
+        fully_visible,
+        Some(true),
+        "last wrapped loss cannot be read after scrolling"
     );
 }

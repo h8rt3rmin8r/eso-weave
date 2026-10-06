@@ -11,6 +11,20 @@ const CAPTURE: &str =
 const LIVE_CATALOG: &str = "specs/070-catalog-compiler/fixtures/minimal-live.json";
 const PTS_CATALOG: &str = "specs/070-catalog-compiler/fixtures/minimal-pts.json";
 
+#[test]
+fn s121_missing_capture_diagnostic_explains_selected_source_and_save_action() {
+    let root = tempfile::tempdir().unwrap();
+    let service = EncounterHistoryService::new(root.path(), root.path().join("catalog.sqlite"));
+    let error = service
+        .import_current(root.path().join("missing.lua"), Channel::Live)
+        .unwrap_err();
+    assert_eq!(error.kind, HistoryDiagnosticKind::SourceUnavailable);
+    assert!(error.message.contains("saved addon data"));
+    assert!(error.message.contains("/reloadui"));
+    assert!(error.message.contains("Settings"));
+    assert!(!error.message.contains("terminal"));
+}
+
 fn json_to_lua(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "nil".into(),

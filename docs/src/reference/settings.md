@@ -49,7 +49,15 @@ requested or active, ESO Weave stops that session without sending another input.
 Start Fishing explicitly after the edit to use the new configuration. Applying
 an unchanged form does not interrupt a session.
 
-## PixelBeacon and Bus
+## Addons and Game Readings
+
+**Game Environment** selects the released **Live** game or **PTS** (Public Test
+Server) for addon installation and saved-data import. **AddOns Folder Override**
+points to that environment's existing AddOns directory when automatic discovery
+cannot locate it. These settings do not enable or load an addon inside ESO.
+PixelBeacon supplies current screen readings; ESO Weave Data separately records
+encounters and collects catalog definitions. Enable the needed package in ESO's
+Add-Ons menu and reload after file changes.
 
 | Setting | Choices and default | Effect |
 | --- | --- | --- |
@@ -83,14 +91,18 @@ Health, Magicka, and Stamina use their decoded integer percentages. Ultimate
 uses its exact `current / maximum` ratio without truncating an above-threshold
 value into eligibility.
 
-## Logging
+## Application Logging
+
+These settings capture ESO Weave troubleshooting events. They do not turn on
+encounter recording or ESO's native combat logs. For fight recordings, use
+[Encounter Capture](../features/encounter-capture.md).
 
 | Setting | Choices and default | Effect |
 | --- | --- | --- |
 | Log Level | OFF, ERROR, WARN, INFO (default), DEBUG, TRACE | Changes the global captured level immediately and persists it |
 | Write Log to File | Off by default | Adds or removes the monthly file sink immediately |
 
-The Live Log level selector controls this same persisted global capture level
+The Application Log level selector controls this same persisted global capture level
 for both the in-memory ring and optional file logging.
 
 ## Local API and MCP
@@ -123,7 +135,7 @@ events from the selected physical devices.
 
 Each Skills row has **Enabled**, **Weave**, **Override**, and **Delay (ms)**.
 Enabled, selected weave type, and delay override persist. **Cooldown** is a
-read-only observation. The System and State expanded preference, Live Log panel
+read-only observation. The System and State expanded preference, Application Log panel
 height, and window geometry also persist. System and State defaults expanded.
 
 The Running suspension, Fishing request, and Auto Potion request persist in

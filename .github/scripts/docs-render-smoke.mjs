@@ -17,6 +17,7 @@ const DIAGRAMS = [
   { id: "S082-D03", page: "development/state-machines.html", asset: "safety-recovery.svg", alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline" },
   { id: "S082-D04", page: "reference/pixel-bus-protocol.html", asset: "pixel-bus-validation.svg", alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals" },
   { id: "S112-D01", page: "getting-started/troubleshooting.html", asset: "troubleshooting-decision-tree.svg", alt: "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence" },
+  { id: "S121-D01", page: "reference/encounter-data-and-metrics.html", asset: "encounter-evidence-lineage.svg", alt: "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts" },
 ];
 const THEMES = ["navy", "light"];
 const VIEWPORTS = [320, 1280];
@@ -105,6 +106,11 @@ export function validateRenderingReceipt(receipt) {
       errors.push(`S086 ${diagram.asset} request requires status 200 and the SVG media type`);
     }
   }
+  const zoom = receipt?.lineageZoom;
+  if (!(zoom?.scale >= 1.99) || !zoom?.pageContained || !zoom?.sourceContained || !zoom?.modalContained
+      || !(zoom?.sourceEffectiveFontSize >= 14) || !(zoom?.modalEffectiveFontSize >= 14) || !zoom?.textEquivalentAvailable) {
+    errors.push("S121 encounter lineage requires readable source and modal labels, containment and a complete text equivalent at 200 percent zoom");
+  }
   if (Array.isArray(receipt?.failures) && receipt.failures.length > 0) errors.push(...receipt.failures.map((failure) => `S086 browser: ${failure}`));
   return [...new Set(errors)];
 }
@@ -150,7 +156,7 @@ export function validateLayoutReceipt(receipt) {
   const expectedIds = new Set(DIAGRAMS.map((diagram) => diagram.id));
   const actualIds = new Set(observations.map((observation) => observation?.diagramId));
   if (observations.length !== expectedIds.size || actualIds.size !== expectedIds.size || [...expectedIds].some((id) => !actualIds.has(id))) {
-    errors.push("S103 layout receipt requires five unique diagram observations");
+    errors.push(`S103 layout receipt requires ${expectedIds.size} unique diagram observations`);
   }
   for (const observation of observations) errors.push(...validateLayoutObservation(observation));
   if (Array.isArray(receipt?.layoutFailures) && receipt.layoutFailures.length > 0) {
@@ -687,6 +693,7 @@ return {
   connectorCount: connectorElements.length,
   labelCount: labels.length,
   visibleElementCount: visibleElements.length,
+  minimumTextFontSize: Math.min(...[...document.querySelectorAll("text")].map((element) => Number.parseFloat(getComputedStyle(element).fontSize))),
   metadataComplete,
   connectorsTracked,
   insideCanvas,
@@ -1034,6 +1041,46 @@ return {
   dialogHidden: dialog ? getComputedStyle(dialog).display === "none" : false,
   legacyChromeHidden: [...document.querySelectorAll(".checkbox-img, .img-wrapper")].every((element) => !visible(element)),
 };
+})()`;
+}
+
+function lineageZoomExpression(minimumTextFontSize) {
+  return `(async () => {
+const minimumTextFontSize = ${JSON.stringify(minimumTextFontSize)};
+const trigger = document.querySelector('figure.docs-flow-diagram .docs-figure-trigger');
+const source = trigger?.querySelector('img');
+const equivalent = document.querySelector('#encounter-lineage-text-equivalent');
+if (!trigger || !source || !equivalent) return null;
+await source.decode();
+const fontSize = minimumTextFontSize;
+const sourceRectangle = source.getBoundingClientRect();
+trigger.scrollIntoView({ block: 'center' });
+trigger.click();
+const dialog = document.querySelector('dialog[data-docs-figure-dialog]');
+const expanded = dialog?.querySelector('.docs-figure-dialog__image');
+const panel = dialog?.querySelector('.docs-figure-dialog__panel');
+if (!expanded || !panel) return null;
+await expanded.decode();
+await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const viewport = visualViewport;
+const modalRectangle = expanded.getBoundingClientRect();
+const panelRectangle = panel.getBoundingClientRect();
+const content = equivalent.parentElement;
+const textEquivalentAvailable = equivalent.getBoundingClientRect().height > 0
+  && ['Ordered addon observations', 'Validation and loss', 'Immutable original data', 'Kind-specific catalog lookup', 'Versioned observed metrics', 'Separate provisional recommendations', 'Native combat-log ingestion remains provisional'].every((phrase) => content.textContent.includes(phrase));
+const result = {
+  scale: viewport.scale,
+  pageContained: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+  sourceContained: sourceRectangle.width > 0 && sourceRectangle.width <= document.documentElement.clientWidth + 1,
+  modalContained: panelRectangle.left >= viewport.offsetLeft - 1 && panelRectangle.right <= viewport.offsetLeft + viewport.width + 1
+    && panelRectangle.top >= viewport.offsetTop - 1 && panelRectangle.bottom <= viewport.offsetTop + viewport.height + 1
+    && modalRectangle.width <= panelRectangle.width + 1,
+  sourceEffectiveFontSize: fontSize * sourceRectangle.width / source.naturalWidth * viewport.scale,
+  modalEffectiveFontSize: fontSize * modalRectangle.width / expanded.naturalWidth * viewport.scale,
+  textEquivalentAvailable,
+};
+dialog.close();
+return result;
 })()`;
 }
 
@@ -1499,7 +1546,10 @@ export async function run(siteRoot) {
     };
     const evaluateValue = async (expression, awaitPromise = false) => {
       const evaluated = await client.send("Runtime.evaluate", { expression, awaitPromise, returnByValue: true });
-      if (evaluated.exceptionDetails || evaluated.result?.value === undefined) throw new Error("browser figure journey evaluation failed");
+      if (evaluated.exceptionDetails || evaluated.result?.value === undefined) {
+        const detail = evaluated.exceptionDetails?.exception?.description ?? evaluated.exceptionDetails?.text ?? "missing return value";
+        throw new Error(`browser figure journey evaluation failed: ${detail.slice(0, 1200)}`);
+      }
       return evaluated.result.value;
     };
     const nextBrowserFrames = () => evaluateValue("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))", true);
@@ -1576,6 +1626,11 @@ export async function run(siteRoot) {
     await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
     await nextBrowserFrames();
     receipt.figureZoom = await evaluateValue(figureZoomExpression(FIGURE_CASES[1]), true);
+    await navigateToFigure({ page: "reference/encounter-data-and-metrics.html" });
+    await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+    await nextBrowserFrames();
+    const lineageLayout = receipt.layoutObservations.find((observation) => observation.diagramId === "S121-D01");
+    receipt.lineageZoom = await evaluateValue(lineageZoomExpression(lineageLayout?.minimumTextFontSize), true);
     await client.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
     await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 920, deviceScaleFactor: 1, mobile: false });
 

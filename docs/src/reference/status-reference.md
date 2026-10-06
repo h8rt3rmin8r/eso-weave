@@ -37,22 +37,28 @@ Observed numeric zero is different from all four states.
 | PixelBeacon Status: **Installed (outdated)** | The managed marker exists but the embedded version differs | Update the managed copy in place |
 | PixelBeacon Status: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
 | ESO Weave Data: **Not installed** | The data-addon package is absent | Choose **Install Data** when catalog or encounter workflows are needed |
-| ESO Weave Data: **Installed** with Ownership **Managed** and Compatibility **Current** | Exact marker, inventory, version, and embedded bytes match | No lifecycle action is required; Repair and Uninstall remain explicit choices |
-| ESO Weave Data: **Installed** with Compatibility **Update available** | Ownership is proven but package content differs | Choose **Update Data** or **Repair Data**, then follow reload guidance |
-| ESO Weave Data: Ownership **Unmanaged** | A target exists but ownership or safe shape cannot be proven | No mutation is offered; move or remove only `EsoWeaveData` manually |
+| ESO Weave Data: **Installed** with Addon Management **Managed** and Addon Package Version **Current** | Files match the bundled package; enablement and loading are separate | No package change needed; check ESO's Add-Ons menu and use in-game commands for recording |
+| ESO Weave Data: **Installed** with Addon Package Version **Update available** | ESO Weave can manage the files, but their content differs | Choose **Update Data** or **Repair Data**, then reload ESO |
+| ESO Weave Data: Addon Management **Unmanaged** | A folder exists, but ESO Weave cannot establish ownership or its expected file layout | No package change is offered; preserve any wanted files and move or remove only `EsoWeaveData` manually |
 | ESO Weave Data: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
-| Data Addon Enabled or Data Addon Loaded: **Unconfirmed** | No supported current-session account or addon-load source exists | Verify enablement in ESO; reload after lifecycle changes; do not infer from process state |
-| Data Addon Reload: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
-| Data Runtime: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
-| Catalog Collection: **Unconfirmed (no live channel)** | Desktop has no current-session catalog channel | Use `/ewcollect status`; disk SavedVariables remains flush-bound historical evidence |
-| Encounter Collection: **Last saved MODE / STATE** | A compatible bounded spool was read from the last disk flush | Historical evidence only; use `/ewencounter status` inside ESO for current mode and state |
-| Encounter Collection: **Unconfirmed (no saved state)** | No compatible last-saved controller fact is available | Verify and control capture inside ESO; never infer activity from process or package state |
-| Data Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
+| Enabled in ESO or Loaded in ESO: **Unconfirmed** | The desktop cannot read current in-game enablement or loading | Check ESO's Add-Ons menu, enable ESO Weave Data and reload after changes |
+| Reload Reminder: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
+| ESO Client: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
+| Catalog Collection: **Unknown (check inside ESO)** | The desktop cannot read current catalog collection | Run `/ewcollect status`; any file on disk describes the last ESO save |
+| Encounter Recording: **Unknown (check inside ESO)** | The desktop cannot observe current recording activity, even when a saved recording state exists | Run `/ewencounter status` inside ESO; a successful import may show the last saved recording state separately in Encounter History |
+| Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
 | PixelBeacon Signal: **Not detected** | Active game, no heartbeat seen | Enable/reload addon and expose overlay |
 | Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
+
+After a compatible saved-data import, **Encounter History** can show **Last saved
+recording state** with the saved mode, state and counts from the last successfully
+imported saved file. Refresh and failed imports retain that older summary, so it
+can predate the newest disk save or a selected-environment change. Check **Saved
+channel** in the summary. It is separate from the current-state row in System
+and State or Data Details.
 
 Maintainer review candidates have no application status row. Candidate generation
 cannot authenticate its origin. A user-approved candidate appears here only after
@@ -83,8 +89,10 @@ one combat period and stops; `continuous` retains one bounded session across
 combat gaps until explicit disablement or hard failure. Live authority belongs
 only to user commands inside ESO:
 
-- `stopped` means no capture request is effective. Select mode and channel, then
-  use `/ewencounter toggle`.
+- `stopped` means no capture request is effective. Mode/channel changes require
+  recording off and no retained session. If one remains, optionally save/import
+  wanted fights, then deliberately use `/ewencounter clear confirm` before
+  changing those selections. Use `/ewencounter toggle` to start the chosen mode.
 - `waiting` means single or continuous is enabled outside combat. Detailed
   handlers stay dormant until combat begins; toggle again to disable.
 - `capturing` means one encounter is active. A combat exit completes it;
@@ -97,9 +105,10 @@ only to user commands inside ESO:
 
 Mode, requested enablement, effective state, active channel, session identity,
 current encounter, last interruption, and failure are independent facts. The
-desktop may display only validated, bounded versions from the last saved spool,
-always under a **Last saved capture state** or historical label. It has no capture
-toggle or addon command ingress.
+desktop may display only validated, bounded versions from the last successfully
+imported saved file, always under **Last saved recording state**. Refresh or a
+failed import keeps that summary; its **Saved channel** can differ from the
+currently selected environment. It has no capture toggle or addon command ingress.
 
 The local icon cache exposes library lookup states for future interface work:
 

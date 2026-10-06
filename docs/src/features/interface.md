@@ -6,15 +6,15 @@ complete client contract is documented under [Local API and
 MCP](../reference/local-api-and-mcp.md).
 
 ESO Weave uses one resizable window with a menu bar, responsive dashboard, Skills
-region, and optional live log panel.
+region, and optional application log panel.
 
 | Region | Contents |
 | --- | --- |
-| Menu bar | Settings, Exit, Live Log, and the offline Documentation action |
+| Menu bar | Settings, Exit, Application Log, and the offline Documentation action |
 | Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, and one composed Quickslot classification, availability, and cooldown row |
 | System and State | Game/provider state, World State, ESO Weave state, PixelBeacon Status and Signal, first-class ESO Weave Data lifecycle and evidence, Fishing, and Auto Potion |
 | Skills | Slot label, enablement, weave type, timing override, effective delay, and cooldown |
-| Live Log | Recent structured events with a local level filter |
+| Application Log | Recent structured events with a local level filter |
 
 ## Responsive dashboard
 
@@ -34,7 +34,7 @@ The intrinsic minimum width never follows an expanding dashboard container, so a
 continuous drag can cross the responsive breakpoint without ratcheting the
 minimum width upward. The minimum follows content down when a row disappears,
 grows the window when content no longer fits without shrinking an operator-chosen
-size, and is capped at the display work area. With Live Log open, the minimum adds
+size, and is capped at the display work area. With Application Log open, the minimum adds
 the required width bonus and open-log reserve. Width-driven and collapse-driven
 transitions reserve pending content height before the log renders, preventing
 overlap.
@@ -51,20 +51,34 @@ marker guard and unmistakable uninstall confirmation.
 At most two lifecycle actions share a primary-then-secondary horizontal row.
 Every uninstall retains the managed-marker uninstall guard and confirmation.
 
-Choose **Data Details** beside **Data Addon Next Step** to open the complete
-evidence view. Its dedicated rows label ownership, compatibility, configured
-enablement, loading, reload requirement, ESO runtime, catalog collection,
-encounter collection, and the next safe step independently. Installed files
-never imply enabled or loaded. A running ESO process never implies loaded or
-collecting. Because the application has no live data-addon channel, those
-current-session facts remain **Unconfirmed** and explain the evidence gap
-instead of guessing. A compatible encounter spool may add a **Last saved capture
-state** summary with mode, state, session, and failure facts, but it remains
-historical and read-only. Mode selection and the one capture toggle exist only
-in ESO through `/ewencounter`; the desktop provides no command or
-SavedVariables-write path. Each row remains directly keyboard accessible and
-carries its own explanation. Closing the modal returns focus to the lifecycle
-surface.
+Choose **Data Details** beside **Addon Next Step** for package status and setup
+instructions. **Addon Management** says whether ESO Weave can manage the files;
+**Addon Package Version** compares them with the bundled package. **Enabled in
+ESO** and **Loaded in ESO** remain **Unconfirmed** because file
+installation and an active game process do not prove those facts. Check ESO's
+Add-Ons menu and reload after changes. **Reload Reminder** explains when that
+reload is needed, and **ESO Client** describes the game process only.
+
+**Catalog Collection** and **Encounter Recording** describe separate workflows.
+Their current state may be **Unknown (check inside ESO)**.
+For current status, run `/ewcollect status` or `/ewencounter status` inside ESO.
+After a compatible import, **Encounter History** may show **Last saved recording state**,
+from the last successfully imported saved file, not current activity.
+Refresh and failed imports keep this older summary. It can predate the newest
+disk save or a change to the selected environment; check **Saved channel** in
+the summary. System and State and Data Details do not replace their unknown
+current-recording row with it.
+The desktop does not send recording commands or write ESO's live addon data.
+Each row has the same explanation on hover and keyboard focus. Closing the
+modal returns focus to the lifecycle surface.
+
+**File > Encounter History** imports saved fights for later analysis. **Import
+Saved Capture** reads ESO's saved addon file for the selected environment;
+**Refresh** rereads imported desktop history. **Observed Metrics** precedes
+**Provisional Recommendations**, whose review prompts retain missing-data and
+unknown-definition qualifications. Delete confirmations identify the imported
+records removed and the ESO saved file, addon files, catalog and settings
+preserved. See [Encounter Capture](encounter-capture.md) for the full workflow.
 
 System and State defaults expanded. Its full header is accessible by pointer,
 keyboard, and assistive technology. Activating the header hides or restores the
@@ -101,9 +115,9 @@ condition is presented as numeric zero.
 
 By default, the last coherent Live HUD and player-state values remain visible
 for 120 seconds after ESO becomes inactive, runtime or focus evidence becomes
-unavailable, focus is lost, or the live signal disappears. A visible **HUD
-Freshness** row marks them **Stale**, names the cause, and reports their
-whole-second age without replacing the values. Fresh coherent observations
+unavailable, focus is lost, or the live signal disappears. The application logs
+the freshness transition without inserting a temporary row above the meters.
+Fresh coherent observations
 replace the snapshot immediately. At expiry, the ordinary **Game not active**
 or **Signal unavailable** presentation returns. **Stale Retention (seconds)** in
 Settings accepts 0 through 999; 0 clears immediately. Retention is display-only:
@@ -138,7 +152,7 @@ blue, purple, or dot color alone.
 
 ## Live log and settings
 
-The live log uses an always-available in-memory ring buffer, colorizes events by
+The application log uses an always-available in-memory ring buffer, colorizes events by
 level, and autoscrolls while at the bottom. Its level selector currently updates
 and persists the global captured level used by both the ring and optional file
 sink. Its panel is resizable between a six-line readable minimum and the space
@@ -169,7 +183,7 @@ tolerance, and sampling intervals; AddOns override and environment; logging;
 theme; and always-on-top behavior.
 Appearance also includes the bounded Stale Retention interval for the Live HUD.
 
-Open **File > Settings** to edit configuration, **View > Live Log** to diagnose
+Open **File > Settings** to edit configuration, **View > Application Log** to diagnose
 events, and **File > Exit** to close after pending geometry is flushed. The
 [Settings Reference](../reference/settings.md) lists every control. The
 [Status Reference](../reference/status-reference.md) explains every field.

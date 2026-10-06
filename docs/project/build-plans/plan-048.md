@@ -17,6 +17,16 @@ After S120, resume documentation planning. Issue #249 and issue #222 are the
 proposed next coherent bundle; record any regrouping at that kickoff. Reserved
 S113-S115 numbers and remaining figure issues are preserved and are not complete.
 
+## Owner-approved S121 Regrouping (2026-10-05)
+
+After the S120 squash merge (#252), the owner authorized S121
+(`121-encounter-logging-and-addon-clarity`) for the full #249 messaging audit
+and #222 encounter-lineage figure. The figure moves from the historical unused
+S115 reservation into S121; that reservation is not a completed implementation.
+S113/#223 and S114/#221 remain separate. No new issue arrived at the post-merge
+assessment. Preserve full audit scope, automated safety/documentation gates,
+official PR, two-review-round cap and owner merge. No field check or release.
+
 ## Reserved Figure Sequence
 
 Sequence:
@@ -36,8 +46,9 @@ complete text equivalent, exact update authorities, policy coverage, and
 browser evidence. These slices improve comprehension only. They do not change
 application, addon, automation, data, transport, or release behavior.
 
-Installed release verification issues #110, #129, #131, and #190 remain
-independent and do not block repository-verifiable figure work.
+Field-verification issues #110, #129, #131 and #190 were closed as not planned
+under the owner's direction. Closure does not prove installed behavior or live
+parity. Native-log ingestion remains provisional and does not block these figures.
 
 The official S112 implementation record is
 [PR #225](https://github.com/h8rt3rmin8r/eso-weave/pull/225).

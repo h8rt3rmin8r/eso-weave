@@ -19,15 +19,15 @@ pub const FISHING_TITLE: &str = "Fishing";
 pub const BEACON_TITLE: &str = "PixelBeacon Status";
 pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon Signal";
 pub const DATA_ADDON_TITLE: &str = "ESO Weave Data";
-pub const DATA_ADDON_OWNERSHIP_TITLE: &str = "Data Addon Ownership";
-pub const DATA_ADDON_COMPATIBILITY_TITLE: &str = "Data Addon Compatibility";
-pub const DATA_ADDON_ENABLED_TITLE: &str = "Data Addon Enabled";
-pub const DATA_ADDON_LOADED_TITLE: &str = "Data Addon Loaded";
-pub const DATA_ADDON_RELOAD_TITLE: &str = "Data Addon Reload";
-pub const DATA_ADDON_RUNTIME_TITLE: &str = "Data Runtime";
+pub const DATA_ADDON_OWNERSHIP_TITLE: &str = "Addon Management";
+pub const DATA_ADDON_COMPATIBILITY_TITLE: &str = "Addon Package Version";
+pub const DATA_ADDON_ENABLED_TITLE: &str = "Enabled in ESO";
+pub const DATA_ADDON_LOADED_TITLE: &str = "Loaded in ESO";
+pub const DATA_ADDON_RELOAD_TITLE: &str = "Reload Reminder";
+pub const DATA_ADDON_RUNTIME_TITLE: &str = "ESO Client";
 pub const DATA_ADDON_CATALOG_TITLE: &str = "Catalog Collection";
-pub const DATA_ADDON_ENCOUNTER_TITLE: &str = "Encounter Collection";
-pub const DATA_ADDON_REMEDIATION_TITLE: &str = "Data Addon Next Step";
+pub const DATA_ADDON_ENCOUNTER_TITLE: &str = "Encounter Recording";
+pub const DATA_ADDON_REMEDIATION_TITLE: &str = "Addon Next Step";
 pub const CATALOG_TITLE: &str = "Catalog";
 pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game Installation";
@@ -43,35 +43,35 @@ pub const STATUS_TOOLTIP: &str =
 pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
-    "PixelBeacon install state and API compatibility of both bundled companion addons. Open Data Details for the numeric game API, client release, and next action; package installation does not prove current API support or loading.";
+    "PixelBeacon sends current game state to ESO Weave for weaving and fishing. This row shows installation and game API support, not whether ESO loaded the addon. Open Data Details for both addons' game-version support and next steps.";
 pub const BEACON_UNMANAGED_TOOLTIP: &str =
-    "ESO Weave did not modify this unmanaged PixelBeacon target. Move or remove it manually before using Install.";
+    "This PixelBeacon folder is not a verified ESO Weave-managed copy. Back it up and move it out of AddOns before using Install; ESO Weave will not change it.";
 pub const DATA_ADDON_TOOLTIP: &str =
-    "Filesystem installation of the managed ESO Weave Data package. This does not prove that ESO enabled or loaded it.";
+    "ESO Weave Data records encounters and collects catalog game-data definitions. Installed means its files are present; enable it in ESO's Add-Ons menu and reload before using it. PixelBeacon supplies current gameplay readings separately.";
 pub const DATA_ADDON_OWNERSHIP_TOOLTIP: &str =
-    "Managed means the exact package inventory and ESO Weave ownership marker were verified. Unmanaged targets are never modified.";
+    "Managed means ESO Weave recognizes and can update this installed copy. Unmanaged means the folder could not be verified as an ESO Weave-managed copy and will not be changed.";
 pub const DATA_ADDON_COMPATIBILITY_TOOLTIP: &str =
-    "Whether the installed data-addon package matches this ESO Weave build.";
+    "Whether the installed files match the addon bundled with this ESO Weave version. Game API support is listed separately; matching files do not prove the addon is loaded.";
 pub const DATA_ADDON_ENABLED_TOOLTIP: &str =
-    "ESO Weave has no supported current-account source for this fact. Verify ESO Weave Data in ESO's Add-Ons menu.";
+    "The desktop cannot read this account's current enablement setting. Check that ESO Weave Data is enabled in ESO's Add-Ons menu.";
 pub const DATA_ADDON_LOADED_TOOLTIP: &str =
-    "A running ESO process does not prove the addon loaded. Reload ESO after lifecycle changes.";
+    "The desktop cannot confirm that ESO loaded this addon. Enable ESO Weave Data, run /reloadui, then use /ewencounter status or /ewcollect status inside ESO.";
 pub const DATA_ADDON_RELOAD_TOOLTIP: &str =
-    "Required means run /reloadui or relog before expecting ESO to use the lifecycle change.";
+    "Required means the addon files changed while ESO may still be running old code. Run /reloadui or log out and back in. No reminder does not confirm that the addon is enabled or loaded.";
 pub const DATA_ADDON_RUNTIME_TOOLTIP: &str =
-    "ESO process availability only. It does not prove the data addon is enabled, loaded, or collecting.";
+    "Whether the ESO game client is running. This does not tell the desktop whether ESO Weave Data is enabled, loaded, or recording.";
 pub const DATA_ADDON_CATALOG_TOOLTIP: &str =
-    "Catalog activity has no live desktop channel. SavedVariables evidence is flush-bound and must be treated as historical.";
+    "Catalog collection gathers game-data definitions, not combat recordings. Use /ewcollect status inside ESO for current activity. The desktop sees only the last save of ESO's addon data (SavedVariables), written after /reloadui, logout, or exit.";
 pub const DATA_ADDON_ENCOUNTER_TOOLTIP: &str =
-    "Encounter activity has no live desktop channel. SavedVariables evidence is flush-bound and must be treated as historical.";
+    "Use /ewencounter status inside ESO for current recording activity. The desktop sees only the last save of ESO's addon data (SavedVariables), written after /reloadui, logout, or exit. Import that saved capture through File > Encounter History.";
 pub const DATA_ADDON_REMEDIATION_TOOLTIP: &str =
-    "The next safe lifecycle step based on the currently available evidence.";
+    "The next installation or setup action supported by the information available. Recording controls are commands entered inside ESO.";
 pub const DATA_ADDON_DETAILS_TOOLTIP: &str =
-    "Open every ESO Weave Data evidence fact with its dedicated explanation.";
+    "Explain ESO Weave Data setup, game-version support, and which status can be checked only inside ESO.";
 pub const BEACON_SIGNAL_TOOLTIP: &str =
     "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
 pub const CATALOG_TOOLTIP: &str =
-    "The immutable local game-data catalog version. An unavailable catalog leaves unrelated ESO Weave features working.";
+    "The local catalog contains game-data definitions used to interpret recorded ability and effect IDs. It is separate from your recordings and application logs. If unavailable, encounter results may be unavailable while unrelated features keep working.";
 pub const GAME_INSTALLATION_TOOLTIP: &str =
     "Whether ESO is installed and which distribution platform supplied the authoritative evidence.";
 pub const GAME_RUNTIME_TOOLTIP: &str =
@@ -107,19 +107,19 @@ pub const SUSPEND_TOOLTIP: &str = "Suspend or resume the weave engine.";
 pub const FISHING_TOGGLE_LABEL: &str = "Fishing";
 pub const FISHING_TOGGLE_TOOLTIP: &str = "Start or stop the fishing routine.";
 pub const BEACON_INSTALL_TOOLTIP: &str =
-    "Install or update the PixelBeacon addon in your AddOns folder.";
+    "Install PixelBeacon in the selected ESO AddOns folder to provide current gameplay readings. Enable it in ESO's Add-Ons menu and run /reloadui if ESO is open.";
 pub const BEACON_UPDATE_TOOLTIP: &str =
-    "Reinstall the PixelBeacon addon: remove the managed copy and install the current one. Enabled only when the addon is installed.";
+    "Replace the ESO Weave-managed PixelBeacon copy with the bundled version. Enable it in ESO's Add-Ons menu and run /reloadui if ESO is open. Saved recordings and imported history are retained.";
 pub const BEACON_UNINSTALL_TOOLTIP: &str =
-    "Remove the PixelBeacon addon. Only a folder marked as managed by ESO Weave is deleted.";
+    "Remove only the ESO Weave-managed PixelBeacon addon files. Current gameplay readings stop after ESO reloads; ESO Weave Data, saved recordings, and imported history are retained.";
 pub const DATA_ADDON_INSTALL_TOOLTIP: &str =
-    "Install the managed ESO Weave Data package in the configured AddOns folder.";
+    "Install ESO Weave Data in the selected Live or PTS AddOns folder. Enable it in ESO's Add-Ons menu, then run /reloadui if ESO is already open.";
 pub const DATA_ADDON_UPDATE_TOOLTIP: &str =
-    "Atomically replace an outdated managed data addon with the current package.";
+    "Replace an outdated ESO Weave-managed addon with this version's bundled copy. Existing saved recordings and imported history are retained. Reload ESO afterward if it is open.";
 pub const DATA_ADDON_REPAIR_TOOLTIP: &str =
-    "Atomically reinstall the managed data addon without deleting the working copy first.";
+    "Reinstall this version's ESO Weave Data files when the managed copy needs repair. Existing saved recordings and imported history are retained. Reload ESO afterward if it is open.";
 pub const DATA_ADDON_UNINSTALL_TOOLTIP: &str =
-    "Remove only an ESO Weave-managed data addon after confirmation.";
+    "Remove the ESO Weave-managed addon files. ESO's saved recordings, collected catalog data, and imported history on this computer are retained. Reload ESO afterward if it is open.";
 
 // Weapon-bar section.
 pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
@@ -246,10 +246,10 @@ pub const SKILL_COLUMNS: [(&str, &str); 6] = [
 ];
 
 // Live log.
-pub const LOG_TITLE: &str = "Live Log";
-pub const LOG_TOOLTIP: &str = "Recent application events. Drag the divider above to resize.";
+pub const LOG_TITLE: &str = "Application Log";
+pub const LOG_TOOLTIP: &str = "Recent ESO Weave diagnostic events for troubleshooting, separate from ESO combat logs and encounter recordings. Drag the divider above to resize.";
 pub const LOG_FILTER_TOOLTIP: &str =
-    "Capture and show events at or above this level. The saved choice also applies to file logging.";
+    "Record and show application diagnostics at this level or higher. Your saved choice also applies to file logging, not encounter recording or ESO's native combat logs.";
 
 // Menu.
 pub const MENU_FILE: &str = "File";
@@ -263,11 +263,11 @@ pub const MENU_ENCOUNTER_HISTORY: &str = "Encounter History...";
 pub const MENU_CATALOG_UPDATE_TOOLTIP: &str =
     "Review imported Live catalog candidates, install one explicitly, or roll back.";
 pub const MENU_ENCOUNTER_HISTORY_TOOLTIP: &str =
-    "Import, inspect, and delete private encounter observations stored only on this computer.";
+    "Import saved ESO Weave Data recordings, view their results, and delete imported copies stored on this computer.";
 pub const MENU_SETTINGS_TOOLTIP: &str = "Open settings.";
 pub const MENU_EXIT: &str = "Exit";
-pub const MENU_LOG_TOGGLE: &str = "Live Log";
-pub const MENU_LOG_TOGGLE_TOOLTIP: &str = "Show or hide the live log panel.";
+pub const MENU_LOG_TOGGLE: &str = "Application Log";
+pub const MENU_LOG_TOGGLE_TOOLTIP: &str = "Show or hide ESO Weave troubleshooting events; this does not start or stop encounter recording.";
 
 // Save toast.
 pub const SAVED_TOAST: &str = "Settings saved";
@@ -276,9 +276,9 @@ pub const SAVED_TOAST: &str = "Settings saved";
 pub const CLUSTER_APPEARANCE: &str = "Appearance";
 pub const CLUSTER_COMBAT_TIMING: &str = "Combat Timing";
 pub const CLUSTER_FISHING: &str = "Fishing";
-pub const CLUSTER_BEACON: &str = "PixelBeacon and Bus";
+pub const CLUSTER_BEACON: &str = "Addons and Game Readings";
 pub const CLUSTER_LOCAL_SERVICE: &str = "Local API and MCP";
-pub const CLUSTER_LOGGING: &str = "Logging";
+pub const CLUSTER_LOGGING: &str = "Application Logging";
 pub const CLUSTER_KEYBINDINGS: &str = "Keybindings";
 pub const FISHING_SETTINGS_APPLICATION_HELP: &str =
     "Fishing changes apply while ESO Weave is running. Changing a setting safely stops a requested or active Fishing session; enable it again to use the new values.";
@@ -366,11 +366,11 @@ pub const SET_FISHING_INTERACT_KEY: Setting = Setting {
 };
 pub const SET_BEACON_PATH: Setting = Setting {
     label: "AddOns Folder Override",
-    help: "Use this AddOns folder instead of the auto-detected one. Leave blank to auto-detect.",
+    help: "Use this ESO AddOns folder for both companion addons and the saved capture source in its neighboring SavedVariables folder. Leave blank to auto-detect the selected game environment.",
 };
 pub const SET_BEACON_ENV: Setting = Setting {
     label: "Game Environment",
-    help: "Which ESO install to target when detecting the AddOns folder.",
+    help: "Choose Live (the regular game) or PTS (Public Test Server) for addon installation and the saved capture source. Use the same channel in ESO's recording commands; Live and PTS data are kept distinct.",
 };
 pub const SET_BLOCK_PX: Setting = Setting {
     label: "Block Size (px)",
@@ -390,11 +390,11 @@ pub const SET_INTERVAL_IDLE: Setting = Setting {
 };
 pub const SET_LOG_LEVEL: Setting = Setting {
     label: "Log Level",
-    help: "The lowest level of event that is captured.",
+    help: "The lowest severity of ESO Weave application diagnostics to record and display. This does not change encounter recording or ESO combat logs.",
 };
 pub const SET_FILE_LOGGING: Setting = Setting {
     label: "Write Log to File",
-    help: "Also write captured events to a monthly log file.",
+    help: "Also write ESO Weave troubleshooting diagnostics to a monthly log file. Encounter recordings and ESO's native combat-log files are separate.",
 };
 pub const SET_LOCAL_SERVICE_ENABLED: Setting = Setting {
     label: "Local API and MCP Server",
