@@ -35,7 +35,7 @@
 - [x] T016 Reconcile all old/final message dispositions, states and help paths in specs/121-encounter-logging-and-addon-clarity/audit.md (FR-001-009, SC-001-002).
 - [x] T017 Run focused/full Rust and documentation/headless rendering checks, including narrow/200-percent zoom and text hygiene; record exact evidence in specs/121-encounter-logging-and-addon-clarity/verification.md (FR-010-013, SC-003-004).
 - [x] T018 Update CHANGELOG.md, finalize spec/task status, commit with co-author attribution and publish authorized branch/official PR (FR-013).
-- [ ] T019 Respond to every review, verify corrections, resolve findings, at most two Codex rounds, require green hosted checks and owner final review (FR-013, SC-005).
+- [x] T019 Respond to every review, verify corrections, resolve findings, at most two Codex rounds, require green hosted checks and hand off for owner final review (FR-013, SC-005).
 
 ## Dependencies and Parallel Execution
 
