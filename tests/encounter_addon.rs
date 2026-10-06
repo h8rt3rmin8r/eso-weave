@@ -15,6 +15,36 @@ const ADDON: &str = include_str!("../addon/EsoWeaveData/Encounter.lua");
 const FIXTURE: &str =
     include_str!("../specs/075-encounter-capture/fixtures/representative-capture.json");
 
+#[test]
+fn recording_help_save_and_clear_messages_explain_distinct_actions() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS['/ewencounter']('help')
+        local help = table.concat(__messages, '\n')
+        assert(string.find(help, 'single records one fight', 1, true))
+        assert(string.find(help, 'Import Saved Capture', 1, true))
+        SLASH_COMMANDS['/ewencounter']('channel live')
+        SLASH_COMMANDS['/ewencounter']('toggle')
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+        local finished = __messages[#__messages]
+        assert(string.find(finished, '/reloadui', 1, true))
+        assert(string.find(finished, 'Import Saved Capture', 1, true))
+        SLASH_COMMANDS['/ewencounter']('clear')
+        local warning = __messages[#__messages]
+        assert(string.find(warning, 'desktop history', 1, true))
+        assert(string.find(warning, 'catalog data', 1, true))
+        SLASH_COMMANDS['/ewencounter']('clear confirm')
+        assert(EsoWeaveDataSaved.encounter.selected_channel == 'live')
+        assert(string.find(__messages[#__messages], 'desktop history', 1, true))
+    "#,
+    );
+}
+
 const HARNESS: &str = r#"
 EVENT_ADD_ON_LOADED = 1
 EVENT_PLAYER_COMBAT_STATE = 2
@@ -878,27 +908,27 @@ fn in_game_status_names_requested_effective_and_failure_authority() {
         SLASH_COMMANDS["/ewencounter"]("toggle")
         SLASH_COMMANDS["/ewencounter"]("status")
         local waiting = __messages[#__messages]
-        assert(string.find(waiting, "Selected mode: continuous", 1, true))
-        assert(string.find(waiting, "requested mode: continuous", 1, true))
-        assert(string.find(waiting, "active mode: continuous", 1, true))
-        assert(string.find(waiting, "channel: live", 1, true))
-        assert(string.find(waiting, "state: waiting", 1, true))
-        assert(string.find(waiting, "current encounter: none", 1, true))
+        assert(string.find(waiting, "selected mode: continuous (multiple fights until stopped)", 1, true))
+        assert(string.find(waiting, "requested mode): continuous", 1, true))
+        assert(string.find(waiting, "active mode): continuous", 1, true))
+        assert(string.find(waiting, "channel): live", 1, true))
+        assert(string.find(waiting, "enabled, waiting for combat (waiting)", 1, true))
+        assert(string.find(waiting, "current encounter): none", 1, true))
         assert(string.find(waiting, "session: active", 1, true))
 
         __in_combat = true
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
         SLASH_COMMANDS["/ewencounter"]("status")
         local capturing = __messages[#__messages]
-        assert(string.find(capturing, "state: capturing", 1, true))
-        assert(not string.find(capturing, "current encounter: none", 1, true))
+        assert(string.find(capturing, "recording the current fight (capturing)", 1, true))
+        assert(not string.find(capturing, "current encounter): none", 1, true))
 
         __fire(EVENT_PLAYER_DEACTIVATED)
         SLASH_COMMANDS["/ewencounter"]("status")
         local failed = __messages[#__messages]
-        assert(string.find(failed, "state: failed", 1, true))
+        assert(string.find(failed, "recording stopped by an error (failed)", 1, true))
         assert(string.find(failed, "last interruption: none", 1, true))
-        assert(string.find(failed, "failure: interruption-limit", 1, true))
+        assert(string.find(failed, "maximum number of interruption markers reached (interruption-limit)", 1, true))
         "#,
     );
 }
@@ -1293,6 +1323,11 @@ fn failed_and_unknown_controller_states_never_auto_retry_or_rewrite_evidence() {
         assert(EsoWeaveDataSaved.encounter == __unknown)
         SLASH_COMMANDS["/ewencounter"]("toggle")
         assert(EsoWeaveDataSaved.encounter == __unknown)
+        assert(string.find(__messages[#__messages], "including clear", 1, true))
+        assert(string.find(__messages[#__messages], "compatible ESO Weave Data version", 1, true))
+        SLASH_COMMANDS["/ewencounter"]("clear confirm")
+        assert(EsoWeaveDataSaved.encounter == __unknown)
+        assert(not string.find(__messages[#__messages], "Use /ewencounter clear confirm", 1, true))
         assert(EsoWeaveDataSaved.encounter.sentinel
             == "preserve-unknown-controller")
         "#,

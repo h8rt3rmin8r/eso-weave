@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::app::encounter_history::{
-    metric_presentation, quality_label, recommendation_presentation, EncounterDetail,
+    loss_labels, metric_presentation, quality_label, recommendation_presentation, EncounterDetail,
     EncounterHistoryWorker, HistoryEvent, HistoryOperation,
 };
 use crate::app::log_view::build_log_view;
@@ -757,11 +757,14 @@ impl EsoWeaveApp {
                     }
                     if recovered_staging > 0 {
                         messages.push(format!(
-                            "Recovered {recovered_staging} interrupted catalog staging operation(s)."
+                            "Cleaned up {recovered_staging} unfinished temporary catalog operation(s) from an earlier run."
                         ));
                     }
                     if let Some(failure) = discovery_failure {
-                        messages.push(format!("Candidate discovery failed: {}", failure.message));
+                        messages.push(format!(
+                            "Could not find catalog update files: {}",
+                            failure.message
+                        ));
                     }
                     self.catalog_update_message =
                         (!messages.is_empty()).then(|| messages.join(" "));
@@ -771,9 +774,9 @@ impl EsoWeaveApp {
                     self.catalog_candidates = candidates;
                     self.choose_default_catalog_candidate();
                     self.catalog_update_message = Some(if self.catalog_candidates.is_empty() {
-                        "No verified candidates were found in the catalog import folders.".into()
+                        "No checked catalog update files were found in the catalog import folders. Add a complete reviewed candidate and choose Refresh candidates.".into()
                     } else {
-                        "Catalog candidate review refreshed.".into()
+                        "The list of checked catalog update files has been refreshed. Review a candidate before installing it.".into()
                     });
                 }
                 WorkerEvent::CaptureBoundaryRecorded(fingerprint) => {
@@ -783,11 +786,11 @@ impl EsoWeaveApp {
                         completed_bytes: 0,
                         total_bytes: 0,
                         elapsed_millis: 0,
-                        message: "Waiting for user/game. In ESO, run /reloadui, log out, or exit to flush SavedVariables."
+                        message: "Waiting for ESO to save addon data. After collecting inside ESO, run /reloadui, log out, or exit, then build from the saved file."
                             .into(),
                     });
                     self.catalog_update_message = Some(
-                        "Capture boundary recorded privately. ESO Weave is not reading in-memory game state."
+                        "ESO Weave is watching for a changed saved catalog-data file. Start collection inside ESO, wait for completion, then save with /reloadui, logout, or exit. No current game activity is read by this workflow."
                             .into(),
                     );
                 }
@@ -805,11 +808,11 @@ impl EsoWeaveApp {
                         completed_bytes: candidate.total_bytes,
                         total_bytes: candidate.total_bytes,
                         elapsed_millis: 0,
-                        message: "Local collector candidate built and verified. Review it before installation."
+                        message: "A local catalog update was built and its files checked. Review it before installation."
                             .into(),
                     });
                     self.catalog_update_message = Some(
-                        "The local candidate passed S073 verification. Installation remains a separate explicit action."
+                        "The local catalog update passed file and format checks. It has not been installed; review it and choose Install selected Live catalog when appropriate."
                             .into(),
                     );
                 }
@@ -830,7 +833,7 @@ impl EsoWeaveApp {
                         completed_bytes: outcome.candidate.total_bytes,
                         total_bytes: outcome.candidate.total_bytes,
                         elapsed_millis: 0,
-                        message: "Catalog installed and selected. Restart safety verified.".into(),
+                        message: "The catalog is installed and selected for use, including after ESO Weave restarts.".into(),
                     });
                     self.catalog_update_message = outcome.receipt_warning.or(warning).or_else(|| {
                         Some(format!(
@@ -849,7 +852,8 @@ impl EsoWeaveApp {
                         completed_bytes: 0,
                         total_bytes: 0,
                         elapsed_millis: 0,
-                        message: "Previous verified catalog restored.".into(),
+                        message: "The previously checked catalog has been restored and selected."
+                            .into(),
                     });
                     self.catalog_update_message = outcome
                         .receipt_warning
@@ -864,12 +868,14 @@ impl EsoWeaveApp {
                         elapsed_millis: 0,
                         message: failure.message.clone(),
                     });
-                    self.catalog_update_message =
-                        Some(format!("{}: {}", failure.code, failure.message));
+                    self.catalog_update_message = Some(format!(
+                        "{} (diagnostic code: {})",
+                        failure.message, failure.code
+                    ));
                 }
                 WorkerEvent::ReceiptWriteFailed => {
                     self.catalog_update_message = Some(
-                        "receipt-write-failed: The operation stayed safe, but its redacted receipt could not be stored."
+                        "The catalog operation's troubleshooting record could not be saved. Check application data-folder access. This does not mean the selected catalog was lost (diagnostic code: receipt-write-failed)."
                             .into(),
                     );
                 }
@@ -1578,8 +1584,8 @@ impl EsoWeaveApp {
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
 
         if self.confirm_uninstall {
-            let row = ui.horizontal(|ui| {
-                ui.label("Remove the PixelBeacon addon?");
+            let row = ui.horizontal_wrapped(|ui| {
+                ui.label("Remove the managed PixelBeacon addon files? Current gameplay readings will stop after ESO reloads. ESO Weave Data, saved recordings, and imported encounter history are kept.");
                 if ui
                     .button("Uninstall")
                     .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
@@ -1603,8 +1609,8 @@ impl EsoWeaveApp {
         }
 
         if self.confirm_data_uninstall {
-            let row = ui.horizontal(|ui| {
-                ui.label("Remove the ESO Weave Data addon?");
+            let row = ui.horizontal_wrapped(|ui| {
+                ui.label("Remove the managed ESO Weave Data addon files? ESO's saved recordings and collected catalog data, imported encounter history, and PixelBeacon are kept. Reload ESO if it is open.");
                 if ui
                     .button("Confirm Data Uninstall")
                     .on_hover_text(strings::DATA_ADDON_UNINSTALL_TOOLTIP)
@@ -2296,8 +2302,9 @@ impl EsoWeaveApp {
                 ui.set_max_width(width);
                 ui.heading("ESO Weave Data Details");
                 ui.label(
-                    "Each line has its own evidence boundary. Installation and ESO process state never prove enablement, loading, or collection.",
+                    "ESO Weave Data records encounters and collects game-data definitions. PixelBeacon separately supplies current gameplay readings. Installed files do not confirm that ESO enabled or loaded either addon.",
                 );
+                ui.label("Setup: install ESO Weave Data for the selected Live or PTS environment, enable it in ESO's Add-Ons menu, and run /reloadui if ESO is open. For current recording status, enter /ewencounter status inside ESO.");
                 ui.separator();
                 let label_width =
                     dashboard_group_label_width(ui, DATA_DETAILS_STATUS_TITLES, 0.0);
@@ -2342,7 +2349,7 @@ impl EsoWeaveApp {
                 .max_height(modal_height)
                 .show(ui, |ui| {
             ui.label(
-                "Updates are always user initiated. Imported hashes prove integrity, not who supplied the files.",
+                "A catalog contains game-data definitions used to identify recorded abilities and effects. Updating it does not start encounter recording or delete history. You choose when to install a reviewed update; file checks detect changes but do not identify its supplier.",
             );
             ui.separator();
 
@@ -2360,7 +2367,7 @@ impl EsoWeaveApp {
             ui.strong("Reviewed import candidates");
             if self.catalog_candidates.is_empty() {
                 ui.label(
-                    "No verified candidates found. Place a complete S073 candidate under the application data catalog/import/live or catalog/import/pts folder, then refresh.",
+                    "No checked catalog update files found. Place a complete reviewed catalog candidate in the application data catalog/import/live or catalog/import/pts folder, then choose Refresh candidates. See the offline guide's Catalog Update workflow for the required files.",
                 );
             }
             for candidate in &self.catalog_candidates {
@@ -2404,7 +2411,7 @@ impl EsoWeaveApp {
             if let Some(candidate) = &selected_summary {
                 ui.group(|ui| {
                     ui.monospace(format!(
-                        "Catalog {} | schema {} | {} sources",
+                        "Catalog {} | file format version {} | {} data sources",
                         candidate.catalog_version, candidate.catalog_schema, candidate.source_count
                     ));
                     ui.label(format!(
@@ -2416,7 +2423,7 @@ impl EsoWeaveApp {
                         candidate.placeholder_icons
                     ));
                     ui.monospace(format!(
-                        "Integrity identity: {}...",
+                        "File identity (SHA-256 checksum): {}...",
                         &candidate.candidate_sha256[..12]
                     ));
                     let provenance = candidate
@@ -2426,7 +2433,7 @@ impl EsoWeaveApp {
                         .collect::<Vec<_>>()
                         .join(", ");
                     ui.label(format!(
-                        "Source acquisition: {}",
+                        "How source data was collected: {}",
                         if provenance.is_empty() {
                             "none recorded"
                         } else {
@@ -2456,24 +2463,26 @@ impl EsoWeaveApp {
                 ui.add_enabled(false, egui::Checkbox::new(&mut acknowledged, trust_label));
             }
             ui.label(
-                "Collector-assisted builds are local-only. ESO saves addon data only after /reloadui, logout, or exit. Captures are parsed as restricted data, never executed or uploaded.",
+                    "For maintainers: ESO Weave Data can collect game definitions inside ESO to build a catalog update locally. This is separate from encounter recording. Saved addon files are read as data, never run as code or uploaded.",
             );
+            ui.label("Choose Watch for saved catalog data before collecting. Inside ESO, enter /ewcollect start live or /ewcollect start pts for the selected environment. Use /ewcollect status for progress; after collection completes, run /reloadui, log out, or exit ESO, then choose Build from saved catalog data. These desktop buttons do not send commands to ESO.");
             ui.label(
-                "Collected categories: player skills, crafted abilities, item sets, champion skills, companions, races, and classes. Account and character names are excluded or represented only by a one-way scope key.",
+                "Collected categories: player skills, crafted abilities, item sets, champion skills, companions, races, and classes. Account and character names are not stored; any grouping identifier is a one-way value instead of the names themselves.",
             );
             let data_addon = self.model.view().data_addon;
             ui.label(format!(
-                "ESO Weave Data lifecycle: {}. Manage it from System and State.",
+                "ESO Weave Data installation: {}. Install, update, or repair it from System and State; enable it in ESO's Add-Ons menu.",
                 data_addon.lifecycle_line.state_text
             ));
             ui.horizontal_wrapped(|ui| {
                 let wait_label = if self.collector_waiting_fingerprint.is_some() {
-                    "Build from flushed capture"
+                    "Build from saved catalog data"
                 } else {
-                    "Begin capture wait"
+                    "Watch for saved catalog data"
                 };
                 if ui
                     .add_enabled(!busy, egui::Button::new(wait_label))
+                    .on_hover_text("Watch for changes to ESO's saved catalog collection, or build a local update from changed saved data. This does not start collection inside ESO.")
                     .clickable()
                     .clicked()
                 {
@@ -2494,7 +2503,7 @@ impl EsoWeaveApp {
                         }
                         _ => {
                             self.catalog_update_message = Some(
-                                "The collector capture location is unavailable until ESO's AddOns directory is configured."
+                                "The saved catalog-data file cannot be located. Choose the correct Live or PTS environment and AddOns folder in Settings, then retry."
                                     .into(),
                             );
                         }
@@ -2506,7 +2515,7 @@ impl EsoWeaveApp {
                     .clicked()
                 {
                     self.catalog_update_message = Some(
-                        "ESO owns the shared data file. In ESO, use /ewcollect clear confirm to clear only catalog data."
+                        "Inside ESO, use /ewcollect clear confirm to delete only the addon's catalog collection data, then /reloadui, logout, or exit to save that deletion. Encounter recordings, imported history, staged update files, and installed catalogs are kept. Cancel a running or paused collection first."
                             .into(),
                     );
                     self.collector_waiting_fingerprint = None;
@@ -2530,7 +2539,7 @@ impl EsoWeaveApp {
                         )),
                     );
                 } else if busy {
-                    ui.label("Progress total is not yet known.");
+                    ui.label("The amount of catalog data to process is not yet known.");
                 }
             }
             if let Some(message) = &self.catalog_update_message {
@@ -2618,8 +2627,19 @@ impl EsoWeaveApp {
             .vscroll(true)
             .show(ctx, |ui| {
                 ui.label(
-                    "Private local observations. Metrics are versioned observations, not complete encounter or Combat Metrics parity claims.",
+                    "Import recordings made by ESO Weave Data and view results stored on this computer. Results cover only the recorded observations; missing events can leave them incomplete.",
                 );
+                let selected_environment = self.model.settings_form().beacon.environment;
+                ui.label(format!("Saved capture source: {}. Change Game Environment in Settings to select Live or PTS (Public Test Server).", env_name(selected_environment)));
+                egui::CollapsingHeader::new("How to record and import")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.label("1. Install ESO Weave Data, enable it in ESO's Add-Ons menu, and run /reloadui if ESO is already open.");
+                        ui.label("2. Inside ESO, while recording is off with no retained session, choose /ewencounter mode single (one fight) or /ewencounter mode continuous (multiple fights), then /ewencounter channel live or /ewencounter channel pts to match the game you are using. To change an existing session's mode or environment, save and import first if you want to keep it, then /ewencounter clear confirm to delete only the addon recording copy.");
+                        ui.label("3. Enter /ewencounter toggle to start. Outside combat it waits for the next fight; during combat it starts immediately with an incomplete opening. Single fight mode stops after that fight; continuous mode waits between fights. Enter /ewencounter status for current activity, and /ewencounter toggle again to stop while retaining recordings.");
+                        ui.label("4. Run /reloadui, log out, or exit ESO to save addon data (SavedVariables) to disk. Return here and choose Import Saved Capture. Refresh only rereads imported history; it does not import new ESO data.");
+                        ui.label("ESO's native combat logs and ESO Weave's application diagnostics are separate. This window imports the addon's saved recordings.");
+                    });
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
@@ -2627,6 +2647,7 @@ impl EsoWeaveApp {
                                 && self.encounter_history_worker.is_some(),
                             egui::Button::new("Refresh"),
                         )
+                        .on_hover_text("Reread the encounter copies already imported on this computer. Use Import Saved Capture to read newly saved ESO data.")
                         .clickable()
                         .clicked()
                     {
@@ -2639,7 +2660,7 @@ impl EsoWeaveApp {
                             egui::Button::new("Import Saved Capture"),
                         )
                         .on_hover_text(
-                            "Import the terminal ESO Weave Encounter capture from the selected Live or PTS environment.",
+                            "Import finished or interrupted encounters from ESO Weave Data's last saved file for the selected Live or PTS environment. Stop recording and run /reloadui, log out, or exit ESO first when you need to save new data.",
                         )
                         .clickable()
                         .clicked()
@@ -2651,6 +2672,7 @@ impl EsoWeaveApp {
                             !self.encounter_history_busy && !self.encounter_history.is_empty(),
                             egui::Button::new("Delete All"),
                         )
+                        .on_hover_text("Delete imported encounter copies on this computer after confirmation. ESO's saved recording file is kept.")
                         .clickable()
                         .clicked()
                     {
@@ -2659,15 +2681,15 @@ impl EsoWeaveApp {
                     }
                     if self.encounter_history_busy {
                         ui.spinner();
-                        ui.label("Working...");
+                        ui.label("Processing imported history. Wait before starting another operation.");
                     }
                 });
 
                 if self.encounter_history_worker.is_none() {
                     ui.separator();
-                    ui.strong("Store Unavailable");
+                    ui.strong("Local History Unavailable");
                     ui.label(
-                        "A per-user application data directory could not be resolved. Encounter history is disabled.",
+                        "ESO Weave could not find this user's application data folder, so it cannot open local encounter history. Check your user profile and application-folder access, then restart ESO Weave.",
                     );
                     return;
                 }
@@ -2682,9 +2704,9 @@ impl EsoWeaveApp {
 
                 if let Some(state) = &self.encounter_last_saved_state {
                     ui.separator();
-                    ui.heading("Last saved capture state");
+                    ui.heading("Last saved recording state");
                     ui.label(
-                        "Historical, read-only disk evidence. Use /ewencounter status inside ESO for current state.",
+                        "This is the addon's state from the last successfully imported saved file, not current activity. Refresh and failed imports keep this older summary; check Saved channel below. Enter /ewencounter status inside ESO for current recording status.",
                     );
                     ui.monospace(format!(
                         "{} mode | {} | revision {}",
@@ -2692,6 +2714,7 @@ impl EsoWeaveApp {
                         capture_controller_state_label(state.state),
                         state.revision
                     ));
+                    ui.label("Single fight mode stops after one encounter; continuous fights mode waits between encounters until you stop it. Interrupted means recording was broken by a reload or similar interruption. The revision counts saved state changes.");
                     ui.label(format!(
                         "Saved channel: {} | Session: {}",
                         state
@@ -2703,7 +2726,7 @@ impl EsoWeaveApp {
                     ));
                     if let Some(session_id) = &state.session_id {
                         ui.label(egui::RichText::new(format!(
-                            "Session {} | {} terminal encounter{} | {} interruption{}",
+                            "Session {} | {} finished encounter{} | {} interruption{}",
                             session_id,
                             state.completed_encounter_count,
                             if state.completed_encounter_count == 1 { "" } else { "s" },
@@ -2713,16 +2736,17 @@ impl EsoWeaveApp {
                     }
                     if let Some(failure) = state.failure_reason {
                         ui.strong(format!(
-                            "Hard failure: {}",
+                            "Recording stopped after a failure: {}",
                             capture_failure_label(failure)
                         ));
+                        ui.label("To keep usable retained recordings, save and import them first. When you choose to discard the addon's failed encounter data, enter /ewencounter clear confirm inside ESO. This keeps catalog collection and imported history. Then use /ewencounter toggle to start a new session. Unknown-version data may need a compatible ESO Weave version instead.");
                     }
                 }
 
                 ui.separator();
                 ui.heading("Local Encounters");
                 if self.encounter_history.is_empty() && !self.encounter_history_busy {
-                    ui.label("No local encounters. Import a terminal capture to begin.");
+                    ui.label("No imported encounters yet. Record inside ESO, save addon data with /reloadui, logout, or exit, then choose Import Saved Capture.");
                 }
 
                 let mut selected = None;
@@ -2764,7 +2788,7 @@ impl EsoWeaveApp {
                                         selected = Some(identity);
                                     }
                                     ui.label(format!(
-                                        "{} | {} capture | {} stored, {} omitted",
+                                        "{} | {} recording | {} events saved, {} events omitted",
                                         summary.channel,
                                         capture_status_label(summary.status),
                                         summary.stored_event_count,
@@ -2791,6 +2815,7 @@ impl EsoWeaveApp {
                                 !self.encounter_history_busy,
                                 egui::Button::new("Delete Encounter"),
                             )
+                            .on_hover_text("Delete this imported encounter copy. ESO's saved recording file is kept.")
                             .clickable()
                             .clicked()
                         {
@@ -2814,7 +2839,7 @@ impl EsoWeaveApp {
                             ui.label("Loading observed metrics...");
                         }
                         None => {
-                            ui.label("Select the encounter again to rebuild observed metrics.");
+                            ui.label("Select the encounter again to recalculate its results from the saved observations and current catalog definitions.");
                         }
                     }
                 }
@@ -2857,14 +2882,14 @@ impl EsoWeaveApp {
             EncounterDeleteConfirmation::One(identity) => (
                 "Delete Encounter?",
                 format!(
-                    "Delete local encounter {}? This removes its immutable raw record and cannot be undone.",
+                    "Delete imported encounter {} from this computer? Its original stored observations and calculated results will be removed. This local deletion cannot be undone. ESO's saved recording file, addon files, and catalog definitions are kept; a retained recording can be imported again.",
                     identity.encounter_id
                 ),
                 "Confirm Delete Encounter",
             ),
             EncounterDeleteConfirmation::All => (
                 "Delete All Encounters?",
-                "Delete every local encounter raw record? This cannot be undone.".into(),
+                "Delete all imported encounters from this computer, including their original stored observations and calculated results? This local deletion cannot be undone. ESO's saved recording file, addon files, and catalog definitions are kept; retained recordings can be imported again.".into(),
                 "Delete All Encounters",
             ),
         };
@@ -3039,10 +3064,10 @@ impl EsoWeaveApp {
 fn history_diagnostic_heading(kind: HistoryDiagnosticKind) -> &'static str {
     match kind {
         HistoryDiagnosticKind::SourceUnavailable => "Capture Unavailable",
-        HistoryDiagnosticKind::StoreInvalid => "Store Unavailable",
+        HistoryDiagnosticKind::StoreInvalid => "Local History Unavailable",
         HistoryDiagnosticKind::CatalogUnavailable => "Catalog Unavailable",
         HistoryDiagnosticKind::CatalogInvalid => "Catalog Invalid",
-        HistoryDiagnosticKind::VersionMismatch => "Catalog Version Mismatch",
+        HistoryDiagnosticKind::VersionMismatch => "Recording and Catalog Versions Differ",
         HistoryDiagnosticKind::EncounterMissing => "Encounter Missing",
         HistoryDiagnosticKind::OperationFailed => "Operation Failed",
     }
@@ -3050,36 +3075,38 @@ fn history_diagnostic_heading(kind: HistoryDiagnosticKind) -> &'static str {
 
 fn capture_status_label(status: crate::encounter::CaptureStatus) -> &'static str {
     match status {
-        crate::encounter::CaptureStatus::Complete => "Complete",
-        crate::encounter::CaptureStatus::Partial => "Partial",
+        crate::encounter::CaptureStatus::Complete => "Complete observations",
+        crate::encounter::CaptureStatus::Partial => "Incomplete observations",
     }
 }
 
 fn capture_mode_label(mode: CaptureMode) -> &'static str {
     match mode {
-        CaptureMode::Single => "Single",
-        CaptureMode::Continuous => "Continuous",
+        CaptureMode::Single => "Single fight",
+        CaptureMode::Continuous => "Continuous fights",
     }
 }
 
 fn capture_controller_state_label(state: CaptureControllerState) -> &'static str {
     match state {
-        CaptureControllerState::Stopped => "Stopped",
-        CaptureControllerState::Waiting => "Waiting",
-        CaptureControllerState::Capturing => "Capturing",
-        CaptureControllerState::Interrupted => "Interrupted",
-        CaptureControllerState::Failed => "Failed",
+        CaptureControllerState::Stopped => "Recording off",
+        CaptureControllerState::Waiting => "Waiting for combat",
+        CaptureControllerState::Capturing => "Recording combat",
+        CaptureControllerState::Interrupted => "Recording interrupted",
+        CaptureControllerState::Failed => "Stopped after a failure",
     }
 }
 
 fn capture_failure_label(reason: CaptureFailureReason) -> &'static str {
     match reason {
-        CaptureFailureReason::StoragePressure => "storage pressure",
-        CaptureFailureReason::CallbackFailed => "callback failure",
-        CaptureFailureReason::ClockReset => "clock reset",
-        CaptureFailureReason::TerminalReserveExhausted => "terminal reserve exhausted",
-        CaptureFailureReason::InterruptionLimit => "interruption limit",
-        CaptureFailureReason::StateInvalid => "invalid recovered state",
+        CaptureFailureReason::StoragePressure => "recording reached its storage limit",
+        CaptureFailureReason::CallbackFailed => "a game event could not be recorded",
+        CaptureFailureReason::ClockReset => "the game clock changed during recording",
+        CaptureFailureReason::TerminalReserveExhausted => {
+            "no reserved space remained to finish recording"
+        }
+        CaptureFailureReason::InterruptionLimit => "recording reached its interruption limit",
+        CaptureFailureReason::StateInvalid => "the saved recording state could not be read",
     }
 }
 
@@ -3105,20 +3132,21 @@ fn render_encounter_projection(
 
     ui.strong("Observed Data Quality");
     ui.label(quality_label(projection.observed_dps.quality));
+    ui.label("Complete means no declared gaps in this recording, not every possible combat event. Incomplete observations can produce partial results. Unknown ability or effect IDs remain unresolved until matching catalog definitions are available.");
     render_virtual_rows(
         ui,
         "encounter_loss_ranges",
         &projection.observed_dps.loss_ranges,
         |ui, range| {
-            ui.label(format!(
-                "Sequences {}-{} ({})",
-                range.missing_sequence_from, range.missing_sequence_to, range.reason
-            ));
+            for label in loss_labels(std::slice::from_ref(range)) {
+                ui.label(label);
+            }
         },
     );
 
     ui.separator();
     ui.heading("Observed Metrics");
+    ui.label("DPS is recorded outgoing damage per second. Effective HPS is recorded effective healing per second. Ability damage share is each ability's portion of recorded damage; effect uptime is its recorded active time. These results describe the saved observations, not a complete Combat Metrics report.");
     render_metric(ui, "Observed DPS", &projection.observed_dps);
     render_metric(ui, "Observed Effective HPS", &projection.effective_hps);
 
@@ -3183,7 +3211,13 @@ fn render_encounter_projection(
     render_encounter_recommendations(ui, recommendations);
 
     ui.separator();
-    ui.heading("Projection and Catalog Provenance");
+    ui.label(format!(
+        "Unresolved recorded IDs: {}. Matching catalog definitions are needed to interpret these IDs; original observations are retained.",
+        projection.catalog_join.unknown_ids.len()
+    ));
+    egui::CollapsingHeader::new("Technical details: calculation versions and source identity")
+        .show(ui, |ui| {
+    ui.label("These versions identify the calculation format and rules, the matching game-data catalog, and the original stored observations. SHA-256 checksums identify the exact contents; they do not prove who supplied them.");
     ui.label(format!("Projection Schema: {}", projection.schema_version));
     ui.label(format!(
         "Algorithm Version: {}",
@@ -3222,6 +3256,7 @@ fn render_encounter_projection(
     ui.monospace(&projection.catalog_join.catalog_semantic_sha256);
     ui.label("Raw Content SHA-256:");
     ui.monospace(&projection.raw_content_sha256);
+        });
 }
 
 fn render_encounter_recommendations(
@@ -3244,7 +3279,12 @@ fn render_encounter_recommendations(
             for reason in &item.qualification_reasons {
                 ui.small(reason);
             }
-            ui.small(&item.citation);
+            egui::CollapsingHeader::new("Technical details: recommendation source")
+                .id_salt((&item.title, &item.citation))
+                .show(ui, |ui| {
+                    ui.small("These recording IDs, checksums, and calculation versions identify the observations behind this review prompt.");
+                    ui.small(&item.citation);
+                });
         });
     }
 }
@@ -3254,7 +3294,7 @@ fn render_metric(ui: &mut egui::Ui, label: &str, result: &MetricResult) {
     ui.strong(view.label);
     ui.label(&view.value);
     ui.label(format!(
-        "Quality: {} | Source Sequences: {}-{}",
+        "Quality: {} | Recorded observation numbers: {}-{}",
         view.quality, result.first_sequence, result.last_sequence
     ));
 }
@@ -3842,13 +3882,13 @@ fn level_name(level: LevelName) -> &'static str {
 fn stage_label(stage: UpdateStage) -> &'static str {
     match stage {
         UpdateStage::Checking => "Checking",
-        UpdateStage::LocatingSources => "Locating sources",
-        UpdateStage::WaitingForCapture => "Waiting for capture",
-        UpdateStage::Validating => "Validating",
-        UpdateStage::Normalizing => "Normalizing",
+        UpdateStage::LocatingSources => "Finding saved catalog data",
+        UpdateStage::WaitingForCapture => "Waiting for ESO to save catalog data",
+        UpdateStage::Validating => "Checking saved catalog data",
+        UpdateStage::Normalizing => "Preparing game-data definitions",
         UpdateStage::Building => "Building",
         UpdateStage::ResolvingIcons => "Resolving icons",
-        UpdateStage::IntegrityChecking => "Integrity checking",
+        UpdateStage::IntegrityChecking => "Checking catalog file integrity",
         UpdateStage::WaitingForLock => "Waiting for another catalog operation",
         UpdateStage::Installing => "Installing",
         UpdateStage::Opening => "Opening",
@@ -3867,13 +3907,13 @@ fn live_state_label(state: LiveUpdateState) -> &'static str {
             "New Live game data is available; no reviewed candidate is installed automatically."
         }
         LiveUpdateState::UpdateReadyToImport => {
-            "A verified Live catalog candidate is ready for review."
+            "A Live catalog update has passed file checks and is ready for review."
         }
         LiveUpdateState::CollectorCaptureRequired => {
-            "A local collector capture is required before building this update."
+            "Collect game definitions with ESO Weave Data inside ESO, then save addon data before building this catalog update."
         }
         LiveUpdateState::UnsupportedSchema => {
-            "An imported candidate uses an unsupported catalog schema."
+            "The update files use a catalog format this ESO Weave version cannot read. Obtain a compatible reviewed update or update ESO Weave."
         }
         LiveUpdateState::OfflineStaleCheck => {
             "The Live version check is offline or stale; the accepted catalog remains active."

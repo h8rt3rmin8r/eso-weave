@@ -26,7 +26,7 @@ of solid colors in the game window, and ESO Weave samples the displayed pixels.
 - Input suppression while unsafe game, lifecycle, travel, roll-dodge, or menu
   conditions are observed.
 - Embedded PixelBeacon installation, update, verification, and managed removal.
-- Configurable keybindings, structured logging, and a live log viewer.
+- Configurable keybindings, structured logging, and a application log viewer.
 - Windows MSI and Linux `.deb`, AppImage, and tarball packages.
 
 ## Platform behavior

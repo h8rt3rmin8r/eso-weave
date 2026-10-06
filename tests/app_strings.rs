@@ -3,6 +3,20 @@
 use eso_weave::app::strings;
 
 #[test]
+fn s121_addon_and_log_help_explains_roles_saved_state_and_removal() {
+    assert!(strings::DATA_ADDON_TOOLTIP.contains("records encounters"));
+    assert!(strings::BEACON_TOOLTIP.contains("current game state"));
+    assert!(strings::DATA_ADDON_ENCOUNTER_TOOLTIP.contains("/ewencounter status"));
+    assert!(strings::DATA_ADDON_ENCOUNTER_TOOLTIP.contains("last save"));
+    assert!(strings::DATA_ADDON_CATALOG_TOOLTIP.contains("/ewcollect status"));
+    assert!(strings::DATA_ADDON_UNINSTALL_TOOLTIP.contains("saved recordings"));
+    assert!(strings::DATA_ADDON_UNINSTALL_TOOLTIP.contains("imported history"));
+    assert!(strings::LOG_TOOLTIP.contains("combat logs"));
+    assert!(strings::SET_BEACON_ENV.help.contains("Public Test Server"));
+    assert!(strings::SET_BEACON_ENV.help.contains("saved capture"));
+}
+
+#[test]
 fn no_user_facing_label_contains_an_underscore() {
     for label in strings::all_labels() {
         assert!(
@@ -137,7 +151,7 @@ fn audited_field_and_settings_labels_match_the_title_case_registry() {
         "Potion Availability",
         "Potion Cooldown",
         "Combat Timing",
-        "PixelBeacon and Bus",
+        "Addons and Game Readings",
         "Always on Top",
         "Stale Retention (seconds)",
         "Global Cooldown (ms)",
@@ -186,7 +200,7 @@ fn behavior_help_matches_latency_and_logging_runtime_contracts() {
     assert!(!latency.contains("Shorten"));
 
     let logging = strings::LOG_FILTER_TOOLTIP;
-    assert!(logging.contains("Capture"));
+    assert!(logging.contains("Record"));
     assert!(logging.contains("file logging"));
     assert!(logging.contains("saved"));
     assert!(!logging.contains("Does not change what is captured"));

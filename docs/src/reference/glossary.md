@@ -34,10 +34,22 @@ page that owns the complete explanation.
 **Aliases:** APIVersion, outdated addon, ESO client version
 
 The ESO addon interface revision declared by an addon and reported by the game.
-ESO Weave compares it with the supported PixelBeacon revision before treating
-addon observations as compatible.
+ESO Weave compares selected Live or PTS API evidence with the reviewed support
+declarations for PixelBeacon and ESO Weave Data. A newer number alone does not
+prove that either bundled addon supports it.
 
 **Related:** [PixelBeacon lifecycle and compatibility](../features/pixelbeacon.md)
+
+### Application Log
+
+**Aliases:** log viewer, in-memory log, ring buffer, Live Log
+
+The always-available in-application diagnostic view backed by a bounded memory
+buffer, independent of whether persistent File Logging is enabled. It contains
+application troubleshooting events, not ESO combat-log files or addon encounter
+recordings. Open it through View > Application Log.
+
+**Related:** [Logging surfaces](logging.md)
 
 ### Auto Potion
 
@@ -249,15 +261,6 @@ The Linux backend that reads focused physical input through evdev and emits
 authorized generated input through uinput after device permissions are configured.
 
 **Related:** [Scope and Platform support](../concepts/scope-and-platform.md)
-
-### Live Log
-
-**Aliases:** log viewer, in-memory log, ring buffer
-
-The always-available in-application diagnostic view backed by a bounded memory
-buffer, independent of whether persistent File Logging is enabled.
-
-**Related:** [Logging surfaces](logging.md)
 
 ## M
 

@@ -1,31 +1,46 @@
 # Encounter Capture
 
-The `EsoWeaveData` encounter module is an explicit local observation tool.
-It records selectively subscribed encounters into a bounded ESO SavedVariables
-spool so later work can import and analyze the same ordered facts outside the
-game. Every scalar
-value delivered by a selected source is retained exactly unless a declared hard
-limit or unsupported runtime type prevents the whole observation from fitting.
+**ESO Weave Data** records fights inside ESO so you can import them into the
+desktop's **Encounter History** and inspect observed damage, healing, effects
+and casts. Recording starts only when you turn it on inside the game. Choose
+**single** for one fight or **continuous** for multiple fights until stopped.
 
-This capture is not automatic. Loading or installing the addon does not authorize
-recording. It remains dormant until you explicitly enable one of exactly two
-modes inside ESO: `single` or `continuous`.
+PixelBeacon is the other addon: it supplies the desktop's current player-state
+display and input features. Installing PixelBeacon does not install encounter
+recording. **Application Log** and **File Logging** are troubleshooting
+logs, not fight recordings. ESO's native combat-log files are another, still
+provisional import route; use the saved-addon workflow below.
+
+Recorded values stay on your computer. Names, identifiers and other values
+supplied by ESO may be retained exactly. Hard limits and unsupported runtime
+values cause a declared missing observation rather than a silently shortened
+value. The desktop's ordinary summaries and application logs do not expose the
+raw values.
 
 ## Install and choose a mode
 
-The desktop lifecycle controls install the exact package under
-`addon/EsoWeaveData`. Catalog and encounter state share one versioned outer
-SavedVariables root, but each command mutates only its own module subtree. The
-desktop does not send commands to the addon and never writes live
-SavedVariables. S096 advances the managed package manifest to version 2 so an
-existing managed installation is offered the controller update.
+1. In desktop **Settings**, select the ESO environment you actually use:
+   **Live** for the released game or **PTS** for the Public Test Server.
+2. In **System and State**, choose **Install Data** beside **ESO Weave Data**.
+   If a managed copy needs replacement, choose **Update Data** or **Repair Data**.
+   These actions install addon files; they do not start recording.
+3. Enable **ESO Weave Data** in ESO's **Add-Ons** menu. Run `/reloadui` or log
+   out and back in after installation, update, repair or an enablement change.
+4. While recording is off, run `/ewencounter mode single` and
+   `/ewencounter channel live`. Substitute `continuous` or `pts` as needed.
+5. Run `/ewencounter toggle` to turn recording on. Run
+   `/ewencounter status` to read its current state inside ESO.
 
-Choose the mode and channel while capture is off, then use the same toggle to
-start or stop it:
+To change mode or channel later, recording must be off **and** the retained
+session must be cleared with `/ewencounter clear confirm`. Stopping alone keeps
+that session. Save and import any usable fights you want to retain before
+clearing, then choose the new mode/channel. Preservation through import is
+optional; clearing deliberately discards the addon's retained recordings.
 
-1. `/ewencounter mode single`
-2. `/ewencounter channel live`
-3. `/ewencounter toggle`
+Catalog collection and encounter recording share the `EsoWeaveData` package and
+the game's `SavedVariables/EsoWeaveData.lua` file, but retain separate data.
+**SavedVariables** means ESO's saved addon data. The desktop reads the last
+file ESO wrote and does not control the in-game recording toggle.
 
 Use `continuous` instead of `single` for an explicitly enabled multi-fight
 session. The channel remains a separate Live or PTS choice, not another mode.
@@ -47,11 +62,11 @@ Use these additional commands:
 
 | Command | Result |
 | --- | --- |
-| `/ewencounter mode single\|continuous` | Select one of the two modes while off |
-| `/ewencounter channel live\|pts` | Select the source channel while off |
-| `/ewencounter toggle` | Enable the selection or disable current authority |
-| `/ewencounter status` | Show selected/requested/active mode, channel, state, current-presence, session disposition, counts, last interruption, and failure class |
-| `/ewencounter clear confirm` | Clear retained encounter evidence while off |
+| `/ewencounter mode single\|continuous` | Select one of the two modes while off with no retained session; clear the old session deliberately before changing it |
+| `/ewencounter channel live\|pts` | Select the source channel while off with no retained session |
+| `/ewencounter toggle` | Start recording with the chosen mode, or stop recording and retain the data already collected |
+| `/ewencounter status` | Show chosen mode, recording request, actual mode and state, current fight, session outcome, retained and finished fight counts, interruption and failure reason |
+| `/ewencounter clear confirm` | While recording is off, remove the addon's retained encounter recordings and controller state; preserve catalog collection and desktop history |
 | `/ewencounter help` | Show the command summary |
 
 Historical `arm`, `disarm`, and `stop` forms may remain compatibility aliases to
@@ -67,7 +82,57 @@ single mode:
 /ewencounter arm pts
 ```
 
-## Captured facts
+## Save, import and view
+
+1. Finish the fight in single mode. For continuous mode, stop with
+   `/ewencounter toggle` when you want to finish the session. Stopping during a
+   fight retains a partial recording; stopping does not delete it.
+2. Run `/reloadui`, log out, or exit ESO. This writes the addon's recordings
+   to disk. A completed fight in memory may still be absent from the saved file.
+3. In the desktop, open **File > Encounter History** and choose
+   **Import Saved Capture**. It reads the fixed file for the environment selected
+   in Settings and copies accepted fights into history on this computer.
+4. Select an imported fight to view **Observed Metrics**, then **Provisional
+   Recommendations**. Unavailable rates, missing observations and unresolved
+   ability or effect definitions stay explicit. Review prompts are questions
+   based on recorded facts, not proven causes or instructions to change a build.
+
+**Refresh** rereads imported desktop history; it does not import new ESO data.
+Import the saved file again to add later completed fights. Exact duplicates are
+skipped, so repeated import does not multiply records. In a running continuous
+session, completed saved fights can be imported while the current fight is
+omitted. A disk file that is still changing must be saved and retried.
+
+If Import is unavailable, check the selected environment and its AddOns folder,
+then save the recording in ESO. While an import, calculation or delete is in
+progress, wait for that operation to finish. A missing or incompatible catalog
+can prevent calculation without removing the imported fight: review its
+catalog status and select a compatible game-data catalog. See
+[Troubleshooting](../getting-started/troubleshooting.md#encounter-capture-is-waiting-interrupted-or-failed)
+for invalid, interrupted, duplicate and failed import recovery.
+
+## Clear the intended copy
+
+- `/ewencounter clear confirm` removes only the addon's encounter recordings and
+  controller state while recording is off. It preserves catalog collection,
+  addon files and previously imported desktop history. ESO saves the cleared
+  state only at the next `/reloadui`, logout or exit. Import first if you want to
+  preserve an importable recording; import is not required to clear it.
+- **Delete Encounter** and **Delete All** in desktop history remove only the
+  chosen imported fight or all imported fights on this computer. They preserve
+  ESO's saved file, both addons, catalog and settings. Importing the unchanged
+  ESO file can bring deleted fights back.
+- `/ewcollect clear confirm` clears only catalog collection, not encounter
+  recordings. **Uninstall Data** removes both modules' managed addon files,
+  while preserving the shared saved file, imported history and catalog.
+
+If the addon reports an unsupported saved-data version, it preserves that data
+and refuses to clear it. Update to a compatible ESO Weave release; do not edit
+version fields to bypass the refusal. An invalid saved state of the supported
+version may be cleared explicitly after accepting that those recordings will
+be lost.
+
+## Captured facts and implementation detail
 
 Schema v2 keeps two related streams. `raw_observations` is authoritative: each
 selected callback or normalization-dependent API read carries its raw source
@@ -104,7 +169,7 @@ and the raw observation stream. Compatibility events are comparison input, not
 replay input. A complete current capture is accepted only when source links,
 projection ordinals, times, kinds, and payloads match exactly.
 
-Declared raw loss or clock discontinuity makes replay indeterminate because an
+Partial recordings, declared raw loss or clock discontinuity make replay indeterminate because an
 omitted observation can change later actor numbering or capacity decisions. Such
 captures retain the existing partial, degraded-evidence behavior. Schema-v1 and
 pre-profile schema-v2 history remains importable with replay explicitly
@@ -174,16 +239,19 @@ retains session mode and ordinal, labels derived results as observed, and expose
 partial capture loss and unresolved catalog IDs without displaying raw payload
 values. Deletion remains an explicit confirmed local action.
 
-Desktop controller facts are always labeled **Last saved capture state** or
-historical. They can be stale while ESO runs and are never presented as a live
-toggle, current addon state, or acknowledgement channel. Use `/ewencounter status`
+Desktop controller facts are always labeled **Last saved recording state**.
+They come from the last successfully imported saved file, not the newest disk
+save or current activity. Refresh and failed imports keep that older summary;
+changing the selected environment does not make it current. Check **Saved
+channel** in the summary. It is never a live toggle, current addon state or
+acknowledgement channel. Use `/ewencounter status`
 inside ESO for current mode and controller state.
 
 Encounter capture does not use Pixel Bus and has no relationship to input
 authorization, Weaving, Fishing, or Auto Potion. It does not perform protected
 actions, use items, change equipment, move the player, or generate input.
-Native encounter-log qualification remains independent under issue #190 and does
-not change this SavedVariables control or fallback path.
+Native combat-log import remains provisional and does not change this supported
+saved-addon workflow. A closed tracking issue is not a claim of field parity.
 
 Continue to [Encounter Data and Metrics](../reference/encounter-data-and-metrics.md)
 for the complete observation and analysis model.

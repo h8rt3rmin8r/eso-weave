@@ -120,8 +120,8 @@ const CONTENT_OBLIGATION_IDS = new Set([
 ]);
 const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
-const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006"]);
-const CONTENT_CONTRACT_SHA256 = "e80fd8d1e1c1171b11743053bd44ffde97230d7ba5b53e4f68406204b745f65f";
+const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006", "DIA-007"]);
+const CONTENT_CONTRACT_SHA256 = "e701a9027d80cebbb86501f4136ea1fd79fa67fc6cbb75666f2428986863adb1";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -160,7 +160,7 @@ const SEARCH_TARGETS = new Map([
   ["Capture Tolerance", "docs/src/reference/pixel-bus-protocol.md"], ["Ultimate", "docs/src/features/ultimate-resource.md"],
   ["Ultimate Cost", "docs/src/features/ultimate-resource.md"], ["Ready", "docs/src/features/ultimate-resource.md"],
   ["Configuration", "docs/src/reference/configuration.md"], ["Session State", "docs/src/reference/configuration.md"],
-  ["Invalid Configuration", "docs/src/reference/configuration.md"], ["Live Log", "docs/src/reference/logging.md"],
+  ["Invalid Configuration", "docs/src/reference/configuration.md"], ["Application Log", "docs/src/reference/logging.md"],
   ["File Logging", "docs/src/reference/logging.md"], ["Windows Input", "docs/src/concepts/scope-and-platform.md"],
   ["Linux Input", "docs/src/concepts/scope-and-platform.md"], ["XWayland", "docs/src/concepts/scope-and-platform.md"],
   ["PixelBeacon Status", "docs/src/features/pixelbeacon.md"], ["API Version", "docs/src/features/pixelbeacon.md"],
@@ -388,7 +388,7 @@ const PLAIN_CODE_BLOCKS = [
   { page: "features/encounter-capture.md", sha256: "7670ddaeb06a92493c7156e32a8eb3bf286fb146597d34530d28b7486ec1eb94", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
   { page: "features/weaving.md", sha256: "74576ddc34a330808aa09f8bbc76348f573f3686a2eec2555060dc5651c3bee5", rationale: "A mathematical formula, not executable syntax." },
   { page: "features/weaving.md", sha256: "4fa825b4a104e43a5c6c4fff848dfd7f8192486b146e1ce02ee9f551694e62b1", rationale: "An authorization process flow, not executable syntax." },
-  { page: "getting-started/troubleshooting.md", sha256: "2041b1a45d75c539e4eff851077493e0b0253d4843625e49eb50fefdc90b1ae5", rationale: "A diagnostic decision tree, not executable syntax." },
+  { page: "getting-started/troubleshooting.md", sha256: "1050ad5bedb0a28540c41596d97b179287cf98c8cb61422bcf45da7615635ac2", rationale: "A diagnostic decision tree, not executable syntax." },
   { page: "reference/pixel-bus-protocol.md", sha256: "e159118f0007ffa610a1afedeb56051affb6758336b096c99e6456a0b828e3e4", rationale: "Protocol geometry formulas, not executable syntax." },
 ];
 
@@ -1519,6 +1519,19 @@ export function validateBrandStandardVisualCss(css) {
 
 const DOCUMENTATION_DIAGRAMS = [
   {
+    id: "S121-D01",
+    label: "encounter evidence lineage",
+    page: "reference/encounter-data-and-metrics.md",
+    outputPage: "reference/encounter-data-and-metrics.html",
+    asset: "encounter-evidence-lineage.svg",
+    width: 400,
+    height: 1530,
+    alt: "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts",
+    heading: "Encounter lineage text equivalent",
+    anchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat-log ingestion remains provisional"],
+    svgAnchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat logs: provisional", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"],
+  },
+  {
     id: "S082-D01",
     label: "architecture ownership",
     page: "development/architecture.md",
@@ -1603,7 +1616,7 @@ const DOCUMENTATION_DIAGRAMS = [
       "Native binding evidence is unavailable",
       "Encounter capture is waiting, interrupted, or failed",
       "Startup failure",
-      "Use the Live Log",
+      "Use the Application Log",
     ],
     rawAnchors: [
       "Does ESO Weave open?",
@@ -1616,11 +1629,38 @@ const DOCUMENTATION_DIAGRAMS = [
       "update or reload PixelBeacon and restore the shared signal first",
       "use the platform input guidance and native binding state table",
       "is encounter capture or import the first failing observation?",
-      "inspect the feature-specific status and Live Log",
+      "inspect the feature-specific status and Application Log",
     ],
     svgAnchors: ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status"],
   },
 ];
+
+export function validateEncounterWorkflowDocs(pages) {
+  if (!(pages instanceof Map)) return ["S121 encounter workflow requires a page map"];
+  const required = new Map([
+    ["features/encounter-capture.md", [
+      "Install Data", "ESO's Add-Ons menu", "/ewencounter mode single", "/ewencounter channel live",
+      "/ewencounter toggle", "/ewencounter status", "continuous", "Public Test Server",
+      "SavedVariables", "Import Saved Capture", "Refresh", "desktop history",
+      "/ewencounter clear confirm", "Delete Encounter", "Delete All", "/ewcollect clear confirm",
+      "unsupported saved-data version", "Importing the unchanged ESO file", "Uninstall Data",
+    ]],
+    ["reference/logging.md", ["Application Log", "File Logging", "native", "provisional", "Neither records fights", "Application Logging"]],
+    ["features/interface.md", ["Addon Management", "Addon Package Version", "Unconfirmed", "Unknown (check inside ESO)", "Last saved recording state", "last successfully imported saved file", "Refresh and failed imports", "Saved channel", "Refresh", "Observed Metrics", "Provisional Recommendations"]],
+    ["getting-started/troubleshooting.md", ["current activity", "unsupported saved-data version", "same-version", "Incomplete observations", "duplicates", "currently active fight", "whole batch", "Delete All"]],
+    ["development/discovery-collector.md", ["Catalog collection", "/ewcollect resume", "/ewcollect cancel", "incomplete snapshot", "replaces that previous catalog collection", "unsupported saved-data version"]],
+    ["reference/settings.md", ["Addons and Game Readings", "Game Environment", "Live", "PTS", "Application Logging", "Write Log to File", "They do not turn on encounter recording"]],
+  ]);
+  const errors = [];
+  for (const [page, anchors] of required) {
+    const markdown = pages.get(page) ?? "";
+    const readable = normalizedText(markdown.replace(/<!--[\s\S]*?-->/gu, "").replace(/[`*]/gu, ""));
+    for (const anchor of anchors) {
+      if (!readable.includes(normalizedText(anchor))) errors.push(`S121 ${page} workflow instruction is missing: ${anchor}`);
+    }
+  }
+  return errors;
+}
 
 export function validateDocumentationDiagrams({ pages, svgs }) {
   const errors = [];
@@ -2152,8 +2192,8 @@ export function validateDocumentationFigureInventory(pages) {
   }
 
   const meaningful = screenshots + diagrams + brandImages;
-  if (screenshots !== 11 || diagrams !== 5 || brandImages !== 5 || meaningful !== 21) {
-    errors.push(`S088 figure inventory requires 21 meaningful placements (11 screenshot or illustration, 5 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
+  if (screenshots !== 11 || diagrams !== 6 || brandImages !== 5 || meaningful !== 22) {
+    errors.push(`S088 figure inventory requires 22 meaningful placements (11 screenshot or illustration, 6 diagram, 5 brand); found ${meaningful} (${screenshots}, ${diagrams}, ${brandImages})`);
   }
   if (decorativeWordmarks !== 1) errors.push("S088 figure inventory requires exactly one empty-alt decorative wordmark");
   if (screenshotCaptions !== 11 || brandCaptions !== 2) {
@@ -4166,6 +4206,7 @@ async function run() {
     }),
     ...validateBrandStandardGenerated(brandStandardHtml, outputPaths),
     ...validateDocumentationDiagrams({ pages: diagramPages, svgs: diagramSvgs }),
+    ...validateEncounterWorkflowDocs(sourceMarkdownPages),
     ...validateDocumentationDiagramsGenerated(generatedDiagramPages, outputPaths, diagramSvgs, generatedDiagramSvgs, themeScript),
     ...validateDocumentationDiagramCss(css),
     ...validateDocumentationScreenshots({ manifest: screenshotManifest, assets: screenshotAssets, pages: screenshotPages }),

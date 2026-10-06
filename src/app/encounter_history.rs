@@ -102,9 +102,9 @@ impl EncounterHistoryWorker {
                                 &thread_service,
                                 HistoryOperation::DeleteOne,
                                 Some(if receipt.deleted_records == 0 {
-                                    "The encounter was already absent.".into()
+                                    "This encounter was already absent from imported history. ESO's saved addon data was not changed.".into()
                                 } else {
-                                    "Encounter deleted from local history.".into()
+                                    "Encounter deleted from imported history on this computer. ESO's saved addon data was not changed and can be imported again.".into()
                                 }),
                                 None,
                             ),
@@ -119,7 +119,7 @@ impl EncounterHistoryWorker {
                             &thread_service,
                             HistoryOperation::DeleteAll,
                             Some(format!(
-                                "Deleted {} local encounter record{}.",
+                                "Deleted {} imported encounter record{} from this computer. ESO's saved addon data was not changed and can be imported again.",
                                 receipt.deleted_records,
                                 if receipt.deleted_records == 1 {
                                     ""
@@ -246,7 +246,7 @@ fn snapshot_event(
 
 fn import_message(report: &CaptureImportReport) -> String {
     match (report.imported_count, report.already_present_count) {
-        (0, 0) => "No terminal encounters were available to import.".into(),
+        (0, 0) => "No finished or interrupted encounters were saved for import. In ESO, use /ewencounter status, finish or stop recording, then /reloadui, logout, or exit to save before importing again.".into(),
         (0, present) => format!(
             "{present} encounter{} already present in local history.",
             if present == 1 { " is" } else { "s are" }
@@ -282,7 +282,7 @@ pub fn metric_presentation<'a>(label: &'a str, result: &MetricResult) -> MetricP
 pub const fn quality_label(quality: MetricQuality) -> &'static str {
     match quality {
         MetricQuality::Complete => "Complete",
-        MetricQuality::Degraded => "Degraded",
+        MetricQuality::Degraded => "Incomplete observations",
     }
 }
 
@@ -291,11 +291,28 @@ pub fn loss_labels(ranges: &[LossRange]) -> Vec<String> {
         .iter()
         .map(|range| {
             format!(
-                "Sequences {}-{} ({})",
-                range.missing_sequence_from, range.missing_sequence_to, range.reason
+                "Missing observations {}-{} ({}; code: {})",
+                range.missing_sequence_from,
+                range.missing_sequence_to,
+                loss_reason_explanation(&range.reason),
+                range.reason
             )
         })
         .collect()
+}
+
+fn loss_reason_explanation(reason: &str) -> &'static str {
+    match reason {
+        "capture-overflow" | "record-limit" => "recording limit reached",
+        "byte-limit" => "recording storage limit reached",
+        "string-limit" => "a recorded value exceeded the size limit",
+        "unsupported-value" => "a game value could not be recorded",
+        "clock-reset" => "the game clock moved backward",
+        "runtime-interrupted" => "recording was interrupted by reload or game exit",
+        "user-stopped" => "recording was stopped before combat ended",
+        "callback-failed" => "a recording callback failed",
+        _ => "recording has a declared gap",
+    }
 }
 
 fn metric_value(result: &MetricResult) -> String {
@@ -330,19 +347,19 @@ pub struct AdvicePresentation {
 
 pub fn recommendation_presentation(report: &RecommendationReport) -> RecommendationPresentation {
     let status = match report.availability {
-        RecommendationAvailability::Ready => "Evidence status: Ready",
-        RecommendationAvailability::Qualified => "Evidence status: Qualified",
-        RecommendationAvailability::Suppressed => "Evidence status: Suppressed",
+        RecommendationAvailability::Ready => "Review prompts available",
+        RecommendationAvailability::Qualified => "Review prompts have limitations",
+        RecommendationAvailability::Suppressed => "Review prompts unavailable",
     };
     let summary = match report.availability {
         RecommendationAvailability::Suppressed => {
-            "Advice is suppressed because the evidence did not pass every s090-v1 gate."
+            "No review prompts are shown because this recording does not meet the analysis requirements. The reasons below explain what is missing; observed metrics remain separate."
         }
         _ if report.advice.is_empty() => {
-            "No provisional review prompt crossed the s090-v1 thresholds."
+            "No review prompts are available for this recording. The reasons below explain omitted prompts or unmet thresholds."
         }
         _ => {
-            "These deterministic review prompts are provisional and do not claim cause or an optimal rotation."
+            "These questions help you review the recorded fight. They do not identify a cause or recommend an optimal rotation."
         }
     };
     let items = report
@@ -370,7 +387,7 @@ pub fn recommendation_presentation(report: &RecommendationReport) -> Recommendat
             let qualification = match item.qualification {
                 AdviceQualification::Provisional => "Provisional review prompt",
                 AdviceQualification::ProvisionalQualified => {
-                    "Provisional, qualified review prompt"
+                    "Provisional review prompt with limitations"
                 }
             };
             let citation = format!(

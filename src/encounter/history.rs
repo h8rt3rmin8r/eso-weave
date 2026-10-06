@@ -60,7 +60,7 @@ impl HistoryDiagnostic {
     pub fn source_unavailable() -> Self {
         Self::new(
             HistoryDiagnosticKind::SourceUnavailable,
-            "The selected ESO environment could not provide a terminal encounter capture.",
+            "The saved addon data location is unavailable. Choose Live or PTS and the AddOns folder in Settings, then record with ESO Weave Data and save using /reloadui, logout, or exit.",
         )
     }
 }
@@ -118,7 +118,7 @@ impl EncounterHistoryService {
         if !source_path.is_file() {
             return Err(HistoryDiagnostic::new(
                 HistoryDiagnosticKind::SourceUnavailable,
-                "The selected ESO environment has no terminal encounter capture to import.",
+                "No saved addon data file was found for the selected environment. Check Live or PTS and the AddOns folder in Settings. Record with ESO Weave Data, then use /reloadui, logout, or exit to save before importing.",
             ));
         }
         import_capture_set(&ImportRequest::new(
@@ -129,7 +129,7 @@ impl EncounterHistoryService {
         .map_err(|_| {
             HistoryDiagnostic::new(
                 HistoryDiagnosticKind::OperationFailed,
-                "The encounter capture was rejected or could not be imported. Existing history was preserved.",
+                "The saved recording could not be imported. Existing history was preserved. Check the selected Live or PTS environment, finish or stop recording in ESO, save with /reloadui, logout, or exit, and try Import Saved Capture again. Unsupported or damaged saved data must remain unchanged for troubleshooting.",
             )
         })
     }
@@ -161,13 +161,13 @@ impl EncounterHistoryService {
             let (kind, message) = match diagnostic.kind {
                 CatalogDiagnosticKind::Missing | CatalogDiagnosticKind::Unavailable => (
                     HistoryDiagnosticKind::CatalogUnavailable,
-                    "The active catalog is unavailable. Raw encounter history remains available.",
+                    "Game-data definitions are unavailable, so encounter metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog when one is available.",
                 ),
                 CatalogDiagnosticKind::Corrupt
                 | CatalogDiagnosticKind::Incompatible
                 | CatalogDiagnosticKind::Checksum => (
                     HistoryDiagnosticKind::CatalogInvalid,
-                    "The active catalog is invalid or unsupported. Raw encounter history remains available.",
+                    "The catalog of game-data definitions is damaged or unsupported, so metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog or roll back to a previous verified one.",
                 ),
             };
             return Err(HistoryDiagnostic::new(kind, message));
@@ -177,26 +177,26 @@ impl EncounterHistoryService {
             .map_err(|_| {
                 HistoryDiagnostic::new(
                     HistoryDiagnosticKind::CatalogInvalid,
-                    "The active catalog metadata could not be validated. Raw encounter history remains available.",
+                    "The catalog's game-data identity could not be checked, so metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog or roll back to a previous verified one.",
                 )
             })?
             .ok_or_else(|| {
                 HistoryDiagnostic::new(
                     HistoryDiagnosticKind::CatalogUnavailable,
-                    "The active catalog is unavailable. Raw encounter history remains available.",
+                    "Game-data definitions are unavailable, so encounter metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog when one is available.",
                 )
             })?;
         if release.channel != capture.channel || release.api_version != capture.source.api_version {
             return Err(HistoryDiagnostic::new(
                 HistoryDiagnosticKind::VersionMismatch,
-                "The active catalog channel or API version does not match this capture. Raw encounter history remains available.",
+                "The catalog's Live or PTS environment or game API version differs from this recording, so metrics cannot be calculated. Your imported recording remains stored. It needs matching game-data definitions; Catalog Update currently installs Live catalogs only, so PTS metrics may remain unavailable.",
             ));
         }
 
         calculate_projection(&capture, &catalog).map_err(|_| {
             HistoryDiagnostic::new(
                 HistoryDiagnosticKind::OperationFailed,
-                "Observed metrics could not be calculated. Raw encounter history remains available.",
+                "Metrics could not be calculated from this recording. The imported original remains stored. Try Refresh and select it again; if the failure persists, use the application log for troubleshooting.",
             )
         })
     }
@@ -225,7 +225,7 @@ fn store_diagnostic(_error: EncounterError) -> HistoryDiagnostic {
 fn invalid_store_diagnostic() -> HistoryDiagnostic {
     HistoryDiagnostic::new(
         HistoryDiagnosticKind::StoreInvalid,
-        "The local encounter store is unavailable, corrupt, or unsupported. It was left unchanged.",
+        "Imported encounter history on this computer could not be opened. Its database may be unavailable, damaged, or from an unsupported version; it was left unchanged. Check the application log and the application data folder's access permissions before retrying. Keep a copy before attempting recovery.",
     )
 }
 

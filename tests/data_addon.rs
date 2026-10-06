@@ -81,7 +81,7 @@ fn modules_are_namespaced_dormant_and_clear_only_catalog_state() {
     assert!(ENCOUNTER.contains("local CAPTURE_EVENTS"));
     assert!(ENCOUNTER.contains("registerCaptureHandlers()"));
     assert!(CATALOG.contains("EsoWeaveDataSaved.catalog = nil"));
-    assert!(CATALOG.contains("Encounter data was preserved"));
+    assert!(CATALOG.contains("Encounter recordings and Encounter History are unchanged"));
     assert!(!CATALOG.contains("EsoWeaveDataSaved.encounter = nil"));
 }
 

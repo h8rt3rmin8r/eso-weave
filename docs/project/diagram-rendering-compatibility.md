@@ -124,7 +124,45 @@ troubleshooting section, or these implementation authorities change:
 - encounter import or validation in `src/encounter/mod.rs`,
   `src/encounter/validate.rs`, or `src/app/encounter_history.rs`.
 
-## Explicit boundary
+## S121 encounter-lineage expansion
+
+S121 adds `encounter-evidence-lineage.svg` as the sixth governed flow diagram,
+with a 400 by 1530 local canvas and a six-stage complete prose equivalent in
+`docs/src/reference/encounter-data-and-metrics.md`. All labels use at least
+15 SVG units, with no external font or resource. The existing dialog keeps its
+intrinsic width and scrolls vertically rather than shrinking tall labels.
+
+The paint matrix now requires 48 unique observations: six assets, Navy and Light,
+320 and 1280 CSS pixels, and normal plus expanded presentation. Six direct-SVG
+observations require measured canvas containment, at least 36 units between
+stages, annotated connected orthogonal paths, clearance, and no crossings or
+shared segments. A dedicated 200 percent browser-scale observation checks the
+lineage source and modal's effective label sizes, contained page and modal
+geometry, and availability of every stage and the native-log qualification in
+the nearby text. Source and generated policy reject missing or changed version,
+API/channel, unresolved-ID and provisional-path labels.
+
+Review the figure and prose together when any of these source contracts change:
+
+- `addon/EsoWeaveData/Encounter.lua`: selected recording modes and sources,
+  encounter ordinal/raw sequence, retained exact values, bounds and loss;
+- `src/encounter/model.rs`, `src/encounter/validate.rs`,
+  `src/encounter/mod.rs` and `src/encounter/replay.rs`: capture/controller
+  and normalization versions, partial/legacy replay, ordering and batch rejection;
+- `src/encounter/store.rs`: canonical format, immutable identity, hash, import
+  idempotency and explicit deletion;
+- `src/encounter/metrics.rs` and `src/catalog/mod.rs`: `s069-v1` projection,
+  unavailable denominators, exact channel/API compatibility and kind-specific IDs;
+- `src/recommendation/mod.rs`: `s090-v1` evidence gates, thresholds, qualifications
+  and display-only prompts; and
+- `docs/src/development/encounter-ingestion.md`: native-log qualification status.
+
+This implementation closes the #222 figure handoff without changing native
+ingestion support or establishing Combat Metrics parity. The new
+`DIA-007` manifest record deliberately updates the pinned semantic projection.
+The separately approved #221 and #223 figures remain future work.
+
+## Renderer boundary
 
 Chrome is the automated representative renderer because it is present on the
 GitHub-hosted Ubuntu runner and the supported Windows development environment.
@@ -133,8 +171,8 @@ promises. Unknown embedded web views are untested, but explicit SVG geometry and
 the preserved text equivalents provide bounded fallback behavior.
 
 S086 remains the rendering-compatibility authority for the original four
-diagram assets. S112 owns the fifth asset and the expanded inventory and
-receipts.
+diagram assets. S112 owns the fifth and S121 the sixth asset, with the expanded
+inventory and receipts above.
 S088 owns the shared click-to-expand behavior, visible affordances, keyboard and
 focus semantics, background inertness, raw HTML figures, screenshots, captions,
 brand assets, and scrollable intrinsic-size presentation. S103 owns intrinsic

@@ -157,5 +157,5 @@ If the physical chord passes through, first check native binding evidence,
 Enabled, focus, suspension, Game Context, Life State, World State, Travel, and
 Roll Dodge. Extra held modifiers also require pass-through when a generated
 target chord does not contain them. If it is suppressed but
-no sequence appears, check the Global Cooldown and Live Log for a queue or worker
+no sequence appears, check the Global Cooldown and Application Log for a queue or worker
 drop. See [A skill passes through or a weave is dropped](../getting-started/troubleshooting.md#a-skill-passes-through-or-a-weave-is-dropped).

@@ -300,18 +300,18 @@ impl CatalogUpdateService {
             UpdateStage::WaitingForCapture,
             0,
             0,
-            "Checking for a SavedVariables flush after the waiting boundary",
+            "Checking whether ESO saved new catalog data since observation began",
         ));
         let first = fingerprint_capture(capture_path.as_ref())?;
         if first.sha256 == waiting_fingerprint.sha256 {
             return Err(UpdateError::Validation(
-                "collector capture is unchanged; run /reloadui, log out, or exit ESO first".into(),
+                "The saved addon data has not changed. Finish /ewcollect catalog collection in ESO, then /reloadui, log out, or exit to save it before building.".into(),
             ));
         }
         let second = fingerprint_capture(capture_path.as_ref())?;
         if first != second {
             return Err(UpdateError::Validation(
-                "collector capture is still changing; wait for the save to finish".into(),
+                "ESO's saved addon data is still changing. Wait for the file save to finish, then try building again.".into(),
             ));
         }
         let canonical_parent = fs::canonicalize(
@@ -327,11 +327,11 @@ impl CatalogUpdateService {
         let capture_bytes = canonical_catalog_capture(&shared_bytes)
             .map_err(PipelineError::Collector)?
             .ok_or_else(|| {
-                UpdateError::Validation("shared SavedVariables has no catalog capture".into())
+                UpdateError::Validation("ESO's saved addon data contains no catalog collection. In ESO, use /ewcollect help and complete collection, then /reloadui, logout, or exit to save it.".into())
             })?;
         if envelope.channel != Channel::Live {
             return Err(UpdateError::Validation(
-                "only a complete Live collector capture can build an active candidate".into(),
+                "Only a complete Live catalog collection can build a catalog for desktop selection. PTS collection is separate and cannot be installed here.".into(),
             ));
         }
         cancel.check()?;
@@ -402,7 +402,7 @@ impl CatalogUpdateService {
             UpdateStage::Building,
             0,
             0,
-            "Building a local review candidate through the S073 pipeline",
+            "Building a local catalog update for review from saved game definitions",
         ));
         cancel.check()?;
         let receipt = build_candidate_with_cancel(
@@ -505,7 +505,7 @@ impl CatalogUpdateService {
             UpdateStage::WaitingForLock,
             0,
             0,
-            "Waiting for catalog operation lock",
+            "Waiting for exclusive access to catalog files; another operation may be using them",
         ));
         let _lock = OperationLock::acquire(&self.roots.operation_lock())?;
         cancel.check()?;
@@ -632,7 +632,7 @@ impl CatalogUpdateService {
             UpdateStage::WaitingForLock,
             0,
             0,
-            "Waiting for catalog operation lock",
+            "Waiting for exclusive access to catalog files; another operation may be using them",
         ));
         let _lock = OperationLock::acquire(&self.roots.operation_lock())?;
         cancel.check()?;
@@ -829,12 +829,12 @@ impl CatalogUpdateService {
 fn validate_live_candidate(candidate: &CandidateSummary) -> Result<(), UpdateError> {
     if candidate.channel != Channel::Live {
         return Err(UpdateError::Validation(
-            "only Live candidates can become the active catalog".into(),
+            "Only a Live (released game) catalog can be selected here. PTS catalogs remain previews for the Public Test Server.".into(),
         ));
     }
     if candidate.catalog_schema != SCHEMA_VERSION {
         return Err(UpdateError::Validation(format!(
-            "candidate schema {} is unsupported",
+            "This proposed catalog uses unsupported data format {}. Obtain a compatible catalog or update ESO Weave before selecting it.",
             candidate.catalog_schema
         )));
     }
@@ -855,7 +855,7 @@ pub(crate) fn candidate_compatibility(
                 < parse_commit_message_version(&active.game_version));
     if older {
         return Err(UpdateError::Validation(
-            "candidate is older than the active Live catalog".into(),
+            "This proposed catalog is older than the selected Live catalog. Choose a current update; use Roll back to restore an available previous selection.".into(),
         ));
     }
     Ok(())

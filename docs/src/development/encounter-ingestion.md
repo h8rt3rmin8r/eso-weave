@@ -1,11 +1,17 @@
 # Encounter Ingestion
 
-Native `Encounter.log` incremental tailing is ESO Weave's provisional preferred
-bulk-ingestion candidate. Terminal native-log import is the second candidate,
-and bounded session-spool import from `EsoWeaveDataSaved.encounter` remains the
-supported safe fallback. It validates and replays every terminal encounter
-before one atomic import transaction. Bulk encounter records never use Pixel
-Bus.
+**Use [Encounter Capture](../features/encounter-capture.md) for the supported
+recording and import workflow.** ESO Weave Data records fights in ESO, ESO saves
+them in its addon data file, and **Import Saved Capture** copies accepted fights
+into desktop history. It validates completed fights and independently replays
+eligible current captures before one atomic import transaction. Bulk encounter
+records never use Pixel Bus.
+
+ESO's native `Encounter.log` files are a separate provisional candidate.
+Incremental tailing means reading new completed lines as ESO writes them;
+terminal import means reading the file after the recording has ended. Neither
+candidate is the desktop Application Log or File Logging setting. Native-log
+qualification does not change or block the supported saved-addon path.
 
 ESO API 101050 and 101051 document controls for enabling encounter logging,
 querying its state and version, and selecting supported verbose and inline
@@ -14,8 +20,9 @@ unit state, equipment, maps, zones, and trials. Those declarations do not prove
 flush cadence, file-sharing behavior, crash durability, callback parity, or
 privacy behavior on a user's platform.
 
-The native-log candidate remains provisional under issue #190 until separately
-owned Windows and Linux/Proton verification records at least three
+The native-log candidate remains provisional. Historical issue #190 describes
+the qualification contract; its disposition is not proof of platform behavior.
+Qualification would require separately owned Windows and Linux/Proton records of at least three
 representative encounters per scenario. S096 single and continuous modes do not
 promote or depend on this candidate. Receipts must include source versions,
 format and anonymity settings,

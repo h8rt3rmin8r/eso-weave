@@ -43,8 +43,10 @@ gameplay, or uses Pixel Bus for bulk records.
 
 The desktop cannot enable, disable, or change encounter mode. It has no custom
 binding, generated-input, clipboard, Pixel Bus, or live SavedVariables command
-path. Any controller state read from disk is labeled last-saved or historical
-because ESO may not have flushed its current state. Use `/ewencounter status`
+path. **Last saved recording state** comes from the last successfully imported
+saved file. Refresh and failed imports keep that older summary; it can predate
+the latest disk save or selected environment. Check **Saved channel** in the
+summary. ESO's disk file can also lag its current state. Use `/ewencounter status`
 inside ESO for the current requested and effective capture state.
 
 ## Privacy and network behavior
@@ -59,7 +61,8 @@ The optional collector records versioned, bounded catalog observations in the
 user's local SavedVariables. The desktop treats that file as hostile data, never
 executes it, never uploads it, and keeps user-collected localized text local.
 
-The optional encounter module records one bounded local SavedVariables envelope.
+The optional encounter module records a bounded local session of one or more
+fights in the game's saved addon data (SavedVariables).
 Every scalar value delivered by a selected callback is retained exactly unless
 a hard bound or unsupported runtime value causes declared whole-observation
 loss. The current desktop importer treats the shared file as hostile data,
@@ -68,10 +71,12 @@ accepted raw history in a user-owned store separate from the shipped catalog.
 It never uploads the capture, and logs, receipts, public fixtures, and default UI
 summaries do not reproduce raw payload values.
 
-The desktop application performs one best-effort background startup check against
-the official `esoui/esoui` live client-version source. That request is used only
-as an addon API-version bump signal. Failure never blocks startup, and the
-application retains a compiled and last-known local fallback. Package download
+The desktop performs a best-effort background startup check against the official
+`esoui/esoui` client/API sources for the selected Live or PTS environment. It
+compares the observed API with each bundled addon's reviewed support declaration;
+it does not claim compatibility by stamping a newer number into installed files.
+Failure never blocks startup, current support stays unknown, and remembered
+unsupported-version guidance remains visible. Package download
 and GitHub documentation access naturally use their respective services.
 
 Logs and settings stay in the platform paths described in

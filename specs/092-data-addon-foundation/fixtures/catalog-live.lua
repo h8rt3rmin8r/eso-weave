@@ -1,7 +1,7 @@
 EsoWeaveDataSaved = { ["schema_version"] = 1, ["addon_version"] = 1, ["catalog"] = {
   ["schema_version"] = 1,
   ["collector_version"] = 1,
-  ["collector_checksum"] = "63292440be3b3020065d26189ff4cf0daa17ea5ad0ca183562e06fe1e1ee3f1b",
+  ["collector_checksum"] = "6c90fe89eaeb6bdc746d9da50f2516e360fd9279c399c5a52594327647a39a68",
   ["status"] = "complete",
   ["channel"] = "live",
   ["game_version"] = "12.0.8",

@@ -168,7 +168,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
         reasons.push(reason(
             RecommendationReasonKind::InsufficientDuration,
             format!(
-                "Observed duration is {} ms; provisional advice requires at least {} ms.",
+                "The recorded fight lasts {} ms; review prompts need at least {} ms (10 seconds) of observations.",
                 projection.duration_ms, MIN_DURATION_MS
             ),
         ));
@@ -178,7 +178,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
         reasons.push(reason(
             RecommendationReasonKind::InsufficientCasts,
             format!(
-                "Observed cast count is {cast_count}; provisional advice requires at least {MIN_CASTS}."
+                "Only {cast_count} skill casts were recorded; review prompts need at least {MIN_CASTS}."
             ),
         ));
     }
@@ -186,7 +186,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
         reasons.push(reason(
             RecommendationReasonKind::UnsupportedProjectionVersion,
             format!(
-                "Projection schema {} and algorithm {} are unsupported; s090-v1 requires schema {} and algorithm {}.",
+                "These calculated results use unsupported format {} or calculation version {}. Review prompts require result format {} and calculation version {}; the original recording is unchanged.",
                 projection.schema_version,
                 projection.algorithm_version,
                 PROJECTION_SCHEMA_VERSION,
@@ -197,19 +197,19 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
     if !valid_span {
         reasons.push(reason(
             RecommendationReasonKind::InvalidSequenceSpan,
-            "The observed sequence span is invalid, so advice is suppressed.".into(),
+            "The recorded observation order is invalid, so review prompts are unavailable.".into(),
         ));
     }
     if !loss_ranges_valid {
         reasons.push(reason(
             RecommendationReasonKind::InvalidLossRange,
-            "A declared loss range is reversed, so advice is suppressed.".into(),
+            "The recording lists missing observations in an invalid order, so review prompts are unavailable.".into(),
         ));
     }
     if !metric_evidence_valid {
         reasons.push(reason(
             RecommendationReasonKind::InvalidMetricEvidence,
-            "Required metric quality, coverage, or algorithm evidence is inconsistent, so advice is suppressed."
+            "The calculated results disagree about recording completeness, observation coverage or calculation version, so review prompts are unavailable."
                 .into(),
         ));
     }
@@ -217,14 +217,14 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
         reasons.push(reason(
             RecommendationReasonKind::MaterialCaptureLoss,
             format!(
-                "Declared loss covers {missing_sequences} of {sequence_span} source sequences, meeting the 10% suppression threshold."
+                "The recording is missing {missing_sequences} of {sequence_span} observations (at least 10%), so review prompts are unavailable."
             ),
         ));
     } else if valid_span && loss_ranges_valid && declared_loss {
         reasons.push(reason(
             RecommendationReasonKind::DeclaredCaptureLoss,
             format!(
-                "Declared loss covers {missing_sequences} of {sequence_span} source sequences; retained prompts are qualified."
+                "The recording is missing {missing_sequences} of {sequence_span} observations. Any available prompts carry this limitation."
             ),
         ));
     }
@@ -232,7 +232,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
         reasons.push(reason(
             RecommendationReasonKind::UnknownCatalogIds,
             format!(
-                "{} numeric catalog ID{} remain unresolved; known-target prompts are qualified.",
+                "{} recorded game-data ID{} cannot be identified by the catalog. Any available prompts for known abilities or effects carry this limitation.",
                 unknown_ids.len(),
                 if unknown_ids.len() == 1 { "" } else { "s" }
             ),
@@ -258,7 +258,7 @@ pub fn generate_recommendations(projection: &EncounterProjection) -> Recommendat
     if unknown_target_omitted {
         reasons.push(reason(
             RecommendationReasonKind::UnknownTargetOmitted,
-            "A threshold-crossing unknown target was omitted because its meaning is unresolved."
+            "An unidentified ability or effect met a review threshold, but no prompt is shown for it because its game-data definition is missing."
                 .into(),
         ));
     }

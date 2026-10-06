@@ -39,7 +39,7 @@ Does ESO Weave open?
               No -> use the platform input guidance and native binding state table.
             Yes -> is encounter capture or import the first failing observation?
               Yes -> inspect addon status, saved authority, receipt, loss, and validation.
-              No -> inspect the feature-specific status and Live Log.
+              No -> inspect the feature-specific status and Application Log.
 ```
 
 The indented text is the complete decision tree. Each matching failure branch
@@ -52,7 +52,7 @@ the earlier one.
 | --- | --- | --- |
 | **Not detected** | No validated ESO installation or active game was found | Confirm ESO is installed for the current user and launch it normally |
 | **Multiple installs detected** | More than one authoritative installation root conflicts | Close ESO Weave, identify the intended installation, and use the AddOns folder override only for PixelBeacon while provider ambiguity remains visible |
-| **Unknown** | The operating-system observation did not authorize a conclusion | Retry after the launcher and game settle; inspect the Live Log if it persists |
+| **Unknown** | The operating-system observation did not authorize a conclusion | Retry after the launcher and game settle; inspect the Application Log if it persists |
 | **Launcher open** | The launcher is present but the game client is not active | Start the game client |
 | **Inactive** | The launcher and game client are absent | Start ESO |
 
@@ -69,7 +69,7 @@ evidence. Dropped work is not replayed.
    X window and capture evidence required by the current application.
 4. Confirm the physical keyboard exposes the expected keys and no other program
    has exclusively grabbed it.
-5. Inspect the Live Log for an explicit pass-through emission error.
+5. Inspect the Application Log for an explicit pass-through emission error.
 
 Do not use recursive permission changes or world-writable device modes.
 
@@ -145,46 +145,62 @@ Do not add the obsolete gameplay key back to `config.json` because it is ignored
 ## ESO Weave Data is missing, outdated, unmanaged, or awaiting reload
 
 - **Not installed**: choose **Install Data**, then obey any reload guidance.
-- Compatibility **Update available**: choose **Update Data** or **Repair Data**;
+- Addon Package Version **Update available**: choose **Update Data** or **Repair Data**;
   both stage and verify replacement before commit.
-- Ownership **Unmanaged**: move or remove only the exact `EsoWeaveData` target
+- Addon Management **Unmanaged**: move or remove only the exact `EsoWeaveData` target
   manually. No lifecycle action is offered.
 - **AddOns folder not found**: select the correct Live or PTS environment or
   configure its existing `AddOns` directory.
-- Reload **Required**: run `/reloadui` or relog before relying on the change.
+- Reload Reminder **Required**: run `/reloadui` or relog before relying on the change.
 - Lifecycle operation failed: keep the prior package, check AddOns permissions,
   and retry the named operation. Do not delete first.
 
-Enabled, loaded, runtime, catalog, and encounter are separate evidence facts.
-**Unconfirmed** does not mean disabled. Verify ESO Weave Data in ESO's Add-Ons
-menu and use `/ewcollect status` or `/ewencounter status` for the in-game module.
-A running ESO process does not confirm addon loading or collection, and
-SavedVariables on disk may reflect only an earlier flush.
+Installed files, enablement, loading, the game process, catalog collection and
+encounter recording answer different questions. **Unknown (check inside ESO)**
+does not mean disabled. Enable ESO Weave Data in ESO's Add-Ons menu, reload after
+changes and run `/ewcollect status` or `/ewencounter status` inside the game for
+current activity. The saved addon file shows only what ESO wrote at its last
+save, not what the addon is doing now.
+
+If a newer game API is unsupported, update ESO Weave to a release that declares
+support. An unknown or failed API check cannot prove compatibility; the desktop
+keeps remembered unsupported-version guidance visible. Live and PTS have
+separate API evidence and addon locations.
 
 ## Encounter capture is waiting, interrupted, or failed
 
 Run `/ewencounter status` inside ESO. The desktop can show only a validated
-last-saved snapshot and cannot toggle capture or acknowledge current addon
-state.
+**Last saved recording state** from the last successfully imported saved file.
+Refresh and failed imports keep this older summary, which can predate the newest
+disk save or selected-environment change. Check **Saved channel** in that history
+summary, and use the in-game command for current activity. Recording is
+controlled inside ESO. Start with the complete
+[setup sequence](../features/encounter-capture.md#install-and-choose-a-mode).
 
-- **Stopped**: choose `single` or `continuous`, select `live` or `pts`, then use
-  `/ewencounter toggle` inside ESO.
-- **Waiting**: the selected mode is enabled and detailed capture handlers are
+- **Recording off**: mode/channel changes require no retained session. If one
+  remains, optionally save/import wanted fights, then deliberately use
+  `/ewencounter clear confirm` before choosing `single` or `continuous` and
+  `live` or `pts`. Start the chosen mode with `/ewencounter toggle` inside ESO.
+- **Waiting for combat**: the selected mode is on, but no fight is being recorded;
+  detailed capture handlers are
   dormant until combat starts. Toggle again to disable it.
-- **Capturing**: the current encounter is recording. Toggling off finalizes it
+- **Recording combat**: the current encounter is recording. Toggling off finalizes it
   as a user-stopped partial record.
-- **Interrupted**: reload or relog created an explicit gap. Single stops;
+- **Recording interrupted**: reload or relog created an explicit gap. Single stops;
   continuous resumes only from valid durably saved authority and retains the
   interruption fact.
-- **Failed**: callback, clock, recovered-state, marker, or storage pressure made
+- **Stopped after a failure**: callback, clock, recovered-state, marker, or storage pressure made
   continued capture unsafe. Retained evidence remains in place and the failed
-  request does not retry automatically. Flush and import it before following
-  the controlled clear and restart guidance.
+  request does not retry automatically. Save and import usable recordings if
+  you want to retain them, then follow the reported clear/restart guidance.
 
 A malformed same-version controller is never normalized by guessing. The addon
 preserves it unchanged, keeps it inactive, and reports `state-invalid` through
 `/ewencounter status`; use `clear confirm` only when you intentionally accept
 discarding that unimportable state.
+An unsupported saved-data version is different: the module preserves it and
+refuses clear as well as recording. Update to a compatible release; do not
+change version fields to bypass that refusal.
 
 Single mode enabled during combat truthfully marks the unseen prefix and is
 partial even when the next combat exit is observed. Continuous encounters share
@@ -193,12 +209,39 @@ replay outcomes. A missing ordinal, changed prior member, malformed spool, or
 identity collision rejects the complete desktop import batch without changing
 existing history.
 
-No old encounter is automatically removed when the spool reaches its record,
+No old encounter is automatically removed when saved recording storage reaches its record,
 marker, or 32 MiB estimated-data limit. The controller preserves terminal and
 failure evidence and stops. Run `/reloadui`, relog, or exit ESO to flush data,
 then use **Import Saved Capture** in Encounter History. An ESO or operating-system
 crash before a flush can lose unflushed control and encounter state; the product
 does not invent a recovery marker for facts that never reached disk.
+
+For desktop history, distinguish these outcomes:
+
+- **No imported encounters**: save a recorded fight in ESO, then choose **Import
+  Saved Capture**. **Refresh** rereads desktop history only.
+- Import unavailable: check the selected Live or PTS environment and AddOns
+  folder. Enable and load ESO Weave Data, record a fight, then save in ESO.
+- An operation is in progress: wait for import, refresh, detail calculation or
+  deletion to finish before requesting another operation.
+- No new fights or duplicates: exact repeated recordings are skipped. Save later
+  completed fights and import again. A currently active fight is not a completed
+  member and may be omitted from a growing saved session.
+- Missing, unstable, invalid or incompatible saved data: save again, check the
+  correct environment and supported package version, then retry. A malformed
+  member, changed earlier record or identity conflict rejects the whole batch
+  and preserves existing history. Preserve the source for diagnosis; do not
+  edit it to defeat validation.
+- Calculation unavailable: a missing or incompatible catalog can leave imported
+  summaries visible while metrics are unavailable. Review the catalog's exact
+  channel/API match; a known ID of another entity kind cannot supply a definition.
+- **Incomplete observations** or unknown definitions: keep the declared missing
+  sequence ranges and unresolved IDs in view. Missing duration produces an
+  unavailable rate, not zero. Review prompts may be qualified or unavailable.
+- Delete failed: imported records remain available unless the operation reports
+  successful removal. Check application-data permissions and retry the named
+  action. **Delete Encounter** and **Delete All** preserve ESO's saved file, so
+  importing that unchanged file can restore deleted fights.
 
 ## Discovery collector capture or import fails
 
@@ -208,12 +251,18 @@ package lifecycle. Maintainers may also run `collector-status` against the exact
 Live or PTS `AddOns` directory. An `unmanaged` result is intentionally not
 repaired or removed automatically.
 
-In ESO, `/ewcollect status` reports the current capture state. Combat pauses a
+In ESO, `/ewcollect status` reports current catalog collection, not fight recording. Combat pauses a
 run and requires `/ewcollect resume`. After completion, run `/reloadui`, log
 out, or exit so ESO writes SavedVariables. Import the matching Live or PTS file;
 channel, checksum, chunk, status, size, or schema errors are fail-closed and do
 not overwrite the previous staged JSON. Do not edit the capture to bypass an
 error. Preserve it for diagnosis and begin a fresh explicit run.
+
+`/ewcollect cancel` retains an incomplete, unimportable collection; it does not
+erase it. Starting a new run after a finished, cancelled or failed one replaces
+the previous catalog collection. A reload does not reconstruct the running
+collector. Preserve a completed collection before starting another, and check
+status after interruptions.
 
 ## A local ability icon uses the placeholder
 
@@ -255,7 +304,7 @@ fallback. A receipt warning means the selection itself succeeded but redacted
 receipt storage failed, commonly because the application-data volume is full.
 
 For a collector-assisted build, manage ESO Weave Data from System and State,
-then choose **Begin capture wait** before the ESO save
+then choose **Watch for saved catalog data** before the ESO save
 boundary. Then run `/reloadui`, log out, or exit and choose **Build from flushed
 capture**. Unchanged, unstable, incomplete, PTS, or coverage-reducing captures
 remain unaccepted. Module-local clear guidance never removes the shared package,
@@ -305,11 +354,11 @@ diagnosis, then change only the exact invalid field or allow a fresh default fil
 to be written. Session-state load failures use safe defaults but do not have the
 same `.invalid` preservation guarantee.
 
-## Use the Live Log
+## Use the Application Log
 
-Open **View > Live Log**. Select INFO for ordinary lifecycle diagnosis, DEBUG for
+Open **View > Application Log**. Select INFO for ordinary lifecycle diagnosis, DEBUG for
 a bounded reproduction, or TRACE only when resource sampling detail is needed.
-The dropdown changes and persists the global captured level for both the Live Log
+The dropdown changes and persists the global captured level for both the Application Log
 ring and optional file logging.
 
 Enable **Write Log to File** before reproducing a problem that must survive the

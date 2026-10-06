@@ -28,7 +28,7 @@
   <rect data-node="startup-evidence" data-stage="3" x="15" y="400" width="170" height="105" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
   <text x="100" y="429" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">Startup evidence</text>
   <text x="100" y="454" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Notification before GUI</text>
-  <text x="100" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">or Live Log after GUI</text>
+  <text x="100" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">or Application Log after GUI</text>
 
   <rect data-node="game-question" data-stage="3" x="205" y="400" width="180" height="105" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
   <text x="295" y="429" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Game observation</text>
@@ -93,7 +93,7 @@
 
   <rect data-node="feature-evidence" data-stage="7" x="205" y="1240" width="180" height="130" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
   <text x="295" y="1284" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Feature status</text>
-  <text x="295" y="1314" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">and Live Log</text>
+  <text x="295" y="1314" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">and Application Log</text>
   <text x="295" y="1342" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">for a different symptom</text>
 
   <rect x="35" y="1420" width="330" height="62" rx="8" fill="#151b23" stroke="#65758b"/>

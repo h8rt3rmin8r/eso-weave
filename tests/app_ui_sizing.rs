@@ -226,7 +226,7 @@ fn file_menu_opens_the_accessible_catalog_update_modal() {
     harness.step();
     harness.get_by_label("Catalog Update");
     harness.get_by_label(
-        "Updates are always user initiated. Imported hashes prove integrity, not who supplied the files.",
+            "A catalog contains game-data definitions used to identify recorded abilities and effects. Updating it does not start encounter recording or delete history. You choose when to install a reviewed update; file checks detect changes but do not identify its supplier.",
     );
     harness.get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates");
     harness.get_by_role_and_label(
@@ -639,7 +639,7 @@ fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
             .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
             .join(eso_weave::data_addon::MANIFEST_FILE)
             .is_file());
-        harness.get_by_label("Data Addon Next Step");
+        harness.get_by_label("Addon Next Step");
         harness
             .get_by_role_and_label(egui::accesskit::Role::Button, "Data Details")
             .click_accesskit();
@@ -647,15 +647,16 @@ fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
             harness.step();
         }
         harness.get_by_label("ESO Weave Data Details");
+        harness.get_by_label("Setup: install ESO Weave Data for the selected Live or PTS environment, enable it in ESO's Add-Ons menu, and run /reloadui if ESO is open. For current recording status, enter /ewencounter status inside ESO.");
         for label in [
-            "Data Addon Ownership",
-            "Data Addon Compatibility",
-            "Data Addon Enabled",
-            "Data Addon Loaded",
-            "Data Addon Reload",
-            "Data Runtime",
+            "Addon Management",
+            "Addon Package Version",
+            "Enabled in ESO",
+            "Loaded in ESO",
+            "Reload Reminder",
+            "ESO Client",
             "Catalog Collection",
-            "Encounter Collection",
+            "Encounter Recording",
         ] {
             harness.get_by_label(label);
         }
@@ -672,7 +673,7 @@ fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
         for _ in 0..2 {
             harness.step();
         }
-        harness.get_by_label("Remove the ESO Weave Data addon?");
+        harness.get_by_label("Remove the managed ESO Weave Data addon files? ESO's saved recordings and collected catalog data, imported encounter history, and PixelBeacon are kept. Reload ESO if it is open.");
         harness.get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Data Uninstall");
     }
 }

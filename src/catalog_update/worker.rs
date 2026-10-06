@@ -91,29 +91,29 @@ impl WorkerFailure {
             ),
             UpdateError::ConcurrentOperation => (
                 "operation-in-progress",
-                "Another catalog operation is already running.".into(),
+                "Another catalog operation is running. Wait for it to finish or cancel it before trying again.".into(),
             ),
             UpdateError::NoRollbackTarget => (
                 "rollback-unavailable",
-                "No previous verified catalog is available.".into(),
+                "There is no previous verified catalog to restore. Keep the current selection or choose another available candidate.".into(),
             ),
             UpdateError::InvalidSelection(_) => (
                 "selection-invalid",
-                "The saved catalog selection is invalid; the bundled fallback remains active."
+                "The saved catalog selection is invalid. ESO Weave uses its bundled game-data definitions instead; open Catalog Update to choose a verified replacement."
                     .into(),
             ),
             UpdateError::Pipeline(_) => (
                 "candidate-invalid",
-                "The candidate failed complete integrity or policy verification.".into(),
+                "The proposed catalog did not pass its data-integrity and source-policy checks. Keep your current catalog and obtain a corrected candidate from a trusted source.".into(),
             ),
             UpdateError::Validation(message) => ("update-invalid", message.clone()),
             UpdateError::Io(_) => (
                 "storage-failed",
-                "Catalog storage could not complete the operation.".into(),
+                "The catalog operation could not read or write its local files. Check application-folder access and available disk space, then retry.".into(),
             ),
             UpdateError::Json(_) => (
                 "contract-invalid",
-                "A catalog update contract was malformed.".into(),
+                "A catalog update file has an invalid format. Use a compatible candidate or application version; the failed operation did not activate that candidate.".into(),
             ),
             UpdateError::Cancelled => ("cancelled", "Catalog operation cancelled.".into()),
         };
@@ -205,7 +205,7 @@ impl CatalogUpdateWorker {
                         let status = crate::data_addon::status(&addons_root);
                         let _ = event_tx.send(WorkerEvent::CollectorState {
                             status: Some(status),
-                            message: "Collector status refreshed.".into(),
+                            message: "ESO Weave Data installation status refreshed. This does not report current in-game collection.".into(),
                         });
                         worker_busy.store(false, Ordering::Release);
                     }
@@ -217,9 +217,9 @@ impl CatalogUpdateWorker {
                         match crate::data_addon::install(&addons_root, running, api_version) {
                             Ok(outcome) => {
                                 let message = if outcome.reload_required {
-                                    "ESO Weave Data installed. Run /reloadui, log out, or exit ESO before importing catalog data."
+                                    "ESO Weave Data installed. Enable it in ESO's Add-Ons menu and run /reloadui. For catalog collection, use /ewcollect help; then save the finished collection with /reloadui, logout, or exit."
                                 } else {
-                                    "ESO Weave Data installed. Start ESO, then use /reloadui, logout, or exit to flush catalog data."
+                                    "ESO Weave Data installed. Start ESO, enable it in the Add-Ons menu and run /reloadui. For catalog collection, use /ewcollect help; then save the finished collection with /reloadui, logout, or exit."
                                 };
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: Some(outcome.status),
@@ -229,7 +229,7 @@ impl CatalogUpdateWorker {
                             Err(_) => {
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: None,
-                                    message: "ESO Weave Data installation was refused by its ownership or path safety gate."
+                                    message: "ESO Weave Data installation could not complete. Check the selected AddOns folder, access permissions and current addon files before retrying; a replacement or cleanup may already have occurred. Keep any recovery files. PixelBeacon and saved addon data were not changed."
                                         .into(),
                                 });
                             }
@@ -245,14 +245,14 @@ impl CatalogUpdateWorker {
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: Some(outcome.status),
                                     message:
-                                        "Managed ESO Weave Data removed. PixelBeacon and SavedVariables were not modified."
+                                        "ESO Weave Data addon files removed. PixelBeacon, ESO's saved addon data and imported desktop history were not changed. Reload ESO before expecting the removal to take effect."
                                             .into(),
                                 });
                             }
                             Err(_) => {
                                 let _ = event_tx.send(WorkerEvent::CollectorState {
                                     status: None,
-                                    message: "ESO Weave Data removal was refused because it is absent or not marker-owned."
+                                    message: "ESO Weave Data removal could not complete. The addon may be absent, unrecognized, or already moved aside before cleanup failed. Check the current AddOns folder and keep recovery files before retrying. PixelBeacon, saved addon data and imported history were not changed."
                                         .into(),
                                 });
                             }

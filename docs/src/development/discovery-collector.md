@@ -7,6 +7,11 @@ workflow, not part of normal application startup. It does not capture combat,
 send network requests, generate input, modify gameplay, upload data, or package
 game-owned image bytes.
 
+**Catalog collection** gathers game-data definitions for a later reviewed catalog
+build. It does not record fights. For player encounter recording, use
+[Encounter Capture](../features/encounter-capture.md). PixelBeacon is the other
+addon and supplies current screen readings; it does not collect catalog data.
+
 The first collector version covers five bounded views: player skills, crafted
 abilities, item sets, champion skills, and companions, races, and classes.
 Coverage is truthful only for the recorded character, account unlocks, locale,
@@ -38,10 +43,18 @@ In ESO, start an explicit bounded run:
 ```
 
 The addon performs limited work per update tick. Entering combat pauses the run;
-it never resumes without `/ewcollect resume`. Use `/ewcollect cancel` to
-discard the active run. A completed capture still reaches disk only at ESO's
-supported SavedVariables save boundary, so run `/reloadui`, log out, or exit
-before importing it.
+leave combat and run `/ewcollect resume` to continue. Use `/ewcollect status`
+inside ESO for the current run. `/ewcollect cancel` stops the run and retains an
+incomplete snapshot, which cannot be used for a catalog build. It does not erase
+the collected data. Starting a new run after a completed, cancelled or failed
+run replaces that previous catalog collection, while preserving encounter data.
+
+Run `/ewcollect start pts` for the Public Test Server, and import with the
+matching channel. A reload does not reconstruct an active collection runtime;
+check status and begin a fresh explicit run if it was interrupted. A completed
+collection still reaches disk only when ESO saves its addon data: run
+`/reloadui`, log out, or exit before importing it. Save or export any completed
+collection you want to retain before starting another.
 
 ## Stage and compile
 
@@ -84,3 +97,7 @@ cargo run --locked --bin catalog-compiler -- collector-remove --addons ADDONS
 Removal never deletes SavedVariables, staged JSON, catalogs, or an unmanaged
 addon directory. Use `/ewcollect clear confirm` in ESO to clear only the catalog
 subtree while preserving encounter data.
+Clear also preserves imported desktop encounter history, both addon packages
+and the active catalog. Save in ESO to write the cleared state to disk. An
+unsupported saved-data version remains preserved and cannot be cleared by the
+current module; update to a compatible release instead of editing its version.

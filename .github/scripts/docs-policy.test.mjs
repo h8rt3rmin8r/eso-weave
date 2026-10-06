@@ -26,6 +26,7 @@ import {
   validateDocumentationDiagramCss,
   validateDocumentationDiagrams,
   validateDocumentationDiagramsGenerated,
+  validateEncounterWorkflowDocs,
   validateDocumentationFigureCss,
   validateDocumentationFigureInventory,
   validateDocumentationFigureJavascript,
@@ -204,7 +205,8 @@ const diagramRecords = [
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
   ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 1080],
-  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Encounter capture is waiting, interrupted, or failed", "Startup failure", "Use the Live Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Live Log"]],
+  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Encounter capture is waiting, interrupted, or failed", "Startup failure", "Use the Application Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Application Log"]],
+  ["reference/encounter-data-and-metrics.md", "encounter-evidence-lineage.svg", "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts", "Encounter lineage text equivalent", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat-log ingestion remains provisional"], 1530],
 ];
 
 function diagramFixture() {
@@ -215,7 +217,8 @@ function diagramFixture() {
     ["action-authorization.svg", ["Physical event", "Positive gates", "Authorized", "Fails closed"]],
     ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
     ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"]],
-    ["troubleshooting-decision-tree.svg", ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status and Live Log"]],
+    ["troubleshooting-decision-tree.svg", ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status and Application Log"]],
+    ["encounter-evidence-lineage.svg", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat logs: provisional", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"]],
   ]);
   for (const [page, asset, alt, heading, anchors, height, rawAnchors = []] of diagramRecords) {
     pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n\n${rawAnchors.join("\n")}\n`);
@@ -228,6 +231,50 @@ function diagramFixture() {
 
 test("S082 accepts exact local diagrams with complete text equivalents", () => {
   assert.deepEqual(validateDocumentationDiagrams(diagramFixture()), []);
+});
+
+test("S121 requires complete encounter lineage and visible version, channel and provisional gates", () => {
+  const missing = diagramFixture();
+  missing.pages.delete("reference/encounter-data-and-metrics.md");
+  assert.match(validateDocumentationDiagrams(missing).join("\n"), /encounter.*reference/i);
+  for (const anchor of diagramRecords.at(-1)[4]) {
+    const incomplete = diagramFixture();
+    incomplete.pages.set("reference/encounter-data-and-metrics.md", incomplete.pages.get("reference/encounter-data-and-metrics.md").replace(new RegExp(anchor, "giu"), "Omitted stage"));
+    assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /encounter.*text equivalent/i);
+  }
+  for (const anchor of ["s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved", "Native combat logs: provisional"]) {
+    const unqualified = diagramFixture();
+    unqualified.svgs.set("encounter-evidence-lineage.svg", unqualified.svgs.get("encounter-evidence-lineage.svg").replace(anchor, "Unqualified"));
+    assert.match(validateDocumentationDiagrams(unqualified).join("\n"), /encounter.*label/i);
+  }
+});
+
+test("S121 keeps recording, saved-data, deletion and catalog recovery instructions at point of use", async () => {
+  const pages = new Map(await Promise.all([
+    "features/encounter-capture.md", "reference/logging.md", "features/interface.md",
+    "getting-started/troubleshooting.md", "development/discovery-collector.md", "reference/settings.md",
+  ].map(async (page) => [page, await readFile(path.join("docs", "src", page), "utf8")])));
+  assert.deepEqual(validateEncounterWorkflowDocs(pages), []);
+  const missing = new Map(pages);
+  missing.delete("features/encounter-capture.md");
+  assert.match(validateEncounterWorkflowDocs(missing).join("\n"), /encounter-capture.*workflow/i);
+  for (const [page, phrase, expected] of [
+    ["features/encounter-capture.md", "Refresh", /encounter-capture/i],
+    ["features/encounter-capture.md", "unsupported saved-data version", /encounter-capture/i],
+    ["features/encounter-capture.md", "Import Saved Capture", /encounter-capture/i],
+    ["getting-started/troubleshooting.md", "current activity", /troubleshooting/i],
+    ["development/discovery-collector.md", "incomplete snapshot", /discovery-collector/i],
+    ["reference/logging.md", "native", /logging/i],
+    ["features/interface.md", "Last saved recording state", /interface/i],
+    ["features/interface.md", "last successfully imported saved file", /interface/i],
+    ["features/interface.md", "Refresh and failed imports", /interface/i],
+    ["features/interface.md", "Saved channel", /interface/i],
+    ["reference/settings.md", "Application Logging", /settings/i],
+  ]) {
+    const incomplete = new Map(pages);
+    incomplete.set(page, incomplete.get(page).replaceAll(phrase, "Removed instruction"));
+    assert.match(validateEncounterWorkflowDocs(incomplete).join("\n"), expected);
+  }
 });
 
 test("S112 requires the troubleshooting decision tree and complete prose authority", () => {
@@ -2853,7 +2900,7 @@ test("S088 inventories every meaningful figure and the sole decorative image", a
     "getting-started/installation.md",
     missingScreenshotClass.get("getting-started/installation.md").replace("docs-screenshot docs-screenshot--portrait", "unclassified-figure"),
   );
-  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /21 meaningful|unclassified/i);
+  assert.match(validateDocumentationFigureInventory(missingScreenshotClass).join("\n"), /22 meaningful|unclassified/i);
 
   const interactiveWordmark = new Map(pages);
   interactiveWordmark.set("README.md", interactiveWordmark.get("README.md").replace('alt=""', 'alt="ESO Weave"'));

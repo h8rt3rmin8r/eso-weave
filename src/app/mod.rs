@@ -358,7 +358,7 @@ pub fn data_addon_view(
                 ("Unknown", StatusRole::Warning),
                 None,
                 false,
-                "Configure a supported ESO AddOns folder in Settings.".to_string(),
+                "Choose Live or PTS in Settings and set AddOns Folder Override if automatic detection cannot find your ESO AddOns folder.".to_string(),
             ),
             Some(DataAddonStatus::NotInstalled) => (
                 ("Not installed", StatusRole::Muted),
@@ -366,7 +366,7 @@ pub fn data_addon_view(
                 ("Not applicable", StatusRole::Muted),
                 Some(DataAddonPrimaryAction::Install),
                 false,
-                "Install ESO Weave Data, then follow any reload guidance.".to_string(),
+                "Install ESO Weave Data, enable it in ESO's Add-Ons menu, then run /reloadui if ESO is open.".to_string(),
             ),
             Some(DataAddonStatus::ManagedUpToDate) => (
                 ("Installed", StatusRole::Healthy),
@@ -374,7 +374,7 @@ pub fn data_addon_view(
                 ("Current", StatusRole::Healthy),
                 Some(DataAddonPrimaryAction::Repair),
                 true,
-                "No lifecycle action is required.".to_string(),
+                "The addon files are current. Check ESO Weave Data in ESO's Add-Ons menu, then use /ewencounter status inside ESO for recording status.".to_string(),
             ),
             Some(DataAddonStatus::ManagedVersionMismatch) => (
                 ("Installed", StatusRole::Warning),
@@ -382,7 +382,7 @@ pub fn data_addon_view(
                 ("Update available", StatusRole::Warning),
                 Some(DataAddonPrimaryAction::Update),
                 true,
-                "Update or repair the managed package, then reload ESO if instructed."
+                "Use Update Data or Repair Data to install the bundled files, then run /reloadui if ESO is open. Enable ESO Weave Data in ESO's Add-Ons menu."
                     .to_string(),
             ),
             Some(DataAddonStatus::Unmanaged) => (
@@ -391,7 +391,7 @@ pub fn data_addon_view(
                 ("Unknown", StatusRole::Warning),
                 None,
                 false,
-                "Move or remove the unmanaged EsoWeaveData folder manually; ESO Weave will not modify it."
+                "Back up and move the unrecognized EsoWeaveData folder out of AddOns before installing. ESO Weave will not change it."
                     .to_string(),
             ),
         };
@@ -411,7 +411,7 @@ pub fn data_addon_view(
         primary_action = None;
         uninstall_enabled = false;
         remediation =
-            "Configure a supported ESO AddOns folder before attempting lifecycle work.".to_string();
+            "Check the selected Live or PTS environment, AddOns folder, and access permissions in Settings before retrying installation or removal.".to_string();
     }
     let available = matches!(
         status,
@@ -427,7 +427,7 @@ pub fn data_addon_view(
         ("Not applicable", StatusRole::Muted)
     };
     let (collection_text, collection_role) = if available {
-        ("Unconfirmed (no live channel)", StatusRole::Warning)
+        ("Unknown (check inside ESO)", StatusRole::Warning)
     } else {
         ("Not applicable", StatusRole::Muted)
     };
@@ -436,6 +436,11 @@ pub fn data_addon_view(
         GameRuntime::Inactive | GameRuntime::LauncherOpen => ("Unavailable", StatusRole::Muted),
         GameRuntime::Unknown => ("Unknown", StatusRole::Warning),
     };
+    if reload_required && inspection_available {
+        remediation = format!(
+            "Run /reloadui or log out and back in so ESO uses the changed addon files. {remediation}"
+        );
+    }
     DataAddonView {
         lifecycle_line: data_status_line(
             strings::DATA_ADDON_TITLE,
@@ -2130,7 +2135,7 @@ impl AppModel {
                         None,
                         false,
                         Some(
-                            "ESO Weave Data could not be inspected. Verify AddOns folder access before retrying."
+                            "ESO Weave Data files could not be checked. Check the selected game environment, AddOns folder, and access permissions in Settings, then retry."
                                 .to_string(),
                         ),
                     ),
@@ -2916,7 +2921,7 @@ impl AppModel {
         self.data_addon_failure_status = None;
         self.data_addon_inspection_available = false;
         self.data_addon_error = Some(
-            "ESO Weave Data could not be inspected. The last known lifecycle state is retained; verify AddOns folder access before retrying."
+            "ESO Weave Data files could not be checked. This is the last known installation state. Check the selected game environment, AddOns folder, and permissions in Settings, then retry."
                 .to_string(),
         );
     }
@@ -2989,7 +2994,7 @@ impl AppModel {
                 }
                 self.data_addon_error = Some(
                     if status == crate::data_addon::DataAddonStatus::Unmanaged {
-                        "ESO Weave Data is unmanaged. Move or remove the EsoWeaveData folder manually; no files were modified."
+                        "The EsoWeaveData folder could not be recognized as an ESO Weave-managed copy. No files were changed. Back it up and move it out of AddOns before installing."
                         .to_string()
                     } else {
                         format!(
@@ -3034,7 +3039,7 @@ impl AppModel {
                                 .to_string()
                         }
                         crate::data_addon::DataAddonStatus::Unmanaged => {
-                            "ESO Weave Data uninstall was refused because the target is unmanaged. Move or remove only the EsoWeaveData folder manually."
+                            "The EsoWeaveData folder could not be recognized as an ESO Weave-managed copy, so it was not removed. Back it up before moving or removing that folder manually."
                                 .to_string()
                         }
                         _ => {
@@ -3308,7 +3313,7 @@ impl AppModel {
             }
         };
         StatusLine { title: "Game API", state_text, role,
-            tooltip: "Compatibility of the bundled PixelBeacon and ESO Weave Data packages with published game UI sources. Client release and addon API are separate. Installed packages may still need Update and /reloadui; an unknown check does not confirm support." }
+            tooltip: "Game API is ESO's numbered addon interface, separate from the client release version. This checks whether the bundled PixelBeacon and ESO Weave Data files support the published API for the selected Live or PTS environment. Update the installed addon files and run /reloadui when needed. Unknown means the check has no current result, not confirmed support." }
     }
 
     /// Resolves collector paths for the background worker. The UI never displays
