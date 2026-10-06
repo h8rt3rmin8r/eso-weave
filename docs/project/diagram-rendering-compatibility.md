@@ -165,8 +165,8 @@ S122 by the owner on 2026-10-06, as recorded below.
 
 ## S122 catalog and local-authority expansion
 
-S122 adds `catalog-evidence-lifecycle.svg` (400 by 2500) and
-`local-extension-authority-map.svg` (400 by 2440), each with labels at least
+S122 adds `catalog-evidence-lifecycle.svg` (400 by 3092) and
+`local-extension-authority-map.svg` (400 by 3272), each with labels at least
 24 SVG units, a complete adjacent equivalent and the existing figure dialog.
 The finite inventory is now eight assets, 64 paint observations and eight
 topology probes. Four new probes cover both maps in Navy and Light at 320 CSS
@@ -175,6 +175,13 @@ containment. Script-blocked reloads require the static image and every equivalen
 anchor. Source/generated policy scopes the new equivalents to their own heading
 and verifies byte-identical local assets; DIA-008/DIA-009 deliberately extend
 the manifest projection without changing earlier content obligations.
+
+Labels wrap within full-width nodes and retain their 24-unit minimum. Four
+additional direct-SVG probes force monospace and DejaVu Sans fallbacks for both
+maps. Every visible label must fit the canvas and its annotated owning node with
+10-unit padding. This guards Linux font fallback independently of image
+containment and zoom. Wrapped visible text satisfies semantic anchors; SVG
+metadata cannot substitute for a missing visible label.
 
 Catalog arrows represent alternative inputs, normalization, compile/verify/diff,
 review and separate explicit Live installation/selection. PTS ends at preview.

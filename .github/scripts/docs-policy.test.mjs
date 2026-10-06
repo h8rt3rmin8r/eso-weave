@@ -201,8 +201,8 @@ test("S081 requires bounded swatches, contained images, and narrow gallery reflo
 });
 
 const diagramRecords = [
-  ["development/catalog-candidate-pipeline.md", "catalog-evidence-lifecycle.svg", "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only", "Catalog lifecycle text equivalent", ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"], 2500],
-  ["reference/local-api-and-mcp.md", "local-extension-authority-map.svg", "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases", "Local authority text equivalent", ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"], 2440],
+  ["development/catalog-candidate-pipeline.md", "catalog-evidence-lifecycle.svg", "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only", "Catalog lifecycle text equivalent", ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"], 3092],
+  ["reference/local-api-and-mcp.md", "local-extension-authority-map.svg", "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases", "Local authority text equivalent", ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"], 3272],
   ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"], 860],
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
@@ -258,6 +258,15 @@ test("S122 rejects omitted catalog and local-authority boundaries", () => {
       assert.match(validateDocumentationDiagrams(fixture).join("\n"), /SVG requires.*label/i, anchor);
     }
   }
+});
+
+test("S122 accepts wrapped visible labels and rejects metadata-only labels", () => {
+  const fixture = diagramFixture();
+  const asset = "catalog-evidence-lifecycle.svg";
+  fixture.svgs.set(asset, fixture.svgs.get(asset).replace("Verified review candidate</text>", "<tspan>Verified review</tspan><tspan>candidate</tspan></text>"));
+  assert.deepEqual(validateDocumentationDiagrams(fixture), []);
+  fixture.svgs.set(asset, fixture.svgs.get(asset).replace("Explicit rollback</text>", "Omitted</text>").replace("</svg>", "<desc>Explicit rollback</desc></svg>"));
+  assert.match(validateDocumentationDiagrams(fixture).join("\n"), /SVG requires the Explicit rollback label/i);
 });
 
 test("S121 requires complete encounter lineage and visible version, channel and provisional gates", () => {

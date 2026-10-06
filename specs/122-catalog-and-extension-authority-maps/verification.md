@@ -58,9 +58,34 @@ All console children use verified hidden noninteractive launch paths. No
 installed application or game-session verification was performed or requested.
 Public and bundled documentation use the same owned asset bytes.
 
-## Remote integration
+## Review corrections and remote integration
 
-Push and official PR publication are explicitly authorized at kickoff. Initial
-external review and CI evidence will be recorded here; at most one additional
-Codex round is authorized. Respond to every finding, resolve completed threads,
-and wait for green checks. Owner final review/merge remains pending. No release.
+Official PR [#254](https://github.com/h8rt3rmin8r/eso-weave/pull/254) was published
+at `42a323a` under the owner's explicit push authorization. First Codex round
+completed on 2026-10-06 and identified two P2 findings:
+
+- [Portable feature path](https://github.com/h8rt3rmin8r/eso-weave/pull/254#discussion_r4198649693):
+  restore forward slashes in `.specify/feature.json`. Installed Spec Kit
+  prerequisites resolve the S122 spec, plan and tasks successfully on Windows.
+  No Linux/macOS PowerShell run is claimed.
+- [Fallback-font label overflow](https://github.com/h8rt3rmin8r/eso-weave/pull/254#discussion_r4198649700):
+  wrap every label to at most 22 characters per line, enlarge nodes/canvases and
+  preserve minimum 24-unit fonts, parallel routes and terminal branches. New
+  dimensions are 400 by 3092 and 400 by 3272. Annotate label ownership and measure
+  all label bounds with 10-unit node/canvas padding under forced monospace and
+  DejaVu Sans/sans-serif fallback stacks. No font dependency is added.
+
+`target/s122-review-red.log` records failed fallback-receipt rejection coverage
+before implementation. Corrected policy tests pass (167), including wrapped
+visible labels and rejection of metadata-only substitutes. The full hidden
+browser passes all five sentinels, 64 paint cells, eight topology observations,
+four zoom/no-script probes and four fallback-font probes. Both maps retain
+70-unit stage gaps and zero crossings/shared segments. Spelling, rebuilt book,
+generated policy and encoding/diff checks pass. Initial Rust checks remain valid
+because no Rust source or dependencies changed in these review corrections.
+
+Initial remote docs and CodeQL workflows succeeded; cross-platform CI was still
+running at this correction checkpoint. Replies/resolutions and the one authorized
+second Codex round follow this push. Final head-specific CI, review completion
+and task T015 disposition will be recorded in the PR handoff. No third review
+round may be requested. Owner final review/merge remains pending. No release.

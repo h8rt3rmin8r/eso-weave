@@ -1,63 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="2440" viewBox="0 0 400 2440" role="img" focusable="false" aria-labelledby="local-authority-title local-authority-desc" data-flow-direction="top-down">
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="3272" viewBox="0 0 400 3272" role="img" focusable="false" aria-labelledby="local-authority-title local-authority-desc" data-flow-direction="top-down">
 <title id="local-authority-title">One service, shared authorities</title>
 <desc id="local-authority-desc">Local clients locate endpoints through non-secret discovery and copy a bearer credential separately. One loopback service generation guards every request. HTTP and MCP frame shared canonical state and bounded read-only queries over application-selected catalog and encounters, with no gameplay-action authority.</desc>
-<rect width="400" height="2440" rx="12" fill="#0e1116" stroke="#65758b"/>
+<rect width="400" height="3272" rx="12" fill="#0e1116" stroke="#65758b"/>
 <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/></marker></defs>
-<text x="200" y="38" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">One service, shared authorities</text>
-<rect data-node="client" data-stage="1" x="20" y="70" width="360" height="230" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text x="200" y="108" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">Local client</text>
-<text x="200" y="146" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Discovery: no credential</text>
-<text x="200" y="180" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Endpoints, process, generation</text>
-<text x="200" y="214" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Copied bearer credential</text>
-<text x="200" y="248" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Copy separately from Settings</text>
-<path data-edge="client-service" data-from="client" data-to="service" d="M200 300 V370" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<rect data-node="service" data-stage="2" x="20" y="370" width="360" height="230" rx="8" fill="#172b3a" stroke="#f2b03c" stroke-width="2"/>
-<text x="200" y="408" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">One loopback generation</text>
-<text x="200" y="446" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Bearer on every request</text>
-<text x="200" y="480" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Exact effective Host</text>
-<text x="200" y="514" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Matching optional Origin</text>
-<text x="200" y="548" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">One listener and owner</text>
-<path data-edge="service-http" data-from="service" data-to="http" d="M200 600 V670" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<path data-edge="service-mcp" data-from="service" data-to="mcp" d="M380 485 H390 V1020 H380" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<rect data-node="http" data-stage="3" x="20" y="670" width="360" height="170" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text x="200" y="708" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">HTTP /api/v1</text>
-<text x="200" y="746" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">JSON operations</text>
-<text x="200" y="780" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">HTTP status framing</text>
-<rect data-node="mcp" data-stage="3" x="20" y="910" width="360" height="170" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text x="200" y="948" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">MCP /mcp</text>
-<text x="200" y="986" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Stateless Streamable HTTP</text>
-<text x="200" y="1020" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Resources and query tool</text>
-<path data-edge="http-shared" data-from="http" data-to="shared" d="M20 755 H10 V1235 H20" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<path data-edge="mcp-shared" data-from="mcp" data-to="shared" d="M200 1080 V1150" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<rect data-node="shared" data-stage="4" x="20" y="1150" width="360" height="170" rx="8" fill="#172b3a" stroke="#2dd4bf" stroke-width="2"/>
-<text x="200" y="1188" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">Shared canonical authorities</text>
-<text x="200" y="1226" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Same semantics</text>
-<text x="200" y="1260" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Different envelopes</text>
-<text x="200" y="1294" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">No transport-owned state</text>
-<path data-edge="shared-state" data-from="shared" data-to="state" d="M200 1320 V1390" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<path data-edge="shared-query" data-from="shared" data-to="query" d="M380 1235 H390 V1830 H380" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<rect data-node="state" data-stage="5" x="20" y="1390" width="360" height="230" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
-<text x="200" y="1428" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">Canonical player state</text>
-<text x="200" y="1466" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">One snapshot publisher</text>
-<text x="200" y="1500" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Capabilities + observations</text>
-<text x="200" y="1534" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Revision + generation</text>
-<text x="200" y="1568" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Knowledge + freshness</text>
-<rect data-node="query" data-stage="5" x="20" y="1690" width="360" height="260" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
-<text x="200" y="1728" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">Shared query executor</text>
-<text x="200" y="1766" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Inventory + one read-only query</text>
-<text x="200" y="1800" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Shared 2 permits, 2 seconds</text>
-<text x="200" y="1834" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">1000 rows, 1 MiB result</text>
-<text x="200" y="1868" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">One parameterized statement</text>
-<text x="200" y="1902" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Common limits and errors</text>
-<path data-edge="query-databases" data-from="query" data-to="databases" d="M200 1950 V2020" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<rect data-node="databases" data-stage="6" x="20" y="2020" width="360" height="260" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text x="200" y="2058" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">Fixed catalog and encounters</text>
-<text x="200" y="2096" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Application-selected paths</text>
-<text x="200" y="2130" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Unavailable identity stays listed</text>
-<text x="200" y="2164" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Typed results materialized</text>
-<text x="200" y="2198" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">SQL handles closed before</text>
-<text x="200" y="2232" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Transport serialization</text>
-<text x="200" y="2330" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3">Read-only, no actions</text>
-<text x="200" y="2370" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">No remote or arbitrary paths</text>
-<text x="200" y="2410" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf">Rediscover on generation change</text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3"><tspan x="200" y="34">One service, shared</tspan> <tspan x="200" y="68">authorities</tspan></text>
+<rect data-node="client" data-stage="1" x="20" y="132" width="360" height="346" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="client"><tspan x="200" y="168">Local client</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="client"><tspan x="200" y="202">Discovery: no</tspan> <tspan x="200" y="236">credential</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="client"><tspan x="200" y="270">Endpoints, process,</tspan> <tspan x="200" y="304">generation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="client"><tspan x="200" y="338">Copied bearer</tspan> <tspan x="200" y="372">credential</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="client"><tspan x="200" y="406">Copy separately from</tspan> <tspan x="200" y="440">Settings</tspan></text>
+<rect data-node="service" data-stage="2" x="20" y="548" width="360" height="312" rx="8" fill="#172b3a" stroke="#f2b03c" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="service"><tspan x="200" y="584">One loopback</tspan> <tspan x="200" y="618">generation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="service"><tspan x="200" y="652">Bearer on every</tspan> <tspan x="200" y="686">request</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="service"><tspan x="200" y="720">Exact effective Host</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="service"><tspan x="200" y="754">Matching optional</tspan> <tspan x="200" y="788">Origin</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="service"><tspan x="200" y="822">One listener and owner</tspan></text>
+<rect data-node="http" data-stage="3" x="20" y="930" width="360" height="142" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="http"><tspan x="200" y="966">HTTP /api/v1</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="http"><tspan x="200" y="1000">JSON operations</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="http"><tspan x="200" y="1034">HTTP status framing</tspan></text>
+<rect data-node="mcp" data-stage="3" x="20" y="1142" width="360" height="210" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="mcp"><tspan x="200" y="1178">MCP /mcp</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="mcp"><tspan x="200" y="1212">Stateless Streamable</tspan> <tspan x="200" y="1246">HTTP</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="mcp"><tspan x="200" y="1280">Resources and query</tspan> <tspan x="200" y="1314">tool</tspan></text>
+<rect data-node="shared" data-stage="4" x="20" y="1422" width="360" height="244" rx="8" fill="#172b3a" stroke="#2dd4bf" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="shared"><tspan x="200" y="1458">Shared canonical</tspan> <tspan x="200" y="1492">authorities</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="shared"><tspan x="200" y="1526">Same semantics</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="shared"><tspan x="200" y="1560">Different envelopes</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="shared"><tspan x="200" y="1594">No transport-owned</tspan> <tspan x="200" y="1628">state</tspan></text>
+<rect data-node="state" data-stage="5" x="20" y="1736" width="360" height="244" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="state"><tspan x="200" y="1772">Canonical player state</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="state"><tspan x="200" y="1806">One snapshot publisher</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="state"><tspan x="200" y="1840">Capabilities +</tspan> <tspan x="200" y="1874">observations</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="state"><tspan x="200" y="1908">Revision + generation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="state"><tspan x="200" y="1942">Knowledge + freshness</tspan></text>
+<rect data-node="query" data-stage="5" x="20" y="2050" width="360" height="414" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="query"><tspan x="200" y="2086">Shared query executor</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="query"><tspan x="200" y="2120">Inventory + one</tspan> <tspan x="200" y="2154">read-only query</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="query"><tspan x="200" y="2188">Shared 2 permits, 2</tspan> <tspan x="200" y="2222">seconds</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="query"><tspan x="200" y="2256">1000 rows, 1 MiB</tspan> <tspan x="200" y="2290">result</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="query"><tspan x="200" y="2324">One parameterized</tspan> <tspan x="200" y="2358">statement</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="query"><tspan x="200" y="2392">Common limits and</tspan> <tspan x="200" y="2426">errors</tspan></text>
+<rect data-node="databases" data-stage="6" x="20" y="2534" width="360" height="448" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="databases"><tspan x="200" y="2570">Fixed catalog and</tspan> <tspan x="200" y="2604">encounters</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="databases"><tspan x="200" y="2638">Application-selected</tspan> <tspan x="200" y="2672">paths</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="databases"><tspan x="200" y="2706">Unavailable identity</tspan> <tspan x="200" y="2740">stays listed</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="databases"><tspan x="200" y="2774">Typed results</tspan> <tspan x="200" y="2808">materialized</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="databases"><tspan x="200" y="2842">SQL handles closed</tspan> <tspan x="200" y="2876">before</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="databases"><tspan x="200" y="2910">Transport</tspan> <tspan x="200" y="2944">serialization</tspan></text>
+<path data-edge="client-service" data-from="client" data-to="service" d="M200 478 V548" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="service-http" data-from="service" data-to="http" d="M200 860 V930" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="service-mcp" data-from="service" data-to="mcp" d="M380 704 H390 V1247 H380" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="http-shared" data-from="http" data-to="shared" d="M20 1001 H10 V1544 H20" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="mcp-shared" data-from="mcp" data-to="shared" d="M200 1352 V1422" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="shared-state" data-from="shared" data-to="state" d="M200 1666 V1736" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="shared-query" data-from="shared" data-to="query" d="M380 1544 H390 V2257 H380" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="query-databases" data-from="query" data-to="databases" d="M200 2464 V2534" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3"><tspan x="200" y="3052">Read-only, no actions</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf"><tspan x="200" y="3096">No remote or arbitrary</tspan> <tspan x="200" y="3130">paths</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf"><tspan x="200" y="3174">Rediscover on</tspan> <tspan x="200" y="3208">generation change</tspan></text>
 </svg>

@@ -67,10 +67,16 @@ test("S086 requires the complete eight-diagram receipt, SVG media types, and pas
     sentinel: PASS_SENTINEL,
     lineageZoom: { scale: 2, pageContained: true, sourceContained: true, modalContained: true, sourceEffectiveFontSize: 30, modalEffectiveFontSize: 30, textEquivalentAvailable: true },
     authorityZoom: ["S122-D01", "S122-D02"].flatMap((diagramId) => ["navy", "light"].map((theme) => ({ diagramId, theme, scale: 2, pageContained: true, sourceContained: true, modalContained: true, sourceEffectiveFontSize: 30, modalEffectiveFontSize: 30, textEquivalentAvailable: true, noScriptAvailable: true }))),
+    fallbackFonts: ["S122-D01", "S122-D02"].flatMap((diagramId) => ["monospace", "DejaVu Sans, sans-serif"].map((fontFamily) => ({ diagramId, fontFamily, textCount: 40, nodeLabelCount: 36, canvasContained: true, nodesContained: true, allNodeLabelsAssociated: true, minimumTextFontSize: 24 }))),
     observations,
     requests: ["architecture-ownership.svg", "action-authorization.svg", "safety-recovery.svg", "pixel-bus-validation.svg", "troubleshooting-decision-tree.svg", "encounter-evidence-lineage.svg", "catalog-evidence-lifecycle.svg", "local-extension-authority-map.svg"].map((asset) => ({ asset, status: 200, contentType: "image/svg+xml" })),
   };
   assert.deepEqual(validateRenderingReceipt(receipt), []);
+  assert.match(validateRenderingReceipt({ ...receipt, fallbackFonts: [] }).join("\n"), /fallback font/i);
+  for (const field of ["canvasContained", "nodesContained", "allNodeLabelsAssociated"]) {
+    assert.match(validateRenderingReceipt({ ...receipt, fallbackFonts: receipt.fallbackFonts.map((probe) => ({ ...probe, [field]: false })) }).join("\n"), /fallback font/i, field);
+  }
+  assert.match(validateRenderingReceipt({ ...receipt, fallbackFonts: receipt.fallbackFonts.map((probe) => ({ ...probe, minimumTextFontSize: 12 })) }).join("\n"), /fallback font/i);
   assert.match(validateRenderingReceipt({ ...receipt, authorityZoom: [] }).join("\n"), /S122.*zoom/i);
   for (const field of ["textEquivalentAvailable", "noScriptAvailable", "pageContained", "sourceContained", "modalContained"]) {
     assert.match(validateRenderingReceipt({ ...receipt, authorityZoom: receipt.authorityZoom.map((probe) => ({ ...probe, [field]: false })) }).join("\n"), /S122/i, field);

@@ -1521,7 +1521,7 @@ const DOCUMENTATION_DIAGRAMS = [
   {
     id: "S122-D01", label: "catalog evidence lifecycle",
     page: "development/catalog-candidate-pipeline.md", outputPage: "development/catalog-candidate-pipeline.html",
-    asset: "catalog-evidence-lifecycle.svg", width: 400, height: 2500,
+    asset: "catalog-evidence-lifecycle.svg", width: 400, height: 3092,
     alt: "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only",
     heading: "Catalog lifecycle text equivalent",
     anchors: ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"],
@@ -1530,7 +1530,7 @@ const DOCUMENTATION_DIAGRAMS = [
   {
     id: "S122-D02", label: "local extension authority map",
     page: "reference/local-api-and-mcp.md", outputPage: "reference/local-api-and-mcp.html",
-    asset: "local-extension-authority-map.svg", width: 400, height: 2440,
+    asset: "local-extension-authority-map.svg", width: 400, height: 3272,
     alt: "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases",
     heading: "Local authority text equivalent",
     anchors: ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"],
@@ -1746,8 +1746,11 @@ export function validateDocumentationDiagrams({ pages, svgs }) {
       if (size < 14) errors.push(`S082 ${record.label} SVG label size must be at least 14`);
     }
     if (![...svg.matchAll(/<text\b/giu)].length) errors.push(`S082 ${record.label} SVG requires visible labels`);
+    const labelText = record.id.startsWith("S122-")
+      ? [...svg.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/giu)].map((match) => match[1].replace(/<[^>]*>/gu, " ").replace(/\s+/gu, " ").trim()).join(" ")
+      : svg;
     for (const anchor of record.svgAnchors) {
-      if (!svg.includes(anchor)) errors.push(`S082 ${record.label} SVG requires the ${anchor} label`);
+      if (!labelText.includes(anchor)) errors.push(`S082 ${record.label} SVG requires the ${anchor} label`);
     }
   }
   return [...new Set(errors)];
