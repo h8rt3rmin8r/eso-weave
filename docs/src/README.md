@@ -11,7 +11,7 @@
   </div>
   <div>
     <dt>Applies to</dt>
-    <dd>v0.17.3</dd>
+    <dd>v0.17.4</dd>
   </div>
   <div>
     <dt>Released</dt>
