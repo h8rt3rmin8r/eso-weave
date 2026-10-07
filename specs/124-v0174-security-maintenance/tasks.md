@@ -32,8 +32,8 @@ Independent check: official paired pins and unchanged workflow authority pass th
 Independent check: coherent v0.17.4 identities, bounded notes, valid archive/active lifecycle and official PR linked to all three issues.
 
 - [x] T010 [US3] Archive Plan049 to docs/archive/build-plans/plan-049.md with chronological S123/publication/PR260 evidence and introduce docs/project/build-plans/plan-050.md; update both indexes, migration-ledger JSON/prose and archived Plan048 reference (FR-007; SC-005).
-- [ ] T011 [US3] Add bounded maintenance Highlights and complete history to CHANGELOG.md, preserving #259; run existing preparation Rust/docs/release/trust gates and commit before rollover (FR-006, FR-008).
-- [ ] T012 [US3] Inspect and execute governed cargo-release 0.17.4 rollover from the clean preparation commit; validate Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md and specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json (FR-006, FR-009; SC-003, SC-006).
+- [x] T011 [US3] Add bounded maintenance Highlights and complete history to CHANGELOG.md, preserving #259; run existing preparation Rust/docs/release/trust gates and commit before rollover (FR-006, FR-008).
+- [x] T012 [US3] Inspect and execute governed cargo-release 0.17.4 rollover from the clean preparation commit; validate Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md and specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json (FR-006, FR-009; SC-003, SC-006).
 - [ ] T013 [US3] Publish the official PR closing #261/#262/#263, attach it, and retain source dependency PRs for post-merge supersession (FR-008, FR-010; SC-005, SC-006).
 
 ## Phase 6: Review and handoff

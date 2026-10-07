@@ -47,3 +47,21 @@ The first docs fixture run rejected the plural issue-reference wording in the
 active ledger entry. Corrected the evidence to explicit singular issue references;
 all fixtures and actual site policy then passed without changing policy code.
 Touched files passed strict UTF-8 without BOM, LF and mojibake checks.
+
+## Governed candidate rollover
+
+Clean preparation commit: 3779b91. Installed cargo-release 1.1.2 dry run passed;
+reviewed replacements and executed `cargo release 0.17.4 --execute --no-confirm`.
+Generated identity commit: d347031 (release: v0.17.4). Cargo.toml, Cargo.lock,
+CHANGELOG.md, README.md, docs/src/README.md and the S073 capture fixture agree
+on v0.17.4. Date-bearing changelog/docs fields agree on 2026-10-07.
+Unchanged release.toml disables tag, push and publication. Logs:
+target/s124-release-dry-run.log and target/s124-release-execute.log.
+Candidate gates are rerun because crate identity, import fixture and embedded
+public documentation changed through the governed command.
+
+All candidate gates passed again on v0.17.4: 1,041 Rust tests, 180 policy
+fixtures, release binary and generated documentation, all five rendered receipt
+sentinels, spelling, examples, trust/brand/site policy and release-note/package
+validator tests. Candidate notes meet the two-bullet bounded Highlights contract.
+Remote/local v0.17.4 tags are absent; latest published release remains v0.17.3.
