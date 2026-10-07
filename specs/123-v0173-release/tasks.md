@@ -34,11 +34,11 @@
 
 - [x] T011 [US3] Run full Rust, release-build, documentation/rendering and repository hygiene gates; record actual evidence in specs/123-v0173-release/verification.md (FR-005,006; SC-004).
 - [x] T012 [US3] Commit/push validated candidate, publish official PR closing #255, attach artifact and move delivery project to PR Review; record PR in specs/123-v0173-release/verification.md (FR-007; SC-005).
-- [ ] T013 [US3] Satisfy every external finding/review and exact-head CI within two requested Codex rounds; record dispositions in specs/123-v0173-release/verification.md (FR-007; SC-004).
+- [x] T013 [US3] Satisfy every external finding/review and exact-head CI within two requested Codex rounds; record dispositions in specs/123-v0173-release/verification.md (FR-007; SC-004).
 
 ## Phase 6: Polish and Handoff
 
-- [ ] T014 Finish specs/123-v0173-release/verification.md and task receipt, confirm final-head checks, clean tree and no new tag/release, then request owner final review and merge (FR-006,008; SC-004,005).
+- [x] T014 Finish specs/123-v0173-release/verification.md and task receipt, confirm final-head checks, clean tree and no new tag/release, then request owner final review and merge (FR-006,008; SC-004,005).
 
 ## Dependencies and Execution
 

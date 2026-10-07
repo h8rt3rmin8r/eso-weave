@@ -80,6 +80,32 @@ GFM renderer confirms Plan047 and Plan048 appear in the same actual HTML table;
 the existing documentation policy passes after correction. No runtime,
 dependency or identity change followed the local gates.
 
-The corrected head will receive the second and final requested review round.
-Hosted CI remains pending. Final owner merge and later publication remain
+The corrected implementation is `778966a`. Its finding was answered and
+resolved, and all nine checks passed with one expected PR deployment skip.
+PR-ref open CodeQL alerts: 0. Final owner merge and later publication remain
 separate operations; no third review round may be requested.
+
+The second and final review completed at 2026-10-07 01:29:12 UTC for
+`778966a783fb52514357cb6c37a830bcc7160dbe`, with
+[no major issues](https://github.com/h8rt3rmin8r/eso-weave/pull/256#issuecomment-6028918404)
+and a thumbs-up on the PR body. The
+[final request](https://github.com/h8rt3rmin8r/eso-weave/pull/256#issuecomment-6028897113)
+followed the answered/resolved first-round finding. Exactly two rounds were
+used: automatic opening review and one manual re-review. Zero unresolved
+threads remain; no third request will be sent.
+
+Reviewed-implementation CI evidence:
+
+- [CI run 37557161043](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37557161043):
+  Windows/Linux tests and bundled-documentation release builds, dependency review.
+- [Documentation run 37557160962](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37557160962):
+  build, policy and rendering gates; PR deployment intentionally skipped.
+- [CodeQL run 37557161040](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37557161040):
+  Rust analysis and CodeQL check.
+- [Issue linkage run 37557160933](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37557160933):
+  issue closure linkage and proposed policy; protected-base trust passed separately.
+
+This final receipt only closes tasks and records completed gate/review evidence.
+It changes no externally reviewed implementation. Checks on its own final head
+will be awaited before the owner handoff and recorded in the PR body. Owner
+merge remains pending; no tag/release, package or installed/game check occurred.
