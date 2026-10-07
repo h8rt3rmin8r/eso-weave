@@ -35,11 +35,12 @@ manifest, so changing a count cannot hide an omission or substitution.
   the Ultimate Auto Potion resource watch, and Plan 047 completed the full
   documentation visualization audit. Plan 048 completed all four approved
   figures through merged S112, S121 and S122, preserving the intervening S120
-  recovery and unused S113-S115 reservations in its archive. Plan 049 is active
-  for S123 v0.17.3 candidate preparation, issue #255, with owner merge pending
-  and later tag/publication separately authorized. Independent release
-  verification does not reactivate a
-  completed plan. The policy requires the matching plan file and index row for
+  recovery and unused S113-S115 reservations in its archive. Plan 049 completed
+  S123 in PR #256 and v0.17.3 published on 2026-10-07. Plan 050 is active for
+  S124 dependency maintenance and v0.17.4 candidate preparation, issues #261,
+  #262 and #263; owner merge and later tag/publication remain separate.
+  Independent release verification does not reactivate a completed plan. The
+  policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.
 - The old monolithic specification is removed only after all 20 units and six
   safety invariants have named canonical destinations.
