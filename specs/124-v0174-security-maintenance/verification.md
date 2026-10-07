@@ -65,3 +65,47 @@ fixtures, release binary and generated documentation, all five rendered receipt
 sentinels, spelling, examples, trust/brand/site policy and release-note/package
 validator tests. Candidate notes meet the two-bullet bounded Highlights contract.
 Remote/local v0.17.4 tags are absent; latest published release remains v0.17.3.
+
+## External review
+
+Official PR: https://github.com/h8rt3rmin8r/eso-weave/pull/264, published and
+attached with closing references for #261, #262 and #263. Source update PRs
+#239, #240, #247, #257 and #258 remain open for post-owner-merge supersession.
+
+Exactly two Codex rounds reviewed candidate 6429f28389c110dc606854e9549695b5ea8f1e38:
+
+1. Automatic PR-open review completed 2026-10-07 19:49:49 UTC, with no findings
+   and a positive PR-body reaction.
+2. Final authorized manual request used `@codex security review` and explicit
+   dependency/authority/import security scope. The connector labeled the result
+   Code Review and completed 19:52:57 UTC, reporting no major issues:
+   https://github.com/h8rt3rmin8r/eso-weave/pull/264#issuecomment-6045656844.
+
+No inline comments, review submissions or unresolved threads were present.
+No additional round will be requested. Hosted CodeQL and dependency-review
+checks provide separate scanner results; the connector's generic label is not
+presented as an independently reported specialized security-review result.
+
+## Hosted CI and completion receipt
+
+The reviewed candidate 6429f28389c110dc606854e9549695b5ea8f1e38 passed all nine
+non-deployment checks: both Linux/Windows format/lint/test/release-build jobs,
+dependency review, CodeQL analysis/result, documentation build/render/policy,
+protected trust boundary, proposed linkage policy and closing-issue enforcement.
+Pages deployment is intentionally skipped for PRs. No CI corrections were needed.
+
+CI run: https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37677255917
+Docs run: https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37677255931
+CodeQL run: https://github.com/h8rt3rmin8r/eso-weave/actions/runs/37677255937
+
+All fifteen tasks are complete. This final completion commit changes only the
+S124 task/evidence records; implementation, dependency graph, workflow pins,
+release identities and public documentation are identical to the reviewed head.
+Final-head hosted checks remain the handoff gate and are rechecked after this
+receipt is pushed. No third review request is authorized or sent. No before/after
+implementation hook is registered. Owner final review/merge remains outstanding;
+Plan050 stays Active until that merge. No tag or package publication occurred,
+and original dependency PR closure remains post-merge housekeeping.
+
+Automated repository and CI evidence is complete within this slice. Installed
+and game-session behavior was not observed and is not claimed as proven.
