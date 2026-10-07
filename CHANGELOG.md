@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pin the Linux release AppImage builder to official appimagetool 1.9.1 and its
+  published SHA256 digest. Upstream changes to the mutable continuous download
+  no longer break packaging with a stale checksum (issue #259).
+
+### Decisions
+
+- 2026-10-07: The release workflow uses the versioned appimagetool 1.9.1 asset
+  (upstream asset 324406736) with digest
+  `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0`,
+  retaining strict checksum rejection before execution. The same tool and digest
+  successfully packaged v0.17.3 in recovery run 37614572498. This repairs the
+  normal pipeline for future tags; the published v0.17.3 tag and assets remain
+  unchanged.
+
 ## [0.17.3] - 2026-10-07
 
 ### Highlights
