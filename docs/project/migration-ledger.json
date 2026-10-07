@@ -1683,13 +1683,23 @@
     },
     {
       "id": "049",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-049.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-049.md",
       "specs": [
         "specs/123-v0173-release"
       ],
-      "evidence": "S123 prepares the v0.17.3 candidate for issue #255 after the S120-S122 owner merges. Owner final review and merge remain pending; later tag/package publication requires separate authorization."
+      "evidence": "S123 candidate preparation for issue #255 merged in PR #256 on 2026-10-07. Separately authorized v0.17.3 published that day with all five required assets. PR #260 subsequently repaired future Linux packaging for issue #259 without changing the published release."
+    },
+    {
+      "id": "050",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-050.md",
+      "specs": [
+        "specs/124-v0174-security-maintenance"
+      ],
+      "evidence": "S124 updates dependencies and CodeQL and prepares the v0.17.4 candidate for issue #261, issue #262 and issue #263. Owner final review and merge remain pending; tag and package publication are separately authorized work."
     }
   ],
   "safetyCrosswalk": [

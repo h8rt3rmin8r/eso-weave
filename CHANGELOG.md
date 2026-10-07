@@ -7,14 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+
+- Update runtime dependencies, including the rustls security fix, while retaining
+  authenticated local-service, database blob and addon import behavior.
+- Repair Linux AppImage packaging with the official versioned builder and
+  checksum, and refresh the pinned CodeQL scanner.
+
+### Changed
+
+- S124 consolidates dependency PRs #239, #240, #257 and #258: rustls 0.23.45,
+  thiserror 2.0.21, ureq 3.4.2, rmcp 3.5.0, tokio 1.53.2, tokio-util 0.7.19,
+  libc 0.2.190, mlua 0.12.2, getrandom 0.4.3 and base64 0.23.1 (issue #261).
+- Refresh both CodeQL Actions to official v4.38.2 (PR #247, issue #262).
+- Archive completed Plan049 and prepare the v0.17.4 candidate under Plan050,
+  using the existing governed release procedure (issue #263).
+
 ### Fixed
 
+- Resolve rustls advisory GHSA-2mjx-qc3c-rqvc through the patched 0.23.45 release.
 - Pin the Linux release AppImage builder to official appimagetool 1.9.1 and its
   published SHA256 digest. Upstream changes to the mutable continuous download
   no longer break packaging with a stale checksum (issue #259).
 
 ### Decisions
 
+- 2026-10-07: S124 retains existing runtime contracts and scoped dependency
+  requirements. Targeted resolution avoids unrelated lockfile downgrades;
+  coordinated rustls-webpki, thiserror-impl and mlua-sys updates follow their
+  selected parents. Regression coverage exercises explicit MCP 2025-11-25
+  initialization and canonical padded blob encodings before and after updates.
+  No new runtime restrictions or addon schema changes are introduced.
+- 2026-10-07: Both CodeQL init and analyze use official v4.38.2 commit
+  `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2`, dereferenced from upstream
+  annotated tag `88585263c0627ee42c0e1c5143a112c8d6f4aa18`. Existing workflow
+  triggers, permissions and credential settings remain unchanged.
 - 2026-10-07: The release workflow uses the versioned appimagetool 1.9.1 asset
   (upstream asset 324406736) with digest
   `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0`,

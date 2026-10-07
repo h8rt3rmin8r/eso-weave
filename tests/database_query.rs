@@ -54,6 +54,41 @@ fn run<T>(future: impl std::future::Future<Output = T>) -> T {
 }
 
 #[test]
+fn blob_parameters_preserve_canonical_padding_and_reject_ambiguous_encodings() {
+    let (_root, service) = fixture();
+    for encoded in ["", "AA==", "AP8=", "AAH/"] {
+        let result = run(service.execute(
+            "catalog",
+            QueryRequest {
+                sql: "SELECT ?1".into(),
+                parameters: vec![QueryParameter::positional(QueryParameterValue::Blob(
+                    encoded.into(),
+                ))],
+                row_limit: None,
+            },
+            CancellationToken::new(),
+        ))
+        .unwrap();
+        assert_eq!(result.rows[0][0], ResultValue::Blob(encoded.into()));
+    }
+    for encoded in ["AA", "AP8", "AB==", "AP9="] {
+        let error = run(service.execute(
+            "catalog",
+            QueryRequest {
+                sql: "SELECT ?1".into(),
+                parameters: vec![QueryParameter::positional(QueryParameterValue::Blob(
+                    encoded.into(),
+                ))],
+                row_limit: None,
+            },
+            CancellationToken::new(),
+        ))
+        .unwrap_err();
+        assert_eq!(error.code(), "invalid_request", "{encoded}");
+    }
+}
+
+#[test]
 fn inventory_is_fixed_ordered_safe_and_truthful() {
     let (root, service) = fixture();
     let inventory = run(service.inventory(CancellationToken::new())).unwrap();

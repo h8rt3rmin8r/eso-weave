@@ -84,5 +84,5 @@ historical pending language above without rewriting the original approvals.
 S113-S115 remain unused historical reservations. Their figure issues were
 delivered in S121/S122, not those reserved slice numbers. S121's October 5
 authorization preceded its October 6 merge. S123 now directs v0.17.3 candidate
-preparation in [Plan049](../../project/build-plans/plan-049.md); publication and
+preparation in [Plan049](plan-049.md); publication and
 installed behavior remain separate from this completed repository program.

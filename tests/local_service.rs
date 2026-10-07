@@ -9,7 +9,10 @@ use eso_weave::local_service::{
     LocalServicePrefs, ServiceFailureCode, ServicePhase, ServiceStatus, DISCOVERY_FILE_NAME,
 };
 use eso_weave::player_state::{bootstrap_content, observed, SnapshotPublisher};
-use rmcp::model::{CallToolRequestParams, ErrorCode, ReadResourceRequestParams, ResourceContents};
+use rmcp::model::{
+    CallToolRequestParams, ClientCapabilities, ClientConfig, ErrorCode, Implementation,
+    ProtocolVersion, ReadResourceRequestParams, ResourceContents,
+};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::{ServiceError, ServiceExt};
@@ -208,6 +211,51 @@ fn one_authenticated_listener_serves_mcp_and_protects_every_route() {
 
     controller.stop();
     wait_for(&controller, ServicePhase::Stopped);
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn mcp_initialized_protocol_2025_11_25_remains_compatible() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut controller = controller(dir.path(), 0);
+    assert!(controller.start(TEST_CREDENTIAL));
+    let connection = wait_for(&controller, ServicePhase::Running)
+        .connection
+        .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(connection.mcp_url)
+                .auth_header(TEST_CREDENTIAL),
+        );
+        let client = ClientConfig::new(
+            ClientCapabilities::default(),
+            Implementation::new("compatibility-test", "1.0.0"),
+        )
+        .with_protocol_version(ProtocolVersion::V_2025_11_25)
+        .serve(transport)
+        .await
+        .unwrap();
+        assert_eq!(
+            client
+                .peer_info()
+                .expect("initialize server info")
+                .protocol_version,
+            ProtocolVersion::V_2025_11_25
+        );
+        let resources = client.list_all_resources().await.unwrap();
+        assert_eq!(resources.len(), 3);
+        assert_resource(
+            &resources[1],
+            PLAYER_STATE_RESOURCE_URI,
+            "player-state",
+            "ESO Weave Player State",
+        );
+        client.cancel().await.unwrap();
+    });
     controller.shutdown().unwrap();
 }
 
