@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-10-07
+
+### Highlights
+
+- Repair keyboard and mouse attack admission when controller assignments are
+  present, and remove the temporary HUD notice that shifted the gauges.
+- Add Live/PTS game API compatibility diagnostics and reviewed addon declarations
+  so source observations remain distinct from installed package support.
+- Clarify encounter recording, saved-data import, addon installation and
+  configuration, catalog collection and application logs across the interface
+  and help. Add encounter lineage, catalog lifecycle and local API/MCP authority
+  diagrams with complete text equivalents.
+
 ### Added
 
 - S120 adds selected Live/PTS client and numeric addon API observations, with
@@ -56,6 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Documentation policy/renderer scripts deliberately extend existing coverage;
   no workflow, tool pin, runtime contract or release behavior changes. DIA-008
   and DIA-009 update the manifest projection while retaining existing obligations.
+
+- 2026-10-06: S123 prepares the v0.17.3 candidate through the existing governed
+  rollover, archives completed Plan048 and establishes preparation-only Plan049
+  for issue #255. Runtime contracts, dependencies, tool pins, workflows and
+  package inventory remain unchanged. Owner merge and later tag/publication
+  remain separate; installed and real-game behavior is unobserved.
 
 ## [0.17.2] - 2026-09-23
 

@@ -50,7 +50,7 @@ src/app/mod.rs, ui.rs
 src/main.rs
 tests/beacon.rs, input_engine.rs, real_sink.rs
 tests/app_view_model.rs, app_ui_sizing.rs, data_addon.rs
-docs/src/, docs/project/build-plans/plan-048.md
+docs/src/, docs/archive/build-plans/plan-048.md
 ```
 
 ## Implementation Sequence and Decisions

@@ -59,6 +59,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [045](plan-045.md) | Complete, Archived | [S104](../../../specs/104-local-extension-contract/spec.md) through [S109](../../../specs/109-extension-docs-e2e/spec.md), completed when [PR #218](https://github.com/h8rt3rmin8r/eso-weave/pull/218) merged, closed issue #180, and enabled epic #174 to close |
 | [046](plan-046.md) | Complete, Archived | [S110 Ultimate Auto Potion watch](../../../specs/110-ultimate-auto-potion/spec.md), merged in [PR #219](https://github.com/h8rt3rmin8r/eso-weave/pull/219) and closed issue #173 |
 | [047](plan-047.md) | Complete, Archived | [S111 documentation visualization audit](../../../specs/111-documentation-visualization-audit/spec.md), merged in [PR #224](https://github.com/h8rt3rmin8r/eso-weave/pull/224), closed issue #170, and created issues #220 through #223 |
+| [048](plan-048.md) | Complete, Archived | S112/#220 in [PR #225](https://github.com/h8rt3rmin8r/eso-weave/pull/225), S120 recovery in [PR #252](https://github.com/h8rt3rmin8r/eso-weave/pull/252), S121/#222 in [PR #253](https://github.com/h8rt3rmin8r/eso-weave/pull/253), and S122/#221/#223 in [PR #254](https://github.com/h8rt3rmin8r/eso-weave/pull/254); S113-S115 are unused reservations |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

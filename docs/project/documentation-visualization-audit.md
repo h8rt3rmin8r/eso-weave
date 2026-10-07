@@ -43,14 +43,18 @@ triggers. None changes application behavior. Issue #222 must keep native-log
 ingestion explicitly provisional; issue disposition alone does not establish
 its qualification evidence.
 
-S112 implemented the troubleshooting figure from #220. S121 implements #222
+S112 implemented the troubleshooting figure from #220 in merged PR #225.
+S121 delivered #222 in merged PR #253
 with the owned encounter-lineage SVG, complete nearby equivalent, policy
 inventory, six-diagram render/topology matrices and dedicated 200 percent
 readability probe. The original S111 decision inventory remains the historical
 approval record. On 2026-10-06 the owner authorized S122 to bundle #221 and #223.
 Both remain independent figures, sharing eight-diagram policy/render inventory,
 complete adjacent equivalents, exact source/update authorities and two-theme
-narrow 200 percent/no-script coverage. Plan048 awaits owner integration.
+narrow 200 percent/no-script coverage. S122 delivered both in merged PR #254
+on 2026-10-06. Plan048 is complete and
+[archived](../archive/build-plans/plan-048.md); its original S113-S115 numbers
+remain unused reservations. Plan049 now directs S123 candidate preparation.
 
 ## Cluster resolution
 

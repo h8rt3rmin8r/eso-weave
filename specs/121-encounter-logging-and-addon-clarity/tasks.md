@@ -3,7 +3,7 @@
 ## Phase 1: Setup
 
 - [x] T001 Complete issue research and spec-kit specify/clarify/checklist/plan artifacts in specs/121-encounter-logging-and-addon-clarity/ (FR-001-013).
-- [x] T002 Record S121 regrouping and preserve historical reservations in docs/project/build-plans/plan-048.md (FR-013).
+- [x] T002 Record S121 regrouping and preserve historical reservations in docs/archive/build-plans/plan-048.md (FR-013).
 
 ## Phase 2: Foundation
 
