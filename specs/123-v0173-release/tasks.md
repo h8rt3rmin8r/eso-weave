@@ -17,8 +17,8 @@
 
 - [x] T004 [US1] Capture missing-Highlights rejection using scripts/release-notes.sh, then add bounded S120-S122 outcome Highlights and S123 preparation record to CHANGELOG.md (FR-002; SC-002).
 - [x] T005 [US1] Run release-note/documentation baseline gates and commit clean preparatory CHANGELOG.md and specification/planning edits before rollover (FR-006).
-- [ ] T006 [US1] Inspect cargo-release dry run and execute governed rollover for Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md and specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json (FR-001,002,005; SC-001).
-- [ ] T007 [US1] Validate candidate notes, history preservation and metadata with existing scripts/release-notes.test.sh and .github/scripts/docs-policy.mjs (FR-001,002,006; SC-001,002).
+- [x] T006 [US1] Inspect cargo-release dry run and execute governed rollover for Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md and specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json (FR-001,002,005; SC-001).
+- [x] T007 [US1] Validate candidate notes, history preservation and metadata with existing scripts/release-notes.test.sh and .github/scripts/docs-policy.mjs (FR-001,002,006; SC-001,002).
 
 ## Phase 4: US2 - Completed and Current Planning (P2)
 
@@ -32,7 +32,7 @@
 
 **Independent test**: Official PR closes #255 on merge, all exact-head required checks pass and every finding is answered/resolved, without tag/publication.
 
-- [ ] T011 [US3] Run full Rust, release-build, documentation/rendering and repository hygiene gates; record actual evidence in specs/123-v0173-release/verification.md (FR-005,006; SC-004).
+- [x] T011 [US3] Run full Rust, release-build, documentation/rendering and repository hygiene gates; record actual evidence in specs/123-v0173-release/verification.md (FR-005,006; SC-004).
 - [ ] T012 [US3] Commit/push validated candidate, publish official PR closing #255, attach artifact and move delivery project to PR Review; record PR in specs/123-v0173-release/verification.md (FR-007; SC-005).
 - [ ] T013 [US3] Satisfy every external finding/review and exact-head CI within two requested Codex rounds; record dispositions in specs/123-v0173-release/verification.md (FR-007; SC-004).
 

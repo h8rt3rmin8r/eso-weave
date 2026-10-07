@@ -12,6 +12,21 @@ criteria covered by the 14 tasks, no unresolved clarification or constitution
 conflict. Required Phase 0 research agents worked read-only on rollover and
 archive authority. The optional agent-context hook updated the managed block.
 
+| Requirement | Task coverage |
+| --- | --- |
+| FR-001 / SC-001 | T003, T006, T007 |
+| FR-002 / SC-002 | T004, T006, T007 |
+| FR-003 / SC-003 | T008-T010 |
+| FR-004 | T001, T009 |
+| FR-005 | T002, T006, T011 |
+| FR-006 | T002, T004-T007, T011, T014 |
+| FR-007 / SC-004 | T012-T014 |
+| FR-008 / SC-005 | T001, T003, T012, T014 |
+
+Analysis metrics: 13 requirements/criteria, 14 tasks, 100 percent coverage;
+zero ambiguity, duplication, critical findings or unmapped tasks. No mandatory
+analysis hook exists. Proceeded to implementation under the owner's autopilot.
+
 ## Baseline and Tool Authority
 
 - Local and remote `v0.17.3` tag absent; hosted release endpoint returns 404.
@@ -31,7 +46,27 @@ examples/build/link checks and generated-site policy. Whitespace and 24 changed
 files' strict UTF-8/no-BOM/LF/punctuation/mojibake checks passed. Current Plan048
 references now resolve to the archive, including historical spec paths.
 
-Post-rollover Rust/build, candidate identity and rendering gates remain pending.
+The inspected dry run and executed governed rollover produced `ee37d38`
+(`release: v0.17.3`). Cargo-release selected UTC date 2026-10-07 while the
+operator's local date was October 6. Changelog and bundled snapshot retain that
+same generated date. Exactly six identity files changed; Cargo.lock changed
+only the root package version, with no dependency changes. Main-to-candidate
+changelog diff is additive, preserving the full S120-S122 and earlier history.
+
+Post-rollover gates passed:
+
+- Format, all-target/all-feature Clippy with warnings denied, all 1039 locked
+  Rust tests and release-profile application build with bundled documentation.
+- Candidate note/section extraction, fresh Unreleased, three Highlights within
+  budget (76 whitespace tokens), synchronized identity and generated-site policy.
+- Rebuilt book/link checks and complete headless browser gates: 64 diagram
+  paint cells, eight topology probes, four fallback-font probes, four authority
+  zoom/no-script probes and retained syntax, figure and table coverage. All five
+  success sentinels pass, with zero reported failures.
+
+No runtime source, addon, service contract, dependency, pinned tool, release
+configuration or workflow changed. This evidence covers repository/build
+behavior, not installation or real-game operation.
 
 ## Hosted Integration
 
