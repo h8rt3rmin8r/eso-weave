@@ -1670,14 +1670,26 @@
     },
     {
       "id": "048",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-048.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-048.md",
       "specs": [
         "specs/112-troubleshooting-decision-tree",
-        "specs/120-combat-recovery-and-api-compatibility"
+        "specs/120-combat-recovery-and-api-compatibility",
+        "specs/121-encounter-logging-and-addon-clarity",
+        "specs/122-catalog-and-extension-authority-maps"
       ],
-      "evidence": "Issue #220 delivered S112; Plan 048 preserves remaining figure issues #221 through #223. On 2026-10-05 the owner prioritized S120 for issue #248, issue #251, and issue #250 before the reserved figure sequence."
+      "evidence": "S112 delivered issue #220 in PR #225 on 2026-09-17; S120 recovery merged in PR #252 on 2026-10-05; S121 delivered issue #249 and issue #222 in PR #253 on 2026-10-06; S122 delivered issue #221 and issue #223 in PR #254 on 2026-10-06. All four figures are complete. S113-S115 remain unused historical reservations."
+    },
+    {
+      "id": "049",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-049.md",
+      "specs": [
+        "specs/123-v0173-release"
+      ],
+      "evidence": "S123 prepares the v0.17.3 candidate for issue #255 after the S120-S122 owner merges. Owner final review and merge remain pending; later tag/package publication requires separate authorization."
     }
   ],
   "safetyCrosswalk": [

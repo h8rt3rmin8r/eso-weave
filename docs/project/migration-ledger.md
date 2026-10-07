@@ -33,9 +33,11 @@ manifest, so changing a count cannot hide an omission or substitution.
   requests or release completed. Plan 044 completed the diagram-legibility
   sequence, Plan 045 completed the local extension surface, Plan 046 completed
   the Ultimate Auto Potion resource watch, and Plan 047 completed the full
-  documentation visualization audit. Plan 048 is active for the four approved
-  visualization implementations, beginning with S112, and now prioritizes the
-  approved S120 combat, API compatibility, and HUD recovery bundle. Independent release
+  documentation visualization audit. Plan 048 completed all four approved
+  figures through merged S112, S121 and S122, preserving the intervening S120
+  recovery and unused S113-S115 reservations in its archive. Plan 049 is active
+  for S123 v0.17.3 candidate preparation, issue #255, with owner merge pending
+  and later tag/publication separately authorized. Independent release
   verification does not reactivate a
   completed plan. The policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.

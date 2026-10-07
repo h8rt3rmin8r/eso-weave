@@ -63,7 +63,7 @@ docs/src/assets/diagrams/troubleshooting-decision-tree.svg
 docs/project/documentation-figure-system.md
 docs/project/diagram-rendering-compatibility.md
 docs/project/content-coverage.json
-docs/project/build-plans/plan-048.md
+docs/archive/build-plans/plan-048.md
 docs/archive/build-plans/plan-047.md
 docs/project/migration-ledger.{json,md}
 .github/scripts/docs-policy.mjs

@@ -1,6 +1,6 @@
 # Plan 048: Approved Documentation Visualizations
 
-Status: Active
+Status: Complete, Archived
 
 ## Owner-approved Recovery Priority (2026-10-05)
 
@@ -68,3 +68,21 @@ source/update authorities. The unused S113/S114 reservations are historical,
 not completed slices. Full spec-kit/autopilot, automatic push/official PR, all
 findings, green CI and at most two review rounds apply. Final review/merge remains
 with the owner; no release or field check. Plan048 awaits that integration.
+
+## Completion and Archival (2026-10-06)
+
+All four approved figures have merged. This completion record supersedes the
+historical pending language above without rewriting the original approvals.
+
+| Delivery date | Actual slice | Delivered issues | Merge evidence |
+| --- | --- | --- | --- |
+| 2026-09-17 | S112 troubleshooting figure | #220 | [PR #225](https://github.com/h8rt3rmin8r/eso-weave/pull/225), `dc28b1a` |
+| 2026-10-05 | S120 recovery interruption | #248, #251, #250 | [PR #252](https://github.com/h8rt3rmin8r/eso-weave/pull/252), `729c298` |
+| 2026-10-06 | S121 messaging and encounter lineage | #249, #222 | [PR #253](https://github.com/h8rt3rmin8r/eso-weave/pull/253), `2bd4fc3` |
+| 2026-10-06 | S122 catalog and extension authority | #221, #223 | [PR #254](https://github.com/h8rt3rmin8r/eso-weave/pull/254), `56d97ae` |
+
+S113-S115 remain unused historical reservations. Their figure issues were
+delivered in S121/S122, not those reserved slice numbers. S121's October 5
+authorization preceded its October 6 merge. S123 now directs v0.17.3 candidate
+preparation in [Plan049](../../project/build-plans/plan-049.md); publication and
+installed behavior remain separate from this completed repository program.

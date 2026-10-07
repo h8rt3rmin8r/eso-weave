@@ -5,7 +5,7 @@
 ## Phase 1: Specification and Design
 
 - [x] T001 Complete specification, clarification decisions, and requirement/domain checklists in `specs/120-combat-recovery-and-api-compatibility/` (all FR/SC).
-- [x] T002 Record source/control research, contracts, model, quickstart and chronological `docs/project/build-plans/plan-048.md` (FR-001,005,011,014).
+- [x] T002 Record source/control research, contracts, model, quickstart and chronological `docs/archive/build-plans/plan-048.md` (FR-001,005,011,014).
 - [x] T003 Reconcile stale constitution V wording outside analysis, then run read-only speckit-analyze across spec/plan/tasks before implementation (SC-005).
 
 ## Phase 2: User Story 1 - Weaving Recovery
