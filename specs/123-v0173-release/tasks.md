@@ -33,7 +33,7 @@
 **Independent test**: Official PR closes #255 on merge, all exact-head required checks pass and every finding is answered/resolved, without tag/publication.
 
 - [x] T011 [US3] Run full Rust, release-build, documentation/rendering and repository hygiene gates; record actual evidence in specs/123-v0173-release/verification.md (FR-005,006; SC-004).
-- [ ] T012 [US3] Commit/push validated candidate, publish official PR closing #255, attach artifact and move delivery project to PR Review; record PR in specs/123-v0173-release/verification.md (FR-007; SC-005).
+- [x] T012 [US3] Commit/push validated candidate, publish official PR closing #255, attach artifact and move delivery project to PR Review; record PR in specs/123-v0173-release/verification.md (FR-007; SC-005).
 - [ ] T013 [US3] Satisfy every external finding/review and exact-head CI within two requested Codex rounds; record dispositions in specs/123-v0173-release/verification.md (FR-007; SC-004).
 
 ## Phase 6: Polish and Handoff

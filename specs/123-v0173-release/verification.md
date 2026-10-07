@@ -70,5 +70,16 @@ behavior, not installation or real-game operation.
 
 ## Hosted Integration
 
-Official PR and external review/CI pending. Requested Codex rounds: 0.
-Final owner merge and later publication remain separate operations.
+Official [PR #256](https://github.com/h8rt3rmin8r/eso-weave/pull/256) was published
+at `2cc0ad3` and issue #255 moved to PR Review with Slice S123. First automatic
+Codex review completed on 2026-10-07 and returned one P2
+[archive-table finding](https://github.com/h8rt3rmin8r/eso-weave/pull/256#discussion_r4202113906).
+
+Removed the blank line that separated Plan048 from the archive table. GitHub's
+GFM renderer confirms Plan047 and Plan048 appear in the same actual HTML table;
+the existing documentation policy passes after correction. No runtime,
+dependency or identity change followed the local gates.
+
+The corrected head will receive the second and final requested review round.
+Hosted CI remains pending. Final owner merge and later publication remain
+separate operations; no third review round may be requested.
