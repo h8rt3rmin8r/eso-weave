@@ -114,5 +114,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/124-v0174-security-maintenance/plan.md
+at specs/125-data-addon-workflow-recovery/plan.md
 <!-- SPECKIT END -->

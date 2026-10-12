@@ -10,7 +10,7 @@ For setup, mode selection, saving, import and clearing, follow
 effects. A catalog is separate from your fight recordings. **SavedVariables**
 means the game's saved addon data, which ESO writes on `/reloadui`, logout or
 exit. **Application Log** and **File Logging** contain application diagnostics.
-ESO's native combat-log files belong to a separate provisional import route.
+ESO's native combat-log files belong to a separate unsupported import route.
 
 ## Encounter evidence lineage
 
@@ -77,11 +77,15 @@ ESO's native combat-log files belong to a separate provisional import route.
    relevant qualifications and source/version identities. They do not establish
    a cause, promise improvement, prove Combat Metrics parity or generate input.
 
-**Native combat-log ingestion remains provisional.** ESO's native encounter-log
+**Native combat-log ingestion is unsupported.** ESO's native encounter-log
 files are a separate candidate, outside this supported saved-addon sequence.
 Documented API controls do not establish file durability, timing or complete
 capture parity. Native logs are also separate from application diagnostic logs.
 The figure does not promote that candidate to a supported import workflow.
+
+Earlier documentation described this unimplemented candidate as "Native
+combat-log ingestion remains provisional." Implementation is tracked by
+[issue #272](https://github.com/h8rt3rmin8r/eso-weave/issues/272).
 
 ## Implementation history and detailed contracts
 
@@ -158,13 +162,14 @@ values are labeled observed, and unavailable denominators remain unavailable
 rather than becoming zero. Import, listing, calculation, and deletion run on a
 serialized background worker so large captures do not block the GUI.
 
-The desktop can display validated controller metadata only as **Last saved
-recording state**, from the last successfully imported saved file. Refresh and
-failed imports retain that older summary; it can predate the newest disk save or
-selected-environment change, so check **Saved channel**. It cannot select a mode, toggle capture,
-write live SavedVariables, or acknowledge the current addon state. Current
-requested and effective state is available through `/ewencounter status` inside
-ESO.
+**Last saved source** inspects validated metadata before import: selected
+environment, path, timestamp, readiness and finished/partial counts. Opening the
+workflow, source refresh, and successful and failed import attempts reread it;
+selection changes reject stale results. An empty stopped session needs clearing
+and a new start, while a stopped session with encounters needs import before
+clearing. The desktop cannot select a mode, toggle capture, write live
+SavedVariables or acknowledge current addon state. Current requested and
+effective state is available through `/ewencounter status` inside ESO.
 
 There is no automatic upload. Schema-v2 raw observations retain exact scalar
 values from deliberately selected callbacks and normalization-dependent API

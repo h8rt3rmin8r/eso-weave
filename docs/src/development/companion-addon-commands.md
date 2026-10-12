@@ -22,3 +22,18 @@ input features. Reconsider real-time ingress only if ESO publishes a documented
 inbound API with adequate delivery and visibility guarantees, or if the operator
 separately authorizes a live-account binding experiment after accepting its
 unknown server-visibility risk.
+
+## Deliberate recording commands
+
+Use `/ewencounter start live single`, `start pts single`, or the
+`continuous` variants inside ESO. Start validates the complete arguments,
+keeps an already enabled recorder unchanged, and never replaces a retained
+session. `/ewencounter stop` retains data and is idempotent.
+`/ewencounter status` gives concise activity and next-step guidance;
+`status details` preserves technical diagnostics. Existing aliases remain
+compatible. Desktop Copy actions copy command text but do not execute it.
+
+Both data modules use the shared system-chat message route, independently of
+debug logging. Delayed initialization queues bounded replies and retries; it
+never silently falls back to the intercepted debug sink. The exact-data warning
+must be delivered before capture authority is enabled.

@@ -229,10 +229,12 @@ fn file_menu_opens_the_accessible_catalog_update_modal() {
             "A catalog contains game-data definitions used to identify recorded abilities and effects. Updating it does not start encounter recording or delete history. You choose when to install a reviewed update; file checks detect changes but do not identify its supplier.",
     );
     harness.get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates");
-    harness.get_by_role_and_label(
-        egui::accesskit::Role::CheckBox,
-        "I obtained this candidate from a review or release source I trust.",
-    );
+    assert!(harness
+        .query_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "I trust this catalog's source",
+        )
+        .is_none());
     assert!(harness
         .query_by_role_and_label(egui::accesskit::Role::Button, "Install/update data addon",)
         .is_none());
@@ -647,7 +649,7 @@ fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
             harness.step();
         }
         harness.get_by_label("ESO Weave Data Details");
-        harness.get_by_label("Setup: install ESO Weave Data for the selected Live or PTS environment, enable it in ESO's Add-Ons menu, and run /reloadui if ESO is open. For current recording status, enter /ewencounter status inside ESO.");
+        harness.get_by_label("Install for Live or PTS, enable ESO Weave Data in ESO's Add-Ons menu, then /reloadui if ESO is open. Files on disk cannot confirm enablement or current recording.");
         for label in [
             "Addon Management",
             "Addon Package Version",
@@ -1507,15 +1509,15 @@ fn collapsed_log_minimum_does_not_reserve_hidden_card_body() {
 }
 
 /// C3 (S046 FR-017): across a monotonically shrinking gesture, the minimum width
-/// stays intrinsic and the height can take only the documented wide or narrow
-/// content extent. A continuously window-derived value would produce many heights.
+/// stays intrinsic. Essential instruction wrapping may add content height as
+/// columns narrow, bounded by the measured minimum-width content extent.
 ///
 /// This is the defect no arithmetic-only test can express, and the reason three
 /// prior slices shipped green (see research.md R5).
 #[test]
-fn enforced_minimum_uses_only_responsive_extents_during_shrink() {
+fn enforced_minimum_tracks_wrapped_content_during_shrink() {
     let wide_extent = render_at(egui::vec2(1600.0, 1200.0), SETTLE).content_extent();
-    let narrow_extent = render_at(egui::vec2(700.0, 1200.0), SETTLE).content_extent();
+    let narrow_extent = render_at(egui::vec2(500.0, 1800.0), SETTLE).content_extent();
     let mut harness = harness_at(egui::vec2(1600.0, 1200.0));
     for _ in 0..SETTLE {
         harness.step();
@@ -1550,8 +1552,8 @@ fn enforced_minimum_uses_only_responsive_extents_during_shrink() {
             baseline.x
         );
         assert!(
-            (sent.y - wide_extent.y).abs() <= 0.5 || (sent.y - narrow_extent.y).abs() <= 0.5,
-            "at window {width}x{height} minimum height {} is neither wide {} nor narrow {}",
+            sent.y >= wide_extent.y.min(narrow_extent.y) - 0.5 && sent.y <= narrow_extent.y.max(wide_extent.y) + 0.5,
+            "at window {width}x{height} minimum height {} escaped the wrapped content range {} to {}",
             sent.y,
             wide_extent.y,
             narrow_extent.y
@@ -2085,4 +2087,716 @@ fn scale_change_selects_layout_in_logical_points() {
         (scaled.x - base.x).abs() <= 0.5 && scaled.y > base.y,
         "scale should preserve intrinsic width and select taller narrow layout: {base:?} -> {scaled:?}"
     );
+}
+
+// Resolve the same glyph colors as epaint, then composite each painted surface
+// at the text's point. Token-pair tests cannot see an incorrect widget role.
+fn flatten_paint<'a>(
+    shape: &'a egui::epaint::Shape,
+    clip: egui::Rect,
+    out: &mut Vec<(&'a egui::epaint::Shape, egui::Rect)>,
+) {
+    if let egui::epaint::Shape::Vec(children) = shape {
+        for child in children {
+            flatten_paint(child, clip, out);
+        }
+    } else {
+        out.push((shape, clip));
+    }
+}
+
+fn composite(color: egui::Color32, background: [f64; 3]) -> [f64; 3] {
+    let alpha = f64::from(color.a()) / 255.0;
+
+    let rgb = [color.r(), color.g(), color.b()].map(|v| f64::from(v) / 255.0);
+    std::array::from_fn(|i| rgb[i] + background[i] * (1.0 - alpha))
+}
+
+fn contrast(foreground: [f64; 3], background: [f64; 3]) -> f64 {
+    fn luminance(rgb: [f64; 3]) -> f64 {
+        let c = rgb.map(|c| {
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        });
+        c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722
+    }
+    let (a, b) = (luminance(foreground), luminance(background));
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
+
+fn painted_text_contrasts<State>(harness: &Harness<'_, State>, label: &str) -> Vec<f64> {
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        flatten_paint(&clipped.shape, clipped.clip_rect, &mut shapes);
+    }
+    let mut ratios = Vec::new();
+    for (index, (shape, clip)) in shapes.iter().enumerate() {
+        let egui::epaint::Shape::Text(text) = shape else {
+            continue;
+        };
+        if text.galley.text() != label {
+            continue;
+        }
+        let point = text.visual_bounding_rect().center();
+        if !clip.contains(point) {
+            continue;
+        }
+        let mut background = [0.0; 3];
+        for (under, under_clip) in &shapes[..index] {
+            if !under_clip.contains(point) {
+                continue;
+            }
+            if let egui::epaint::Shape::Rect(rect) = under {
+                if rect.rect.contains(point) {
+                    background = composite(rect.fill, background);
+                }
+            }
+        }
+        for row in &text.galley.rows {
+            for vertex in &row.visuals.mesh.vertices[row.visuals.glyph_vertex_range.clone()] {
+                let color = text.override_text_color.unwrap_or_else(|| {
+                    if vertex.color == egui::Color32::PLACEHOLDER {
+                        text.fallback_color
+                    } else {
+                        vertex.color
+                    }
+                });
+                let color = color.gamma_multiply(text.opacity_factor);
+                ratios.push(contrast(composite(color, background), background));
+            }
+        }
+    }
+    ratios
+}
+
+#[test]
+fn s125_catalog_heading_uses_actual_readable_surface_role() {
+    for theme in [Theme::Dark, Theme::Light] {
+        let (_root, settings) = addon_surface_settings(theme, AddonSurfaceState::Installed);
+        let mut app = test_app_with_settings(settings);
+        app.set_catalog_update_open(true);
+        let mut harness = harness_for_app(app, egui::vec2(900.0, 1000.0));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        let ratios = painted_text_contrasts(&harness, "Reviewed import candidates");
+        assert!(!ratios.is_empty(), "actual heading was not painted");
+        assert!(
+            ratios.iter().all(|r| *r >= 4.5),
+            "{theme:?}: actual contrast {ratios:?}"
+        );
+    }
+}
+
+#[test]
+fn s125_surface_emphasis_cannot_bypass_semantic_text_role() {
+    let source = include_str!("../src/app/ui.rs");
+    assert!(
+        !source.contains("ui.strong("),
+        "surface emphasis must use widgets::label_strong with an explicit text role"
+    );
+}
+
+#[test]
+fn s125_contrast_detects_wrong_widget_role_despite_valid_palette() {
+    for theme in [Theme::Dark, Theme::Light] {
+        let mut harness = Harness::builder().build_ui(move |ui| {
+            eso_weave::app::theme::apply(ui.ctx(), theme);
+            let p = eso_weave::app::theme::palette(theme);
+            egui::Frame::new().fill(p.card).show(ui, |ui| {
+                ui.label(egui::RichText::new("wrong role").color(p.on_primary));
+                ui.label(egui::RichText::new("surface role").color(p.text));
+            });
+        });
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        let wrong = painted_text_contrasts(&harness, "wrong role");
+        let right = painted_text_contrasts(&harness, "surface role");
+        assert!(!wrong.is_empty() && wrong.iter().any(|r| *r < 4.5));
+        assert!(!right.is_empty() && right.iter().all(|r| *r >= 4.5));
+    }
+}
+
+#[test]
+fn s125_data_details_instruction_is_fully_painted() {
+    for theme in [Theme::Dark, Theme::Light] {
+        for state in AddonSurfaceState::ALL {
+            let (_root, settings) = addon_surface_settings(theme, state);
+            let mut app = test_app_with_settings(settings);
+            let status = match state {
+                AddonSurfaceState::Missing => eso_weave::data_addon::DataAddonStatus::NotInstalled,
+                AddonSurfaceState::Incompatible => {
+                    eso_weave::data_addon::DataAddonStatus::ManagedVersionMismatch
+                }
+                AddonSurfaceState::RemediationRequired => {
+                    eso_weave::data_addon::DataAddonStatus::Unmanaged
+                }
+                _ => eso_weave::data_addon::DataAddonStatus::ManagedUpToDate,
+            };
+            let action = eso_weave::app::data_addon_view(
+                Some(status),
+                true,
+                eso_weave::game::GameRuntime::Inactive,
+                false,
+                None,
+            )
+            .remediation_line
+            .state_text;
+            app.set_data_addon_details_open(true);
+            let mut harness = harness_for_app(app, egui::vec2(520.0, 1200.0));
+            for _ in 0..SETTLE {
+                harness.step();
+            }
+            let text = harness
+                .output()
+                .shapes
+                .iter()
+                .find_map(|clipped| {
+                    if let egui::epaint::Shape::Text(t) = &clipped.shape {
+                        (t.galley.text() == action).then_some((t, clipped.clip_rect))
+                    } else {
+                        None
+                    }
+                })
+                .expect("full essential instruction must be painted");
+            assert!(!text.0.galley.elided, "essential instruction was elided");
+            assert!(
+                text.1
+                    .expand(1.0)
+                    .contains_rect(text.0.visual_bounding_rect()),
+                "instruction clipped"
+            );
+        }
+    }
+}
+
+fn s125_catalog_harness(
+    theme: Theme,
+    channel: eso_weave::catalog::Channel,
+    older: bool,
+) -> (
+    tempfile::TempDir,
+    eso_weave::catalog_update::CatalogUpdateService,
+    Harness<'static, EsoWeaveApp>,
+) {
+    use eso_weave::catalog::compiler::{build_catalog, BuildRequest};
+    use eso_weave::catalog_pipeline::{build_candidate, PipelineRun};
+    use eso_weave::catalog_update::CatalogUpdateService;
+    let root = tempfile::tempdir().unwrap();
+    let bundled = root.path().join("bundled.sqlite");
+    let mut bundle: serde_json::Value = serde_json::from_str(include_str!(
+        "../specs/070-catalog-compiler/fixtures/minimal-live.json"
+    ))
+    .unwrap();
+    if older {
+        bundle["release"]["api_version"] = serde_json::json!(101099);
+        bundle["source_snapshots"][0]["api_version"] = serde_json::json!(101099);
+    }
+    let bundle_path = root.path().join("bundled.json");
+    std::fs::write(&bundle_path, serde_json::to_vec(&bundle).unwrap()).unwrap();
+    build_catalog(&BuildRequest::new(
+        &bundle_path,
+        &bundled,
+        eso_weave::catalog::Channel::Live,
+    ))
+    .unwrap();
+    let service = CatalogUpdateService::new(root.path().join("config"), &bundled);
+    service.prepare().unwrap();
+    let request = if channel == eso_weave::catalog::Channel::Live {
+        "specs/073-reviewed-catalog-pipeline/fixtures/offline-live-request.json"
+    } else {
+        "specs/073-reviewed-catalog-pipeline/fixtures/pts-request.json"
+    };
+    let roots = service.roots();
+    build_candidate(&PipelineRun::new(
+        request,
+        ".",
+        roots.source_cache(),
+        roots.icon_cache(),
+        roots.import_root(),
+        false,
+    ))
+    .unwrap();
+    let settings = Settings {
+        ui: serde_json::json!({"theme": if theme == Theme::Dark { "dark" } else { "light" }}),
+        ..Settings::default()
+    };
+    let mut app = test_app_with_settings(settings).with_catalog_updates(service.clone());
+    app.set_catalog_update_open(true);
+    let mut harness = harness_for_app(app, egui::vec2(900.0, 1200.0));
+    for _ in 0..SETTLE {
+        harness.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    (root, service, harness)
+}
+
+#[test]
+fn s125_acknowledgment_is_contextual_keyboard_operable_and_cleared_by_refresh() {
+    use egui_kittest::kittest::NodeT;
+    for theme in [Theme::Dark, Theme::Light] {
+        for (channel, older) in [
+            (eso_weave::catalog::Channel::Pts, false),
+            (eso_weave::catalog::Channel::Live, true),
+        ] {
+            let (_root, _service, harness) = s125_catalog_harness(theme, channel, older);
+            assert!(harness
+                .query_by_role_and_label(
+                    egui::accesskit::Role::CheckBox,
+                    "I trust this catalog's source"
+                )
+                .is_none());
+        }
+        let (_root, service, mut harness) =
+            s125_catalog_harness(theme, eso_weave::catalog::Channel::Live, false);
+        let ratios = painted_text_contrasts(&harness, "Reviewed import candidates");
+        assert!(!ratios.is_empty() && ratios.iter().all(|ratio| *ratio >= 4.5));
+        assert!(harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                "Install selected Live catalog"
+            )
+            .accesskit_node()
+            .is_disabled());
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "I trust this catalog's source",
+            )
+            .focus();
+        harness.key_press(egui::Key::Space);
+        harness.step();
+        assert!(!harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                "Install selected Live catalog"
+            )
+            .accesskit_node()
+            .is_disabled());
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates")
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                "Install selected Live catalog"
+            )
+            .accesskit_node()
+            .is_disabled());
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "I trust this catalog's source",
+            )
+            .click_accesskit();
+        harness.step();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "I trust this catalog's source",
+            )
+            .click_accesskit();
+        harness.step();
+        assert!(harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                "Install selected Live catalog"
+            )
+            .accesskit_node()
+            .is_disabled());
+        assert_eq!(service.load_selection().unwrap().generation, 0);
+    }
+}
+
+#[test]
+fn s125_data_details_opens_recording_guide_and_copies_the_exact_selected_command() {
+    let mut app = test_app();
+    app.set_data_addon_details_open(true);
+    let mut harness = harness_for_app(app, egui::vec2(900.0, 1400.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Record a fight")
+        .click_accesskit();
+    harness.step();
+    harness.step();
+    harness.get_by_label("How to record and import");
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            "Copy /ewencounter start live single",
+        )
+        .click_accesskit();
+    harness.step();
+    assert!(harness.output().platform_output.commands.iter().any(|command|
+        matches!(command, egui::OutputCommand::CopyText(text) if text == "/ewencounter start live single")));
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Copy /reloadui");
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Copy /ewencounter status");
+}
+
+#[test]
+fn s125_all_lifecycle_reload_instructions_wrap_completely_at_scaled_column_widths() {
+    use eso_weave::app::ui::{dashboard_instruction_row, dashboard_metric};
+    use eso_weave::data_addon::DataAddonStatus;
+    for theme in [Theme::Dark, Theme::Light] {
+        for width in [360.0, 580.0] {
+            for scale in [1.0, 1.5] {
+                let states = [
+                    None,
+                    Some(DataAddonStatus::NotInstalled),
+                    Some(DataAddonStatus::ManagedUpToDate),
+                    Some(DataAddonStatus::ManagedVersionMismatch),
+                    Some(DataAddonStatus::Unmanaged),
+                ];
+                for available in [false, true] {
+                    for reload in [false, true] {
+                        let lines: Vec<_> = states
+                            .iter()
+                            .map(|status| {
+                                eso_weave::app::data_addon_view(
+                                    *status,
+                                    available,
+                                    eso_weave::game::GameRuntime::Inactive,
+                                    reload,
+                                    None,
+                                )
+                                .remediation_line
+                            })
+                            .collect();
+                        for line in &lines {
+                            assert!(line.state_text.matches("/reloadui").count() <= 1);
+                        }
+                        let expected: Vec<_> =
+                            lines.iter().map(|line| line.state_text.clone()).collect();
+                        let mut installed = false;
+                        let mut harness = Harness::builder()
+                            .with_size(egui::vec2(width, 9000.0))
+                            .build_ui(move |ui| {
+                                if !installed {
+                                    eso_weave::app::theme::install_fonts(ui.ctx());
+                                    installed = true;
+                                    return;
+                                }
+                                eso_weave::app::theme::apply(ui.ctx(), theme);
+                                let palette = eso_weave::app::theme::palette(theme);
+                                for line in &lines {
+                                    dashboard_instruction_row(
+                                        ui,
+                                        &palette,
+                                        dashboard_metric(
+                                            line.title,
+                                            &line.state_text,
+                                            line.role,
+                                            line.tooltip,
+                                        ),
+                                        120.0,
+                                        0.0,
+                                        |_| {},
+                                    );
+                                }
+                            });
+                        harness.ctx.set_pixels_per_point(scale);
+                        for _ in 0..3 {
+                            harness.step();
+                        }
+                        for label in &expected {
+                            let mut paint = Vec::new();
+                            for clipped in &harness.output().shapes {
+                                flatten_paint(&clipped.shape, clipped.clip_rect, &mut paint);
+                            }
+                            let texts: Vec<_> = paint
+                                .iter()
+                                .filter_map(|(shape, clip)| match shape {
+                                    egui::epaint::Shape::Text(text)
+                                        if text.galley.text() == label =>
+                                    {
+                                        Some((text, clip))
+                                    }
+                                    _ => None,
+                                })
+                                .collect();
+                            assert!(!texts.is_empty());
+                            assert!(
+                                texts.iter().all(|(text, clip)| !text.galley.elided
+                                    && clip.expand(1.0).contains_rect(text.visual_bounding_rect())),
+                                "instruction is clipped at {width}, scale {scale}: {label}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn s125_short_data_details_keeps_close_reachable_and_scrolls_instructions() {
+    for theme in [Theme::Dark, Theme::Light] {
+        let (_root, settings) = addon_surface_settings(theme, AddonSurfaceState::Missing);
+        let mut app = test_app_with_settings(settings);
+        app.set_data_addon_details_open(true);
+        let mut harness = harness_for_app(app, egui::vec2(520.0, 420.0));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        let close = harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Close Data Details")
+            .rect();
+        assert!(
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(520.0, 420.0))
+                .contains_rect(close),
+            "close is outside viewport: {close:?}"
+        );
+        let action = eso_weave::app::data_addon_view(
+            Some(eso_weave::data_addon::DataAddonStatus::NotInstalled),
+            true,
+            eso_weave::game::GameRuntime::Inactive,
+            false,
+            None,
+        )
+        .remediation;
+        harness
+            .query_all_by_label(&action)
+            .last()
+            .unwrap()
+            .scroll_to_me();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        let fully_painted = harness
+            .output()
+            .shapes
+            .iter()
+            .rev()
+            .find_map(|clipped| match &clipped.shape {
+                egui::epaint::Shape::Text(text) if text.galley.text() == action => Some(
+                    clipped
+                        .clip_rect
+                        .expand(1.0)
+                        .contains_rect(text.visual_bounding_rect())
+                        && !text.galley.elided,
+                ),
+                _ => None,
+            });
+        assert_eq!(fully_painted, Some(true));
+    }
+}
+
+#[test]
+fn s125_busy_catalog_surface_keeps_readable_progress_and_disables_acknowledgment() {
+    use egui_kittest::kittest::NodeT;
+    for theme in [Theme::Dark, Theme::Light] {
+        let (_root, service, mut harness) =
+            s125_catalog_harness(theme, eso_weave::catalog::Channel::Live, false);
+        let receipt_lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(service.roots().root().join("receipt.lock"))
+            .unwrap();
+        receipt_lock.lock().unwrap();
+        let operation_lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(service.roots().root().join("operation.lock"))
+            .unwrap();
+        operation_lock.lock().unwrap();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "I trust this catalog's source",
+            )
+            .click_accesskit();
+        harness.step();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                "Install selected Live catalog",
+            )
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let heading = painted_text_contrasts(&harness, "Reviewed import candidates");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while harness
+            .query_by_label("Waiting for another catalog operation")
+            .is_none()
+            && std::time::Instant::now() < deadline
+        {
+            harness.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        harness
+            .get_by_label("Waiting for another catalog operation")
+            .scroll_to_me();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        let progress = painted_text_contrasts(&harness, "Waiting for another catalog operation");
+        let disabled = harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                "I trust this catalog's source",
+            )
+            .accesskit_node()
+            .is_disabled();
+        receipt_lock.unlock().unwrap();
+        operation_lock.unlock().unwrap();
+        assert!(disabled);
+        assert!(!heading.is_empty() && heading.iter().all(|ratio| *ratio >= 4.5));
+        assert!(
+            !progress.is_empty() && progress.iter().all(|ratio| *ratio >= 4.5),
+            "{theme:?}: progress contrast {progress:?}"
+        );
+        for _ in 0..SETTLE {
+            harness.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+}
+
+#[test]
+fn s125_changed_candidate_contents_cannot_reuse_acknowledgment() {
+    let (_root, service, mut harness) =
+        s125_catalog_harness(Theme::Dark, eso_weave::catalog::Channel::Live, false);
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "I trust this catalog's source",
+        )
+        .click_accesskit();
+    harness.step();
+    let candidate = service.discover_candidates().unwrap().pop().unwrap();
+    let manifest = service
+        .roots()
+        .import_root()
+        .join("live")
+        .join(&candidate.candidate_sha256)
+        .join("manifest.json");
+    std::fs::write(manifest, b"{}").unwrap();
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates")
+        .click_accesskit();
+    for _ in 0..SETTLE {
+        harness.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(harness
+        .query_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "I trust this catalog's source"
+        )
+        .is_none());
+    assert_eq!(service.load_selection().unwrap().generation, 0);
+}
+
+#[test]
+fn s125_switching_candidate_identity_never_restores_an_old_acknowledgment() {
+    use egui_kittest::kittest::NodeT;
+    use sha2::{Digest, Sha256};
+    let (_root, service, mut harness) =
+        s125_catalog_harness(Theme::Dark, eso_weave::catalog::Channel::Live, false);
+    let workspace = tempfile::tempdir_in("target").unwrap();
+    let mut bundle: serde_json::Value = serde_json::from_str(include_str!(
+        "../specs/070-catalog-compiler/fixtures/minimal-live.json"
+    ))
+    .unwrap();
+    bundle["release"]["catalog_version"] = serde_json::json!("s125-live-2");
+    let bytes = serde_json::to_vec(&bundle).unwrap();
+    let input = workspace.path().join("input.json");
+    std::fs::write(&input, &bytes).unwrap();
+    let mut request: serde_json::Value = serde_json::from_str(include_str!(
+        "../specs/073-reviewed-catalog-pipeline/fixtures/offline-live-request.json"
+    ))
+    .unwrap();
+    request["version"]["catalog_version"] = bundle["release"]["catalog_version"].clone();
+    request["sources"][0]["local_path"] = serde_json::json!(input
+        .strip_prefix(std::env::current_dir().unwrap())
+        .unwrap_or(&input)
+        .to_string_lossy()
+        .replace('\\', "/"));
+    request["sources"][0]["sha256"] = serde_json::json!(Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>());
+    let request_path = workspace.path().join("request.json");
+    std::fs::write(&request_path, serde_json::to_vec(&request).unwrap()).unwrap();
+    let roots = service.roots();
+    eso_weave::catalog_pipeline::build_candidate(&eso_weave::catalog_pipeline::PipelineRun::new(
+        &request_path,
+        ".",
+        roots.source_cache(),
+        roots.icon_cache(),
+        roots.import_root(),
+        false,
+    ))
+    .unwrap();
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates")
+        .click_accesskit();
+    for _ in 0..SETTLE {
+        harness.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(
+        harness
+            .query_all_by_role(egui::accesskit::Role::RadioButton)
+            .count(),
+        2
+    );
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::CheckBox,
+            "I trust this catalog's source",
+        )
+        .click_accesskit();
+    harness.step();
+    assert!(!harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            "Install selected Live catalog"
+        )
+        .accesskit_node()
+        .is_disabled());
+    harness
+        .query_all_by_role(egui::accesskit::Role::RadioButton)
+        .next()
+        .unwrap()
+        .click_accesskit();
+    harness.step();
+    assert!(harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            "Install selected Live catalog"
+        )
+        .accesskit_node()
+        .is_disabled());
+    harness
+        .query_all_by_role(egui::accesskit::Role::RadioButton)
+        .last()
+        .unwrap()
+        .click_accesskit();
+    harness.step();
+    assert!(harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            "Install selected Live catalog"
+        )
+        .accesskit_node()
+        .is_disabled());
+    assert_eq!(service.load_selection().unwrap().generation, 0);
 }

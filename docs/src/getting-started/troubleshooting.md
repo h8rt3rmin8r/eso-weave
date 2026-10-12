@@ -169,22 +169,23 @@ separate API evidence and addon locations.
 
 ## Encounter capture is waiting, interrupted, or failed
 
-Run `/ewencounter status` inside ESO. The desktop can show only a validated
-**Last saved recording state** from the last successfully imported saved file.
-Refresh and failed imports keep this older summary, which can predate the newest
-disk save or selected-environment change. Check **Saved channel** in that history
-summary, and use the in-game command for current activity. Recording is
-controlled inside ESO. Start with the complete
+Run `/ewencounter status` inside ESO for current activity. Desktop
+**Last saved source** is a read-only inspection of the selected environment's
+disk file, available before import. Check its path, last-save timestamp, saved
+state and finished/partial counts. **Refresh Saved Source** rereads it; changing
+the environment or folder rejects older pending results. The file cannot prove
+current enablement, loading or activity. Start with the complete
 [setup sequence](../features/encounter-capture.md#install-and-choose-a-mode).
 
 - **Recording off**: mode/channel changes require no retained session. If one
   remains, optionally save/import wanted fights, then deliberately use
   `/ewencounter clear confirm` before choosing `single` or `continuous` and
-  `live` or `pts`. Start the chosen mode with `/ewencounter toggle` inside ESO.
+  `live` or `pts`. Start with `/ewencounter start live single` or the matching `pts`/
+   `continuous` variant inside ESO.
 - **Waiting for combat**: the selected mode is on, but no fight is being recorded;
   detailed capture handlers are
-  dormant until combat starts. Toggle again to disable it.
-- **Recording combat**: the current encounter is recording. Toggling off finalizes it
+  dormant until combat starts. Use `/ewencounter stop` to disable it.
+- **Recording combat**: the current encounter is recording. Explicit stop finalizes it
   as a user-stopped partial record.
 - **Recording interrupted**: reload or relog created an explicit gap. Single stops;
   continuous resumes only from valid durably saved authority and retains the
@@ -216,10 +217,26 @@ then use **Import Saved Capture** in Encounter History. An ESO or operating-syst
 crash before a flush can lose unflushed control and encounter state; the product
 does not invent a recovery marker for facts that never reached disk.
 
+If command replies are absent while chat starts, wait for queued system-chat
+guidance. Recording remains OFF if its warning could not be delivered; repeat
+the start command after chat is ready. Debug logging addons need no changes.
+
 For desktop history, distinguish these outcomes:
 
+- **Recording OFF with no retained session**: the addon initialized but no
+  recording was saved. Start a fight inside ESO, finish it and save.
+- **Saved Source Inaccessible**: check the selected folder and read permissions.
+- **Saved Source Version Unsupported**: keep the file unchanged and use a
+  compatible ESO Weave version.
+- **Saved Source Environment Differs**: select the saved file's Live or PTS
+  environment, then refresh the saved source.
+- **Saved Source Invalid**: preserve it for troubleshooting, finish or stop,
+  save again, then refresh.
+- **Local History Unavailable**: the imported-history store is damaged or
+  inaccessible; this is distinct from a saved-source failure.
+
 - **No imported encounters**: save a recorded fight in ESO, then choose **Import
-  Saved Capture**. **Refresh** rereads desktop history only.
+  Saved Capture**. **Refresh Imported History** rereads desktop history only.
 - Import unavailable: check the selected Live or PTS environment and AddOns
   folder. Enable and load ESO Weave Data, record a fight, then save in ESO.
 - An operation is in progress: wait for import, refresh, detail calculation or

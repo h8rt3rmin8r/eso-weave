@@ -43,11 +43,11 @@ gameplay, or uses Pixel Bus for bulk records.
 
 The desktop cannot enable, disable, or change encounter mode. It has no custom
 binding, generated-input, clipboard, Pixel Bus, or live SavedVariables command
-path. **Last saved recording state** comes from the last successfully imported
-saved file. Refresh and failed imports keep that older summary; it can predate
-the latest disk save or selected environment. Check **Saved channel** in the
-summary. ESO's disk file can also lag its current state. Use `/ewencounter status`
-inside ESO for the current requested and effective capture state.
+path. **Last saved source** inspects the selected environment's saved file
+without importing or writing it. Changing the selected folder or environment
+discards older pending results. The disk file can lag current activity and does
+not prove the addon is enabled or loaded. Use `/ewencounter status` inside ESO
+for current capture activity; desktop Copy actions copy instructions only.
 
 ## Privacy and network behavior
 

@@ -409,3 +409,13 @@ impl Toast {
             });
     }
 }
+
+/// Surface emphasis resolves the semantic text role, independently of filled actions.
+pub fn label_surface_strong(ui: &mut egui::Ui, text: impl AsRef<str>) -> egui::Response {
+    let palette = super::theme::palette(if ui.visuals().dark_mode {
+        crate::config::Theme::Dark
+    } else {
+        crate::config::Theme::Light
+    });
+    label_strong(ui, &palette, text.as_ref())
+}

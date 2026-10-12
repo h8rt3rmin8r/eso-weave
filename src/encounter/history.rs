@@ -6,9 +6,10 @@ use std::sync::{Arc, RwLock};
 use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 
 use super::{
-    calculate_projection, delete_all, delete_encounter, import_capture_set, list_encounters,
-    load_encounter, CaptureImportReport, DeleteReceipt, EncounterError, EncounterProjection,
-    EncounterSummary, ImportRequest,
+    append_capture_set, calculate_projection, delete_all, delete_encounter, ensure_distinct_paths,
+    list_encounters, load_encounter, read_saved_source, CaptureControllerState,
+    CaptureImportReport, CaptureStateSummary, CaptureStatus, DeleteReceipt, EncounterError,
+    EncounterProjection, EncounterSummary, ImportRequest,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -35,6 +36,10 @@ impl From<&EncounterSummary> for EncounterIdentity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoryDiagnosticKind {
     SourceUnavailable,
+    SourceInaccessible,
+    SourceInvalid,
+    SourceVersionUnsupported,
+    SourceEnvironmentMismatch,
     StoreInvalid,
     CatalogUnavailable,
     CatalogInvalid,
@@ -115,22 +120,37 @@ impl EncounterHistoryService {
         expected_channel: Channel,
     ) -> Result<CaptureImportReport, HistoryDiagnostic> {
         let source_path = source_path.as_ref();
-        if !source_path.is_file() {
-            return Err(HistoryDiagnostic::new(
-                HistoryDiagnosticKind::SourceUnavailable,
-                "No saved addon data file was found for the selected environment. Check Live or PTS and the AddOns folder in Settings. Record with ESO Weave Data, then use /reloadui, logout, or exit to save before importing.",
-            ));
-        }
-        import_capture_set(&ImportRequest::new(
-            source_path,
-            &self.store_path,
-            expected_channel,
-        ))
-        .map_err(|_| {
-            HistoryDiagnostic::new(
-                HistoryDiagnosticKind::OperationFailed,
-                "The saved recording could not be imported. Existing history was preserved. Check the selected Live or PTS environment, finish or stop recording in ESO, save with /reloadui, logout, or exit, and try Import Saved Capture again. Unsupported or damaged saved data must remain unchanged for troubleshooting.",
-            )
+        let request = ImportRequest::new(source_path, &self.store_path, expected_channel);
+        ensure_distinct_paths(source_path, &self.store_path).map_err(source_diagnostic)?;
+        let (hash, parsed, _) =
+            read_saved_source(source_path, expected_channel).map_err(source_diagnostic)?;
+        // Parsing is complete before the store is opened. Store errors cannot
+        // masquerade as source errors, and failed parsing never creates a store.
+        append_capture_set(&request, hash, parsed).map_err(store_diagnostic)
+    }
+
+    pub fn inspect_source(
+        &self,
+        source_path: impl AsRef<Path>,
+        expected_channel: Channel,
+    ) -> Result<SavedSourceInspection, HistoryDiagnostic> {
+        let source_path = source_path.as_ref();
+        let (_, parsed, modified) =
+            read_saved_source(source_path, expected_channel).map_err(source_diagnostic)?;
+        let state = parsed.state.as_ref().map(CaptureStateSummary::from);
+        let partial_count = parsed
+            .records
+            .iter()
+            .filter(|record| record.capture.status == CaptureStatus::Partial)
+            .count();
+        Ok(SavedSourceInspection {
+            path: source_path.to_path_buf(),
+            channel: expected_channel,
+            modified,
+            finished_count: parsed.records.len() - partial_count,
+            partial_count,
+            readiness: SavedRecordingReadiness::from_state(state.as_ref(), parsed.records.len()),
+            state,
         })
     }
 
@@ -246,5 +266,101 @@ fn store_is_absent(path: &Path) -> Result<bool, ()> {
             Err(())
         }
         Err(_) => Err(()),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SavedRecordingReadiness {
+    NeverStarted,
+    Waiting,
+    Recording,
+    Stopped,
+    StoppedEmpty,
+    Interrupted,
+    Failed,
+    LegacyFinished,
+}
+
+impl SavedRecordingReadiness {
+    pub(crate) fn from_state(state: Option<&CaptureStateSummary>, records: usize) -> Self {
+        match state {
+            None if records == 0 => Self::NeverStarted,
+            None => Self::LegacyFinished,
+            Some(state) => match state.state {
+                CaptureControllerState::Stopped if state.session_id.is_none() && records == 0 => {
+                    Self::NeverStarted
+                }
+                CaptureControllerState::Stopped if records == 0 => Self::StoppedEmpty,
+                CaptureControllerState::Stopped => Self::Stopped,
+                CaptureControllerState::Waiting => Self::Waiting,
+                CaptureControllerState::Capturing => Self::Recording,
+                CaptureControllerState::Interrupted => Self::Interrupted,
+                CaptureControllerState::Failed => Self::Failed,
+            },
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::NeverStarted => "Recording was OFF with no retained session. Start one fight in ESO.",
+            Self::Waiting => "The saved recorder was WAITING FOR COMBAT. Fight, then save new data.",
+            Self::Recording => "The saved recorder was RECORDING. Finish or stop, then save new data.",
+            Self::Stopped => "The saved recorder was OFF. Import retained encounters before clearing.",
+            Self::StoppedEmpty => "The saved recorder was OFF with an empty session. Use /ewencounter clear confirm in ESO, then start a new fight.",
+            Self::Interrupted => "The saved recording was interrupted. Import retained encounters; some observations may be missing.",
+            Self::Failed => "The saved recorder stopped after a failure. Import usable retained encounters before recovery.",
+            Self::LegacyFinished => "A finished recording is saved and ready to import.",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SavedSourceInspection {
+    pub path: PathBuf,
+    pub channel: Channel,
+    pub modified: Option<std::time::SystemTime>,
+    pub state: Option<CaptureStateSummary>,
+    pub finished_count: usize,
+    pub partial_count: usize,
+    pub readiness: SavedRecordingReadiness,
+}
+
+fn source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
+    let (kind, message) = match error {
+        EncounterError::Io(error) if error.kind() == ErrorKind::NotFound => (
+            HistoryDiagnosticKind::SourceUnavailable,
+            "No saved addon data file was found. Check Live or PTS and the AddOns folder in Settings. Enable ESO Weave Data, record, then /reloadui, logout or exit to save.",
+        ),
+        EncounterError::Io(_) => (
+            HistoryDiagnosticKind::SourceInaccessible,
+            "The saved addon data file could not be read. Check the selected folder and read permissions, then refresh the saved source. Existing history was preserved.",
+        ),
+        EncounterError::UnsupportedVersion => (
+            HistoryDiagnosticKind::SourceVersionUnsupported,
+            "The saved addon data uses an unsupported version. Keep the file unchanged and use a compatible ESO Weave version.",
+        ),
+        EncounterError::EnvironmentMismatch => (
+            HistoryDiagnosticKind::SourceEnvironmentMismatch,
+            "The saved recording belongs to a different environment. Select its Live or PTS environment in Settings, then refresh the saved source.",
+        ),
+        EncounterError::Validation(_) | EncounterError::Database(_) => (
+            HistoryDiagnosticKind::SourceInvalid,
+            "The saved addon data is malformed, incomplete or changed during reading. Keep it unchanged for troubleshooting; finish or stop recording in ESO, save again, then refresh the saved source.",
+        ),
+    };
+    HistoryDiagnostic::new(kind, message)
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::*;
+    #[test]
+    fn permission_failure_uses_a_controlled_source_access_diagnostic() {
+        let diagnostic = source_diagnostic(EncounterError::Io(std::io::Error::new(
+            ErrorKind::PermissionDenied,
+            "PRIVATE_PATH_CANARY",
+        )));
+        assert_eq!(diagnostic.kind, HistoryDiagnosticKind::SourceInaccessible);
+        assert!(!diagnostic.message.contains("PRIVATE_PATH_CANARY"));
     }
 }

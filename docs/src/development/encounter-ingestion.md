@@ -7,7 +7,7 @@ into desktop history. It validates completed fights and independently replays
 eligible current captures before one atomic import transaction. Bulk encounter
 records never use Pixel Bus.
 
-ESO's native `Encounter.log` files are a separate provisional candidate.
+ESO's native `Encounter.log` files are a separate unsupported candidate.
 Incremental tailing means reading new completed lines as ESO writes them;
 terminal import means reading the file after the recording has ended. Neither
 candidate is the desktop Application Log or File Logging setting. Native-log
@@ -20,7 +20,7 @@ unit state, equipment, maps, zones, and trials. Those declarations do not prove
 flush cadence, file-sharing behavior, crash durability, callback parity, or
 privacy behavior on a user's platform.
 
-The native-log candidate remains provisional. Historical issue #190 describes
+The native-log candidate is unsupported; implementation is tracked by issue #272. Historical issue #190 describes
 the qualification contract; its disposition is not proof of platform behavior.
 Qualification would require separately owned Windows and Linux/Proton records of at least three
 representative encounters per scenario. S096 single and continuous modes do not

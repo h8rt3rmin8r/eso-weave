@@ -2,6 +2,10 @@
 
 Status: Active
 
+Historical status preserved. S124 merged in PR #264 on 2026-10-07 at
+`e154dbf9e83d7d6dd0aaec3876fd0305a55e56cb`. Plan050 is Complete and Archived;
+later tag and package publication are separate work.
+
 ## S124 (2026-10-07)
 
 After Plan049, v0.17.3 publication and the merged Linux packaging repair,
@@ -17,7 +21,7 @@ deliver [S124](../../../specs/124-v0174-security-maintenance/spec.md) for
    service authority, canonical blob encoding and exact Lua import behavior.
 3. Archive completed Plan049 and update both indexes and the lifecycle ledger.
    Prepare bounded Highlights with the complete maintenance history.
-4. Follow [Releasing](../releasing.md) to prepare v0.17.4 through cargo-release.
+4. Follow [Releasing](../../project/releasing.md) to prepare v0.17.4 through cargo-release.
    Validate all governed identities, existing automated gates and bundled docs.
 5. Automatically push and publish the official PR, satisfy every review finding
    and final-head CI check within at most two requested Codex rounds, then

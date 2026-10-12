@@ -255,3 +255,136 @@ fn detail_projection_follows_active_catalog_path_changes() {
         "s070-live-1"
     );
 }
+
+fn initialized_state() -> serde_json::Value {
+    serde_json::json!({
+        "state_schema_version":1,"addon_version":4,"selected_mode":"single",
+        "state":"stopped","records":{},"interruptions":[],
+        "stop_reason":"never-started","revision":1
+    })
+}
+
+fn write_state(path: &std::path::Path, state: &serde_json::Value) {
+    fs::write(path, format!("EsoWeaveDataSaved = {{[\"schema_version\"]=1, [\"addon_version\"]=1, [\"encounter\"]={}}}", json_to_lua(state))).unwrap();
+}
+
+#[test]
+fn s125_saved_source_is_bounded_read_only_and_ready_before_first_import() {
+    use eso_weave::encounter::SavedRecordingReadiness;
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("EsoWeaveData.lua");
+    let service =
+        EncounterHistoryService::new(root.path().join("app"), root.path().join("catalog.sqlite"));
+    write_state(&input, &initialized_state());
+    let original = fs::read(&input).unwrap();
+    let inspected = service.inspect_source(&input, Channel::Live).unwrap();
+    assert_eq!(inspected.path, input);
+    assert_eq!(inspected.channel, Channel::Live);
+    assert_eq!(
+        inspected.modified,
+        fs::metadata(&input).unwrap().modified().ok()
+    );
+    assert_eq!(inspected.readiness, SavedRecordingReadiness::NeverStarted);
+    assert_eq!(inspected.finished_count + inspected.partial_count, 0);
+    assert!(!service.store_path().exists());
+    assert_eq!(fs::read(&input).unwrap(), original);
+    assert_eq!(
+        service
+            .import_current(&input, Channel::Live)
+            .unwrap()
+            .imported_count,
+        0
+    );
+
+    fs::write(&input, capture_lua()).unwrap();
+    let inspected = service.inspect_source(&input, Channel::Live).unwrap();
+    assert_eq!(inspected.readiness, SavedRecordingReadiness::LegacyFinished);
+    assert_eq!(inspected.finished_count + inspected.partial_count, 1);
+    assert_eq!(
+        service
+            .import_current(&input, Channel::Live)
+            .unwrap()
+            .imported_count,
+        1
+    );
+    assert_eq!(
+        service
+            .import_current(&input, Channel::Live)
+            .unwrap()
+            .already_present_count,
+        1
+    );
+}
+
+#[test]
+fn s125_source_errors_are_typed_controlled_and_preserve_both_sources_and_history() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("EsoWeaveData.lua");
+    let service = EncounterHistoryService::new(root.path(), root.path().join("catalog.sqlite"));
+    fs::write(&input, capture_lua()).unwrap();
+    service.import_current(&input, Channel::Live).unwrap();
+    let before = service.snapshot().unwrap();
+    let mut future = initialized_state();
+    future["state_schema_version"] = 999.into();
+    let mut wrong = initialized_state();
+    wrong["selected_channel"] = "pts".into();
+    for (source, kind) in [
+        ("EsoWeaveDataSaved = PRIVATE_CANARY()".to_owned(), HistoryDiagnosticKind::SourceInvalid),
+        ("EsoWeaveDataSaved = {[\"addon_version\"]=1,[\"encounter\"]={}}".to_owned(), HistoryDiagnosticKind::SourceInvalid),
+        ("EsoWeaveDataSaved = {[\"schema_version\"]=\"PRIVATE_CANARY\",[\"addon_version\"]=1,[\"encounter\"]={}}".to_owned(), HistoryDiagnosticKind::SourceInvalid),
+        (format!("EsoWeaveDataSaved = {{[\"schema_version\"]=1,[\"addon_version\"]=1,[\"encounter\"]={}}}", json_to_lua(&future)), HistoryDiagnosticKind::SourceVersionUnsupported),
+        (format!("EsoWeaveDataSaved = {{[\"schema_version\"]=1,[\"addon_version\"]=1,[\"encounter\"]={}}}", json_to_lua(&wrong)), HistoryDiagnosticKind::SourceEnvironmentMismatch),
+    ] {
+        fs::write(&input, source.as_bytes()).unwrap();
+        for error in [service.inspect_source(&input, Channel::Live).unwrap_err(), service.import_current(&input, Channel::Live).unwrap_err()] {
+            assert_eq!(error.kind, kind);
+            assert!(!error.message.contains("PRIVATE_CANARY"));
+        }
+        assert_eq!(fs::read(&input).unwrap(), source.as_bytes());
+        assert_eq!(service.snapshot().unwrap(), before);
+    }
+    let blocked = root.path().join("ordinary-file");
+    fs::write(&blocked, b"not a directory").unwrap();
+    assert_eq!(
+        service
+            .inspect_source(blocked.join("child/source.lua"), Channel::Live)
+            .unwrap_err()
+            .kind,
+        if cfg!(windows) {
+            HistoryDiagnosticKind::SourceUnavailable
+        } else {
+            HistoryDiagnosticKind::SourceInaccessible
+        }
+    );
+    let oversized = fs::File::create(&input).unwrap();
+    oversized
+        .set_len(eso_weave::encounter::MAX_CAPTURE_BYTES + 1)
+        .unwrap();
+    assert_eq!(
+        service
+            .inspect_source(&input, Channel::Live)
+            .unwrap_err()
+            .kind,
+        HistoryDiagnosticKind::SourceInvalid
+    );
+    assert_eq!(service.snapshot().unwrap(), before);
+}
+
+#[test]
+fn s125_valid_source_store_failure_has_its_own_diagnostic() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("EsoWeaveData.lua");
+    fs::write(&input, capture_lua()).unwrap();
+    let store = root.path().join("broken.sqlite");
+    fs::write(&store, b"not SQLite").unwrap();
+    let service = EncounterHistoryService::from_paths(&store, root.path().join("catalog.sqlite"));
+    assert!(service.inspect_source(&input, Channel::Live).is_ok());
+    assert_eq!(
+        service
+            .import_current(&input, Channel::Live)
+            .unwrap_err()
+            .kind,
+        HistoryDiagnosticKind::StoreInvalid
+    );
+    assert_eq!(fs::read(&store).unwrap(), b"not SQLite");
+}

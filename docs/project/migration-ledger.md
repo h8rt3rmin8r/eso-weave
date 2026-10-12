@@ -36,9 +36,10 @@ manifest, so changing a count cannot hide an omission or substitution.
   documentation visualization audit. Plan 048 completed all four approved
   figures through merged S112, S121 and S122, preserving the intervening S120
   recovery and unused S113-S115 reservations in its archive. Plan 049 completed
-  S123 in PR #256 and v0.17.3 published on 2026-10-07. Plan 050 is active for
-  S124 dependency maintenance and v0.17.4 candidate preparation, issues #261,
-  #262 and #263; owner merge and later tag/publication remain separate.
+  S123 in PR #256 and v0.17.3 published on 2026-10-07. Plan 050 completed
+  S124 dependency maintenance and v0.17.4 candidate preparation in PR #264
+  on 2026-10-07. Plan 051 is active for S125 data-addon workflow recovery,
+  issues #265 through #271; owner merge and later tag/publication remain separate.
   Independent release verification does not reactivate a completed plan. The
   policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.

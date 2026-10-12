@@ -1,5 +1,5 @@
 use eso_weave::data_addon::{
-    catalog_checksum_from_source, embedded_checksum, CATALOG, MANAGED_MARKER, MANIFEST,
+    catalog_checksum_from_source, embedded_checksum, BOOTSTRAP, CATALOG, MANAGED_MARKER, MANIFEST,
 };
 
 #[test]
@@ -17,7 +17,10 @@ fn catalog_messages_explain_replacement_cancellation_and_hide_callback_errors() 
         __messages = {}
         SLASH_COMMANDS = {}
         EsoWeaveDataSaved = { encounter = { sentinel = true } }
-        function d(text) table.insert(__messages, text) end
+        __debug_messages = {}
+        CHAT_ROUTER = {}
+        function CHAT_ROUTER:AddSystemMessage(text) table.insert(__messages, text) end
+        function d(text) table.insert(__debug_messages, text) end
         function IsUnitInCombat() return false end
         function GetTimeStamp() return 1 end
         function GetAPIVersion() return 101050 end
@@ -25,6 +28,7 @@ fn catalog_messages_explain_replacement_cancellation_and_hide_callback_errors() 
         function GetGameTimeMilliseconds() return 1 end
         function GetNumSkillTypes() error('PRIVATE-CALLBACK-VALUE') end
     "#).exec().unwrap();
+    lua.load(BOOTSTRAP).exec().unwrap();
     lua.load(CATALOG).exec().unwrap();
     lua.load(
         r#"
@@ -42,6 +46,7 @@ fn catalog_messages_explain_replacement_cancellation_and_hide_callback_errors() 
         local failed = __messages[#__messages]
         assert(not string.find(failed, 'PRIVATE-CALLBACK-VALUE', 1, true))
         assert(string.find(failed, '/ewcollect start', 1, true))
+        assert(#__debug_messages == 0)
         SLASH_COMMANDS['/ewcollect']('clear confirm')
         assert(EsoWeaveDataSaved.catalog == nil)
         assert(EsoWeaveDataSaved.encounter.sentinel == true)

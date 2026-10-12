@@ -45,7 +45,7 @@ Observed numeric zero is different from all four states.
 | Reload Reminder: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
 | ESO Client: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
 | Catalog Collection: **Unknown (check inside ESO)** | The desktop cannot read current catalog collection | Run `/ewcollect status`; any file on disk describes the last ESO save |
-| Encounter Recording: **Unknown (check inside ESO)** | The desktop cannot observe current recording activity, even when a saved recording state exists | Run `/ewencounter status` inside ESO; a successful import may show the last saved recording state separately in Encounter History |
+| Encounter Recording: **Unknown (check inside ESO)** | The desktop cannot observe current recording activity, even when a saved recording state exists | Run `/ewencounter status` inside ESO; inspect Last saved source separately in Data Details or Encounter History |
 | Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
@@ -53,12 +53,14 @@ Observed numeric zero is different from all four states.
 | Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
-After a compatible saved-data import, **Encounter History** can show **Last saved
-recording state** with the saved mode, state and counts from the last successfully
-imported saved file. Refresh and failed imports retain that older summary, so it
-can predate the newest disk save or a selected-environment change. Check **Saved
-channel** in the summary. It is separate from the current-state row in System
-and State or Data Details.
+**Last saved source** inspects the selected environment's file before import,
+showing path, timestamp, saved state and counts. **Refresh Saved Source** rereads
+that file; **Refresh Imported History** rereads desktop copies. Successful and
+failed import attempts clear and refresh the source summary. Environment/folder
+changes reject stale results. These facts do not establish current game activity.
+An **empty session** stopped before combat needs `/ewencounter clear confirm`
+inside ESO before starting again; it has no encounters to import. Retained
+encounters in a stopped session should be imported before clearing.
 
 Maintainer review candidates have no application status row. Candidate generation
 cannot authenticate its origin. A user-approved candidate appears here only after
@@ -92,11 +94,11 @@ only to user commands inside ESO:
 - `stopped` means no capture request is effective. Mode/channel changes require
   recording off and no retained session. If one remains, optionally save/import
   wanted fights, then deliberately use `/ewencounter clear confirm` before
-  changing those selections. Use `/ewencounter toggle` to start the chosen mode.
+  changing those selections. Use `/ewencounter start live single` or its matching environment/mode variant.
 - `waiting` means single or continuous is enabled outside combat. Detailed
-  handlers stay dormant until combat begins; toggle again to disable.
+  handlers stay dormant until combat begins; use `/ewencounter stop` to disable.
 - `capturing` means one encounter is active. A combat exit completes it;
-  toggling off makes it a user-stopped partial record.
+  explicit stop makes it a user-stopped partial record.
 - `interrupted` means reload, relog, or recovery opened an explicit observation
   gap. Single stops; valid durably saved continuous authority can return to
   waiting under the same session.
@@ -105,10 +107,13 @@ only to user commands inside ESO:
 
 Mode, requested enablement, effective state, active channel, session identity,
 current encounter, last interruption, and failure are independent facts. The
-desktop may display only validated, bounded versions from the last successfully
-imported saved file, always under **Last saved recording state**. Refresh or a
-failed import keeps that summary; its **Saved channel** can differ from the
-currently selected environment. It has no capture toggle or addon command ingress.
+desktop displays validated, bounded saved facts under **Last saved source**,
+including its selected environment/path, last-save timestamp and finished or
+partial/interrupted counts. It distinguishes initialized/no retained session,
+waiting, recording, stopped, interrupted and failed states. Refresh Saved
+Source rereads the file; Refresh Imported History rereads imported copies.
+Older inspection generations or a changed path/channel cannot replace the
+current result. A saved snapshot has no current capture authority.
 
 The local icon cache exposes library lookup states for future interface work:
 
