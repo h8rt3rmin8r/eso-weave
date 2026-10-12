@@ -30,3 +30,11 @@ The owner explicitly authorized push and PR publication. No merge, tag,
 release publication or owner field verification is authorized by this plan.
 Native Encounter.log ingestion (#272) and multiple retained sessions (#273)
 remain separate slices. Repository tests do not prove installed game behavior.
+
+## S125 review corrections (2026-10-12)
+
+The first external review identified two P2 recovery gaps. Reproduce and fix
+failed-import source invalidation and stopped empty-session guidance, including
+current game status and repeated start. Revalidate, push to PR #274, reply to
+and resolve both threads, then request the second and final authorized review.
+Finish with green checks on the final head and owner merge handoff.

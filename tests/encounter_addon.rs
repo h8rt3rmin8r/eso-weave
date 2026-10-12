@@ -2619,3 +2619,27 @@ fn s125_full_chat_queue_cannot_silently_discard_the_enable_warning() {
     "#,
     );
 }
+
+#[test]
+fn s125_empty_stopped_session_status_and_repeated_start_explain_restart() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        local c = SLASH_COMMANDS['/ewencounter']
+        for _, channel in ipairs({'live', 'pts'}) do
+            c('start ' .. channel .. ' single')
+            c('stop')
+            local session = EsoWeaveDataSaved.encounter.session
+            c('status')
+            assert(string.find(__messages[#__messages], 'empty session', 1, true))
+            assert(string.find(__messages[#__messages], 'clear confirm', 1, true))
+            assert(not string.find(__messages[#__messages], 'Import Saved Capture', 1, true))
+            c('start ' .. channel .. ' single')
+            assert(EsoWeaveDataSaved.encounter.session == session)
+            assert(string.find(__messages[#__messages], 'empty session', 1, true))
+            c('clear confirm')
+        end
+    "#,
+    );
+}

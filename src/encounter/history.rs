@@ -275,19 +275,22 @@ pub enum SavedRecordingReadiness {
     Waiting,
     Recording,
     Stopped,
+    StoppedEmpty,
     Interrupted,
     Failed,
     LegacyFinished,
 }
 
 impl SavedRecordingReadiness {
-    fn from_state(state: Option<&CaptureStateSummary>, records: usize) -> Self {
+    pub(crate) fn from_state(state: Option<&CaptureStateSummary>, records: usize) -> Self {
         match state {
+            None if records == 0 => Self::NeverStarted,
             None => Self::LegacyFinished,
             Some(state) => match state.state {
                 CaptureControllerState::Stopped if state.session_id.is_none() && records == 0 => {
                     Self::NeverStarted
                 }
+                CaptureControllerState::Stopped if records == 0 => Self::StoppedEmpty,
                 CaptureControllerState::Stopped => Self::Stopped,
                 CaptureControllerState::Waiting => Self::Waiting,
                 CaptureControllerState::Capturing => Self::Recording,
@@ -303,6 +306,7 @@ impl SavedRecordingReadiness {
             Self::Waiting => "The saved recorder was WAITING FOR COMBAT. Fight, then save new data.",
             Self::Recording => "The saved recorder was RECORDING. Finish or stop, then save new data.",
             Self::Stopped => "The saved recorder was OFF. Import retained encounters before clearing.",
+            Self::StoppedEmpty => "The saved recorder was OFF with an empty session. Use /ewencounter clear confirm in ESO, then start a new fight.",
             Self::Interrupted => "The saved recording was interrupted. Import retained encounters; some observations may be missing.",
             Self::Failed => "The saved recorder stopped after a failure. Import usable retained encounters before recovery.",
             Self::LegacyFinished => "A finished recording is saved and ready to import.",

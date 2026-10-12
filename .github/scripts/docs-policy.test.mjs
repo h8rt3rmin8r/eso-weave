@@ -289,13 +289,15 @@ test("S125 keeps recording, saved-source, deletion and catalog recovery instruct
   const pages = new Map(await Promise.all([
     "features/encounter-capture.md", "reference/logging.md", "features/interface.md",
     "getting-started/troubleshooting.md", "development/discovery-collector.md", "reference/settings.md",
+    "reference/status-reference.md", "reference/encounter-data-and-metrics.md",
   ].map(async (page) => [page, await readFile(path.join("docs", "src", page), "utf8")])));
   assert.deepEqual(validateEncounterWorkflowDocs(pages), []);
   const missing = new Map(pages);
   missing.delete("features/encounter-capture.md");
   assert.match(validateEncounterWorkflowDocs(missing).join("\n"), /encounter-capture.*workflow/i);
   for (const [page, phrase, expected] of [
-    ["features/encounter-capture.md", "Refresh", /encounter-capture/i],
+    ["features/encounter-capture.md", "Refresh Saved Source", /encounter-capture/i],
+    ["features/encounter-capture.md", "Refresh Imported History", /encounter-capture/i],
     ["features/encounter-capture.md", "unsupported saved-data version", /encounter-capture/i],
     ["features/encounter-capture.md", "Import Saved Capture", /encounter-capture/i],
     ["getting-started/troubleshooting.md", "current activity", /troubleshooting/i],
@@ -308,6 +310,9 @@ test("S125 keeps recording, saved-source, deletion and catalog recovery instruct
     ["features/interface.md", "last-save timestamp", /interface/i],
     ["features/interface.md", "Refresh Saved Source", /interface/i],
     ["features/interface.md", "Refresh Imported History", /interface/i],
+    ["reference/status-reference.md", "Last saved source", /status-reference/i],
+    ["reference/status-reference.md", "empty session", /status-reference/i],
+    ["reference/encounter-data-and-metrics.md", "successful and failed import", /encounter-data/i],
     ["reference/settings.md", "Application Logging", /settings/i],
   ]) {
     const incomplete = new Map(pages);

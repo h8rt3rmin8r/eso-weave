@@ -275,26 +275,8 @@ fn snapshot_event(
 fn import_message(report: &CaptureImportReport) -> String {
     match (report.imported_count, report.already_present_count) {
         (0, 0) => {
-            let readiness = report
-                .last_saved_state
-                .as_ref()
-                .map(|state| match state.state {
-                    crate::encounter::CaptureControllerState::Waiting => {
-                        SavedRecordingReadiness::Waiting
-                    }
-                    crate::encounter::CaptureControllerState::Capturing => {
-                        SavedRecordingReadiness::Recording
-                    }
-                    _ if state.session_id.is_none() => SavedRecordingReadiness::NeverStarted,
-                    crate::encounter::CaptureControllerState::Failed => {
-                        SavedRecordingReadiness::Failed
-                    }
-                    crate::encounter::CaptureControllerState::Interrupted => {
-                        SavedRecordingReadiness::Interrupted
-                    }
-                    _ => SavedRecordingReadiness::Stopped,
-                })
-                .unwrap_or(SavedRecordingReadiness::NeverStarted);
+            let readiness =
+                SavedRecordingReadiness::from_state(report.last_saved_state.as_ref(), 0);
             format!("No finished or interrupted encounters were saved for import. {} Use /ewencounter status in ESO, then /reloadui, logout or exit to save.", readiness.description())
         }
         (0, present) => format!(

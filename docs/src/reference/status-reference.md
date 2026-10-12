@@ -53,12 +53,14 @@ Observed numeric zero is different from all four states.
 | Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
-After a compatible saved-data import, **Encounter History** can show **Last saved
-recording state** with the saved mode, state and counts from the last successfully
-imported saved file. Refresh and failed imports retain that older summary, so it
-can predate the newest disk save or a selected-environment change. Check **Saved
-channel** in the summary. It is separate from the current-state row in System
-and State or Data Details.
+**Last saved source** inspects the selected environment's file before import,
+showing path, timestamp, saved state and counts. **Refresh Saved Source** rereads
+that file; **Refresh Imported History** rereads desktop copies. Successful and
+failed import attempts clear and refresh the source summary. Environment/folder
+changes reject stale results. These facts do not establish current game activity.
+An **empty session** stopped before combat needs `/ewencounter clear confirm`
+inside ESO before starting again; it has no encounters to import. Retained
+encounters in a stopped session should be imported before clearing.
 
 Maintainer review candidates have no application status row. Candidate generation
 cannot authenticate its origin. A user-approved candidate appears here only after

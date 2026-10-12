@@ -34,7 +34,7 @@ All required local commands finished successfully on the final implementation.
 | --- | --- |
 | Format | Passed |
 | Clippy, all targets/features, warnings denied | Passed |
-| Complete locked Rust suite | Passed, 1,065 tests |
+| Complete locked Rust suite | Passed, 1,067 tests |
 | Release binary with bundled documentation | Passed |
 | Spelling | Passed |
 | Repository and documentation policy fixtures | Passed, 191 fixtures |
@@ -59,3 +59,9 @@ They do not prove installed ESO behavior or field parity. No owner field check
 is requested. Automatic push and one official PR are authorized. External
 reviews and exact-head CI must be satisfied within at most two Codex rounds;
 the final boundary is owner review and merge, with no agent merge or release.
+
+## First external review corrections
+
+Automatic Codex review at 9d5503ea9e88d3e3068148c3b60435646e4505d2 raised two P2 findings. Both were reproduced before the fix: an import failure left one current error heading beside an older ready source summary; a valid stopped session with no records directed import instead of restart. New fixtures require failed malformed/missing/wrong-environment imports to replace both source and import status, and validate empty-session guidance through bounded inspection and the worker import result. The focused suite passes 15 tests after correction. The same controlled readiness classifier now serves inspection and empty-import recovery.
+
+The same empty-session recovery is covered through registered in-game status and repeated-start commands for Live and PTS (45 addon tests pass). One full Windows run encountered TCP reset 10054 in the unchanged local-service HTTP fixture. Its isolated 18-test suite and the subsequent complete 1,066-test run passed without code changes; no cause was established. Final fmt, clippy, all 1,067 Rust tests and the rebuilt release binary pass after the addon-copy changes.

@@ -252,11 +252,17 @@ saved controller state, and finished and partial/interrupted counts. Inspection
 is bounded and read-only; it does not create history. **Refresh Saved Source**
 rereads that file, while **Refresh Imported History** rereads desktop copies.
 Changing the environment or folder rejects an older pending inspection result.
+Opening the workflow rereads the source. Successful and failed import attempts
+clear and refresh its summary, so an import error cannot leave older readiness
+or counts displayed as the current inspection.
 
 The file can lag ESO's current activity. Its existence cannot prove the addon
 is enabled, loaded or recording now. Use `/ewencounter status` inside ESO for
 current activity. An initialized file with no retained session means no recording
 has been saved; start a fight instead of repeatedly importing that empty state.
+A stopped **empty session** means recording started and stopped before a fight.
+Use `/ewencounter clear confirm` in ESO, then start again; it has no encounters
+to import. A stopped session with encounters still needs import before clearing.
 
 Command replies use ESO's system-chat route independently of the debug sink.
 If chat is still initializing, replies wait for it. Recording stays off until

@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of debug interception, with bounded initialization retry (issue #268).
 - Distinguish missing, inaccessible, malformed, unsupported and mismatched
   saved sources from local-history store failures (issue #271).
+- Refresh source inspection after failed imports and direct stopped empty
+  sessions toward deliberate clearing/restart, preserving source bytes and
+  imported history (issue #271).
 
 ### Decisions
 

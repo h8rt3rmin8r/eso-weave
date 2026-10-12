@@ -1072,7 +1072,7 @@ impl EsoWeaveApp {
                     self.encounter_history = encounters;
                     self.encounter_history_message = message;
                     if operation == HistoryOperation::Import || last_saved_state.is_some() {
-                        self.saved_source_pending = true;
+                        self.refresh_saved_source();
                     }
                     self.encounter_history_diagnostic = None;
                     let selection_still_exists = self
@@ -1099,7 +1099,13 @@ impl EsoWeaveApp {
                         self.encounter_history_detail = Some(result.map(|detail| *detail));
                     }
                 }
-                HistoryEvent::Failed { diagnostic, .. } => {
+                HistoryEvent::Failed {
+                    operation,
+                    diagnostic,
+                } => {
+                    if operation == HistoryOperation::Import {
+                        self.refresh_saved_source();
+                    }
                     self.encounter_history_message = None;
                     self.encounter_history_diagnostic = Some(diagnostic);
                 }

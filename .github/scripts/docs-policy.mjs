@@ -1659,7 +1659,7 @@ export function validateEncounterWorkflowDocs(pages) {
     ["features/encounter-capture.md", [
       "Install Data", "ESO's Add-Ons menu", "/ewencounter mode single", "/ewencounter channel live",
       "/ewencounter toggle", "/ewencounter status", "continuous", "Public Test Server",
-      "SavedVariables", "Import Saved Capture", "Refresh", "desktop history",
+      "SavedVariables", "Import Saved Capture", "Refresh Saved Source", "Refresh Imported History", "desktop history",
       "/ewencounter clear confirm", "Delete Encounter", "Delete All", "/ewcollect clear confirm",
       "unsupported saved-data version", "Importing the unchanged ESO file", "Uninstall Data",
     ]],
@@ -1667,6 +1667,8 @@ export function validateEncounterWorkflowDocs(pages) {
     ["features/interface.md", ["Addon Management", "Addon Package Version", "Unconfirmed", "Unknown (check inside ESO)", "Last saved source", "before import", "last-save timestamp", "saved state and importable counts", "Refresh Saved Source", "Refresh Imported History", "Environment/folder changes discard older pending results", "Observed Metrics", "Provisional Recommendations"]],
     ["getting-started/troubleshooting.md", ["current activity", "unsupported saved-data version", "same-version", "Incomplete observations", "duplicates", "currently active fight", "whole batch", "Delete All"]],
     ["development/discovery-collector.md", ["Catalog collection", "/ewcollect resume", "/ewcollect cancel", "incomplete snapshot", "replaces that previous catalog collection", "unsupported saved-data version"]],
+    ["reference/status-reference.md", ["Last saved source", "before import", "Refresh Saved Source", "Refresh Imported History", "empty session", "/ewencounter clear confirm"]],
+    ["reference/encounter-data-and-metrics.md", ["Last saved source", "before import", "successful and failed import", "stale results", "empty stopped session"]],
     ["reference/settings.md", ["Addons and Game Readings", "Game Environment", "Live", "PTS", "Application Logging", "Write Log to File", "They do not turn on encounter recording"]],
   ]);
   const errors = [];

@@ -6,11 +6,16 @@ Selected PathBuf and expected Channel, filesystem modification SystemTime, optio
 
 ## Controlled diagnostics
 
-SourceUnavailable, SourceInaccessible, SourceInvalid, SourceUnsupported, SourceEnvironmentMismatch and StoreInvalid distinguish repair actions without raw error/payload disclosure. Existing catalog/detail categories remain unchanged. Empty and duplicate imports are successful outcomes, not errors.
+SourceUnavailable, SourceInaccessible, SourceInvalid, SourceVersionUnsupported, SourceEnvironmentMismatch and StoreInvalid distinguish repair actions without raw error/payload disclosure. Existing catalog/detail categories remain unchanged. Empty and duplicate imports are successful outcomes, not errors.
+
+StoppedEmpty distinguishes a retained stopped session with zero terminal records
+from a never-started file and a stopped session with importable encounters.
+Inspection and empty-import guidance share one controlled readiness classifier.
 
 ## InspectSource request/result
 
 Request includes generation, path and expected channel. Result preserves that identity; UI accepts only the selected generation/path/channel. Opening or changing selection clears stale presentation and queues inspection when the existing worker can accept it.
+Successful and failed imports also clear and queue the source inspection.
 
 ## User chat
 

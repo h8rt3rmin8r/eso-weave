@@ -85,7 +85,7 @@ Inspection neither creates history nor rewrites source bytes. It cannot prove
 the game is running, the addon is enabled or an in-memory session is active.
 
 Requests and replies carry generation, path and environment; only matching
-results reach the UI. Workflow entry rereads the source; Refresh saved source and Refresh imported history have
+results reach the UI. Workflow entry rereads the source; Successful and failed imports invalidate and reread the source. Empty stopped sessions direct clearing/restart; stopped sessions with records preserve import-first guidance. Refresh saved source and Refresh imported history have
 separate effects. Missing, inaccessible, malformed, unsupported-version and
 wrong-environment sources have controlled categories; store append failures
 retain their separate category. Raw hostile text is never used to classify or
@@ -112,3 +112,7 @@ Canonical encounter, interface, command, catalog, status, troubleshooting,
 architecture and responsible-use documentation matches these surfaces and is
 included in the release binary's bundled documentation build. Automated tests
 are repository evidence, not installed/game-session verification.
+
+First-review regression coverage also checks stopped empty-session guidance in
+source inspection, worker import recovery and registered Live/PTS status/start
+commands. Failed imports clear stale source readiness before rereading it.

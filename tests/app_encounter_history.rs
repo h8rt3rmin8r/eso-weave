@@ -605,6 +605,43 @@ fn rendered_import_uses_the_explicitly_selected_environment() {
         }
         assert_eq!(harness.state().encounter_history_count(), 0);
     }
+    for (failure, heading) in [
+        (0, "Saved Source Invalid"),
+        (1, "Capture Unavailable"),
+        (2, "Saved Source Environment Differs"),
+    ] {
+        fs::write(&source, &original).unwrap();
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Refresh Saved Source")
+            .click_accesskit();
+        settle(&mut harness);
+        harness.get_by_label("A finished recording is saved and ready to import.");
+        match failure {
+            0 => fs::write(&source, b"EsoWeaveDataSaved = PRIVATE_CANARY()").unwrap(),
+            1 => fs::remove_file(&source).unwrap(),
+            _ => fs::write(
+                &source,
+                String::from_utf8(original.clone())
+                    .unwrap()
+                    .replace("[\"channel\"]=\"live\"", "[\"channel\"]=\"pts\""),
+            )
+            .unwrap(),
+        }
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Import Saved Capture")
+            .click_accesskit();
+        settle(&mut harness);
+        assert_eq!(
+            harness.query_all_by_label(heading).count(),
+            2,
+            "import and source both reflect the failure"
+        );
+        assert!(harness
+            .query_by_label("A finished recording is saved and ready to import.")
+            .is_none());
+        assert_eq!(harness.state().encounter_history_count(), 0);
+    }
+    fs::write(&source, &original).unwrap();
     assert_eq!(fs::read(&source).unwrap(), original);
 
     harness
@@ -1042,4 +1079,50 @@ fn s125_worker_inspects_a_selected_source_before_history_exists_and_echoes_its_g
         event => panic!("Unexpected event: {event:?}"),
     }
     assert!(!service.store_path().exists());
+}
+
+#[test]
+fn s125_empty_stopped_session_guidance_does_not_request_nonexistent_encounters() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("EsoWeaveData.lua");
+    let state = serde_json::json!({
+        "state_schema_version":1,"addon_version":4,"selected_mode":"single","selected_channel":"live",
+        "state":"stopped","stop_reason":"user-disabled","records":{},"interruptions":[],"revision":3,
+        "session":{"session_id":"session-1788912002-2000","mode":"single","channel":"live",
+        "status":"stopped","started_at":"1788912002","finished_at":"1788912003",
+        "next_encounter_ordinal":1,"completed_encounter_count":0,"degraded_encounter_count":0,
+        "aggregate_estimated_bytes":0,"aggregate_event_count":0,"aggregate_raw_observation_count":0,"interruption_count":0}
+    });
+    let bytes = format!("EsoWeaveDataSaved = {{ [\"schema_version\"] = 1, [\"addon_version\"] = 1, [\"encounter\"] = {} }}",json_to_lua(&state));
+    fs::write(&source, &bytes).unwrap();
+    let service =
+        EncounterHistoryService::new(root.path().join("app"), root.path().join("catalog.sqlite"));
+    let inspected = service.inspect_source(&source, Channel::Live).unwrap();
+    assert_eq!(inspected.finished_count + inspected.partial_count, 0);
+    assert!(inspected.readiness.description().contains("empty session"));
+    assert!(inspected
+        .readiness
+        .description()
+        .contains("/ewencounter clear confirm"));
+    assert!(!service.store_path().exists());
+    let worker = EncounterHistoryWorker::spawn(service);
+    worker
+        .import_current(source.clone(), Channel::Live)
+        .unwrap();
+    match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+        HistoryEvent::Snapshot {
+            encounters,
+            message,
+            ..
+        } => {
+            assert!(encounters.is_empty());
+            let message = message.unwrap();
+            assert!(
+                message.contains("empty session") && message.contains("/ewencounter clear confirm")
+            );
+            assert!(!message.contains("Import retained encounters"));
+        }
+        event => panic!("unexpected event: {event:?}"),
+    }
+    assert_eq!(fs::read_to_string(source).unwrap(), bytes);
 }

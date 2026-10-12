@@ -1364,6 +1364,8 @@ local function showStatus(details)
         label, action = "FAILURE", reasonLabel(saved.failure and saved.failure.reason or "state-invalid") .. ". " .. PRESERVE_AND_CLEAR
     elseif saved.state == "interrupted" then
         label, action = "INTERRUPTED", "Saved recording was interrupted. " .. SAVE_AND_IMPORT
+    elseif saved.session and finished == 0 and next(saved.records) == nil then
+        action = "An empty session is retained. Use /ewencounter clear confirm, then /ewencounter start " .. saved.selected_channel .. " " .. saved.selected_mode .. "."
     elseif saved.session or next(saved.records) ~= nil then
         action = "A session is retained. " .. SAVE_AND_IMPORT .. " " .. PRESERVE_AND_CLEAR
     end
@@ -1379,7 +1381,7 @@ local function explicitStart(arguments)
     local saved = state()
     if saved.requested_mode then showStatus(); return end
     if saved.state == "failed" or saved.session or next(saved.records) ~= nil then
-        message("A failed or retained session prevents a new recording. " .. PRESERVE_AND_CLEAR)
+        showStatus()
         return
     end
     saved.selected_channel, saved.selected_mode = channel, mode
