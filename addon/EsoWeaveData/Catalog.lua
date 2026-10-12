@@ -2,7 +2,7 @@ local ADDON_NAME = "EsoWeaveData"
 local MODULE_NAMESPACE = ADDON_NAME .. "Catalog"
 local COLLECTOR_VERSION = 1
 local SCHEMA_VERSION = 1
-local COLLECTOR_CHECKSUM = "6c90fe89eaeb6bdc746d9da50f2516e360fd9279c399c5a52594327647a39a68"
+local COLLECTOR_CHECKSUM = "0981ad6bb2497b789d3cbc09e3c5eba3d99987d309515ec57a50cb65998d3af4"
 
 local MAX_RECORDS_PER_TICK = 64
 local MAX_MILLISECONDS_PER_TICK = 4
@@ -25,7 +25,7 @@ local CATEGORY_ORDER = {
 }
 
 local function message(text)
-    d("[ESO Weave Data: Catalog] " .. text)
+    return EsoWeaveDataMessages.User("Catalog", text)
 end
 
 local function addWarning(text)
@@ -412,7 +412,7 @@ local function finalizeCapture()
     EsoWeaveDataSaved.catalog.checkpoint = { adapter = #runtime.selected_categories, cursor = 0 }
     EVENT_MANAGER:UnregisterForUpdate(UPDATE_NAME)
     runtime = nil
-    message("Catalog collection complete. Use /reloadui, logout, or exit ESO to save addon data, then use the catalog-compiler import-collector workflow. This is game-definition data for maintainers, not an Encounter History recording.")
+    message("Catalog collection complete. Use /reloadui, logout, or exit ESO to save addon data, then choose Build from saved catalog data in Catalog Update. Maintainers can also use catalog-compiler import-collector. This is game-definition data for maintainers, not an Encounter History recording.")
 end
 
 local function updateCapture()
@@ -548,14 +548,19 @@ end
 
 local function showStatus()
     local state = EsoWeaveDataSaved.catalog and EsoWeaveDataSaved.catalog.status or "idle"
-    if runtime then
-        message("Current catalog collection: " .. tostring(state) .. ", category group " .. tostring(runtime.adapter)
-            .. "/" .. tostring(#runtime.selected_categories) .. ", game-definition records collected: " .. tostring(#records)
-            .. ". Running collects data; paused requires /ewcollect resume after combat. This is not encounter recording.")
+    local action
+    if state == "running" and runtime then
+        action = "Collecting definitions; /ewcollect status checks progress."
+    elseif state == "paused" and runtime then
+        action = "After combat, use /ewcollect resume."
+    elseif state == "complete" then
+        action = "Save with /reloadui, logout or exit, then Build from saved catalog data in Catalog Update."
+    elseif state == "idle" then
+        action = "Maintainers: /ewcollect start live or pts starts definition collection."
     else
-        message("Retained catalog collection: " .. tostring(state)
-            .. ". Complete results need /reloadui, logout, or exit ESO before catalog-compiler import-collector. Incomplete results cannot be imported or resumed after reload. /ewcollect start live|pts replaces the retained collection; /ewcollect clear confirm deletes only catalog collection data.")
+        action = "Incomplete results cannot be imported; /ewcollect start live or pts replaces the inactive collection."
     end
+    message("Catalog " .. tostring(state) .. " | " .. tostring(#records) .. " definition records. " .. action .. " This is not encounter recording.")
 end
 
 local function clearCapture(arguments)
@@ -574,7 +579,9 @@ end
 
 local function command(arguments)
     local verb, rest = string.match(arguments or "", "^(%S*)%s*(.-)%s*$")
-    if verb == "start" then
+    if (verb == "resume" or verb == "cancel" or verb == "status" or verb == "help") and rest ~= "" then
+        message("Use /ewcollect " .. verb .. " without extra arguments. Example: /ewcollect status.")
+    elseif verb == "start" then
         startCapture(rest)
     elseif verb == "resume" then
         resumeCapture()
@@ -585,8 +592,11 @@ local function command(arguments)
     elseif verb == "clear" then
         clearCapture(rest)
     else
-        message("Catalog collection gathers game-definition data for maintainers, not fight recordings. /ewcollect start live|pts [categories] replaces the previous inactive collection; live is the normal game and pts is the Public Test Server. Categories: player-skills, crafted-abilities, item-sets, champion-skills, companions-races-classes. Omit categories for all five.")
-        message("Use /ewcollect status for progress, /ewcollect resume after combat, /ewcollect cancel to retain an incomplete non-importable result, or /ewcollect clear confirm to delete only addon catalog data. Complete collection needs /reloadui, logout, or exit ESO before catalog-compiler import-collector. Encounter recordings and Encounter History are unchanged.")
+        if verb ~= "" and verb ~= "help" then message("Unknown catalog command. Use /ewcollect help. Example: /ewcollect start live."); return end
+        message("Catalog collection gathers game definitions for maintainers, not fights. /ewcollect start live|pts [categories] replaces the inactive collection. /ewcollect status shows progress.")
+        message("/ewcollect resume after combat; cancel keeps an incomplete result; clear confirm deletes only catalog data. Complete: save with /reloadui, logout or exit, then Build from saved catalog data in Catalog Update.")
+        message("Optional categories: player-skills, crafted-abilities, item-sets, champion-skills, companions-races-classes. Omit for all five. Encounter History is unchanged.")
+
     end
 end
 

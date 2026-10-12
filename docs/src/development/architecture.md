@@ -157,11 +157,13 @@ default UI summaries do not reproduce raw payload values.
 
 Only explicit user commands inside ESO change encounter authority. The desktop
 has no binding, generated-input, clipboard, Pixel Bus, or SavedVariables command
-path. Its controller presentation is read-only and labeled **Last saved recording
-state** from the last successfully imported saved file. Refresh and failed
-imports keep that older summary; it can predate the latest disk save or selected
-environment. The displayed **Saved channel** identifies the imported snapshot,
-not current in-game activity.
+path. The existing history worker also performs bounded read-only saved-source
+inspection. It returns controlled state/counts, selected environment/path and
+the modified timestamp from the same stable file handle. Results are accepted
+only for the current path, channel and request generation. Source read/parse
+diagnostics are typed separately from store append failures; neither exposes
+raw input values. **Last saved source** is available before the first import
+and never asserts current in-game activity.
 
 Current addon-v3 schema-v2 captures include normalization profile version 1.
 The pure replay verifier derives only from that bounded profile and raw

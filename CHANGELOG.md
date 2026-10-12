@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S125 connects Data Details to a copyable recording/import walkthrough and
+  separates advanced recording recovery from maintainer catalog collection
+  (issue #269).
+- Inspect the selected last-saved recording before importing, including its
+  path, modification time, environment, readiness and finished/partial counts.
+  Source refresh and imported-history refresh have separate controls (issue #271).
+- Add `/ewencounter start live|pts single|continuous`, validating the whole
+  command before state changes and preserving active or retained sessions on
+  repeated start. Stop remains idempotent (issue #270).
+
+### Fixed
+
+- Use surface-aware emphasis throughout catalog and encounter details, and
+  paint complete Next Step instructions across theme, scale and window sizes
+  (issues #265 and #267).
+- Show content-bound origin acknowledgment only for an eligible Live catalog;
+  selection, refresh, content changes and unchecking reset installation intent
+  (issue #266).
+- Deliver both data-addon modules' replies through system chat independently
+  of debug interception, with bounded initialization retry (issue #268).
+- Distinguish missing, inaccessible, malformed, unsupported and mismatched
+  saved sources from local-history store failures (issue #271).
+
+### Decisions
+
+- 2026-10-11: Documentation policy replaces the obsolete imported-only state
+  assertions with last-saved source, timestamp/count, independent refresh and
+  stale-selection contracts. Negative fixtures preserve each required instruction.
+- 2026-10-11: S125 reuses the existing four-file addon bootstrap for a shared
+  system-chat route. Initialization holds at most 64 replies and reports excess
+  replies when chat becomes ready; recording cannot gain authority before its
+  enable warning is delivered. No addon schema or dependency changes are needed.
+- 2026-10-11: Last-saved inspection reuses the bounded stable-file reader and
+  serialized encounter worker, carrying source identity and generation. Read
+  metadata comes from the same handle; source validation and history append
+  retain separate controlled diagnostics and source/history mutation boundaries.
+- 2026-10-11: Essential Next Step rows derive height from wrapped content.
+  Expanded dashboard cards share that measured height across responsive layouts;
+  the former two fixed-height expectation is replaced by content-derived bounds.
+  Data Details scrolls its body while keeping Close reachable.
+- 2026-10-11: Plan050 is archived after S124 merged in PR #264. Plan051 groups
+  issues #265 through #271 under S125; native logs and multiple retained sessions
+  remain separately tracked by issues #272 and #273.
+
 ## [0.17.4] - 2026-10-07
 
 ### Highlights

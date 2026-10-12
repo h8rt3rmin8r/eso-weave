@@ -124,7 +124,7 @@ local function normalizationProfile(apiVersion)
 end
 
 local function message(text)
-    d("[ESO Weave Data: Recording] " .. text)
+    return EsoWeaveDataMessages.User("Recording", text)
 end
 
 local SAVE_AND_IMPORT = "Use /reloadui, logout, or exit ESO to save addon data, then File > Encounter History > Import Saved Capture in ESO Weave for the matching Live or PTS environment."
@@ -1263,8 +1263,12 @@ local function startSession()
         message("Before enabling recording, choose /ewencounter channel live for the normal game or /ewencounter channel pts for the Public Test Server.")
         return
     end
-    message("Enabling local fight recording: " .. MODE_LABELS[saved.selected_mode]
+    local warned = message("Enabling local fight recording: " .. MODE_LABELS[saved.selected_mode]
         .. ". Recorded game events can include names and identifiers. Outside combat it waits for the next fight; during combat it starts immediately with earlier events missing.")
+    if not warned then
+        message("Chat is initializing; recording remains OFF. Repeat /ewencounter start live single (or pts / continuous) after help appears.")
+        return
+    end
     local raw = GetGameTimeMilliseconds()
     local stamp = tostring(GetTimeStamp())
     local mode = saved.selected_mode
@@ -1327,7 +1331,7 @@ local function clear(arguments)
     message("Addon encounter recordings and session state cleared. Selected mode and environment, desktop history, and catalog data were kept. Use /reloadui, logout, or exit ESO to save the deletion; /ewencounter toggle can start another session.")
 end
 
-local function showStatus()
+local function showDiagnosticStatus()
     local saved = state()
     local session = saved.session
     local lastInterruption = saved.interruptions[#saved.interruptions]
@@ -1343,7 +1347,49 @@ local function showStatus()
         .. "; interruptions: " .. tostring(session and session.interruption_count or 0)
         .. "; last interruption: " .. (lastInterruption and reasonLabel(lastInterruption.reason) or "none")
         .. (saved.failure and "; error: " .. reasonLabel(saved.failure.reason) or "")
-        .. ". This is current in-game status; desktop Last saved recording state can lag until /reloadui, logout, or exit ESO.")
+        .. ". This is current in-game status; desktop Last saved source can lag until /reloadui, logout, or exit ESO.")
+end
+
+local function showStatus(details)
+    if details then showDiagnosticStatus(); return end
+    local saved = state()
+    local finished = saved.session and saved.session.completed_encounter_count or 0
+    local partial = saved.session and saved.session.degraded_encounter_count or 0
+    local label, action = "OFF", "Use /ewencounter start live single (or pts) to record a fight."
+    if saved.state == "waiting" then
+        label, action = "WAITING FOR COMBAT", "Enter combat; /ewencounter stop keeps retained fights."
+    elseif saved.state == "capturing" then
+        label, action = "RECORDING", "Finish combat; /ewencounter stop ends early with a partial result."
+    elseif saved.state == "failed" then
+        label, action = "FAILURE", reasonLabel(saved.failure and saved.failure.reason or "state-invalid") .. ". " .. PRESERVE_AND_CLEAR
+    elseif saved.state == "interrupted" then
+        label, action = "INTERRUPTED", "Saved recording was interrupted. " .. SAVE_AND_IMPORT
+    elseif saved.session or next(saved.records) ~= nil then
+        action = "A session is retained. " .. SAVE_AND_IMPORT .. " " .. PRESERVE_AND_CLEAR
+    end
+    message(label .. "; retained fights: " .. tostring(finished) .. "; partial: " .. tostring(partial) .. ". " .. action)
+end
+
+local function explicitStart(arguments)
+    local channel, mode = string.match(arguments or "", "^(%S+)%s+(%S+)$")
+    if (channel ~= "live" and channel ~= "pts") or (mode ~= "single" and mode ~= "continuous") then
+        message("Use /ewencounter start live single (or pts / continuous). Example: /ewencounter start live single.")
+        return
+    end
+    local saved = state()
+    if saved.requested_mode then showStatus(); return end
+    if saved.state == "failed" or saved.session or next(saved.records) ~= nil then
+        message("A failed or retained session prevents a new recording. " .. PRESERVE_AND_CLEAR)
+        return
+    end
+    saved.selected_channel, saved.selected_mode = channel, mode
+    startSession()
+    if state().requested_mode then showStatus() end
+end
+
+local function showHelp()
+    message("Record fights: single records one fight; continuous records until stopped. Use /ewencounter start live single (or pts / continuous), /ewencounter stop, /ewencounter status, /ewencounter status details.")
+    message(SAVE_AND_IMPORT .. " Retained sessions need deliberate /ewencounter clear confirm before another session. Clearing before import discards the addon copy; desktop history and catalog data are kept.")
 end
 
 local function command(arguments)
@@ -1371,7 +1417,11 @@ local function command(arguments)
         message("Saved addon recording data uses an unsupported version and was preserved. Recording commands, including clear, are unavailable for this data. Use a compatible ESO Weave Data version or keep a backup for recovery; desktop history and catalog data are unchanged.")
         return
     end
-    if verb == "mode" then
+    if verb == "start" then
+        explicitStart(rest)
+    elseif (verb == "stop" or verb == "disarm" or verb == "toggle" or verb == "help") and rest ~= "" then
+        message("Use /ewencounter " .. verb .. " without extra arguments. Example: /ewencounter stop.")
+    elseif verb == "mode" then
         selectMode(rest)
     elseif verb == "channel" then
         selectChannel(rest)
@@ -1390,12 +1440,14 @@ local function command(arguments)
     elseif verb == "stop" then
         if state().requested_mode then toggle() else message("Recording is already off. Retained recordings were kept; use /ewencounter status to inspect the session.") end
     elseif verb == "status" then
-        showStatus()
+        if rest == "" or rest == "details" then showStatus(rest == "details")
+        else message("Use /ewencounter status or /ewencounter status details.") end
     elseif verb == "clear" then
         clear(rest)
     else
-        message("Fight recording: /ewencounter mode single records one fight; /ewencounter mode continuous records multiple fights until stopped. While off with no retained session, choose /ewencounter channel live (normal game) or pts (Public Test Server), then /ewencounter toggle to enable. /ewencounter status shows current in-game status; toggle stops and keeps data.")
-        message(SAVE_AND_IMPORT .. " /ewencounter clear confirm deletes only addon recordings and session state while off; selected mode and environment, desktop history, and catalog data are kept. Clearing before import discards the addon copy. Use /ewcollect help for the separate maintainer catalog workflow.")
+        if verb ~= "" and verb ~= "help" then
+            message("Unknown encounter command. Use /ewencounter help. Example: /ewencounter start live single.")
+        else showHelp() end
     end
 end
 

@@ -48,8 +48,8 @@ use crate::config::{LevelName, Theme};
 use crate::documentation::{BrowserOpener, DocumentationService, NativeBrowser};
 use crate::encounter::{
     CaptureControllerState, CaptureFailureReason, CaptureMode, CaptureSessionStatus,
-    CaptureStateSummary, EncounterHistoryService, EncounterIdentity, EncounterProjection,
-    EncounterSummary, HistoryDiagnostic, HistoryDiagnosticKind, MetricResult,
+    EncounterHistoryService, EncounterIdentity, EncounterProjection, EncounterSummary,
+    HistoryDiagnostic, HistoryDiagnosticKind, MetricResult, SavedSourceInspection,
 };
 use crate::input::{Action, Key};
 use crate::weave::WeaveType;
@@ -321,6 +321,8 @@ pub struct EsoWeaveApp {
     last_settings_body_visible: Option<f32>,
     /// Responsive dashboard mode and section rectangles from the latest frame.
     last_dashboard_layout: Option<DashboardLayout>,
+    dashboard_height_key: Option<(u32, u32, String, Option<String>)>,
+    dashboard_shared_height: Option<f32>,
     dashboard_rects: Option<(egui::Rect, egui::Rect)>,
     /// Width inputs needed to project a pending responsive transition before the
     /// bottom log panel consumes space on the next frame.
@@ -349,6 +351,7 @@ pub struct EsoWeaveApp {
     collector_waiting_fingerprint: Option<CaptureFingerprint>,
     encounter_history_worker: Option<EncounterHistoryWorker>,
     encounter_history_open: bool,
+    show_recording_guide: bool,
     encounter_history_initialized: bool,
     encounter_history_busy: bool,
     encounter_history: Vec<EncounterSummary>,
@@ -356,7 +359,10 @@ pub struct EsoWeaveApp {
     encounter_history_detail: Option<Result<EncounterDetail, HistoryDiagnostic>>,
     encounter_history_diagnostic: Option<HistoryDiagnostic>,
     encounter_history_message: Option<String>,
-    encounter_last_saved_state: Option<CaptureStateSummary>,
+    saved_source_key: Option<(std::path::PathBuf, Channel)>,
+    saved_source_generation: u64,
+    saved_source_pending: bool,
+    saved_source_result: Option<Result<SavedSourceInspection, HistoryDiagnostic>>,
     encounter_history_catalog_refresh_pending: bool,
     encounter_delete_confirmation: Option<EncounterDeleteConfirmation>,
 }
@@ -408,6 +414,8 @@ impl EsoWeaveApp {
             last_settings_body_height: None,
             last_settings_body_visible: None,
             last_dashboard_layout: None,
+            dashboard_height_key: None,
+            dashboard_shared_height: None,
             dashboard_rects: None,
             last_dashboard_available_width: None,
             previous_frame_available_width: None,
@@ -432,6 +440,7 @@ impl EsoWeaveApp {
             collector_waiting_fingerprint: None,
             encounter_history_worker: None,
             encounter_history_open: false,
+            show_recording_guide: false,
             encounter_history_initialized: false,
             encounter_history_busy: false,
             encounter_history: Vec::new(),
@@ -439,7 +448,10 @@ impl EsoWeaveApp {
             encounter_history_detail: None,
             encounter_history_diagnostic: None,
             encounter_history_message: None,
-            encounter_last_saved_state: None,
+            saved_source_key: None,
+            saved_source_generation: 0,
+            saved_source_pending: true,
+            saved_source_result: None,
             encounter_history_catalog_refresh_pending: false,
             encounter_delete_confirmation: None,
         }
@@ -770,6 +782,7 @@ impl EsoWeaveApp {
                         (!messages.is_empty()).then(|| messages.join(" "));
                 }
                 WorkerEvent::DiscoveryComplete(candidates) => {
+                    self.catalog_acknowledged_candidate = None;
                     self.catalog_status_ready = true;
                     self.catalog_candidates = candidates;
                     self.choose_default_catalog_candidate();
@@ -950,6 +963,7 @@ impl EsoWeaveApp {
                 .any(|candidate| &candidate.candidate_sha256 == selected)
         });
         if !selected_exists {
+            self.catalog_acknowledged_candidate = None;
             self.catalog_selected = self
                 .catalog_candidates
                 .iter()
@@ -1033,6 +1047,22 @@ impl EsoWeaveApp {
         {
             self.encounter_history_busy = false;
             match event {
+                HistoryEvent::SourceInspected {
+                    generation,
+                    source_path,
+                    expected_channel,
+                    result,
+                } => {
+                    if should_accept_saved_source(
+                        self.model.encounter_capture_source().as_ref(),
+                        self.saved_source_generation,
+                        generation,
+                        &source_path,
+                        expected_channel,
+                    ) {
+                        self.saved_source_result = Some(result);
+                    }
+                }
                 HistoryEvent::Snapshot {
                     encounters,
                     operation,
@@ -1042,7 +1072,7 @@ impl EsoWeaveApp {
                     self.encounter_history = encounters;
                     self.encounter_history_message = message;
                     if operation == HistoryOperation::Import || last_saved_state.is_some() {
-                        self.encounter_last_saved_state = last_saved_state;
+                        self.saved_source_pending = true;
                     }
                     self.encounter_history_diagnostic = None;
                     let selection_still_exists = self
@@ -1078,6 +1108,107 @@ impl EsoWeaveApp {
         self.request_catalog_changed_history_detail();
     }
 
+    fn refresh_saved_source(&mut self) {
+        self.saved_source_generation = self.saved_source_generation.wrapping_add(1);
+        self.saved_source_result = None;
+        self.saved_source_pending = true;
+    }
+
+    fn request_saved_source_inspection(&mut self) {
+        let selected = self.model.encounter_capture_source();
+        if selected != self.saved_source_key {
+            self.saved_source_key = selected.clone();
+            self.refresh_saved_source();
+        }
+        if !self.saved_source_pending
+            || self.encounter_history_busy
+            || !(self.encounter_history_open || self.data_addon_details_open)
+        {
+            return;
+        }
+        let Some((path, channel)) = selected else {
+            self.saved_source_result = Some(Err(HistoryDiagnostic::source_unavailable()));
+            self.saved_source_pending = false;
+            return;
+        };
+        if let Some(worker) = &self.encounter_history_worker {
+            if worker
+                .inspect_source(self.saved_source_generation, path, channel)
+                .is_ok()
+            {
+                self.saved_source_pending = false;
+                self.encounter_history_busy = true;
+            }
+        }
+    }
+
+    fn saved_source_ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Last saved source");
+        ui.label("This file is a saved snapshot. It cannot prove the addon is enabled, loaded or recording now. Use /ewencounter status in ESO.");
+        ui.label(format!(
+            "Selected environment: {}",
+            env_name(self.model.settings_form().beacon.environment)
+        ));
+        if let Some((path, _)) = self.model.encounter_capture_source() {
+            ui.label(format!("Source: {}", path.display()));
+        }
+        if ui
+            .add_enabled(
+                !self.encounter_history_busy && self.encounter_history_worker.is_some(),
+                egui::Button::new("Refresh Saved Source"),
+            )
+            .clicked()
+        {
+            self.refresh_saved_source();
+        }
+        match &self.saved_source_result {
+            Some(Ok(source)) => {
+                let saved_at = source
+                    .modified
+                    .map(|time| {
+                        time::OffsetDateTime::from(time)
+                            .format(&time::format_description::well_known::Rfc3339)
+                            .unwrap_or_else(|_| "unavailable".into())
+                    })
+                    .unwrap_or_else(|| "unavailable".into());
+                ui.label(format!("Last saved: {saved_at}"));
+                widgets::label_surface_strong(ui, source.readiness.description());
+                ui.label(format!("Saved for {}: {} finished, {} partial/interrupted encounters ready for import.",
+                    source.channel, source.finished_count, source.partial_count));
+                if let Some(state) = &source.state {
+                    egui::CollapsingHeader::new("Saved recording details").show(ui, |ui| {
+                        ui.label(format!(
+                            "{} | {} | revision {}",
+                            capture_mode_label(state.selected_mode),
+                            capture_controller_state_label(state.state),
+                            state.revision
+                        ));
+                        ui.label(format!(
+                            "Session: {} | {} interruptions",
+                            state
+                                .session_status
+                                .map_or("none", capture_session_status_label),
+                            state.interruption_count
+                        ));
+                        if let Some(reason) = state.failure_reason {
+                            ui.label(capture_failure_label(reason));
+                        }
+                    });
+                }
+            }
+            Some(Err(diagnostic)) => {
+                widgets::label_surface_strong(ui, history_diagnostic_heading(diagnostic.kind));
+                ui.label(&diagnostic.message);
+            }
+            None if self.encounter_history_worker.is_none() => {
+                ui.label("Saved-source inspection is unavailable. Check local history access and restart ESO Weave.");
+            }
+            None => {
+                ui.label("Inspecting the selected saved source...");
+            }
+        }
+    }
+
     /// Renders one frame. Reachable without an `eframe::Frame`, a window, or a
     /// GPU, so `tests/app_ui_sizing.rs` can assert the rendered geometry that the
     /// pure sizing helpers alone never proved (slice 030).
@@ -1090,6 +1221,7 @@ impl EsoWeaveApp {
         self.drain_api_checks();
         self.drain_catalog_updates();
         self.drain_encounter_history();
+        self.request_saved_source_inspection();
         if self
             .catalog_worker
             .as_ref()
@@ -1299,6 +1431,7 @@ impl EsoWeaveApp {
                             .clicked()
                         {
                             self.encounter_history_open = true;
+                            self.refresh_saved_source();
                             if !self.encounter_history_initialized {
                                 self.request_history_refresh();
                             }
@@ -1637,12 +1770,35 @@ impl EsoWeaveApp {
         self.last_dashboard_available_width = Some(dashboard_width);
         let layout = effective_dashboard_layout(dashboard_width, self.system_state_expanded);
         self.last_dashboard_layout = Some(layout);
+        let card_width = match layout {
+            DashboardLayout::Narrow => dashboard_width,
+            DashboardLayout::Wide => (dashboard_width - ui.spacing().item_spacing.x) / 2.0,
+        };
+        let height_key = (
+            card_width.to_bits(),
+            ui.ctx().pixels_per_point().to_bits(),
+            view.data_addon.remediation.clone(),
+            view.data_addon.operation_error.clone(),
+        );
+        if self.dashboard_height_key.as_ref() != Some(&height_key) {
+            self.dashboard_height_key = Some(height_key);
+            self.dashboard_shared_height = None;
+        }
+        let shared_height = self
+            .system_state_expanded
+            .then_some(self.dashboard_shared_height)
+            .flatten();
         let (live_rect, system_rect) = match layout {
             DashboardLayout::Narrow => {
-                let live = Self::live_hud(ui, &palette, &view);
+                let live = Self::live_hud(ui, &palette, &view, shared_height);
                 ui.add_space(DASHBOARD_NARROW_GAP);
-                let shared_height = self.system_state_expanded.then_some(live.height());
-                let system = self.system_and_state(ui, &palette, &view, intents, shared_height);
+                let system = self.system_and_state(
+                    ui,
+                    &palette,
+                    &view,
+                    intents,
+                    self.system_state_expanded.then_some(live.height()),
+                );
                 (live, system)
             }
             DashboardLayout::Wide => {
@@ -1655,7 +1811,7 @@ impl EsoWeaveApp {
                         egui::vec2(column_width, 0.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            let live = Self::live_hud(ui, &palette, &view);
+                            let live = Self::live_hud(ui, &palette, &view, shared_height);
                             rects = Some((live, egui::Rect::NOTHING));
                         },
                     );
@@ -1678,6 +1834,11 @@ impl EsoWeaveApp {
                 rects.expect("dashboard columns render both sections")
             }
         };
+        if self.system_state_expanded && system_rect.height() > live_rect.height() + 0.5 {
+            self.dashboard_shared_height = Some(system_rect.height());
+            ui.ctx()
+                .request_discard("wrapped dashboard instructions changed the shared card height");
+        }
         self.dashboard_rects = Some((live_rect, system_rect));
         // This is the compact layout's intrinsic width. The wide containers
         // expand with the window and must never feed the enforced minimum.
@@ -1807,10 +1968,14 @@ impl EsoWeaveApp {
         ui: &mut egui::Ui,
         palette: &crate::app::theme::Palette,
         view: &AppView,
+        expanded_outer_height: Option<f32>,
     ) -> egui::Rect {
         dashboard_frame(palette)
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
+                if let Some(height) = expanded_outer_height {
+                    ui.set_min_height((height - DASHBOARD_FRAME_VERTICAL_OVERHEAD).max(0.0));
+                }
                 let label_width = dashboard_group_label_width(ui, LIVE_HUD_STATUS_TITLES, 0.0);
                 widgets::heading(ui, strings::LIVE_HUD_TITLE);
                 widgets::resource_group(
@@ -2160,6 +2325,7 @@ impl EsoWeaveApp {
                                         .clicked()
                                     {
                                         self.data_addon_details_open = true;
+                                        self.refresh_saved_source();
                                     }
                                 },
                             );
@@ -2301,11 +2467,26 @@ impl EsoWeaveApp {
                 ui.set_min_width(width);
                 ui.set_max_width(width);
                 ui.heading("ESO Weave Data Details");
-                ui.label(
-                    "ESO Weave Data records encounters and collects game-data definitions. PixelBeacon separately supplies current gameplay readings. Installed files do not confirm that ESO enabled or loaded either addon.",
-                );
-                ui.label("Setup: install ESO Weave Data for the selected Live or PTS environment, enable it in ESO's Add-Ons menu, and run /reloadui if ESO is open. For current recording status, enter /ewencounter status inside ESO.");
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("Record a fight").clicked() {
+                        self.encounter_history_open = true;
+                            self.refresh_saved_source();
+                        self.show_recording_guide = true;
+                        self.request_history_refresh();
+                        self.data_addon_details_open = false;
+                    }
+                    if ui.button("Open Encounter History").clicked() {
+                        self.encounter_history_open = true;
+                            self.refresh_saved_source();
+                        self.request_history_refresh();
+                        self.data_addon_details_open = false;
+                    }
+                });
                 ui.separator();
+                // Reserve the heading and footer before allocating scrollable content.
+                let body_height = (ctx.content_rect().height() - 160.0).max(50.0);
+                egui::ScrollArea::vertical().max_height(body_height).show(ui, |ui| {
+                    ui.label("Install for Live or PTS, enable ESO Weave Data in ESO's Add-Ons menu, then /reloadui if ESO is open. Files on disk cannot confirm enablement or current recording.");
                 let label_width =
                     dashboard_group_label_width(ui, DATA_DETAILS_STATUS_TITLES, 0.0);
                 for line in [
@@ -2323,6 +2504,10 @@ impl EsoWeaveApp {
                 ] {
                     dashboard_status_row(ui, &palette, line, label_width, 0.0, |_| {});
                 }
+                    ui.separator();
+                    self.saved_source_ui(ui);
+                });
+
                 ui.separator();
                 if ui.button("Close Data Details").clickable().clicked() {
                     self.data_addon_details_open = false;
@@ -2364,12 +2549,13 @@ impl EsoWeaveApp {
             }
 
             ui.add_space(6.0);
-            ui.strong("Reviewed import candidates");
+            widgets::label_surface_strong(ui, "Reviewed import candidates");
             if self.catalog_candidates.is_empty() {
                 ui.label(
                     "No checked catalog update files found. Place a complete reviewed catalog candidate in the application data catalog/import/live or catalog/import/pts folder, then choose Refresh candidates. See the offline guide's Catalog Update workflow for the required files.",
                 );
             }
+            let previous_selection = self.catalog_selected.clone();
             for candidate in &self.catalog_candidates {
                 if candidate.channel == Channel::Live {
                     let label = format!(
@@ -2391,6 +2577,9 @@ impl EsoWeaveApp {
                 }
             }
 
+            if previous_selection != self.catalog_selected {
+                self.catalog_acknowledged_candidate = None;
+            }
             let selected_summary = self.catalog_selected.as_ref().and_then(|hash| {
                 self.catalog_candidates
                     .iter()
@@ -2449,19 +2638,7 @@ impl EsoWeaveApp {
                 );
             }
 
-            let trust_label =
-                "I obtained this candidate from a review or release source I trust.";
-            if let Some(candidate) = &selected_summary {
-                let hash = candidate.candidate_sha256.clone();
-                let mut acknowledged =
-                    self.catalog_acknowledged_candidate.as_deref() == Some(hash.as_str());
-                if ui.checkbox(&mut acknowledged, trust_label).changed() {
-                    self.catalog_acknowledged_candidate = acknowledged.then_some(hash);
-                }
-            } else {
-                let mut acknowledged = false;
-                ui.add_enabled(false, egui::Checkbox::new(&mut acknowledged, trust_label));
-            }
+            egui::CollapsingHeader::new("Maintainer catalog collection").show(ui, |ui| {
             ui.label(
                     "For maintainers: ESO Weave Data can collect game definitions inside ESO to build a catalog update locally. This is separate from encounter recording. Saved addon files are read as data, never run as code or uploaded.",
             );
@@ -2522,9 +2699,11 @@ impl EsoWeaveApp {
                 }
             });
 
+            });
+
             if let Some(progress) = &self.catalog_progress {
                 ui.separator();
-                ui.strong(stage_label(progress.stage));
+                widgets::label_surface_strong(ui, stage_label(progress.stage));
                 ui.label(&progress.message);
                 ui.label(format!(
                     "Elapsed: {:.1} seconds",
@@ -2547,6 +2726,17 @@ impl EsoWeaveApp {
             }
 
             ui.separator();
+            if compatibility.as_ref().is_some_and(Result::is_ok) {
+                if let Some(candidate) = selected_summary.as_ref().filter(|candidate| candidate.channel == Channel::Live) {
+                    ui.label("File checks verify content integrity, not who supplied this catalog.");
+                    let hash = candidate.candidate_sha256.clone();
+                    let mut acknowledged = self.catalog_acknowledged_candidate.as_deref() == Some(hash.as_str());
+                    if ui.add_enabled(!busy, egui::Checkbox::new(&mut acknowledged,
+                        "I trust this catalog's source")).changed() {
+                        self.catalog_acknowledged_candidate = acknowledged.then_some(hash);
+                    }
+                }
+            }
             ui.horizontal_wrapped(|ui| {
                 let can_install = !busy
                     && compatibility.as_ref().is_some_and(Result::is_ok)
@@ -2570,6 +2760,7 @@ impl EsoWeaveApp {
                     .clickable()
                     .clicked()
                 {
+                    self.catalog_acknowledged_candidate = None;
                     if let Some(worker) = &self.catalog_worker {
                         let _ = worker.discover();
                     }
@@ -2632,20 +2823,33 @@ impl EsoWeaveApp {
                 let selected_environment = self.model.settings_form().beacon.environment;
                 ui.label(format!("Saved capture source: {}. Change Game Environment in Settings to select Live or PTS (Public Test Server).", env_name(selected_environment)));
                 egui::CollapsingHeader::new("How to record and import")
-                    .default_open(true)
+                    .default_open(false)
+                    .open(self.show_recording_guide.then_some(true))
                     .show(ui, |ui| {
-                        ui.label("1. Install ESO Weave Data, enable it in ESO's Add-Ons menu, and run /reloadui if ESO is already open.");
-                        ui.label("2. Inside ESO, while recording is off with no retained session, choose /ewencounter mode single (one fight) or /ewencounter mode continuous (multiple fights), then /ewencounter channel live or /ewencounter channel pts to match the game you are using. To change an existing session's mode or environment, save and import first if you want to keep it, then /ewencounter clear confirm to delete only the addon recording copy.");
-                        ui.label("3. Enter /ewencounter toggle to start. Outside combat it waits for the next fight; during combat it starts immediately with an incomplete opening. Single fight mode stops after that fight; continuous mode waits between fights. Enter /ewencounter status for current activity, and /ewencounter toggle again to stop while retaining recordings.");
-                        ui.label("4. Run /reloadui, log out, or exit ESO to save addon data (SavedVariables) to disk. Return here and choose Import Saved Capture. Refresh only rereads imported history; it does not import new ESO data.");
-                        ui.label("ESO's native combat logs and ESO Weave's application diagnostics are separate. This window imports the addon's saved recordings.");
+                        let channel = if selected_environment == crate::beacon::Environment::Pts { "pts" } else { "live" };
+                        ui.label("1. Enable ESO Weave Data in ESO's Add-Ons menu. Reload if files changed.");
+                        recording_command(ui, "/reloadui", "Saves addon data and reloads enabled addons.");
+                        ui.label("2. Choose the game's environment and single fight mode, then start before combat.");
+                        recording_command(ui, &format!("/ewencounter start {channel} single"), "Chat: WAITING FOR COMBAT, or RECORDING with an incomplete opening if already fighting.");
+                        ui.label("3. Fight. Single fight mode stops after the fight.");
+                        recording_command(ui, "/ewencounter status", "Chat: OFF, WAITING FOR COMBAT or RECORDING, retained counts and the next action.");
+                        ui.label("4. Save with /reloadui, logout or exit ESO.");
+                        ui.label("5. Choose Import Saved Capture here. 6. Select an imported encounter to view its results.");
+                        egui::CollapsingHeader::new("Continuous recording and recovery").show(ui, |ui| {
+                            recording_command(ui, &format!("/ewencounter start {channel} continuous"), "Waits between fights until stopped. Repeated start keeps the active mode and environment.");
+                            recording_command(ui, "/ewencounter stop", "Chat: OFF. Stops and retains recordings; repeating stop keeps them.");
+                            recording_command(ui, "/ewencounter clear confirm", "Deletes the addon recording copy only. Save and import first if you want to keep it; retained sessions block a new start.");
+                            recording_command(ui, "/ewencounter status details", "Optional technical state and failure details.");
+                        });
+                        ui.label("Catalog collection produces game-data definitions for maintainers, not fights. Native Encounter.log ingestion is not implemented. Application diagnostics are separate.");
                     });
+                self.show_recording_guide = false;
                 ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(
                             !self.encounter_history_busy
                                 && self.encounter_history_worker.is_some(),
-                            egui::Button::new("Refresh"),
+                            egui::Button::new("Refresh Imported History"),
                         )
                         .on_hover_text("Reread the encounter copies already imported on this computer. Use Import Saved Capture to read newly saved ESO data.")
                         .clickable()
@@ -2681,13 +2885,13 @@ impl EsoWeaveApp {
                     }
                     if self.encounter_history_busy {
                         ui.spinner();
-                        ui.label("Processing imported history. Wait before starting another operation.");
+                        ui.label("Reading saved data or processing local history. Wait before another operation.");
                     }
                 });
 
                 if self.encounter_history_worker.is_none() {
                     ui.separator();
-                    ui.strong("Local History Unavailable");
+                    widgets::label_surface_strong(ui, "Local History Unavailable");
                     ui.label(
                         "ESO Weave could not find this user's application data folder, so it cannot open local encounter history. Check your user profile and application-folder access, then restart ESO Weave.",
                     );
@@ -2698,50 +2902,12 @@ impl EsoWeaveApp {
                 }
                 if let Some(diagnostic) = &self.encounter_history_diagnostic {
                     ui.separator();
-                    ui.strong(history_diagnostic_heading(diagnostic.kind));
+                    widgets::label_surface_strong(ui, history_diagnostic_heading(diagnostic.kind));
                     ui.label(&diagnostic.message);
                 }
 
-                if let Some(state) = &self.encounter_last_saved_state {
-                    ui.separator();
-                    ui.heading("Last saved recording state");
-                    ui.label(
-                        "This is the addon's state from the last successfully imported saved file, not current activity. Refresh and failed imports keep this older summary; check Saved channel below. Enter /ewencounter status inside ESO for current recording status.",
-                    );
-                    ui.monospace(format!(
-                        "{} mode | {} | revision {}",
-                        capture_mode_label(state.selected_mode),
-                        capture_controller_state_label(state.state),
-                        state.revision
-                    ));
-                    ui.label("Single fight mode stops after one encounter; continuous fights mode waits between encounters until you stop it. Interrupted means recording was broken by a reload or similar interruption. The revision counts saved state changes.");
-                    ui.label(format!(
-                        "Saved channel: {} | Session: {}",
-                        state
-                            .selected_channel
-                            .map_or_else(|| "not selected".into(), |channel| channel.to_string()),
-                        state
-                            .session_status
-                            .map_or("none", capture_session_status_label)
-                    ));
-                    if let Some(session_id) = &state.session_id {
-                        ui.label(egui::RichText::new(format!(
-                            "Session {} | {} finished encounter{} | {} interruption{}",
-                            session_id,
-                            state.completed_encounter_count,
-                            if state.completed_encounter_count == 1 { "" } else { "s" },
-                            state.interruption_count,
-                            if state.interruption_count == 1 { "" } else { "s" }
-                        )).small().monospace());
-                    }
-                    if let Some(failure) = state.failure_reason {
-                        ui.strong(format!(
-                            "Recording stopped after a failure: {}",
-                            capture_failure_label(failure)
-                        ));
-                        ui.label("To keep usable retained recordings, save and import them first. When you choose to discard the addon's failed encounter data, enter /ewencounter clear confirm inside ESO. This keeps catalog collection and imported history. Then use /ewencounter toggle to start a new session. Unknown-version data may need a compatible ESO Weave version instead.");
-                    }
-                }
+                ui.separator();
+                if self.encounter_history_selected.is_none() { self.saved_source_ui(ui); }
 
                 ui.separator();
                 ui.heading("Local Encounters");
@@ -2770,7 +2936,7 @@ impl EsoWeaveApp {
                         for range in sessions.into_iter().rev() {
                             let first = &self.encounter_history[range.start];
                             ui.group(|ui| {
-                                ui.strong(format!(
+                                widgets::label_surface_strong(ui, format!(
                                     "Session {} | {} mode",
                                     first.session_id,
                                     capture_mode_label(first.capture_mode)
@@ -2832,7 +2998,7 @@ impl EsoWeaveApp {
                             &detail.recommendations,
                         ),
                         Some(Err(diagnostic)) => {
-                            ui.strong(history_diagnostic_heading(diagnostic.kind));
+                            widgets::label_surface_strong(ui, history_diagnostic_heading(diagnostic.kind));
                             ui.label(&diagnostic.message);
                         }
                         None if self.encounter_history_busy => {
@@ -2842,6 +3008,10 @@ impl EsoWeaveApp {
                             ui.label("Select the encounter again to recalculate its results from the saved observations and current catalog definitions.");
                         }
                     }
+                }
+                if self.encounter_history_selected.is_some() {
+                    ui.separator();
+                    self.saved_source_ui(ui);
                 }
             });
         self.encounter_history_open = open;
@@ -3061,9 +3231,23 @@ impl EsoWeaveApp {
     }
 }
 
+fn recording_command(ui: &mut egui::Ui, command: &str, outcome: &str) {
+    ui.horizontal_wrapped(|ui| {
+        ui.monospace(command);
+        if ui.small_button(format!("Copy {command}")).clicked() {
+            ui.ctx().copy_text(command.to_owned());
+        }
+    });
+    ui.label(outcome);
+}
+
 fn history_diagnostic_heading(kind: HistoryDiagnosticKind) -> &'static str {
     match kind {
         HistoryDiagnosticKind::SourceUnavailable => "Capture Unavailable",
+        HistoryDiagnosticKind::SourceInaccessible => "Saved Source Inaccessible",
+        HistoryDiagnosticKind::SourceInvalid => "Saved Source Invalid",
+        HistoryDiagnosticKind::SourceVersionUnsupported => "Saved Source Version Unsupported",
+        HistoryDiagnosticKind::SourceEnvironmentMismatch => "Saved Source Environment Differs",
         HistoryDiagnosticKind::StoreInvalid => "Local History Unavailable",
         HistoryDiagnosticKind::CatalogUnavailable => "Catalog Unavailable",
         HistoryDiagnosticKind::CatalogInvalid => "Catalog Invalid",
@@ -3130,7 +3314,7 @@ fn render_encounter_projection(
         projection.duration_ms as f64 / 1000.0
     ));
 
-    ui.strong("Observed Data Quality");
+    widgets::label_surface_strong(ui, "Observed Data Quality");
     ui.label(quality_label(projection.observed_dps.quality));
     ui.label("Complete means no declared gaps in this recording, not every possible combat event. Incomplete observations can produce partial results. Unknown ability or effect IDs remain unresolved until matching catalog definitions are available.");
     if projection.observed_dps.loss_ranges.is_empty() {
@@ -3153,7 +3337,7 @@ fn render_encounter_projection(
     render_metric(ui, "Observed DPS", &projection.observed_dps);
     render_metric(ui, "Observed Effective HPS", &projection.effective_hps);
 
-    ui.strong("Observed Ability Damage Share");
+    widgets::label_surface_strong(ui, "Observed Ability Damage Share");
     if projection.ability_damage_share.is_empty() {
         ui.label("No observed outgoing ability damage.");
     } else {
@@ -3171,7 +3355,7 @@ fn render_encounter_projection(
         );
     }
 
-    ui.strong("Observed Effect Uptime");
+    widgets::label_surface_strong(ui, "Observed Effect Uptime");
     if projection.effect_uptime.is_empty() {
         ui.label("No observed effect intervals.");
     } else {
@@ -3189,7 +3373,7 @@ fn render_encounter_projection(
         );
     }
 
-    ui.strong("Observed Cast Order");
+    widgets::label_surface_strong(ui, "Observed Cast Order");
     if projection.ordered_cast_sequence.ability_ids.is_empty() {
         ui.label("No observed casts.");
     } else {
@@ -3269,14 +3453,14 @@ fn render_encounter_recommendations(
     let view = recommendation_presentation(report);
     ui.separator();
     ui.heading(view.heading);
-    ui.strong(view.status);
+    widgets::label_surface_strong(ui, view.status);
     ui.label(view.summary);
     for reason in &view.reasons {
         ui.label(reason);
     }
     for item in &view.items {
         ui.group(|ui| {
-            ui.strong(item.title);
+            widgets::label_surface_strong(ui, item.title);
             ui.label(&item.body);
             ui.small(item.qualification);
             for reason in &item.qualification_reasons {
@@ -3294,12 +3478,23 @@ fn render_encounter_recommendations(
 
 fn render_metric(ui: &mut egui::Ui, label: &str, result: &MetricResult) {
     let view = metric_presentation(label, result);
-    ui.strong(view.label);
+    widgets::label_surface_strong(ui, view.label);
     ui.label(&view.value);
     ui.label(format!(
         "Quality: {} | Recorded observation numbers: {}-{}",
         view.quality, result.first_sequence, result.last_sequence
     ));
+}
+
+fn should_accept_saved_source(
+    selected: Option<&(std::path::PathBuf, Channel)>,
+    current_generation: u64,
+    result_generation: u64,
+    result_path: &std::path::Path,
+    result_channel: Channel,
+) -> bool {
+    current_generation == result_generation
+        && selected.is_some_and(|(path, channel)| path == result_path && *channel == result_channel)
 }
 
 fn should_accept_history_detail(
@@ -3675,7 +3870,12 @@ fn dashboard_status_row(
     interaction_width: f32,
     interaction: impl FnOnce(&mut egui::Ui),
 ) {
-    dashboard_metric_row(
+    let row = if matches!(line.title, strings::DATA_ADDON_REMEDIATION_TITLE) {
+        dashboard_instruction_row
+    } else {
+        dashboard_metric_row
+    };
+    row(
         ui,
         palette,
         dashboard_metric(line.title, &line.state_text, line.role, line.tooltip),
@@ -3743,6 +3943,89 @@ pub struct DashboardRowGeometry {
     pub label: egui::Rect,
     pub value: egui::Rect,
     pub interaction: Option<egui::Rect>,
+}
+
+/// Renders essential instructions with a content-derived height and fixed cell origins.
+pub fn dashboard_instruction_row(
+    ui: &mut egui::Ui,
+    palette: &crate::app::theme::Palette,
+    metric: DashboardMetric<'_>,
+    label_width: f32,
+    interaction_width: f32,
+    interaction: impl FnOnce(&mut egui::Ui),
+) -> DashboardRowGeometry {
+    let color = crate::app::theme::status_color(palette, metric.role);
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let dot_width = ui
+        .painter()
+        .layout_no_wrap("●".into(), font.clone(), color)
+        .size()
+        .x;
+    let reserve = if interaction_width > 0.0 {
+        interaction_width + DASHBOARD_CELL_GAP
+    } else {
+        0.0
+    };
+    let value_width = (ui.available_width() - label_width - DASHBOARD_CELL_GAP - reserve).max(0.0);
+    let text_width = (value_width - dot_width - DASHBOARD_CELL_GAP).max(1.0);
+    let galley = ui
+        .painter()
+        .layout(metric.state.to_owned(), font, color, text_width);
+    let height = galley.size().y.max(ui.spacing().interact_size.y);
+    let row = ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = DASHBOARD_CELL_GAP;
+        let (label, _) =
+            ui.allocate_exact_size(egui::vec2(label_width, height), egui::Sense::hover());
+        let mut label_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(label)
+                .layout(egui::Layout::left_to_right(egui::Align::Min)),
+        );
+        label_ui.set_clip_rect(label.intersect(ui.clip_rect()));
+        widgets::label_strong_truncated(&mut label_ui, palette, metric.title)
+            .on_hover_text(metric.tooltip);
+        let (value, _) =
+            ui.allocate_exact_size(egui::vec2(value_width, height), egui::Sense::hover());
+        let mut value_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(value)
+                .layout(egui::Layout::left_to_right(egui::Align::Min)),
+        );
+        value_ui.set_clip_rect(value.intersect(ui.clip_rect()));
+        value_ui.spacing_mut().item_spacing.x = DASHBOARD_CELL_GAP;
+        value_ui.label(egui::RichText::new("●").color(color));
+        value_ui
+            .add(
+                egui::Label::new(egui::RichText::new(metric.state).color(color))
+                    .wrap()
+                    .sense(egui::Sense::focusable_noninteractive()),
+            )
+            .on_hover_text(metric.tooltip);
+        let control = if interaction_width > 0.0 {
+            let (rect, _) =
+                ui.allocate_exact_size(egui::vec2(interaction_width, height), egui::Sense::hover());
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(rect)
+                    .layout(egui::Layout::left_to_right(egui::Align::Min)),
+            );
+            child.set_clip_rect(rect.intersect(ui.clip_rect()));
+            interaction(&mut child);
+            Some(rect)
+        } else {
+            None
+        };
+        DashboardRowGeometry {
+            row: egui::Rect::NOTHING,
+            label,
+            value,
+            interaction: control,
+        }
+    });
+    DashboardRowGeometry {
+        row: row.response.rect,
+        ..row.inner
+    }
 }
 
 /// Renders one stable-height dashboard row and returns its exact allocations.
@@ -4006,6 +4289,50 @@ mod tests {
             Some(&selected),
             true,
             &selected
+        ));
+    }
+    #[test]
+    fn s125_stale_source_results_cannot_cross_selection_or_refresh_boundaries() {
+        use crate::catalog::Channel;
+        use std::path::PathBuf;
+        let selected = (
+            PathBuf::from("live/SavedVariables/EsoWeaveData.lua"),
+            Channel::Live,
+        );
+        assert!(super::should_accept_saved_source(
+            Some(&selected),
+            7,
+            7,
+            &selected.0,
+            Channel::Live
+        ));
+        assert!(!super::should_accept_saved_source(
+            Some(&selected),
+            8,
+            7,
+            &selected.0,
+            Channel::Live
+        ));
+        assert!(!super::should_accept_saved_source(
+            Some(&selected),
+            7,
+            7,
+            &selected.0,
+            Channel::Pts
+        ));
+        assert!(!super::should_accept_saved_source(
+            Some(&selected),
+            7,
+            7,
+            std::path::Path::new("other/source.lua"),
+            Channel::Live
+        ));
+        assert!(!super::should_accept_saved_source(
+            None,
+            7,
+            7,
+            &selected.0,
+            Channel::Live
         ));
     }
 }

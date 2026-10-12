@@ -37,8 +37,12 @@ as installable.
 
 A candidate hash proves that the reviewed files stayed intact. It does not
 authenticate the person or service that supplied them. The install control
-therefore requires an acknowledgement that the candidate came from a review or
-release source you trust.
+therefore shows **I trust this catalog's source** beside installation only for a
+selected compatible Live candidate. Empty, PTS-only and incompatible states do
+not show a placeholder checkbox. The acknowledgment is bound to the exact
+candidate SHA-256 identity. Selection changes, candidate refresh and changed
+contents require a new acknowledgment; unchecking disables installation. Busy
+operations disable the checkbox and installation while progress stays visible.
 
 Installation copies regular files to same-filesystem staging, verifies the copy,
 publishes it once beneath `catalog/versions/live/<candidate-sha256>/`, opens the
@@ -49,7 +53,7 @@ unchanged. The selection commit itself is short and non-interruptible.
 ## Collector-assisted candidate
 
 The optional catalog module lives inside the separately marker-owned ESO Weave
-Data addon and never modifies PixelBeacon. Before installation, the modal lists
+Data addon and never modifies PixelBeacon. The separate **Maintainer catalog collection** disclosure lists
 the collected categories and the exclusion or one-way pseudonymization of
 account and character identity. The module uses only public addon API results
 and writes its own subtree beneath the shared SavedVariables root.
@@ -61,7 +65,8 @@ until you leave combat and run `/ewcollect resume`. Cancelling retains an
 incomplete collection; starting a later inactive run replaces the previous
 collection. These commands affect catalog data, not encounter recording.
 
-After choosing **Watch for saved catalog data**, save the completed collection in ESO with
+Open **Maintainer catalog collection** and choose **Watch for saved catalog data**
+before collecting. Save the completed collection in ESO with
 `/reloadui`, logout, or exit. ESO Weave does not claim to read unflushed or
 in-memory state. **Build from saved catalog data** requires a later, changed, stable,
 complete S071 envelope; parses it as restricted data rather than Lua; never

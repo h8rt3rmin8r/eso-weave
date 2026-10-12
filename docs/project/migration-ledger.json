@@ -1693,13 +1693,23 @@
     },
     {
       "id": "050",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-050.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-050.md",
       "specs": [
         "specs/124-v0174-security-maintenance"
       ],
-      "evidence": "S124 updates dependencies and CodeQL and prepares the v0.17.4 candidate for issue #261, issue #262 and issue #263. Owner final review and merge remain pending; tag and package publication are separately authorized work."
+      "evidence": "S124 completed dependency maintenance and v0.17.4 candidate preparation for issues #261, #262 and #263 when PR #264 merged on 2026-10-07 at e154dbf9e83d7d6dd0aaec3876fd0305a55e56cb. Later tag and package publication are separate work."
+    },
+    {
+      "id": "051",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-051.md",
+      "specs": [
+        "specs/125-data-addon-workflow-recovery"
+      ],
+      "evidence": "S125 groups data-addon workflow recovery for issue #265 through issue #271. Implementation and automated validation precede official PR review; owner merge remains pending."
     }
   ],
   "safetyCrosswalk": [

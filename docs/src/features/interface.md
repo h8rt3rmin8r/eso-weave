@@ -52,7 +52,8 @@ At most two lifecycle actions share a primary-then-secondary horizontal row.
 Every uninstall retains the managed-marker uninstall guard and confirmation.
 
 Choose **Data Details** beside **Addon Next Step** for package status and setup
-instructions. **Addon Management** says whether ESO Weave can manage the files;
+instructions. Essential **Addon Next Step** text wraps completely, and the
+scrolling details body keeps Close reachable in a short window. **Addon Management** says whether ESO Weave can manage the files;
 **Addon Package Version** compares them with the bundled package. **Enabled in
 ESO** and **Loaded in ESO** remain **Unconfirmed** because file
 installation and an active game process do not prove those facts. Check ESO's
@@ -62,19 +63,23 @@ reload is needed, and **ESO Client** describes the game process only.
 **Catalog Collection** and **Encounter Recording** describe separate workflows.
 Their current state may be **Unknown (check inside ESO)**.
 For current status, run `/ewcollect status` or `/ewencounter status` inside ESO.
-After a compatible import, **Encounter History** may show **Last saved recording state**,
-from the last successfully imported saved file, not current activity.
-Refresh and failed imports keep this older summary. It can predate the newest
-disk save or a change to the selected environment; check **Saved channel** in
-the summary. System and State and Data Details do not replace their unknown
-current-recording row with it.
+**Data Details** also provides **Record a fight** and **Open Encounter History**.
+The recording guide orders enablement, environment/mode, start, fight, save,
+import and view, with individual **Copy** actions for commands entered in ESO.
+Continuous recording and recovery appear in a separate disclosure.
+
+**Last saved source** inspects the selected environment's disk file before
+import, showing its path, last-save timestamp, saved state and importable counts.
+**Refresh Saved Source** rereads it. These facts cannot establish current
+enablement, loading or recording activity; the current-recording row stays
+unknown. Environment/folder changes discard older pending results.
 The desktop does not send recording commands or write ESO's live addon data.
 Each row has the same explanation on hover and keyboard focus. Closing the
 modal returns focus to the lifecycle surface.
 
 **File > Encounter History** imports saved fights for later analysis. **Import
 Saved Capture** reads ESO's saved addon file for the selected environment;
-**Refresh** rereads imported desktop history. **Observed Metrics** precedes
+**Refresh Imported History** rereads imported desktop history. **Observed Metrics** precedes
 **Provisional Recommendations**, whose review prompts retain missing-data and
 unknown-definition qualifications. Delete confirmations identify the imported
 records removed and the ESO saved file, addon files, catalog and settings

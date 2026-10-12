@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [050](plan-050.md) | Active | S124 resolves dependency security and prepares v0.17.4 for issues #261, #262 and #263 |
+| [051](plan-051.md) | Active | S125 recovers the data-addon recording and catalog workflow for issues #265 through #271 |
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -22,10 +22,11 @@ S121 and S122, with S120's intervening recovery work preserved in its
 S113-S115 remain unused historical reservations.
 
 Plan049 completed S123; v0.17.3 subsequently published on 2026-10-07.
-Plan050 owns dependency maintenance and candidate preparation only. Tag and
-package publication require separate authorization after owner merge and exact
-merged-head checks.
+Plan050 completed S124 in PR #264 on 2026-10-07. Plan051 owns S125's seven
+workflow issues. Owner final review and merge remain the delivery boundary;
+tag and package publication require separate authorization.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence
-of installed behavior or live parity. Native-log ingestion remains provisional.
+of installed behavior or live parity. Native-log ingestion is unsupported and
+remains future issue #272; retained multiple sessions remain issue #273.

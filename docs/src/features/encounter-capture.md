@@ -8,8 +8,7 @@ and casts. Recording starts only when you turn it on inside the game. Choose
 PixelBeacon is the other addon: it supplies the desktop's current player-state
 display and input features. Installing PixelBeacon does not install encounter
 recording. **Application Log** and **File Logging** are troubleshooting
-logs, not fight recordings. ESO's native combat-log files are another, still
-provisional import route; use the saved-addon workflow below.
+logs, not fight recordings. ESO's native Encounter.log ingestion is not implemented; use the saved-addon workflow below.
 
 Recorded values stay on your computer. Names, identifiers and other values
 supplied by ESO may be retained exactly. Hard limits and unsupported runtime
@@ -26,10 +25,11 @@ raw values.
    These actions install addon files; they do not start recording.
 3. Enable **ESO Weave Data** in ESO's **Add-Ons** menu. Run `/reloadui` or log
    out and back in after installation, update, repair or an enablement change.
-4. While recording is off, run `/ewencounter mode single` and
-   `/ewencounter channel live`. Substitute `continuous` or `pts` as needed.
-5. Run `/ewencounter toggle` to turn recording on. Run
-   `/ewencounter status` to read its current state inside ESO.
+4. Before combat, run `/ewencounter start live single`. For the Public Test
+   Server, use `/ewencounter start pts single`.
+5. Chat reports **WAITING FOR COMBAT**. Fight once; single mode stops afterward.
+   Use `/ewencounter status` for current activity and the next action.
+   Starting during combat reports **RECORDING** with an incomplete opening.
 
 To change mode or channel later, recording must be off **and** the retained
 session must be cleared with `/ewencounter clear confirm`. Stopping alone keeps
@@ -56,21 +56,27 @@ cannot reconstruct observations from before the user's action.
 Continuous mode creates one bounded session and a separate encounter record for
 each combat period. It removes detailed handlers during gaps, preserves the
 session identity, assigns contiguous encounter ordinals, and waits for the next
-combat entry until the user toggles it off or a reported hard failure stops it.
+combat entry until the user runs `/ewencounter stop` or a reported hard failure stops it.
 
 Use these additional commands:
 
 | Command | Result |
 | --- | --- |
+| `/ewencounter start live single` | Choose Live and single fight mode, then start; repeating start keeps an active recording |
+| `/ewencounter start pts single` | Start one fight in the Public Test Server |
+| `/ewencounter start live continuous` | Start continuous recording in Live; substitute pts for the Public Test Server |
+| `/ewencounter stop` | Stop and retain recordings; repeating stop keeps them |
 | `/ewencounter mode single\|continuous` | Select one of the two modes while off with no retained session; clear the old session deliberately before changing it |
 | `/ewencounter channel live\|pts` | Select the source channel while off with no retained session |
 | `/ewencounter toggle` | Start recording with the chosen mode, or stop recording and retain the data already collected |
-| `/ewencounter status` | Show chosen mode, recording request, actual mode and state, current fight, session outcome, retained and finished fight counts, interruption and failure reason |
+| `/ewencounter status` | Show OFF, WAITING FOR COMBAT or RECORDING, retained counts and the next action |
+| `/ewencounter status details` | Show optional technical state, interruption and failure details |
 | `/ewencounter clear confirm` | While recording is off, remove the addon's retained encounter recordings and controller state; preserve catalog collection and desktop history |
 | `/ewencounter help` | Show the command summary |
 
-Historical `arm`, `disarm`, and `stop` forms may remain compatibility aliases to
-these transitions. They do not add a mode. Retained evidence is never silently
+Historical `arm`, `disarm`, `mode`, `channel` and `toggle` forms remain compatible.
+Explicit start validates all arguments before changing configuration and refuses
+to replace a retained session. They do not add a mode. Retained evidence is never silently
 overwritten or evicted; clear it explicitly when the status instructs you to do
 so.
 
@@ -85,11 +91,12 @@ single mode:
 ## Save, import and view
 
 1. Finish the fight in single mode. For continuous mode, stop with
-   `/ewencounter toggle` when you want to finish the session. Stopping during a
+   `/ewencounter stop` when you want to finish the session. Stopping during a
    fight retains a partial recording; stopping does not delete it.
 2. Run `/reloadui`, log out, or exit ESO. This writes the addon's recordings
    to disk. A completed fight in memory may still be absent from the saved file.
-3. In the desktop, open **File > Encounter History** and choose
+3. In the desktop, use **Data Details > Open Encounter History** or
+   **File > Encounter History** and choose
    **Import Saved Capture**. It reads the fixed file for the environment selected
    in Settings and copies accepted fights into history on this computer.
 4. Select an imported fight to view **Observed Metrics**, then **Provisional
@@ -97,7 +104,7 @@ single mode:
    ability or effect definitions stay explicit. Review prompts are questions
    based on recorded facts, not proven causes or instructions to change a build.
 
-**Refresh** rereads imported desktop history; it does not import new ESO data.
+**Refresh Imported History** rereads imported desktop history; it does not import new ESO data.
 Import the saved file again to add later completed fights. Exact duplicates are
 skipped, so repeated import does not multiply records. In a running continuous
 session, completed saved fights can be imported while the current fight is
@@ -239,18 +246,29 @@ retains session mode and ordinal, labels derived results as observed, and expose
 partial capture loss and unresolved catalog IDs without displaying raw payload
 values. Deletion remains an explicit confirmed local action.
 
-Desktop controller facts are always labeled **Last saved recording state**.
-They come from the last successfully imported saved file, not the newest disk
-save or current activity. Refresh and failed imports keep that older summary;
-changing the selected environment does not make it current. Check **Saved
-channel** in the summary. It is never a live toggle, current addon state or
-acknowledgement channel. Use `/ewencounter status`
-inside ESO for current mode and controller state.
+**Last saved source** inspects the selected saved file before an import. It
+shows the selected Live or PTS environment, file path, last-save timestamp,
+saved controller state, and finished and partial/interrupted counts. Inspection
+is bounded and read-only; it does not create history. **Refresh Saved Source**
+rereads that file, while **Refresh Imported History** rereads desktop copies.
+Changing the environment or folder rejects an older pending inspection result.
+
+The file can lag ESO's current activity. Its existence cannot prove the addon
+is enabled, loaded or recording now. Use `/ewencounter status` inside ESO for
+current activity. An initialized file with no retained session means no recording
+has been saved; start a fight instead of repeatedly importing that empty state.
+
+Command replies use ESO's system-chat route independently of the debug sink.
+If chat is still initializing, replies wait for it. Recording stays off until
+its enablement warning can be delivered; repeat the explicit start command
+after the queued retry guidance appears. DebugLogViewer and LibDebugLogger do
+not need configuration changes. The reply queue holds 64 messages and reports
+any omitted overflow count when chat becomes ready.
 
 Encounter capture does not use Pixel Bus and has no relationship to input
 authorization, Weaving, Fishing, or Auto Potion. It does not perform protected
 actions, use items, change equipment, move the player, or generate input.
-Native combat-log import remains provisional and does not change this supported
+Native combat-log import is unsupported and does not change this supported
 saved-addon workflow. A closed tracking issue is not a claim of field parity.
 
 Continue to [Encounter Data and Metrics](../reference/encounter-data-and-metrics.md)

@@ -16,15 +16,33 @@ pub(crate) fn read_bounded_stable(
     path: &Path,
     max_bytes: u64,
 ) -> Result<Vec<u8>, StableReadError> {
-    read_bounded_stable_with(canonical_root, path, max_bytes, || {})
+    read_bounded_stable_snapshot(canonical_root, path, max_bytes).map(|(bytes, _)| bytes)
 }
 
+pub(crate) fn read_bounded_stable_snapshot(
+    canonical_root: &Path,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<(Vec<u8>, Option<std::time::SystemTime>), StableReadError> {
+    read_snapshot_with(canonical_root, path, max_bytes, || {})
+}
+
+#[cfg(test)]
 fn read_bounded_stable_with(
     canonical_root: &Path,
     path: &Path,
     max_bytes: u64,
     after_read: impl FnOnce(),
 ) -> Result<Vec<u8>, StableReadError> {
+    read_snapshot_with(canonical_root, path, max_bytes, after_read).map(|(bytes, _)| bytes)
+}
+
+fn read_snapshot_with(
+    canonical_root: &Path,
+    path: &Path,
+    max_bytes: u64,
+    after_read: impl FnOnce(),
+) -> Result<(Vec<u8>, Option<std::time::SystemTime>), StableReadError> {
     let mut file = open_bounded_stable(canonical_root, path, max_bytes)?;
     let metadata = file.metadata().map_err(StableReadError::Io)?;
     let original_length = metadata.len();
@@ -62,7 +80,7 @@ fn read_bounded_stable_with(
             "file path changed during its stable read",
         ));
     }
-    Ok(bytes)
+    Ok((bytes, original_modified))
 }
 
 #[cfg(unix)]

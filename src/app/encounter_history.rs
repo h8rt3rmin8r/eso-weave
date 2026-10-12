@@ -7,7 +7,7 @@ use crate::catalog::Channel;
 use crate::encounter::{
     CaptureImportReport, CaptureStateSummary, EncounterHistoryService, EncounterIdentity,
     EncounterProjection, EncounterSummary, HistoryDiagnostic, LossRange, MetricQuality,
-    MetricResult,
+    MetricResult, SavedRecordingReadiness, SavedSourceInspection,
 };
 use crate::recommendation::{
     generate_recommendations, AdviceQualification, AdviceRule, RecommendationAvailability,
@@ -24,6 +24,11 @@ pub enum HistoryOperation {
 
 #[derive(Debug)]
 enum HistoryCommand {
+    InspectSource {
+        generation: u64,
+        source_path: PathBuf,
+        expected_channel: Channel,
+    },
     Refresh,
     Import {
         source_path: PathBuf,
@@ -37,6 +42,12 @@ enum HistoryCommand {
 
 #[derive(Debug)]
 pub enum HistoryEvent {
+    SourceInspected {
+        generation: u64,
+        source_path: PathBuf,
+        expected_channel: Channel,
+        result: Result<SavedSourceInspection, HistoryDiagnostic>,
+    },
     Snapshot {
         encounters: Vec<EncounterSummary>,
         operation: HistoryOperation,
@@ -71,6 +82,10 @@ impl EncounterHistoryWorker {
         let join = std::thread::spawn(move || {
             while let Ok(command) = command_rx.recv() {
                 let event = match command {
+                    HistoryCommand::InspectSource { generation, source_path, expected_channel } => {
+                        let result = thread_service.inspect_source(&source_path, expected_channel);
+                        HistoryEvent::SourceInspected { generation, source_path, expected_channel, result }
+                    }
                     HistoryCommand::Refresh => {
                         snapshot_event(&thread_service, HistoryOperation::Refresh, None, None)
                     }
@@ -151,6 +166,19 @@ impl EncounterHistoryWorker {
 
     pub fn set_catalog_path(&self, catalog_path: PathBuf) {
         self.service.set_catalog_path(catalog_path);
+    }
+
+    pub fn inspect_source(
+        &self,
+        generation: u64,
+        source_path: PathBuf,
+        expected_channel: Channel,
+    ) -> Result<(), HistoryWorkerBusy> {
+        self.send(HistoryCommand::InspectSource {
+            generation,
+            source_path,
+            expected_channel,
+        })
     }
 
     pub fn refresh(&self) -> Result<(), HistoryWorkerBusy> {
@@ -246,7 +274,29 @@ fn snapshot_event(
 
 fn import_message(report: &CaptureImportReport) -> String {
     match (report.imported_count, report.already_present_count) {
-        (0, 0) => "No finished or interrupted encounters were saved for import. In ESO, use /ewencounter status, finish or stop recording, then /reloadui, logout, or exit to save before importing again.".into(),
+        (0, 0) => {
+            let readiness = report
+                .last_saved_state
+                .as_ref()
+                .map(|state| match state.state {
+                    crate::encounter::CaptureControllerState::Waiting => {
+                        SavedRecordingReadiness::Waiting
+                    }
+                    crate::encounter::CaptureControllerState::Capturing => {
+                        SavedRecordingReadiness::Recording
+                    }
+                    _ if state.session_id.is_none() => SavedRecordingReadiness::NeverStarted,
+                    crate::encounter::CaptureControllerState::Failed => {
+                        SavedRecordingReadiness::Failed
+                    }
+                    crate::encounter::CaptureControllerState::Interrupted => {
+                        SavedRecordingReadiness::Interrupted
+                    }
+                    _ => SavedRecordingReadiness::Stopped,
+                })
+                .unwrap_or(SavedRecordingReadiness::NeverStarted);
+            format!("No finished or interrupted encounters were saved for import. {} Use /ewencounter status in ESO, then /reloadui, logout or exit to save.", readiness.description())
+        }
         (0, present) => format!(
             "{present} encounter{} already present in local history.",
             if present == 1 { " is" } else { "s are" }

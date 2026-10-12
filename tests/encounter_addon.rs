@@ -106,7 +106,10 @@ function EVENT_MANAGER:UnregisterForUpdate(namespace)
 end
 
 SLASH_COMMANDS = {}
-function d(message) table.insert(__messages, message) end
+__debug_messages = {}
+CHAT_ROUTER = {}
+function CHAT_ROUTER:AddSystemMessage(message) table.insert(__messages, message) end
+function d(message) table.insert(__debug_messages, message) end
 function GetGameTimeMilliseconds() return __now end
 function GetTimeStamp() return __timestamp end
 function GetAPIVersion() return 101050 end
@@ -878,13 +881,13 @@ fn enablement_warns_about_persisted_values_before_authority_is_committed() {
                 r#"
                 SLASH_COMMANDS["/ewencounter"]("channel live")
                 __in_combat = {in_combat}
-                local original = d
+                local original = CHAT_ROUTER.AddSystemMessage
                 local authorityAtWarning = "not-seen"
-                function d(text)
+                function CHAT_ROUTER:AddSystemMessage(text)
                     if string.find(text, "names and identifiers", 1, true) then
                         authorityAtWarning = EsoWeaveDataSaved.encounter.requested_mode
                     end
-                    original(text)
+                    original(self, text)
                 end
                 SLASH_COMMANDS["/ewencounter"]("toggle")
                 assert(authorityAtWarning == nil)
@@ -906,7 +909,7 @@ fn in_game_status_names_requested_effective_and_failure_authority() {
         SLASH_COMMANDS["/ewencounter"]("mode continuous")
         SLASH_COMMANDS["/ewencounter"]("channel live")
         SLASH_COMMANDS["/ewencounter"]("toggle")
-        SLASH_COMMANDS["/ewencounter"]("status")
+        SLASH_COMMANDS["/ewencounter"]("status details")
         local waiting = __messages[#__messages]
         assert(string.find(waiting, "selected mode: continuous (multiple fights until stopped)", 1, true))
         assert(string.find(waiting, "requested mode): continuous", 1, true))
@@ -918,13 +921,13 @@ fn in_game_status_names_requested_effective_and_failure_authority() {
 
         __in_combat = true
         __fire(EVENT_PLAYER_COMBAT_STATE, true)
-        SLASH_COMMANDS["/ewencounter"]("status")
+        SLASH_COMMANDS["/ewencounter"]("status details")
         local capturing = __messages[#__messages]
         assert(string.find(capturing, "recording the current fight (capturing)", 1, true))
         assert(not string.find(capturing, "current encounter): none", 1, true))
 
         __fire(EVENT_PLAYER_DEACTIVATED)
-        SLASH_COMMANDS["/ewencounter"]("status")
+        SLASH_COMMANDS["/ewencounter"]("status details")
         local failed = __messages[#__messages]
         assert(string.find(failed, "recording stopped by an error (failed)", 1, true))
         assert(string.find(failed, "last interruption: none", 1, true))
@@ -2477,4 +2480,142 @@ fn normalized_fixture_declares_every_kind_and_its_sequence_gap() {
     assert_eq!(marker["payload"]["missing_sequence_from"], 13);
     assert_eq!(marker["payload"]["missing_sequence_to"], 13);
     assert_eq!(marker["sequence"], 14);
+}
+
+#[test]
+fn s125_start_stop_are_explicit_idempotent_and_preserve_retained_data() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        local command = SLASH_COMMANDS['/ewencounter']
+        command('start live single')
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == 'waiting')
+        assert(saved.selected_channel == 'live' and saved.selected_mode == 'single')
+        local session = saved.session
+        command('start live single')
+        assert(saved.state == 'waiting' and saved.session == session)
+        assert(string.find(__messages[#__messages], 'WAITING FOR COMBAT', 1, true))
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        command('start pts continuous')
+        assert(saved.state == 'capturing' and saved.session == session)
+        assert(saved.selected_channel == 'live' and saved.selected_mode == 'single')
+        command('stop')
+        local record = saved.records['0000000001']
+        assert(record and saved.state == 'stopped')
+        command('stop')
+        command('start pts continuous')
+        assert(saved.records['0000000001'] == record and saved.session == session)
+        assert(saved.selected_channel == 'live' and saved.selected_mode == 'single')
+        assert(string.find(__messages[#__messages], 'retained', 1, true))
+        assert(#__debug_messages == 0)
+    "#,
+    );
+}
+
+#[test]
+fn s125_command_syntax_correction_has_no_partial_state_effects() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        local c = SLASH_COMMANDS['/ewencounter']
+        for _, command in ipairs({'start', 'start live invalid', 'start invalid single', 'start live single extra', 'unknown', 'stop extra', 'status extra'}) do
+            c(command)
+            local state = EsoWeaveDataSaved.encounter
+            assert(state.state == 'stopped' and state.selected_channel == nil and state.session == nil)
+            assert(string.find(__messages[#__messages], 'Use ', 1, true))
+        end
+        c('start pts continuous')
+        assert(EsoWeaveDataSaved.encounter.requested_mode == 'continuous')
+        assert(EsoWeaveDataSaved.encounter.selected_channel == 'pts')
+    "#,
+    );
+}
+
+#[test]
+fn s125_essential_replies_wait_for_system_chat_and_flush_once() {
+    let lua = harness("CHAT_ROUTER = nil");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS['/ewencounter']('help')
+        SLASH_COMMANDS['/ewencounter']('status')
+        assert(#__messages == 0 and #__debug_messages == 0)
+        CHAT_ROUTER = {}
+        function CHAT_ROUTER:AddSystemMessage(text) table.insert(__messages, text) end
+        __run_updates()
+        assert(#__messages >= 2)
+        local count = #__messages
+        __run_updates()
+        assert(#__messages == count)
+        assert(string.find(table.concat(__messages, '\n'), '/ewencounter start live single', 1, true))
+    "#,
+    );
+}
+
+#[test]
+fn s125_router_presence_without_initialized_chat_cannot_enable_capture() {
+    let lua = harness("function ZO_GetChatSystem() return nil end");
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS['/ewencounter']('help')
+        SLASH_COMMANDS['/ewencounter']('start live single')
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == 'stopped' and saved.requested_mode == nil and saved.session == nil)
+        assert(#__messages == 0 and #__debug_messages == 0)
+        function ZO_GetChatSystem() return {} end
+        __run_updates()
+        local text = table.concat(__messages, '\n')
+        assert(string.find(text, 'recording remains OFF', 1, true))
+        local count = #__messages
+        __run_updates()
+        assert(#__messages == count)
+        SLASH_COMMANDS['/ewencounter']('start live single')
+        assert(saved.state == 'waiting')
+    "#,
+    );
+}
+
+#[test]
+fn s125_delayed_chat_queue_is_bounded_and_declares_overflow_without_duplicates() {
+    let lua = harness("CHAT_ROUTER = nil");
+    run(
+        &lua,
+        r#"
+        for i = 1, 100 do SLASH_COMMANDS['/ewencounter']('status') end
+        assert(#__messages == 0 and #__debug_messages == 0)
+        CHAT_ROUTER = {}
+        function CHAT_ROUTER:AddSystemMessage(text) table.insert(__messages, text) end
+        __run_updates()
+        assert(#__messages == 65)
+        assert(string.find(__messages[#__messages], 'replies exceeded the startup message limit', 1, true))
+        local count = #__messages
+        __run_updates()
+        assert(#__messages == count)
+    "#,
+    );
+}
+
+#[test]
+fn s125_full_chat_queue_cannot_silently_discard_the_enable_warning() {
+    let lua = harness("CHAT_ROUTER = nil");
+    run(
+        &lua,
+        r#"
+        for i = 1, 64 do SLASH_COMMANDS['/ewencounter']('status') end
+        CHAT_ROUTER = {}
+        function CHAT_ROUTER:AddSystemMessage(text) table.insert(__messages, text) end
+        SLASH_COMMANDS['/ewencounter']('start live single')
+        assert(EsoWeaveDataSaved.encounter.state == 'stopped')
+        assert(EsoWeaveDataSaved.encounter.current_session == nil)
+        assert(not EsoWeaveDataSaved.encounter.requested_enabled)
+        assert(string.find(__messages[#__messages], 'recording remains OFF', 1, true))
+        SLASH_COMMANDS['/ewencounter']('start live single')
+        assert(EsoWeaveDataSaved.encounter.state == 'waiting')
+    "#,
+    );
 }

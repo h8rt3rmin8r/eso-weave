@@ -11,12 +11,13 @@ use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::bounded_file::{read_bounded_stable, StableReadError};
+use crate::bounded_file::{read_bounded_stable_snapshot, StableReadError};
 use crate::catalog::Channel;
 use crate::saved_variables::{self, EmptyTable, ParseLimits};
 
 pub use history::{
     EncounterHistoryService, EncounterIdentity, HistoryDiagnostic, HistoryDiagnosticKind,
+    SavedRecordingReadiness, SavedSourceInspection,
 };
 pub use metrics::{
     calculate_projection, canonical_projection_bytes, project_encounter, AbilityDamageShare,
@@ -59,6 +60,10 @@ pub enum EncounterError {
     Database(#[from] rusqlite::Error),
     #[error("encounter input rejected: {0}")]
     Validation(String),
+    #[error("unsupported encounter capture version")]
+    UnsupportedVersion,
+    #[error("encounter source channel does not match the expected channel")]
+    EnvironmentMismatch,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +107,14 @@ pub fn import_encounter(request: &ImportRequest) -> Result<ImportReceipt, Encoun
 
 pub fn import_capture_set(request: &ImportRequest) -> Result<CaptureImportReport, EncounterError> {
     let (source_sha256, parsed) = read_capture_set(request)?;
+    append_capture_set(request, source_sha256, parsed)
+}
+
+fn append_capture_set(
+    request: &ImportRequest,
+    source_sha256: String,
+    parsed: ParsedCaptureSet,
+) -> Result<CaptureImportReport, EncounterError> {
     let prepared = parsed
         .records
         .iter()
@@ -116,16 +129,33 @@ pub fn import_capture_set(request: &ImportRequest) -> Result<CaptureImportReport
 
 fn read_capture_set(request: &ImportRequest) -> Result<(String, ParsedCaptureSet), EncounterError> {
     ensure_distinct_paths(&request.input_path, &request.store_path)?;
-    let absolute_input = absolute_path(&request.input_path)?;
+    let (source_sha256, parsed, _) =
+        read_saved_source(&request.input_path, request.expected_channel)?;
+    Ok((source_sha256, parsed))
+}
+
+fn read_saved_source(
+    input_path: &Path,
+    expected_channel: Channel,
+) -> Result<(String, ParsedCaptureSet, Option<std::time::SystemTime>), EncounterError> {
+    let absolute_input = absolute_path(input_path)?;
     let parent = absolute_input
         .parent()
         .ok_or_else(|| EncounterError::Validation("encounter input has no parent".into()))?;
     let canonical_parent = std::fs::canonicalize(parent)?;
-    let bytes = read_bounded_stable(&canonical_parent, &absolute_input, MAX_CAPTURE_BYTES)
-        .map_err(map_stable_read)?;
+    let (bytes, modified) =
+        read_bounded_stable_snapshot(&canonical_parent, &absolute_input, MAX_CAPTURE_BYTES)
+            .map_err(map_stable_read)?;
     let source_sha256 = sha256(&bytes);
-    let parsed = parse_capture_set(&bytes, request.expected_channel)?;
-    Ok((source_sha256, parsed))
+    let parsed = parse_capture_set(&bytes, expected_channel)?;
+    Ok((source_sha256, parsed, modified))
+}
+
+fn capture_version(value: &serde_json::Value, field: &str) -> Result<u64, EncounterError> {
+    value
+        .get(field)
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| EncounterError::Validation("invalid capture version field".into()))
 }
 
 pub fn parse_capture(
@@ -167,22 +197,40 @@ pub fn parse_capture_set(
         EmptyTable::Object,
     )
     .map_err(|error| EncounterError::Validation(error.to_string()))?;
+    if root.is_object()
+        && (capture_version(&root, "schema_version")?
+            != crate::data_addon::SAVED_VARIABLES_SCHEMA_VERSION
+            || capture_version(&root, "addon_version")? != crate::data_addon::DATA_ADDON_VERSION)
+    {
+        return Err(EncounterError::UnsupportedVersion);
+    }
     let mut value = crate::data_addon::take_module(&mut root, "encounter")
         .map_err(EncounterError::Validation)?;
     if value.get("state_schema_version").is_some() {
+        if capture_version(&value, "state_schema_version")? != 1
+            || capture_version(&value, "addon_version")? != 4
+        {
+            return Err(EncounterError::UnsupportedVersion);
+        }
         normalize_state_empty_arrays(&mut value);
         let state: EncounterModuleState = serde_json::from_value(value)
             .map_err(|_| EncounterError::Validation("invalid encounter state schema".into()))?;
         return validate::validate_state(state, expected_channel);
     }
+    if !matches!(
+        (
+            capture_version(&value, "schema_version")?,
+            capture_version(&value, "addon_version")?
+        ),
+        (1, 1) | (2, 2 | 3)
+    ) {
+        return Err(EncounterError::UnsupportedVersion);
+    }
     normalize_empty_raw_value_arrays(&mut value);
     let capture: EncounterCapture = serde_json::from_value(value)
         .map_err(|_| EncounterError::Validation("invalid encounter schema".into()))?;
     if capture.channel != expected_channel {
-        return invalid(format!(
-            "capture channel {} does not match expected {}",
-            capture.channel, expected_channel
-        ));
+        return Err(EncounterError::EnvironmentMismatch);
     }
     validate::validate(&capture)?;
     replay::enforce(&capture)?;

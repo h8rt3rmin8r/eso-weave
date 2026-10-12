@@ -1642,3 +1642,66 @@ fn create_file_symlink(target: &std::path::Path, link: &std::path::Path) -> std:
 fn create_file_symlink(target: &std::path::Path, link: &std::path::Path) -> std::io::Result<()> {
     std::os::windows::fs::symlink_file(target, link)
 }
+
+#[test]
+fn s125_inspection_distinguishes_every_saved_controller_state_without_importing_current_data() {
+    use eso_weave::encounter::{EncounterHistoryService, SavedRecordingReadiness};
+    let sandbox = tempfile::tempdir().unwrap();
+    let source = sandbox.path().join("source.lua");
+    let service = EncounterHistoryService::new(
+        sandbox.path().join("app"),
+        sandbox.path().join("catalog.sqlite"),
+    );
+    let session_id = "session-1788912002-2000";
+    let waiting = capture_state(
+        vec![current_terminal(session_id, "encounter-1788912002-1")],
+        3,
+    );
+    let mut active = waiting.clone();
+    let current = active_current(session_id, "encounter-1788912002-2");
+    active["state"] = serde_json::json!("capturing");
+    active["current_encounter_id"] = current["encounter_id"].clone();
+    active["session"]["next_encounter_ordinal"] = serde_json::json!(3);
+    active["session"]["aggregate_estimated_bytes"] =
+        serde_json::json!(4096 + current["estimated_bytes"].as_u64().unwrap());
+    active["session"]["aggregate_event_count"] = serde_json::json!(3);
+    active["session"]["aggregate_raw_observation_count"] =
+        serde_json::json!(4 + current["raw_observation_count"].as_u64().unwrap());
+    active["current"] = current;
+
+    let mut stopped = waiting.clone();
+    stopped["state"] = serde_json::json!("stopped");
+    stopped["requested_mode"] = serde_json::Value::Null;
+    stopped["active_mode"] = serde_json::Value::Null;
+    stopped["stop_reason"] = serde_json::json!("user-disabled");
+    stopped["session"]["status"] = serde_json::json!("stopped");
+    stopped["session"]["finished_at"] = serde_json::json!("1788912003");
+    let mut interrupted = waiting.clone();
+    interrupted["state"] = serde_json::json!("interrupted");
+    interrupted["active_mode"] = serde_json::Value::Null;
+    interrupted["session"]["interruption_count"] = serde_json::json!(1);
+    interrupted["interruptions"] = serde_json::json!([{
+        "sequence":1,"after_encounter_ordinal":1,"reason":"runtime-interrupted","occurred_at":"1788912003"
+    }]);
+    let mut failed = stopped.clone();
+    failed["state"] = serde_json::json!("failed");
+    failed.as_object_mut().unwrap().remove("stop_reason");
+    failed["session"]["status"] = serde_json::json!("failed");
+    failed["failure"] = serde_json::json!({"reason":"callback-failed","occurred_at":"1788912003"});
+    for (state, expected) in [
+        (waiting, SavedRecordingReadiness::Waiting),
+        (active, SavedRecordingReadiness::Recording),
+        (stopped, SavedRecordingReadiness::Stopped),
+        (interrupted, SavedRecordingReadiness::Interrupted),
+        (failed, SavedRecordingReadiness::Failed),
+    ] {
+        let bytes = state_lua(&state);
+        fs::write(&source, &bytes).unwrap();
+        let inspected = service.inspect_source(&source, Channel::Live).unwrap();
+        assert_eq!(inspected.readiness, expected);
+        assert_eq!(inspected.finished_count, 0);
+        assert_eq!(inspected.partial_count, 1);
+        assert_eq!(fs::read(&source).unwrap(), bytes.as_bytes());
+        assert!(!service.store_path().exists());
+    }
+}

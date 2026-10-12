@@ -54,7 +54,7 @@ pub(crate) fn validate(capture: &EncounterCapture) -> Result<(), EncounterError>
             }
             validate_raw_capture(capture)?;
         }
-        _ => return invalid("unsupported encounter capture version"),
+        _ => return Err(EncounterError::UnsupportedVersion),
     }
     if capture.source.api_version == 0
         || capture.source.game_version.is_empty()
@@ -221,8 +221,11 @@ pub(crate) fn validate_state(
     state: EncounterModuleState,
     expected_channel: Channel,
 ) -> Result<ParsedCaptureSet, EncounterError> {
-    if state.state_schema_version != 1 || state.addon_version != 4 || state.revision == 0 {
-        return invalid("unsupported encounter state version");
+    if state.state_schema_version != 1 || state.addon_version != 4 {
+        return Err(EncounterError::UnsupportedVersion);
+    }
+    if state.revision == 0 {
+        return invalid("encounter state revision must be positive");
     }
     if state.records.len() > MAX_SESSION_ENCOUNTERS
         || state.interruptions.len() > MAX_SESSION_INTERRUPTION_MARKERS
@@ -234,7 +237,7 @@ pub(crate) fn validate_state(
         .selected_channel
         .is_some_and(|channel| channel != expected_channel)
     {
-        return invalid("encounter state channel does not match the expected channel");
+        return Err(EncounterError::EnvironmentMismatch);
     }
 
     let mut records = Vec::with_capacity(state.records.len());

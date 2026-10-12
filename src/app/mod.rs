@@ -358,7 +358,7 @@ pub fn data_addon_view(
                 ("Unknown", StatusRole::Warning),
                 None,
                 false,
-                "Choose Live or PTS in Settings and set AddOns Folder Override if automatic detection cannot find your ESO AddOns folder.".to_string(),
+                "Select Live or PTS in Settings; set AddOns Folder Override if detection fails.".to_string(),
             ),
             Some(DataAddonStatus::NotInstalled) => (
                 ("Not installed", StatusRole::Muted),
@@ -366,7 +366,7 @@ pub fn data_addon_view(
                 ("Not applicable", StatusRole::Muted),
                 Some(DataAddonPrimaryAction::Install),
                 false,
-                "Install ESO Weave Data, enable it in ESO's Add-Ons menu, then run /reloadui if ESO is open.".to_string(),
+                "Install ESO Weave Data, then enable it in ESO's Add-Ons menu.".to_string(),
             ),
             Some(DataAddonStatus::ManagedUpToDate) => (
                 ("Installed", StatusRole::Healthy),
@@ -374,7 +374,7 @@ pub fn data_addon_view(
                 ("Current", StatusRole::Healthy),
                 Some(DataAddonPrimaryAction::Repair),
                 true,
-                "The addon files are current. Check ESO Weave Data in ESO's Add-Ons menu, then use /ewencounter status inside ESO for recording status.".to_string(),
+                "Check ESO Weave Data in Add-Ons; run /ewencounter status in ESO to check recording.".to_string(),
             ),
             Some(DataAddonStatus::ManagedVersionMismatch) => (
                 ("Installed", StatusRole::Warning),
@@ -382,7 +382,7 @@ pub fn data_addon_view(
                 ("Update available", StatusRole::Warning),
                 Some(DataAddonPrimaryAction::Update),
                 true,
-                "Use Update Data or Repair Data to install the bundled files, then run /reloadui if ESO is open. Enable ESO Weave Data in ESO's Add-Ons menu."
+                "Choose Update Data or Repair Data, then enable ESO Weave Data in Add-Ons."
                     .to_string(),
             ),
             Some(DataAddonStatus::Unmanaged) => (
@@ -411,7 +411,8 @@ pub fn data_addon_view(
         primary_action = None;
         uninstall_enabled = false;
         remediation =
-            "Check the selected Live or PTS environment, AddOns folder, and access permissions in Settings before retrying installation or removal.".to_string();
+            "Check Live or PTS, the AddOns folder and access permissions in Settings; retry."
+                .to_string();
     }
     let available = matches!(
         status,
@@ -436,10 +437,17 @@ pub fn data_addon_view(
         GameRuntime::Inactive | GameRuntime::LauncherOpen => ("Unavailable", StatusRole::Muted),
         GameRuntime::Unknown => ("Unknown", StatusRole::Warning),
     };
+    if inspection_available
+        && !reload_required
+        && matches!(
+            status,
+            Some(DataAddonStatus::NotInstalled | DataAddonStatus::ManagedVersionMismatch)
+        )
+    {
+        remediation.push_str(" Reload with /reloadui if ESO is open.");
+    }
     if reload_required && inspection_available {
-        remediation = format!(
-            "Run /reloadui or log out and back in so ESO uses the changed addon files. {remediation}"
-        );
+        remediation = format!("Reload changed files with /reloadui or logout/login. {remediation}");
     }
     DataAddonView {
         lifecycle_line: data_status_line(

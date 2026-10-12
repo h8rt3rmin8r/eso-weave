@@ -309,7 +309,9 @@ fn settle(harness: &mut Harness<'static, EsoWeaveApp>) {
         harness.step();
         if !harness.state().encounter_history_busy() {
             harness.step();
-            return;
+            if !harness.state().encounter_history_busy() {
+                return;
+            }
         }
         assert!(
             Instant::now() < deadline,
@@ -577,6 +579,34 @@ fn rendered_import_uses_the_explicitly_selected_environment() {
         .click_accesskit();
     settle(&mut harness);
     assert_eq!(harness.state().encounter_history_count(), 0);
+    harness.get_by_label("A finished recording is saved and ready to import.");
+    let source = saved_variables.join("EsoWeaveData.lua");
+    let original = fs::read(&source).unwrap();
+    fs::write(&source, b"EsoWeaveDataSaved = PRIVATE_CANARY()").unwrap();
+    for malformed in [true, false] {
+        if !malformed {
+            fs::write(&source, &original).unwrap();
+        }
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+            .click_accesskit();
+        harness.step();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                eso_weave::app::strings::MENU_ENCOUNTER_HISTORY,
+            )
+            .click_accesskit();
+        settle(&mut harness);
+        if malformed {
+            harness.get_by_label("Saved Source Invalid");
+        } else {
+            harness.get_by_label("A finished recording is saved and ready to import.");
+        }
+        assert_eq!(harness.state().encounter_history_count(), 0);
+    }
+    assert_eq!(fs::read(&source).unwrap(), original);
+
     harness
         .get_by_role_and_label(egui::accesskit::Role::Button, "Import Saved Capture")
         .click_accesskit();
@@ -635,10 +665,15 @@ fn rendered_batch_import_groups_ordinals_and_labels_last_saved_state() {
 
     assert_eq!(harness.state().encounter_history_count(), 2);
     harness.get_by_label("2 encounters imported.");
-    harness.get_by_label("Last saved recording state");
-    harness.get_by_label("Continuous fights mode | Waiting for combat | revision 7");
+    harness.get_by_label("Last saved source");
+    harness.get_by_label("The saved recorder was WAITING FOR COMBAT. Fight, then save new data.");
+    harness
+        .get_by_label("Saved recording details")
+        .click_accesskit();
+    harness.step();
+    harness.get_by_label("Continuous fights | Waiting for combat | revision 7");
     harness.get_by_label(
-        "This is the addon's state from the last successfully imported saved file, not current activity. Refresh and failed imports keep this older summary; check Saved channel below. Enter /ewencounter status inside ESO for current recording status.",
+        "This file is a saved snapshot. It cannot prove the addon is enabled, loaded or recording now. Use /ewencounter status in ESO.",
     );
     harness.get_by_label("Encounter 1");
     harness.get_by_label("Encounter 2");
@@ -661,9 +696,7 @@ fn rendered_batch_import_groups_ordinals_and_labels_last_saved_state() {
     settle(&mut harness);
     assert_eq!(harness.state().encounter_history_count(), 3);
     harness.get_by_label("1 encounter imported.");
-    assert!(harness
-        .query_by_label("Last saved recording state")
-        .is_none());
+    assert!(harness.query_by_label("Saved recording details").is_none());
 }
 
 #[test]
@@ -694,14 +727,14 @@ fn desktop_action_and_configuration_surfaces_have_zero_encounter_command_ingress
         }
     }
     assert!(DESKTOP_UI_SOURCE.contains(
-        "This is the addon's state from the last successfully imported saved file, not current activity. Refresh and failed imports keep this older summary; check Saved channel below. Enter /ewencounter status inside ESO for current recording status."
+        "This file is a saved snapshot. It cannot prove the addon is enabled, loaded or recording now. Use /ewencounter status in ESO."
     ));
     // Static instructions tell the player what to type inside ESO. The worker
     // exposes disk/history operations only, never a game-command sender.
     for instruction in [
-        "/ewencounter toggle",
-        "/ewencounter mode single",
-        "/ewencounter channel live",
+        "/ewencounter start {channel} single",
+        "/ewencounter stop",
+        "/ewencounter status",
     ] {
         assert!(DESKTOP_UI_SOURCE.contains(instruction));
     }
@@ -909,9 +942,6 @@ fn s121_wrapped_loss_diagnostics_are_fully_painted_at_minimum_width() {
     let service = seeded_service_with_capture(root.path(), &capture);
     let mut harness = harness_with_size(service, Settings::default(), egui::vec2(360.0, 3000.0));
     open_history_and_select(&mut harness);
-    harness
-        .get_by_label("How to record and import")
-        .click_accesskit();
     for _ in 0..6 {
         harness.step();
     }
@@ -968,6 +998,10 @@ fn s121_wrapped_loss_diagnostics_are_fully_painted_at_minimum_width() {
         harness.step();
     }
     let last_label = "Missing observations 28-28 (recording limit reached; code: capture-overflow)";
+    harness.get_by_label(last_label).scroll_to_me();
+    for _ in 0..12 {
+        harness.step();
+    }
     let fully_visible = harness
         .output()
         .shapes
@@ -978,4 +1012,34 @@ fn s121_wrapped_loss_diagnostics_are_fully_painted_at_minimum_width() {
         Some(true),
         "last wrapped loss cannot be read after scrolling"
     );
+}
+
+#[test]
+fn s125_worker_inspects_a_selected_source_before_history_exists_and_echoes_its_generation() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("saved.lua");
+    fs::write(&source, format!("EsoWeaveDataSaved = {{ [\"schema_version\"]=1, [\"addon_version\"]=1, [\"encounter\"]={} }}", json_to_lua(&serde_json::from_str::<serde_json::Value>(CAPTURE).unwrap()))).unwrap();
+    let service =
+        EncounterHistoryService::new(root.path().join("app"), root.path().join("catalog.sqlite"));
+    let worker = EncounterHistoryWorker::spawn(service.clone());
+    worker
+        .inspect_source(42, source.clone(), Channel::Live)
+        .unwrap();
+    match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+        HistoryEvent::SourceInspected {
+            generation,
+            source_path,
+            expected_channel,
+            result,
+        } => {
+            assert_eq!(generation, 42);
+            assert_eq!(source_path, source);
+            assert_eq!(expected_channel, Channel::Live);
+            let inspected = result.unwrap();
+            assert_eq!(inspected.finished_count + inspected.partial_count, 1);
+            assert!(inspected.modified.is_some());
+        }
+        event => panic!("Unexpected event: {event:?}"),
+    }
+    assert!(!service.store_path().exists());
 }
