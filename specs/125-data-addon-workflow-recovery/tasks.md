@@ -42,8 +42,8 @@
 - [x] T021 Update docs/src user/development guidance and create specs/125-data-addon-workflow-recovery/audit.md accounting for all scoped emphasis/copy/state surfaces (FR-001, FR-002, FR-007, FR-008).
 - [x] T022 Archive completed Plan050, create chronological docs/project/build-plans/plan-051.md and update indexes/ledger and CHANGELOG.md (FR-011).
 - [x] T023 Run full foreground Rust/build/docs/repository gates and document red/green evidence in specs/125-data-addon-workflow-recovery/verification.md (FR-010, FR-011).
-- [ ] T024 Commit, automatically push, publish/attach one official PR closing #265-#271, satisfy external reviews and final-head CI within two Codex rounds (FR-011).
-- [ ] T025 Verify zero unresolved findings and green final-head checks; hand off for owner merge without merging or release publication (FR-011).
+- [x] T024 Commit, automatically push, publish/attach one official PR closing #265-#271, satisfy external reviews and final-head CI within two Codex rounds (FR-011).
+- [x] T025 Verify zero unresolved findings and green final-head checks; hand off for owner merge without merging or release publication (FR-011).
 
 ## Dependencies and implementation strategy
 

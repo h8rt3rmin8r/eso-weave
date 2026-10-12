@@ -65,3 +65,15 @@ the final boundary is owner review and merge, with no agent merge or release.
 Automatic Codex review at 9d5503ea9e88d3e3068148c3b60435646e4505d2 raised two P2 findings. Both were reproduced before the fix: an import failure left one current error heading beside an older ready source summary; a valid stopped session with no records directed import instead of restart. New fixtures require failed malformed/missing/wrong-environment imports to replace both source and import status, and validate empty-session guidance through bounded inspection and the worker import result. The focused suite passes 15 tests after correction. The same controlled readiness classifier now serves inspection and empty-import recovery.
 
 The same empty-session recovery is covered through registered in-game status and repeated-start commands for Live and PTS (45 addon tests pass). One full Windows run encountered TCP reset 10054 in the unchanged local-service HTTP fixture. Its isolated 18-test suite and the subsequent complete 1,066-test run passed without code changes; no cause was established. Final fmt, clippy, all 1,067 Rust tests and the rebuilt release binary pass after the addon-copy changes.
+
+## Delivery receipt (2026-10-12)
+
+Official [PR #274](https://github.com/h8rt3rmin8r/eso-weave/pull/274) closes issues #265 through #271 on owner merge.
+
+- Round 1: automatic review of `9d5503ea9e88d3e3068148c3b60435646e4505d2` completed with two P2 findings. Both were reproduced, corrected, answered and resolved in `b2edd987698dec51738072b16fe13530012ba8d7`.
+- Round 2: the one authorized manual request used the security-review command and security/workflow scope. The connector reported Code Review, completed at 2026-10-12T04:11:16Z on `b2edd987698dec51738072b16fe13530012ba8d7`, with no findings and a thumbs-up. No third round was requested.
+- Direct thread inspection confirmed both threads resolved and zero unresolved findings.
+- All nine distinct non-deployment checks passed on the reviewed implementation: Linux/Windows tests and release builds, documentation validation/rendering, trust, issue linkage, dependency review and CodeQL. Pages deployment is skipped for PRs.
+- [Rust CI](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38202366524), [documentation](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38202366509), and [CodeQL](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38202366545) identify that exact implementation head.
+
+This receipt commit updates task/evidence records only. Implementation is identical to the reviewed head. Its final-head checks are reverified live before owner handoff. Plan051 remains Active and the seven issues remain in PR review until owner merge. No merge, tag, release or owner field verification was performed.
