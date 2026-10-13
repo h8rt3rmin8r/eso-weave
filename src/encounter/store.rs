@@ -208,6 +208,7 @@ pub(crate) fn append_set(
     }
     let mut connection = open_store(store_path, true, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
     let outcomes = parsed
         .records
         .iter()
@@ -734,11 +735,16 @@ pub fn delete_encounter(
 ) -> Result<DeleteReceipt, EncounterError> {
     let mut connection = open_store(store_path.as_ref(), false, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
     let deleted = transaction.execute(
         "DELETE FROM raw_encounters WHERE session_id = ?1 AND encounter_id = ?2",
         params![session_id, encounter_id],
     )?;
-    transaction.commit()?;
+    if deleted > 0 {
+        transaction.commit()?;
+    } else {
+        transaction.rollback()?;
+    }
     Ok(DeleteReceipt {
         deleted_records: deleted,
     })
@@ -747,8 +753,13 @@ pub fn delete_encounter(
 pub fn delete_all(store_path: impl AsRef<Path>) -> Result<DeleteReceipt, EncounterError> {
     let mut connection = open_store(store_path.as_ref(), false, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
     let deleted = transaction.execute("DELETE FROM raw_encounters", [])?;
-    transaction.commit()?;
+    if deleted > 0 {
+        transaction.commit()?;
+    } else {
+        transaction.rollback()?;
+    }
     Ok(DeleteReceipt {
         deleted_records: deleted,
     })
@@ -835,35 +846,15 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
     } else if version == 1 {
         validate_schema(&connection, 1)?;
         validate_records(&connection, 1)?;
-        if write {
-            migrate_v1_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
     } else if version == 2 {
         validate_schema(&connection, 2)?;
         validate_records(&connection, 2)?;
-        if write {
-            migrate_v2_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
     } else if version == 3 {
         validate_schema(&connection, 3)?;
         validate_records(&connection, 3)?;
-        if write {
-            migrate_v3_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
     } else if version == 4 {
         validate_schema(&connection, 4)?;
         validate_records(&connection, 4)?;
-        if write {
-            migrate_v4_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
     } else if version == STORE_SCHEMA_VERSION {
         validate_schema(&connection, STORE_SCHEMA_VERSION)?;
         validate_records(&connection, STORE_SCHEMA_VERSION)?;
@@ -882,10 +873,24 @@ fn validate_store_contents(connection: &Connection) -> Result<(), EncounterError
     validate_records(connection, version)
 }
 
-fn migrate_v1_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_for_write(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
+    let version: u32 = transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    match version {
+        1 => migrate_v1_to_current(transaction)?,
+        2 => migrate_v2_to_current(transaction)?,
+        3 => migrate_v3_to_current(transaction)?,
+        4 => migrate_v4_to_current(transaction)?,
+        STORE_SCHEMA_VERSION => return Ok(()),
+        _ => return invalid("unsupported encounter store schema"),
+    }
+    validate_schema(transaction, STORE_SCHEMA_VERSION)?;
+    validate_records(transaction, STORE_SCHEMA_VERSION)?;
+    Ok(())
+}
+
+fn migrate_v1_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TRIGGER raw_encounters_no_update;
+        "DROP TRIGGER raw_encounters_no_update;
          ALTER TABLE raw_encounters RENAME TO raw_encounters_v1;
          DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
@@ -914,19 +919,15 @@ fn migrate_v1_to_current(connection: &Connection) -> Result<(), EncounterError> 
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
          PRAGMA user_version = 5;
-         COMMIT;"
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
-    }
+    transaction.execute_batch(&migration)?;
     Ok(())
 }
 
-fn migrate_v2_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_v2_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TRIGGER raw_encounters_no_update;
+        "DROP TRIGGER raw_encounters_no_update;
          ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
          DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
@@ -955,19 +956,15 @@ fn migrate_v2_to_current(connection: &Connection) -> Result<(), EncounterError> 
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
          PRAGMA user_version = 5;
-         COMMIT;"
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
-    }
+    transaction.execute_batch(&migration)?;
     Ok(())
 }
 
-fn migrate_v3_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_v3_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TRIGGER raw_encounters_no_update;
+        "DROP TRIGGER raw_encounters_no_update;
          ALTER TABLE raw_encounters RENAME TO raw_encounters_v3;
          DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
@@ -996,31 +993,24 @@ fn migrate_v3_to_current(connection: &Connection) -> Result<(), EncounterError> 
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
          PRAGMA user_version = 5;
-         COMMIT;"
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
-    }
+    transaction.execute_batch(&migration)?;
     Ok(())
 }
 
-fn migrate_v4_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_v4_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TABLE encounter_store_meta;
+        "DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
          {META_INSERT_SQL};
          {ORDER_TABLE_SQL};
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
          PRAGMA user_version = 5;
-         COMMIT;"
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
-    }
+    transaction.execute_batch(&migration)?;
     Ok(())
 }
 

@@ -24,3 +24,8 @@ After S125 merged in PR #274 on 2026-10-12, deliver
 Push and official PR publication are explicitly authorized. No merge, tag,
 release or owner field-verification task is authorized by this plan.
 Native completed-file import remains separately tracked by issue #272.
+
+Publication: [PR #275](https://github.com/h8rt3rmin8r/eso-weave/pull/275).
+Both authorized review rounds have completed. Round 2 identified a migration
+rollback gap; the correction preserves schema1-4 store bytes on rejection.
+Corrected-head CI and owner handoff are pending.

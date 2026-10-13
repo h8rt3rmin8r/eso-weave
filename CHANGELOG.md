@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-10-13: Encounter store schema5 adds durable first-import session ordering
   and atomic per-session snapshot preparation. Transactional schema1-4 migration
   preserves canonical bytes; deletion/reimport cannot reorder surviving sessions.
+- 2026-10-13: External review exposed a pre-import migration commit. Schema1-4
+  migration now shares the write transaction with collision preflight and append;
+  rejected imports and no-op deletions preserve the existing store layout.
 - 2026-10-13: Archive completed Plan051 after owner merge of PR #274 and create
   Plan052 for S126/#273. Native terminal-file import remains separate #272.
 

@@ -21,10 +21,10 @@ legacy selection arguments; the implemented corrections pass.
 
 | Gate | Result | Local log |
 | --- | --- | --- |
-| cargo fmt --all -- --check | PASS | target/s126-fmt.log |
-| cargo clippy --all-targets --all-features -- -D warnings | PASS | target/s126-clippy.log |
-| cargo test --all --locked | PASS, 1087 tests | target/s126-full-tests.log |
-| cargo build --release --locked --bin eso-weave | PASS | target/s126-release-build.log |
+| cargo fmt --all -- --check | PASS | target/s126-review-fmt.log |
+| cargo clippy --all-targets --all-features -- -D warnings | PASS | target/s126-review-clippy.log |
+| cargo test --all --locked | PASS, 1088 tests | target/s126-review-full-tests.log |
+| cargo build --release --locked --bin eso-weave | PASS | target/s126-review-release-build.log |
 | Policy fixture suite | PASS, 191 tests | target/s126-policy-tests.log |
 | Documentation spelling, brand and trust policies | PASS | target/s126-spelling.log, s126-brand-policy.log, s126-trust-policy.log |
 | mdBook test and build, including link checks | PASS | target/s126-mdbook-test.log, s126-mdbook-build.log |
@@ -40,8 +40,32 @@ point of use; its deletion-only meaning remains. Both gates passed after repair.
 
 ## Publication and review
 
-Automatic branch push and official PR publication are explicitly authorized.
-Remote publication, final-head CI and external review are pending.
-At most two review rounds are permitted; owner merge remains the final boundary.
+Official [PR #275](https://github.com/h8rt3rmin8r/eso-weave/pull/275) is published
+and closes issue #273. Initial source head
+4d72285046c2c22e2e70850b7518e12461ef1368 passed all nine remote checks:
+Linux/Windows CI, documentation, CodeQL build and analysis, trust policy,
+proposed/closing issue-link policy and dependency review. Documentation
+deployment was correctly skipped for the pull request.
+
+Round 1 completed automatically on 2026-10-13 with a thumbs-up and no findings.
+The second and final request was explicitly security-scoped:
+[request](https://github.com/h8rt3rmin8r/eso-weave/pull/275#issuecomment-6139506362).
+The connector reported its result as Code Review and raised one P2:
+[migration rollback](https://github.com/h8rt3rmin8r/eso-weave/pull/275#discussion_r4255360060).
+The finding reproduced a schema4 upgrade surviving a rejected import.
+
+Migration helpers now require the caller transaction. Schema1-4 migration,
+record/snapshot preflight and append share one commit/rollback boundary.
+No-op deletion also rolls back any migration. A red schema4 regression became
+green for both record and snapshot collisions; existing schema1-3 migration
+fixtures now verify byte-identical rejected imports before successful migration.
+Focused storage suites passed 102 tests. Post-review full gates passed 1088
+Rust tests, fmt, Clippy and release build.
+Logs: target/s126-review-migration-red.log, s126-review-storage-tests.log and
+the post-review gate logs above.
+
+The correction is ready to push and reply/resolve. Final corrected-head CI
+and owner handoff remain pending. Both authorized review rounds are used;
+no third review request is permitted. Owner merge remains the final boundary.
 No merge, tag, release, native-log implementation or owner field-verification
 request is included. Installed/game behavior remains unverified.

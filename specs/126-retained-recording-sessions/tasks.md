@@ -57,7 +57,7 @@ Independent criterion: supported upgrade preserves payloads; mixed source import
 - [x] T024 Update canonical recording/reference/troubleshooting documents under docs/src and dated CHANGELOG.md decisions (FR-012).
 - [x] T025 Reconcile build-plan indexes and migration ledger under docs/project (FR-013).
 - [x] T026 Run full local Rust, policy, documentation, rendering and text gates; record evidence in specs/126-retained-recording-sessions/verification.md.
-- [ ] T027 Commit, automatically push and publish official PR; record issue/PR mapping in specs/126-retained-recording-sessions/verification.md.
+- [x] T027 Commit, automatically push and publish official PR; record issue/PR mapping in specs/126-retained-recording-sessions/verification.md.
 - [ ] T028 Address every external finding within two review rounds, verify green final-head CI and request owner merge in specs/126-retained-recording-sessions/verification.md.
 
 ## Dependencies and execution

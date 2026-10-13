@@ -3278,3 +3278,87 @@ fn retained_legacy_selection_commands_reject_extra_arguments_without_mutation() 
     );
     assert_eq!(serialized_saved_variables(&lua), before);
 }
+
+fn retained_downgrade_fixture_to_v4(connection: &rusqlite::Connection) {
+    connection
+        .execute_batch(
+            r#"
+        BEGIN IMMEDIATE;
+        DROP TRIGGER encounter_session_order_no_update;
+        DROP TABLE encounter_session_order;
+        DROP TABLE encounter_store_meta;
+        CREATE TABLE encounter_store_meta (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 4),
+            canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+        );
+        INSERT INTO encounter_store_meta VALUES (1,4,2);
+        PRAGMA user_version = 4;
+        COMMIT;
+    "#,
+        )
+        .unwrap();
+}
+
+#[test]
+fn retained_rejected_v4_import_rolls_back_migration_with_record_or_snapshot_collision() {
+    for snapshot_collision in [false, true] {
+        let lua = harness("");
+        run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+        retained_finish_fight(&lua);
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("source.lua");
+        let store = dir.path().join("history.sqlite");
+        std::fs::write(&input, serialized_saved_variables(&lua)).unwrap();
+        let request = ImportRequest::new(&input, &store, Channel::Live);
+        import_capture_set(&request).unwrap();
+        let connection = rusqlite::Connection::open(&store).unwrap();
+        retained_downgrade_fixture_to_v4(&connection);
+        drop(connection);
+        let before = std::fs::read(&store).unwrap();
+        assert_eq!(
+            eso_weave::encounter::delete_encounter(&store, "session-0-0", "encounter-0-0")
+                .unwrap()
+                .deleted_records,
+            0
+        );
+        assert!(
+            std::fs::read(&store).unwrap() == before,
+            "missing deletion upgraded schema4"
+        );
+        if snapshot_collision {
+            run(
+                &lua,
+                "EsoWeaveDataSaved.encounter.session.finished_at = '1788912001'",
+            );
+        } else {
+            run(&lua,"EsoWeaveDataSaved.encounter.records['0000000001'].capture.source.game_version = '12.0.8'");
+        }
+        let source = serialized_saved_variables(&lua);
+        parse_capture_set(source.as_bytes(), Channel::Live).unwrap();
+        std::fs::write(&input, &source).unwrap();
+        assert!(import_capture_set(&request).is_err());
+        assert!(
+            std::fs::read(&store).unwrap() == before,
+            "rejected schema4 import changed the store bytes"
+        );
+        let connection = rusqlite::Connection::open(&store).unwrap();
+        assert_eq!(
+            connection
+                .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            connection
+                .query_row::<i64, _, _>(
+                    "SELECT count(*) FROM sqlite_schema WHERE name='encounter_session_order'",
+                    [],
+                    |row| row.get(0)
+                )
+                .unwrap(),
+            0
+        );
+        assert_eq!(std::fs::read_to_string(input).unwrap(), source);
+    }
+}
