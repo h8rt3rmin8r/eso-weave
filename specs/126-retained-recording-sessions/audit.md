@@ -16,7 +16,7 @@ Date: 2026-10-13. Issue #273. Base: 7939729f302611f911c39216aea0c00f5dfe3ef1.
 | Recording authority | Existing warning delivery required before start and resume | Delayed/full chat checks and explicit resume warning regression |
 
 New archives declare base controller v2/addon5 because resume adds interruption
-vocabulary. Legacy v1/controller4 snapshots remain accepted without that new
+vocabulary. Legacy controller v1/addon4 snapshots remain accepted without that new
 marker. Terminal payload schema2/addon3 and catalog/root versions are unchanged.
 
 Superseded assertions were updated only for the owner-approved behavior: emitted

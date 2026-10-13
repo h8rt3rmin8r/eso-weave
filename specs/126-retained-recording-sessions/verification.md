@@ -28,7 +28,7 @@ legacy selection arguments; the implemented corrections pass.
 | Policy fixture suite | PASS, 191 tests | target/s126-policy-tests.log |
 | Documentation spelling, brand and trust policies | PASS | target/s126-spelling.log, s126-brand-policy.log, s126-trust-policy.log |
 | mdBook test and build, including link checks | PASS | target/s126-mdbook-test.log, s126-mdbook-build.log |
-| Complete documentation policy | PASS | target/s126-docs-policy.log |
+| Complete documentation policy | PASS, including review records | target/s126-docs-policy.log, s126-review-docs-policy.log |
 | Headless Chrome rendering sentinels | PASS | target/s126-docs-render.log |
 | Release-note and Debian validator fixtures | PASS | target/s126-release-notes-fixtures.log, s126-validate-debian-package-fixtures.log |
 | git diff --check | PASS | Direct repository check |
@@ -64,8 +64,23 @@ Rust tests, fmt, Clippy and release build.
 Logs: target/s126-review-migration-red.log, s126-review-storage-tests.log and
 the post-review gate logs above.
 
-The correction is ready to push and reply/resolve. Final corrected-head CI
-and owner handoff remain pending. Both authorized review rounds are used;
-no third review request is permitted. Owner merge remains the final boundary.
+The correction was committed and pushed as
+3e8ef8cbdf8954572a65cdeb9ae4d5bbe3a716a0.
+The [review reply](https://github.com/h8rt3rmin8r/eso-weave/pull/275#discussion_r4255520338)
+explains the correction and regressions. Direct thread inspection confirmed
+the sole thread resolved and zero unresolved findings.
+
+All nine distinct checks passed on the corrected implementation head:
+[Linux/Windows CI](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38358357488),
+[documentation](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38358357386),
+[CodeQL](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38358357457),
+trust policy, issue-link policy and dependency review. CodeQL annotations
+were empty and documentation deployment was skipped for the PR.
+
+Both authorized review rounds are complete; no third request was issued.
+This receipt commit changes task/evidence records only. Its implementation
+is identical to the corrected head above; final-head checks are reverified
+live before owner handoff. Plan052 and issue #273 remain in PR review until
+owner merge. Owner review and merge remain the final boundary.
 No merge, tag, release, native-log implementation or owner field-verification
 request is included. Installed/game behavior remains unverified.

@@ -28,4 +28,7 @@ Native completed-file import remains separately tracked by issue #272.
 Publication: [PR #275](https://github.com/h8rt3rmin8r/eso-weave/pull/275).
 Both authorized review rounds have completed. Round 2 identified a migration
 rollback gap; the correction preserves schema1-4 store bytes on rejection.
-Corrected-head CI and owner handoff are pending.
+All nine checks passed on corrected source head
+3e8ef8cbdf8954572a65cdeb9ae4d5bbe3a716a0. The review thread is answered and
+resolved; the receipt commit changes records only and its exact-head checks
+are verified live before owner handoff. Plan052 remains Active until owner merge.
