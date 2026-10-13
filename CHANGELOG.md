@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Archive completed v0.18.0 Plan054 and synchronize planning indexes, ledger
+  and final release evidence; no build plan remains active (issue #280).
+
+### Decisions
+
+- 2026-10-13: Post-release housekeeping records the completed owner merge and
+  separately authorized publication without creating another active plan or
+  changing the published v0.18.0 tag, package identity or assets.
+
 ## [0.18.0] - 2026-10-13
 
 ### Highlights

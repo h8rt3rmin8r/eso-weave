@@ -27,7 +27,7 @@ Independent test: identity and release-note gates agree on v0.18.0 with complete
 Independent test: generic documentation policy accepts matching plan lifecycle/index/ledger and working references.
 
 - [x] T009 [US2] Archive completed Plan053 at docs/archive/build-plans/plan-053.md with PR #276 merge evidence; repair affected spec references.
-- [x] T010 [US2] Create docs/project/build-plans/plan-054.md and update both current/archive README indexes without splitting archive table rows.
+- [x] T010 [US2] Create Plan054 (subsequently archived at docs/archive/build-plans/plan-054.md) and update both current/archive README indexes without splitting archive table rows.
 - [x] T011 [US2] Synchronize Plan053/054 lifecycle in docs/project/migration-ledger.json and migration-ledger.md; run established documentation policy.
 
 ## Phase 5: User Story 3, Official Reviewed Candidate (P3)
