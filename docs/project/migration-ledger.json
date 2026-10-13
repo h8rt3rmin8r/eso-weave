@@ -1723,13 +1723,23 @@
     },
     {
       "id": "053",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-053.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-053.md",
       "specs": [
         "specs/127-native-completed-import"
       ],
-      "evidence": "S127 implements completed native Encounter.log import for issue #272 through full spec-kit and autopilot. Official PR review and owner merge remain the delivery boundary."
+      "evidence": "S127 completed native Encounter.log import for issue #272 when owner squash-merged PR #276 on 2026-10-13 at 05c97041b9d12f5e5c10fae14ba1b80511c5974d. Tag and release publication remain separate."
+    },
+    {
+      "id": "054",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-054.md",
+      "specs": [
+        "specs/128-v0180-release"
+      ],
+      "evidence": "S128 prepares the v0.18.0 release candidate for issue #279 through the existing release procedure and full spec-kit/autopilot. Owner final review and merge remain the candidate delivery boundary; later tag and package publication require separate authorization."
     }
   ],
   "safetyCrosswalk": [

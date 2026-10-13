@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-13
+
+### Highlights
+
+- Follow clear recording and import guidance, with visible in-game command feedback
+  and specific recovery actions for saved recordings.
+- Start another recording while retaining earlier sessions, explicitly resume
+  continuous capture, and discard individual sessions with confirmation.
+- Import completed native Encounter.log files alongside addon history, with
+  source provenance, duplicate handling and explicit metric availability. Native
+  import supports normal/separate log version15.
+
 ### Added
 
 - S125 connects Data Details to a copyable recording/import walkthrough and
@@ -111,6 +123,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   20 million record visits or 512 MiB context text, including irrelevant metadata.
   Context replacement/removal updates cached size, and new runs cannot reset the
   budget. Rejection occurs before history writes with a controlled diagnosis.
+
+- 2026-10-13: S128 prepares the v0.18.0 candidate for merged S125-S127 through
+  the governed local rollover. Plan053 is archived after owner merge of PR #276;
+  Plan054 tracks candidate preparation for issue #279. Runtime, addon/store
+  contracts, dependencies and pipeline pins remain unchanged. Owner final merge
+  and separately authorized tag/package publication remain later steps.
+- 2026-10-13: First S128 review corrected the release issue lifecycle. Parent
+  #277 remains open through publication; candidate-preparation child #279 closes
+  on owner merge. The PR links both without extending publication authority.
 
 ## [0.17.4] - 2026-10-07
 

@@ -114,5 +114,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/127-native-completed-import/plan.md
+at specs/128-v0180-release/plan.md
 <!-- SPECKIT END -->

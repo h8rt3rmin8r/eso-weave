@@ -7,7 +7,7 @@ All stories are required. Tests precede behavior code; shared files are edited s
 
 - [x] T001 Complete specification, clarification and quality checklists in specs/127-native-completed-import/spec.md.
 - [x] T002 Resolve research, model, contract and constitution gates in specs/127-native-completed-import/plan.md.
-- [x] T003 Archive Plan052 and create chronological Plan053 in docs/project/build-plans/plan-053.md.
+- [x] T003 Archive Plan052 and create chronological Plan053 (subsequently archived at docs/archive/build-plans/plan-053.md).
 
 ## Phase 2 - Foundations
 

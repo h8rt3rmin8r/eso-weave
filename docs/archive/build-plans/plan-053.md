@@ -1,6 +1,6 @@
 # Plan 053: Completed Native Encounter Log Import
 
-Status: Active
+Status: Complete, Archived
 
 ## S127 (2026-10-13)
 
@@ -26,7 +26,6 @@ After S126 was owner-squash-merged in PR #275 at
 Live tailing and logger activation remain future work. Push and official PR are
 authorized. No agent merge, tag, release or owner field-verification request.
 
-Implementation delivered in official PR #276. Both review rounds completed,
-with duplicate validation and context amplification corrected and resolved.
-Implementation5672cae passed all9 distinct CI checks. Owner final review and merge
-remain pending; this plan stays Active until that merge.
+Implementation delivered in official [PR #276](https://github.com/h8rt3rmin8r/eso-weave/pull/276). Both authorized review rounds completed, and both findings were corrected, answered and resolved. The owner squash-merged the PR on 2026-10-13 at 05c97041b9d12f5e5c10fae14ba1b80511c5974d, closing issue #272. The merged tree matches final reviewed head 5ba42cde3c9f76ecbdbcfb06da66078f4ffa3b37.
+
+Archived during S128 preparation. Later tag and package publication remain separate.
