@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
 import {
@@ -7,6 +12,7 @@ import {
   PASS_SENTINEL,
   SYNTAX_PASS_SENTINEL,
   TABLE_PASS_SENTINEL,
+  browserEndpointFromProfile,
   validateFigureObservation,
   validateFigureReceipt,
   validateLayoutObservation,
@@ -17,7 +23,48 @@ import {
   validateSyntaxReceipt,
   validateTableObservation,
   validateTableReceipt,
+  waitForBrowserEndpoint,
 } from "./docs-render-smoke.mjs";
+
+test("browser startup accepts Chrome's profile endpoint when stderr is silent", async () => {
+  const profile = await mkdtemp(path.join(tmpdir(), "eso-weave-browser-test-"));
+  const child = new EventEmitter();
+  child.stderr = new PassThrough();
+  child.exitCode = null;
+  child.kill = () => {
+    child.exitCode = 0;
+    child.emit("close", 0);
+  };
+  try {
+    assert.equal(browserEndpointFromProfile("39217\n/devtools/browser/abc-123\n"), "ws://127.0.0.1:39217/devtools/browser/abc-123");
+    assert.equal(browserEndpointFromProfile("0\n/devtools/browser/abc-123\n"), null);
+    const ready = waitForBrowserEndpoint(child, profile, 5000);
+    await writeFile(path.join(profile, "DevToolsActivePort"), "39217\n/devtools/browser/abc-123\n", "utf8");
+    assert.equal((await ready).webSocketUrl, "ws://127.0.0.1:39217/devtools/browser/abc-123");
+  } finally {
+    child.kill();
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("browser startup times out and stops a silent browser", async () => {
+  const profile = await mkdtemp(path.join(tmpdir(), "eso-weave-browser-timeout-test-"));
+  const child = new EventEmitter();
+  child.stderr = new PassThrough();
+  child.exitCode = null;
+  let killed = false;
+  child.kill = () => {
+    killed = true;
+    child.exitCode = 0;
+    child.emit("close", 0);
+  };
+  try {
+    await assert.rejects(waitForBrowserEndpoint(child, profile, 30), /timed out after 30 ms/u);
+    assert.equal(killed, true);
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
 
 const validObservation = {
   diagramId: "S082-D01",

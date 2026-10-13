@@ -1322,6 +1322,77 @@ async function startServer(siteRoot) {
   return { server, port: server.address().port, diagramRequests };
 }
 
+export function browserEndpointFromProfile(contents) {
+  const [portText, endpointPath] = contents.split(/\r?\n/u);
+  const port = Number(portText);
+  if (!Number.isInteger(port) || port < 1 || port > 65535 || !/^\/devtools\/browser\/[A-Za-z0-9-]+$/u.test(endpointPath ?? "")) return null;
+  return `ws://127.0.0.1:${port}${endpointPath}`;
+}
+
+export function waitForBrowserEndpoint(child, profile, timeoutMs = 45000) {
+  return new Promise((resolve, reject) => {
+    let stderr = "";
+    let settled = false;
+    let checking = false;
+    let interval;
+    let timeout;
+    const stopWaiting = () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+    const rejectAfterCleanup = (error) => {
+      if (settled) return;
+      settled = true;
+      stopWaiting();
+      void (async () => {
+        if (child.exitCode === null) {
+          const closed = new Promise((finish) => child.once("close", finish));
+          child.kill();
+          await Promise.race([closed, new Promise((finish) => setTimeout(finish, 2000))]);
+          if (child.exitCode === null && child.signalCode === null) {
+            child.kill("SIGKILL");
+            await Promise.race([closed, new Promise((finish) => setTimeout(finish, 2000))]);
+          }
+        }
+        reject(error);
+      })();
+    };
+    const acceptEndpoint = (webSocketUrl) => {
+      if (!webSocketUrl || settled) return;
+      settled = true;
+      stopWaiting();
+      resolve({ child, webSocketUrl });
+    };
+    const checkProfile = async () => {
+      if (checking || settled) return;
+      checking = true;
+      try {
+        const contents = await readFile(path.join(profile, "DevToolsActivePort"), "utf8");
+        acceptEndpoint(browserEndpointFromProfile(contents));
+      } catch (error) {
+        if (error.code !== "ENOENT") rejectAfterCleanup(error);
+      } finally {
+        checking = false;
+      }
+    };
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr = (stderr + chunk).slice(-4000);
+      acceptEndpoint(stderr.match(/DevTools listening on (ws:\/\/[^\s]+)/u)?.[1]);
+    });
+    child.once("error", rejectAfterCleanup);
+    child.once("close", (code) => {
+      if (settled) return;
+      settled = true;
+      stopWaiting();
+      reject(new Error(`browser exited ${code}: ${stderr.slice(-2000)}`));
+    });
+    interval = setInterval(checkProfile, 100);
+    timeout = setTimeout(() => rejectAfterCleanup(new Error(`browser debugging endpoint timed out after ${timeoutMs} ms: ${stderr.slice(-2000)}`)), timeoutMs);
+    void checkProfile();
+  });
+}
+
 function launchBrowser(executable, profile) {
   const arguments_ = [
     "--headless=new",
@@ -1336,40 +1407,8 @@ function launchBrowser(executable, profile) {
     "--remote-debugging-port=0",
     "about:blank",
   ];
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, arguments_, { shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    let settled = false;
-    child.stderr.setEncoding("utf8");
-    let timeout;
-    const rejectAfterCleanup = (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      void (async () => {
-        if (child.exitCode === null) {
-          const closed = new Promise((finish) => child.once("close", finish));
-          child.kill();
-          await Promise.race([closed, new Promise((finish) => setTimeout(finish, 2000))]);
-        }
-        reject(error);
-      })();
-    };
-    timeout = setTimeout(() => rejectAfterCleanup(new Error(`browser debugging endpoint timed out: ${stderr.slice(-2000)}`)), 15000);
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-      const webSocketUrl = stderr.match(/DevTools listening on (ws:\/\/[^\s]+)/u)?.[1];
-      if (webSocketUrl && !settled) {
-        settled = true;
-        clearTimeout(timeout);
-        resolve({ child, webSocketUrl });
-      }
-    });
-    child.once("error", rejectAfterCleanup);
-    child.once("close", (code) => {
-      if (!settled) rejectAfterCleanup(new Error(`browser exited ${code}: ${stderr.slice(-2000)}`));
-    });
-  });
+  const child = spawn(executable, arguments_, { shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  return waitForBrowserEndpoint(child, profile);
 }
 
 class DevToolsClient {
@@ -1512,7 +1551,16 @@ export async function run(siteRoot) {
   let browserProcess;
   let client;
   try {
-    const launched = await launchBrowser(browser, profileRoot);
+    let launched;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        launched = await launchBrowser(browser, path.join(profileRoot, `attempt-${attempt}`));
+        break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+        console.warn(`Browser startup attempt ${attempt} failed: ${error.message}. Retrying with a fresh profile.`);
+      }
+    }
     browserProcess = launched.child;
     client = await DevToolsClient.connect(await pageDebuggerUrl(launched.webSocketUrl));
     await Promise.all([client.send("Page.enable"), client.send("Runtime.enable"), client.send("Network.enable")]);
