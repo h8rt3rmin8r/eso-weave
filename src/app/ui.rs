@@ -1093,7 +1093,14 @@ impl EsoWeaveApp {
             worker.set_catalog_path(path);
         }
         self.model.set_catalog(access);
-        if self.encounter_history_selected.is_some() {
+        if self
+            .encounter_history_selected
+            .as_ref()
+            .is_some_and(|identity| {
+                self.history_source_kind(identity)
+                    == crate::encounter::EncounterSourceKind::SavedAddon
+            })
+        {
             self.encounter_history_detail = None;
             self.native_history_detail = None;
             self.encounter_history_catalog_refresh_pending = true;
@@ -1165,15 +1172,29 @@ impl EsoWeaveApp {
         }
     }
 
+    fn history_source_kind(
+        &self,
+        identity: &EncounterIdentity,
+    ) -> crate::encounter::EncounterSourceKind {
+        self.encounter_history
+            .iter()
+            .find(|summary| {
+                summary.session_id == identity.session_id
+                    && summary.encounter_id == identity.encounter_id
+            })
+            .map_or(
+                crate::encounter::EncounterSourceKind::SavedAddon,
+                |summary| summary.source_kind,
+            )
+    }
+
     fn request_history_detail(&mut self, identity: EncounterIdentity) {
         if self.encounter_history_busy {
             return;
         }
-        match self
-            .encounter_history_worker
-            .as_ref()
-            .map(|worker| worker.load_detail(identity.clone()))
-        {
+        match self.encounter_history_worker.as_ref().map(|worker| {
+            worker.load_detail_for(identity.clone(), self.history_source_kind(&identity))
+        }) {
             Some(Ok(())) => {
                 self.encounter_history_selected = Some(identity);
                 self.encounter_history_detail = None;
@@ -1197,11 +1218,9 @@ impl EsoWeaveApp {
             self.encounter_history_catalog_refresh_pending = false;
             return;
         };
-        match self
-            .encounter_history_worker
-            .as_ref()
-            .map(|worker| worker.load_detail(identity))
-        {
+        match self.encounter_history_worker.as_ref().map(|worker| {
+            worker.load_detail_for(identity.clone(), self.history_source_kind(&identity))
+        }) {
             Some(Ok(())) => {
                 self.encounter_history_catalog_refresh_pending = false;
                 self.encounter_history_busy = true;

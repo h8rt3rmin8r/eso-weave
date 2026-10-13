@@ -572,3 +572,21 @@ fn native_import_migrates_schema4_and5_without_rewriting_addon_evidence() {
         assert_eq!(before, after);
     }
 }
+
+#[test]
+fn native_observed_totals_keep_valid_large_quantities_exact() {
+    let source = tiny().replace("300,0,10", "18446744073709551615,0,10");
+    let extra = tiny()
+        .lines()
+        .find(|line| line.contains(",COMBAT_EVENT,"))
+        .unwrap()
+        .replace("300,0,10", "1,0,10");
+    let capture = first(&source.replace("30,END_COMBAT", &format!("{extra}\n30,END_COMBAT")));
+    let projection = eso_weave::encounter::project_native_encounter(&capture).unwrap();
+    assert_eq!(projection.damage_hit.to_string(), "18446744073709551616");
+    assert_eq!(
+        projection.local_damage_hit.unwrap().to_string(),
+        "18446744073709551616"
+    );
+    assert_eq!(projection.combat_event_count, 2);
+}

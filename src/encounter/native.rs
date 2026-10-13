@@ -1155,12 +1155,12 @@ pub struct NativeProjection {
     pub cast_start_count: usize,
     pub effect_change_count: usize,
     pub unknown_record_count: usize,
-    pub damage_hit: u64,
-    pub damage_overflow: u64,
-    pub healing_hit: u64,
-    pub healing_overflow: u64,
-    pub local_damage_hit: Option<u64>,
-    pub local_healing_hit: Option<u64>,
+    pub damage_hit: u128,
+    pub damage_overflow: u128,
+    pub healing_hit: u128,
+    pub healing_overflow: u128,
+    pub local_damage_hit: Option<u128>,
+    pub local_healing_hit: Option<u128>,
     pub local_damage_per_second: Option<f64>,
     pub quality_reasons: Vec<String>,
     pub unavailable: Vec<String>,
@@ -1286,8 +1286,8 @@ pub fn project_native_encounter(
     Ok(projection)
 }
 
-fn add_quantity(total: u64, value: u64) -> Result<u64, EncounterError> {
-    total.checked_add(value).ok_or_else(|| {
+fn add_quantity(total: u128, value: u64) -> Result<u128, EncounterError> {
+    total.checked_add(u128::from(value)).ok_or_else(|| {
         EncounterError::Validation("native observed quantity exceeds the supported total".into())
     })
 }

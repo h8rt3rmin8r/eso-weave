@@ -34,7 +34,7 @@ API joins and recommendations have reasons.
 ## Verification and dispositions
 
 - Foreground fmt check, all-target/all-feature Clippy with warnings denied, and
-  all locked Rust tests pass (1112 tests).
+  all locked Rust tests pass (1114 tests).
 - 181 documentation/render/brand/trust policy fixtures pass.
 - Spelling, repository trust, brand adoption, release-note and Debian fixtures pass.
 - mdBook examples, build/link checking, generated-site policy and complete headless
@@ -61,3 +61,19 @@ installed Windows/Linux/Proton behavior remain unimplemented or unverified.
 Repository and private-file evidence do not prove live callback parity. No owner
 field-verification request is created. Official PR, at most two review rounds,
 green final-head CI and owner final review/merge remain the delivery sequence.
+
+After publication, a boundary regression reproduced valid unsigned64 amounts
+overflowing a64-bit aggregate. Native totals now use128-bit arithmetic, bounded
+by the record budget. The new regression, fmt, Clippy and all1114 Rust tests pass.
+Original source/canonical evidence is unchanged by this projection correction.
+
+Round1 Codex comment4257130239 (PRRT_kwDOTU-tqc6rzQUh) correctly identified
+duplicate full-store validation for addon detail. UI requests now pass recorded
+source kind to the worker; addon detail no longer probes native history first.
+Native facts also survive unrelated catalog replacement without recalculation.
+The mixed-source worker regression and both desktop widths pass.
+
+Full correction verification: fmt/Clippy and optimized build pass. Two
+default-harness reruns encountered Windows OS10053 in unchanged loopback tests.
+Focused documentation/local-service suites passed; the complete1114-test local
+recheck passed with one harness thread. CI retains its default harness.

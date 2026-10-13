@@ -1310,7 +1310,12 @@ fn native_worker_echoes_selection_and_loads_detail_without_catalog() {
         }
         event => panic!("unexpected event: {event:?}"),
     };
-    worker.load_detail(identity).unwrap();
+    worker
+        .load_detail_for(
+            identity,
+            eso_weave::encounter::EncounterSourceKind::NativeLog,
+        )
+        .unwrap();
     match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
         HistoryEvent::NativeDetail { result, .. } => assert_eq!(result.unwrap().log_version, 15),
         event => panic!("unexpected event: {event:?}"),
@@ -1414,5 +1419,41 @@ fn native_desktop_import_and_details_work_at_narrow_and_wide_sizes() {
             .query_by_label("Provisional Recommendations")
             .is_none());
         assert!(harness.query_by_label("Fixture, Ω").is_none());
+    }
+}
+
+#[test]
+fn worker_dispatches_mixed_history_by_recorded_source_kind() {
+    use eso_weave::encounter::EncounterSourceKind;
+    let root = tempfile::tempdir().unwrap();
+    let service = seeded_service(root.path());
+    let source = root.path().join("native.log");
+    fs::write(
+        &source,
+        include_str!("../specs/127-native-completed-import/fixtures/representative-v15.log"),
+    )
+    .unwrap();
+    service
+        .import_native_current(&source, Channel::Live)
+        .unwrap();
+    let worker = EncounterHistoryWorker::spawn(service.clone());
+    let summaries = service.snapshot().unwrap();
+    assert_eq!(summaries.len(), 3);
+    for summary in summaries {
+        worker
+            .load_detail_for(EncounterIdentity::from(&summary), summary.source_kind)
+            .unwrap();
+        match (
+            summary.source_kind,
+            worker.receive_timeout(WORKER_TIMEOUT).unwrap(),
+        ) {
+            (EncounterSourceKind::SavedAddon, HistoryEvent::Detail { result, .. }) => {
+                assert_eq!(result.unwrap().projection.observed_dps.value, Some(300.0));
+            }
+            (EncounterSourceKind::NativeLog, HistoryEvent::NativeDetail { result, .. }) => {
+                assert_eq!(result.unwrap().log_version, 15);
+            }
+            (_, event) => panic!("wrong source detail: {event:?}"),
+        }
     }
 }

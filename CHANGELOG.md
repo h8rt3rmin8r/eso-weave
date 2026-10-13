@@ -97,6 +97,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for S127/#272. Automatic push and official PR are authorized; owner merge and
   later publication remain separate.
 
+- 2026-10-13: Native aggregate quantities use 128-bit integer arithmetic so
+  valid unsigned 64-bit source amounts cannot overflow a fight total. The native
+  record budget bounds every possible sum; original values remain unchanged.
+
+- 2026-10-13: First external review found duplicate whole-store validation for
+  addon details in mixed history. Detail requests now carry the summary's source
+  kind and enter one source-specific service path; catalog changes do not rebuild
+  native facts. Mixed-source worker/UI regressions cover the corrected routing.
+
 ## [0.17.4] - 2026-10-07
 
 ### Highlights

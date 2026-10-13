@@ -6,9 +6,9 @@ use std::time::Duration;
 use crate::catalog::Channel;
 use crate::encounter::{
     CaptureImportReport, CaptureStateSummary, EncounterHistoryService, EncounterIdentity,
-    EncounterProjection, EncounterSummary, HistoryDiagnostic, LossRange, MetricQuality,
-    MetricResult, NativeImportReport, NativeProjection, NativeSourceInspection,
-    SavedRecordingReadiness, SavedSourceInspection,
+    EncounterProjection, EncounterSourceKind, EncounterSummary, HistoryDiagnostic,
+    HistoryDiagnosticKind, LossRange, MetricQuality, MetricResult, NativeImportReport,
+    NativeProjection, NativeSourceInspection, SavedRecordingReadiness, SavedSourceInspection,
 };
 use crate::recommendation::{
     generate_recommendations, AdviceQualification, AdviceRule, RecommendationAvailability,
@@ -54,7 +54,7 @@ enum HistoryCommand {
         source_path: PathBuf,
         expected_channel: Channel,
     },
-    LoadDetail(EncounterIdentity),
+    LoadDetail(EncounterIdentity, EncounterSourceKind),
     DeleteOne(EncounterIdentity),
     DeleteAll,
     Stop,
@@ -146,11 +146,17 @@ impl EncounterHistoryWorker {
                             diagnostic,
                         },
                     },
-                    HistoryCommand::LoadDetail(identity) => {
-                        match thread_service.native_detail(&identity) {
-                            Ok(Some(projection)) => HistoryEvent::NativeDetail { identity, result: Ok(Box::new(projection)) },
-                            Err(diagnostic) => HistoryEvent::NativeDetail { identity, result: Err(diagnostic) },
-                            Ok(None) => {
+                    HistoryCommand::LoadDetail(identity, source_kind) => {
+                        match source_kind {
+                            EncounterSourceKind::NativeLog => {
+                                let result = thread_service.native_detail(&identity)
+                                    .and_then(|projection| projection.map(Box::new).ok_or_else(|| HistoryDiagnostic {
+                                        kind: HistoryDiagnosticKind::EncounterMissing,
+                                        message: "The selected native encounter is no longer present. Refresh history.".into(),
+                                    }));
+                                HistoryEvent::NativeDetail { identity, result }
+                            }
+                            EncounterSourceKind::SavedAddon => {
                                 let result = thread_service.detail(&identity)
                                     .map(EncounterDetail::from_projection).map(Box::new);
                                 HistoryEvent::Detail { identity, result }
@@ -260,8 +266,18 @@ impl EncounterHistoryWorker {
         })
     }
 
+    /// Compatibility entry point for saved-addon recordings.
     pub fn load_detail(&self, identity: EncounterIdentity) -> Result<(), HistoryWorkerBusy> {
-        self.send(HistoryCommand::LoadDetail(identity))
+        self.load_detail_for(identity, EncounterSourceKind::SavedAddon)
+    }
+
+    /// Dispatches directly from the source kind attached to an imported summary.
+    pub fn load_detail_for(
+        &self,
+        identity: EncounterIdentity,
+        source_kind: EncounterSourceKind,
+    ) -> Result<(), HistoryWorkerBusy> {
+        self.send(HistoryCommand::LoadDetail(identity, source_kind))
     }
 
     pub fn delete_one(&self, identity: EncounterIdentity) -> Result<(), HistoryWorkerBusy> {
