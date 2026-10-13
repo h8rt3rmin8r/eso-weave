@@ -9,11 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Make the documentation render smoke test discover Chrome's debugging endpoint
+  from its profile when startup emits no stderr, allow a bounded startup delay,
+  and retry one failed launch with a fresh profile (issue #282).
 - Archive completed v0.18.0 Plan054 and synchronize planning indexes, ledger
   and final release evidence; no build plan remains active (issue #280).
 
 ### Decisions
 
+- 2026-10-13: Keep the browser rendering gate for Pages builds while making
+  headless Chrome startup tolerant of runner delays and silent stderr. A failed
+  launch remains a CI failure after one fresh-profile retry.
 - 2026-10-13: Post-release housekeeping records the completed owner merge and
   separately authorized publication without creating another active plan or
   changing the published v0.18.0 tag, package identity or assets.
