@@ -1096,7 +1096,7 @@ return {
 })()`;
 }
 
-function lineageZoomExpression(minimumTextFontSize, equivalentId = "encounter-lineage-text-equivalent", phrases = ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat-log ingestion is unsupported"]) {
+function lineageZoomExpression(minimumTextFontSize, equivalentId = "encounter-lineage-text-equivalent", phrases = ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"]) {
   return `(async () => {
 const minimumTextFontSize = ${JSON.stringify(minimumTextFontSize)};
 const trigger = document.querySelector('figure.docs-flow-diagram .docs-figure-trigger');

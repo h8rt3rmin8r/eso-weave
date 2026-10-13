@@ -1713,13 +1713,23 @@
     },
     {
       "id": "052",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-052.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-052.md",
       "specs": [
         "specs/126-retained-recording-sessions"
       ],
-      "evidence": "S126 implements retained recording sessions for issue #273 through the full spec-kit and autopilot sequence. Official PR review and owner merge remain the delivery boundary."
+      "evidence": "S126 completed retained recording sessions for issue #273 when owner squash-merged PR #275 on 2026-10-13 at 9bfe9e07644d4611cd29bec3293e33457e4c4d69. Tag and release publication remain separate."
+    },
+    {
+      "id": "053",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-053.md",
+      "specs": [
+        "specs/127-native-completed-import"
+      ],
+      "evidence": "S127 implements completed native Encounter.log import for issue #272 through full spec-kit and autopilot. Official PR review and owner merge remain the delivery boundary."
     }
   ],
   "safetyCrosswalk": [

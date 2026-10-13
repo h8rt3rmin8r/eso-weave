@@ -1546,8 +1546,8 @@ const DOCUMENTATION_DIAGRAMS = [
     height: 1530,
     alt: "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts",
     heading: "Encounter lineage text equivalent",
-    anchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat-log ingestion is unsupported"],
-    svgAnchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat logs: provisional", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"],
+    anchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"],
+    svgAnchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native files: completed import", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"],
   },
   {
     id: "S082-D01",
@@ -1663,7 +1663,7 @@ export function validateEncounterWorkflowDocs(pages) {
       "/ewencounter clear confirm", "Delete Encounter", "Delete All", "/ewcollect clear confirm",
       "unsupported saved-data version", "Importing the unchanged ESO file", "Uninstall Data",
     ]],
-    ["reference/logging.md", ["Application Log", "File Logging", "native", "provisional", "Neither records fights", "Application Logging"]],
+    ["reference/logging.md", ["Application Log", "File Logging", "native", "completed-file import", "Neither records fights", "Application Logging"]],
     ["features/interface.md", ["Addon Management", "Addon Package Version", "Unconfirmed", "Unknown (check inside ESO)", "Last saved source", "before import", "last-save timestamp", "saved state and importable counts", "Refresh Saved Source", "Refresh Imported History", "Environment/folder changes discard older pending results", "Observed Metrics", "Provisional Recommendations"]],
     ["getting-started/troubleshooting.md", ["current activity", "unsupported saved-data version", "same-version", "Incomplete observations", "duplicates", "currently active fight", "whole batch", "Delete All"]],
     ["development/discovery-collector.md", ["Catalog collection", "/ewcollect resume", "/ewcollect cancel", "incomplete snapshot", "replaces that previous catalog collection", "unsupported saved-data version"]],
@@ -2897,6 +2897,17 @@ function canonicalEncounterEvents(events) {
   return JSON.stringify([...events].sort((left, right) => left.sequence - right.sequence));
 }
 
+
+export function validateNativeImportPolicy(contract) {
+  const errors = [];
+  const native = contract?.native_import_policy ?? {};
+  const expected = {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":6,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false,"context_work_records":20000000,"context_work_bytes":536870912};
+  for (const [key, value] of Object.entries(expected)) {
+    if (native[key] !== value) errors.push("S127 native import requires " + key + "=" + JSON.stringify(value));
+  }
+  return errors;
+}
+
 export function validateEncounterModelContract(contract) {
   const errors = [];
   if (!contract || typeof contract !== "object") return ["encounter model contract must be an object"];
@@ -3014,7 +3025,7 @@ export function validateEncounterModelContract(contract) {
   const transport = contract.transport_policy ?? {};
   if (transport.pixel_bus_bulk_transport !== false) errors.push("Pixel Bus cannot be the bulk encounter transport");
   if (transport.automation_independent !== true) errors.push("encounter observation and calculation must remain independent of automation");
-  if (transport.future_transport !== "bounded-saved-variables-import") errors.push("future encounter transport must use a bounded SavedVariables import");
+  if (transport.future_transport !== "bounded-saved-variables-and-native-completed-import") errors.push("future encounter transport must use a bounded SavedVariables import");
   const actorIdentity = lossless ? "source-exact" : "encounter-local-opaque";
   if (contract.actor_policy?.identity !== actorIdentity || !contract.actor_policy?.roles?.includes("pet") || !contract.actor_policy?.pet_owner_relationship || !contract.actor_policy?.ability_aliases) errors.push("encounter actor policy must model the selected identity, pets, owners, and aliases");
   if (lossless && contract.actor_policy?.numeric_unit_id !== "positive-exact-integer-decimal-key-or-anonymous") errors.push("lossless encounter actor policy must constrain numeric unit IDs to exact decimal keys before interning");
@@ -4258,6 +4269,7 @@ async function run() {
     ...validateGlossarySearchIndex(searchIndex),
     ...validateCatalogSourceContract(catalog),
     ...validateEncounterModelContract(encounterModel),
+    ...validateNativeImportPolicy(encounterModel),
     ...validateEncounterEvidence(encounterFixture, encounterProjection, encounterFixtureBytes),
     ...validateVisualizationAudit(visualizationAudit, summaryMarkdown, { existingAuthorityPaths: visualizationAuthorityPaths }),
   ];

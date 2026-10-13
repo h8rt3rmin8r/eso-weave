@@ -1,6 +1,6 @@
 # Plan 052: Retained Recording Sessions
 
-Status: Active
+Status: Complete, Archived
 
 ## S126 (2026-10-13)
 
@@ -32,3 +32,11 @@ All nine checks passed on corrected source head
 3e8ef8cbdf8954572a65cdeb9ae4d5bbe3a716a0. The review thread is answered and
 resolved; the receipt commit changes records only and its exact-head checks
 are verified live before owner handoff. Plan052 remains Active until owner merge.
+
+## Owner merge receipt (2026-10-13)
+
+PR #275 was squash-merged at 9bfe9e07644d4611cd29bec3293e33457e4c4d69.
+The merged tree exactly equals completed head adb46e758de3b4ba0fce0255fec7f3ac31150753.
+Issue #273 is closed with all acceptance criteria checked and project Stage/Status Done.
+Local main was synchronized, the completed branch deleted and stale refs pruned.
+Main CI was outside the housekeeping scope; no installed/game verification is claimed.

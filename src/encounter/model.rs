@@ -505,6 +505,13 @@ impl From<&EncounterModuleState> for CaptureStateSummary {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EncounterSourceKind {
+    SavedAddon,
+    NativeLog,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EncounterSummary {
     pub content_sha256: String,
@@ -518,7 +525,9 @@ pub struct EncounterSummary {
     pub last_sequence: u64,
     pub stored_event_count: usize,
     pub omitted_event_count: u64,
-    pub capture_mode: CaptureMode,
+    pub capture_mode: Option<CaptureMode>,
+    pub source_kind: EncounterSourceKind,
+    pub unknown_record_count: usize,
     pub encounter_ordinal: u64,
 }
 

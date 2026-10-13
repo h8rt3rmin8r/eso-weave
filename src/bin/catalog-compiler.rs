@@ -14,8 +14,9 @@ use eso_weave::data_addon::{
     RunningState as CollectorRunningState,
 };
 use eso_weave::encounter::{
-    backup_store, delete_all, delete_encounter, import_encounter, list_encounters,
-    project_encounter, EncounterError, ImportRequest as EncounterImportRequest, ProjectionRequest,
+    backup_store, delete_all, delete_encounter, import_encounter, import_native_log,
+    inspect_native_log, list_encounters, project_encounter, EncounterError,
+    ImportRequest as EncounterImportRequest, ProjectionRequest,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -75,6 +76,21 @@ fn run(arguments: Vec<String>) -> Result<(), CliError> {
                 catalog_version,
             ))?;
             print_json(&report)?;
+        }
+        "native-encounter-import" => {
+            let report = import_native_log(&EncounterImportRequest::new(
+                required(&flags, "--input")?,
+                required(&flags, "--store")?,
+                parse_channel(required(&flags, "--channel")?)?,
+            ))?;
+            print_json(&report)?;
+        }
+        "native-encounter-inspect" => {
+            let inspection = inspect_native_log(
+                required(&flags, "--input")?,
+                parse_channel(required(&flags, "--channel")?)?,
+            )?;
+            print_json(&inspection.report)?;
         }
         "encounter-import" => {
             let report = import_encounter(&EncounterImportRequest::new(
@@ -249,7 +265,7 @@ fn write_json(path: PathBuf, value: &impl serde::Serialize) -> Result<(), Catalo
 
 fn usage() -> CatalogError {
     CatalogError::Validation(
-        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler encounter-import --input PATH --store PATH --channel live|pts; catalog-compiler encounter-list --store PATH; catalog-compiler encounter-project --store PATH --catalog PATH --output PATH --session ID --encounter ID; catalog-compiler encounter-backup --store PATH --output PATH; catalog-compiler encounter-delete --store PATH (--session ID --encounter ID | --all); catalog-compiler pipeline-build --request PATH --workspace PATH --source-cache PATH --icon-cache PATH --candidates PATH [--network enabled|disabled]; catalog-compiler pipeline-verify --candidate PATH; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
+        "usage: catalog-compiler build --input PATH --output PATH --channel live|pts [--report PATH]; catalog-compiler verify --catalog PATH; catalog-compiler diff --old PATH --new PATH [--output PATH]; catalog-compiler import-collector --input PATH --output PATH --channel live|pts --catalog-version VERSION; catalog-compiler native-encounter-inspect --input PATH --channel live|pts; catalog-compiler native-encounter-import --input PATH --store PATH --channel live|pts; catalog-compiler encounter-import --input PATH --store PATH --channel live|pts; catalog-compiler encounter-list --store PATH; catalog-compiler encounter-project --store PATH --catalog PATH --output PATH --session ID --encounter ID; catalog-compiler encounter-backup --store PATH --output PATH; catalog-compiler encounter-delete --store PATH (--session ID --encounter ID | --all); catalog-compiler pipeline-build --request PATH --workspace PATH --source-cache PATH --icon-cache PATH --candidates PATH [--network enabled|disabled]; catalog-compiler pipeline-verify --candidate PATH; catalog-compiler collector-status --addons PATH; catalog-compiler collector-install --addons PATH --api-version VERSION; catalog-compiler collector-remove --addons PATH"
             .to_string(),
     )
 }

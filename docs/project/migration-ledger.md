@@ -39,8 +39,9 @@ manifest, so changing a count cannot hide an omission or substitution.
   S123 in PR #256 and v0.17.3 published on 2026-10-07. Plan 050 completed
   S124 dependency maintenance and v0.17.4 candidate preparation in PR #264
   on 2026-10-07. Plan 051 completed S125 data-addon workflow recovery for
-  issues #265 through #271 in PR #274 on 2026-10-12. Plan 052 is active for
-  S126 retained recording sessions / issue #273. Owner merge and later
+  issues #265 through #271 in PR #274 on 2026-10-12. Plan 052 completed
+  S126 retained recording sessions / issue #273 in PR #275 on 2026-10-13.
+  Plan 053 is active for S127 completed native import / issue #272. Owner merge and later
   tag/publication remain separate.
   Independent release verification does not reactivate a completed plan. The
   policy requires the matching plan file and index row for

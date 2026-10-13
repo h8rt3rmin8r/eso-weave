@@ -3,6 +3,7 @@
 mod history;
 mod metrics;
 mod model;
+mod native;
 mod replay;
 mod store;
 mod validate;
@@ -28,16 +29,26 @@ pub use model::{
     BackupReceipt, CaptureControllerState, CaptureFailure, CaptureFailureReason,
     CaptureImportReport, CaptureInterruption, CaptureInterruptionReason, CaptureMode,
     CaptureSession, CaptureSessionStatus, CaptureStateSummary, CaptureStatus, CaptureStopReason,
-    DeleteReceipt, EncounterCapture, EncounterEvent, EncounterModuleState, EncounterSummary,
-    ImportOutcome, ImportReceipt, NormalizationProfile, OrderedEncounterCapture, ParsedCaptureSet,
-    PartialReason, PayloadValue, RawLoss, RawLossReason, RawObservation, RawSourceKind, RawValue,
-    RawValueType, SourceProvenance,
+    DeleteReceipt, EncounterCapture, EncounterEvent, EncounterModuleState, EncounterSourceKind,
+    EncounterSummary, ImportOutcome, ImportReceipt, NormalizationProfile, OrderedEncounterCapture,
+    ParsedCaptureSet, PartialReason, PayloadValue, RawLoss, RawLossReason, RawObservation,
+    RawSourceKind, RawValue, RawValueType, SourceProvenance,
+};
+pub use native::{
+    canonical_native_bytes, import_native_log, inspect_native_log, parse_native_log,
+    project_native_encounter, read_native_source, validate_native_encounter, NativeEncounter,
+    NativeHeader, NativeImportReceipt, NativeImportReport, NativeProjection, NativeRecord,
+    NativeRun, NativeSourceInspection, NativeSourceReport, ParsedNativeLog, MAX_NATIVE_FILE_BYTES,
+    NATIVE_SCHEMA_VERSION,
 };
 pub use replay::{assess_replay, ReplayAssessment};
-pub use store::{backup_store, delete_all, delete_encounter, list_encounters, load_encounter};
+pub use store::{
+    backup_store, delete_all, delete_encounter, list_encounters, load_encounter,
+    load_native_encounter,
+};
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
-pub const STORE_SCHEMA_VERSION: u32 = 5;
+pub const STORE_SCHEMA_VERSION: u32 = 6;
 pub const CANONICAL_FORMAT_VERSION: u32 = 2;
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;
@@ -64,6 +75,8 @@ pub enum EncounterError {
     Validation(String),
     #[error("unsupported encounter capture version")]
     UnsupportedVersion,
+    #[error("native context work budget exceeded")]
+    NativeWorkLimit,
     #[error("encounter source channel does not match the expected channel")]
     EnvironmentMismatch,
 }

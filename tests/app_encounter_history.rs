@@ -1265,3 +1265,195 @@ fn retained_rendered_source_lists_matching_sessions_and_refreshes_after_import()
         assert_eq!(fs::read_to_string(&input).unwrap(), bytes);
     }
 }
+
+#[test]
+fn native_worker_echoes_selection_and_loads_detail_without_catalog() {
+    use eso_weave::app::encounter_history::EncounterSourceSelection;
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("native.log");
+    fs::write(
+        &source,
+        include_str!("../specs/127-native-completed-import/fixtures/representative-v15.log"),
+    )
+    .unwrap();
+    let service = EncounterHistoryService::new(root.path(), root.path().join("missing.sqlite"));
+    let worker = EncounterHistoryWorker::spawn(service.clone());
+    let selection = EncounterSourceSelection {
+        generation: 7,
+        source_path: source,
+        channel: Channel::Pts,
+    };
+    worker.inspect_native(selection.clone()).unwrap();
+    let hash = match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+        HistoryEvent::NativeInspected {
+            selection: echoed,
+            result,
+        } => {
+            assert_eq!(echoed, selection);
+            let inspection = result.unwrap();
+            assert_eq!(inspection.report.completed_encounter_count, 2);
+            inspection.source_sha256
+        }
+        event => panic!("unexpected event: {event:?}"),
+    };
+    assert!(!service.store_path().exists());
+    worker.import_native(selection.clone(), hash).unwrap();
+    let identity = match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+        HistoryEvent::NativeImported {
+            selection: echoed,
+            result,
+        } => {
+            assert_eq!(echoed, selection);
+            let (summaries, report) = result.unwrap();
+            assert_eq!(report.imported_count, 2);
+            EncounterIdentity::from(&summaries[0])
+        }
+        event => panic!("unexpected event: {event:?}"),
+    };
+    worker
+        .load_detail_for(
+            identity,
+            eso_weave::encounter::EncounterSourceKind::NativeLog,
+        )
+        .unwrap();
+    match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+        HistoryEvent::NativeDetail { result, .. } => assert_eq!(result.unwrap().log_version, 15),
+        event => panic!("unexpected event: {event:?}"),
+    };
+}
+
+#[test]
+fn native_selection_acceptance_requires_kind_generation_path_and_channel() {
+    use eso_weave::app::encounter_history::{accept_native_selection, EncounterSourceSelection};
+    let key = EncounterSourceSelection {
+        generation: 2,
+        source_path: PathBuf::from("native.log"),
+        channel: Channel::Live,
+    };
+    assert!(accept_native_selection(Some(&key), &key));
+    assert!(!accept_native_selection(None, &key));
+    for stale in [
+        EncounterSourceSelection {
+            generation: 1,
+            ..key.clone()
+        },
+        EncounterSourceSelection {
+            source_path: PathBuf::from("other.log"),
+            ..key.clone()
+        },
+        EncounterSourceSelection {
+            channel: Channel::Pts,
+            ..key.clone()
+        },
+    ] {
+        assert!(!accept_native_selection(Some(&key), &stale));
+    }
+}
+
+#[test]
+fn native_import_rejects_source_changed_since_inspection_without_history_writes() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("native.log");
+    let fixture =
+        include_str!("../specs/127-native-completed-import/fixtures/representative-v15.log");
+    fs::write(&source, fixture).unwrap();
+    let service = EncounterHistoryService::new(root.path(), root.path().join("missing.sqlite"));
+    let inspection = service
+        .inspect_native_source(&source, Channel::Live)
+        .unwrap();
+    fs::write(&source, fixture.replace("1700000000000", "1700000001000")).unwrap();
+    let error = service
+        .import_native_inspected(&source, Channel::Live, &inspection.source_sha256)
+        .unwrap_err();
+    assert_eq!(error.kind, HistoryDiagnosticKind::SourceInvalid);
+    assert!(!service.store_path().exists());
+}
+
+#[test]
+fn native_desktop_import_and_details_work_at_narrow_and_wide_sizes() {
+    for width in [420.0, 760.0] {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("native.log");
+        fs::write(
+            &source,
+            include_str!("../specs/127-native-completed-import/fixtures/representative-v15.log"),
+        )
+        .unwrap();
+        let service = EncounterHistoryService::new(root.path(), root.path().join("missing.sqlite"));
+        let mut harness =
+            harness_with_size(service, Settings::default(), egui::vec2(width, 1000.0));
+        harness.step();
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+            .click_accesskit();
+        harness.step();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                eso_weave::app::strings::MENU_ENCOUNTER_HISTORY,
+            )
+            .click_accesskit();
+        settle(&mut harness);
+        harness.state_mut().set_native_encounter_source(source);
+        harness.step();
+        harness.get_by_label("Native Encounter Log");
+        harness.get_by_label("Native file path");
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Inspect Native File")
+            .click_accesskit();
+        settle(&mut harness);
+        harness.get_by_label("Completed fights: 2");
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Import Native File")
+            .click_accesskit();
+        settle(&mut harness);
+        assert_eq!(harness.state().encounter_history_count(), 2);
+        let identity = harness.state().encounter_identities().remove(0);
+        harness
+            .get_by_label(&identity.encounter_id)
+            .click_accesskit();
+        settle(&mut harness);
+        harness.get_by_label("Native Observations");
+        harness.get_by_label("Native log version: 15");
+        assert!(harness
+            .query_by_label("Provisional Recommendations")
+            .is_none());
+        assert!(harness.query_by_label("Fixture, Ω").is_none());
+    }
+}
+
+#[test]
+fn worker_dispatches_mixed_history_by_recorded_source_kind() {
+    use eso_weave::encounter::EncounterSourceKind;
+    let root = tempfile::tempdir().unwrap();
+    let service = seeded_service(root.path());
+    let source = root.path().join("native.log");
+    fs::write(
+        &source,
+        include_str!("../specs/127-native-completed-import/fixtures/representative-v15.log"),
+    )
+    .unwrap();
+    service
+        .import_native_current(&source, Channel::Live)
+        .unwrap();
+    let worker = EncounterHistoryWorker::spawn(service.clone());
+    let summaries = service.snapshot().unwrap();
+    assert_eq!(summaries.len(), 3);
+    for summary in summaries {
+        worker
+            .load_detail_for(EncounterIdentity::from(&summary), summary.source_kind)
+            .unwrap();
+        match (
+            summary.source_kind,
+            worker.receive_timeout(WORKER_TIMEOUT).unwrap(),
+        ) {
+            (EncounterSourceKind::SavedAddon, HistoryEvent::Detail { result, .. }) => {
+                assert_eq!(result.unwrap().projection.observed_dps.value, Some(300.0));
+            }
+            (EncounterSourceKind::NativeLog, HistoryEvent::NativeDetail { result, .. }) => {
+                assert_eq!(result.unwrap().log_version, 15);
+            }
+            (_, event) => panic!("wrong source detail: {event:?}"),
+        }
+    }
+}

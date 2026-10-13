@@ -269,12 +269,12 @@ records and per-session snapshots atomically. A repeated or growing valid spool 
 member, conflicting identity, changed prior prefix, or invalid ordinal rejects
 the batch and preserves prior history. Session snapshots authenticate every
 present member's mode, ordinal, identity, channel, and content hash before a
-transaction commits. Store schema v5 accepts legacy capture v1
+transaction commits. Store schema v6 accepts legacy capture v1
 and raw-authority capture v2, including addon versions 2 and 3.
 Migration copies legacy canonical bytes and hashes unchanged. If an older valid
 store reused a session identity, read and migration assign stable deterministic
 ordinals within that historical session without changing canonical evidence.
-Store versions 1-4 remain readable and migrate transactionally on import.
+Store versions 1-5 remain readable and migrate transactionally on import.
 Durable first-import session order preserves grouping after clock reversal,
 record deletion and reimport; source session order comes from persisted creation
 sequences, never wall-clock sorting.
@@ -313,8 +313,10 @@ any omitted overflow count when chat becomes ready.
 Encounter capture does not use Pixel Bus and has no relationship to input
 authorization, Weaving, Fishing, or Auto Potion. It does not perform protected
 actions, use items, change equipment, move the player, or generate input.
-Native combat-log import is unsupported and does not change this supported
-saved-addon workflow. A closed tracking issue is not a claim of field parity.
+Completed normal/separate version 15 native files have their own Native Encounter
+Log selection, inspection, import and factual metrics. Follow [Encounter Ingestion](../development/encounter-ingestion.md)
+for that workflow. Live tailing remains unavailable. A closed tracking issue is
+not a claim of field parity.
 
 Continue to [Encounter Data and Metrics](../reference/encounter-data-and-metrics.md)
 for the complete observation and analysis model.

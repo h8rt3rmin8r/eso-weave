@@ -3035,6 +3035,10 @@ fn retained_v4_store_migration_preserves_canonical_bytes_and_read_only_access() 
         .execute_batch(
             r#"
         BEGIN IMMEDIATE;
+        DROP TRIGGER native_encounters_no_update;
+        DROP TRIGGER native_runs_no_update;
+        DROP TABLE native_encounters;
+        DROP TABLE native_runs;
         DROP TRIGGER encounter_session_order_no_update;
         DROP TABLE encounter_session_order;
         DROP TABLE encounter_store_meta;
@@ -3284,6 +3288,10 @@ fn retained_downgrade_fixture_to_v4(connection: &rusqlite::Connection) {
         .execute_batch(
             r#"
         BEGIN IMMEDIATE;
+        DROP TRIGGER native_encounters_no_update;
+        DROP TRIGGER native_runs_no_update;
+        DROP TABLE native_encounters;
+        DROP TABLE native_runs;
         DROP TRIGGER encounter_session_order_no_update;
         DROP TABLE encounter_session_order;
         DROP TABLE encounter_store_meta;

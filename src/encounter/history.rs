@@ -188,6 +188,80 @@ impl EncounterHistoryService {
         })
     }
 
+    pub fn inspect_native_source(
+        &self,
+        source_path: impl AsRef<Path>,
+        expected_channel: Channel,
+    ) -> Result<super::native::NativeSourceInspection, HistoryDiagnostic> {
+        super::native::inspect_native_log(source_path, expected_channel)
+            .map_err(native_source_diagnostic)
+    }
+
+    pub fn import_native_current(
+        &self,
+        source_path: impl AsRef<Path>,
+        expected_channel: Channel,
+    ) -> Result<super::native::NativeImportReport, HistoryDiagnostic> {
+        self.import_native_checked(source_path.as_ref(), expected_channel, None)
+    }
+
+    pub fn import_native_inspected(
+        &self,
+        source_path: impl AsRef<Path>,
+        expected_channel: Channel,
+        source_sha256: &str,
+    ) -> Result<super::native::NativeImportReport, HistoryDiagnostic> {
+        self.import_native_checked(source_path.as_ref(), expected_channel, Some(source_sha256))
+    }
+
+    pub fn native_detail(
+        &self,
+        identity: &EncounterIdentity,
+    ) -> Result<Option<super::native::NativeProjection>, HistoryDiagnostic> {
+        super::load_native_encounter(
+            &self.store_path,
+            &identity.session_id,
+            &identity.encounter_id,
+        )
+        .map_err(store_diagnostic)?
+        .map(|capture| super::native::project_native_encounter(&capture).map_err(store_diagnostic))
+        .transpose()
+    }
+
+    fn import_native_checked(
+        &self,
+        source_path: &Path,
+        expected_channel: Channel,
+        expected_hash: Option<&str>,
+    ) -> Result<super::native::NativeImportReport, HistoryDiagnostic> {
+        ensure_distinct_paths(source_path, &self.store_path).map_err(native_source_diagnostic)?;
+        let (hash, parsed, _) = super::native::read_native_source(source_path, expected_channel)
+            .map_err(native_source_diagnostic)?;
+        if expected_hash.is_some_and(|expected| expected != hash) {
+            return Err(HistoryDiagnostic::new(HistoryDiagnosticKind::SourceInvalid, "The native file changed since inspection. Inspect the selected file again before importing."));
+        }
+        if parsed.encounters.is_empty() {
+            return Ok(super::native::NativeImportReport {
+                source_sha256: hash,
+                imported_count: 0,
+                already_present_count: 0,
+                source: parsed.report,
+                receipts: Vec::new(),
+            });
+        }
+        let prepared = parsed
+            .encounters
+            .iter()
+            .map(|capture| {
+                let bytes = super::native::canonical_native_bytes(capture)
+                    .map_err(native_source_diagnostic)?;
+                let hash = super::sha256(&bytes);
+                Ok((bytes, hash))
+            })
+            .collect::<Result<Vec<_>, HistoryDiagnostic>>()?;
+        super::store::append_native_set(&self.store_path, &parsed, &prepared, hash)
+            .map_err(store_diagnostic)
+    }
     pub fn detail(
         &self,
         identity: &EncounterIdentity,
@@ -380,12 +454,37 @@ fn source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
             HistoryDiagnosticKind::SourceEnvironmentMismatch,
             "The saved recording belongs to a different environment. Select its Live or PTS environment in Settings, then refresh the saved source.",
         ),
-        EncounterError::Validation(_) | EncounterError::Database(_) => (
+        EncounterError::Validation(_) | EncounterError::Database(_) | EncounterError::NativeWorkLimit => (
             HistoryDiagnosticKind::SourceInvalid,
             "The saved addon data is malformed, incomplete or changed during reading. Keep it unchanged for troubleshooting; finish or stop recording in ESO, save again, then refresh the saved source.",
         ),
     };
     HistoryDiagnostic::new(kind, message)
+}
+
+fn native_source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
+    match error {
+        EncounterError::NativeWorkLimit => HistoryDiagnostic::new(
+            HistoryDiagnosticKind::SourceInvalid,
+            "This native file exceeds the cumulative context-work limit (20 million record visits or 512 MiB of inspected context). Choose a smaller completed recording. No source or history data was changed.",
+        ),
+        EncounterError::UnsupportedVersion=>HistoryDiagnostic::new(
+            HistoryDiagnosticKind::SourceVersionUnsupported,
+            "This native recording version is unsupported. Native import supports normal version15 completed files; inline and verbose layouts remain unsupported. The source and history were kept."
+        ),
+        EncounterError::Io(ref error) if error.kind()==ErrorKind::NotFound=>HistoryDiagnostic::new(
+            HistoryDiagnosticKind::SourceUnavailable,
+            "The selected native recording file is missing. Choose its completed local file path and inspect again."
+        ),
+        EncounterError::Io(_)=>HistoryDiagnostic::new(
+            HistoryDiagnosticKind::SourceInaccessible,
+            "The native recording could not be read. Check file access or use a completed copy, then inspect again. No source or history data was changed."
+        ),
+        _=>HistoryDiagnostic::new(
+            HistoryDiagnosticKind::SourceInvalid,
+            "The native recording is malformed, changed during reading, exceeds a declared limit, or does not match supported normal version15 layouts. Choose a stable completed file and inspect again. No source or history data was changed."
+        ),
+    }
 }
 
 #[cfg(test)]

@@ -868,6 +868,10 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
     connection
         .execute_batch(
             "BEGIN IMMEDIATE;
+             DROP TRIGGER native_encounters_no_update;
+             DROP TRIGGER native_runs_no_update;
+             DROP TABLE native_encounters;
+             DROP TABLE native_runs;
              DROP TRIGGER raw_encounters_no_update;
              DROP TRIGGER encounter_session_snapshots_no_update;
              DROP TABLE encounter_session_snapshots;
@@ -936,6 +940,7 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
         .unwrap();
     drop(connection);
 
+    assert_native_import_migrates_legacy_copy(&store);
     rejected_legacy_import_keeps_layout(
         &store,
         &sandbox.path().join("failed-legacy.lua"),
@@ -1082,6 +1087,7 @@ fn populated_v2_store_migrates_to_v4_without_rewriting_canonical_evidence() {
         .unwrap();
     drop(connection);
 
+    assert_native_import_migrates_legacy_copy(&store);
     rejected_legacy_import_keeps_layout(
         &store,
         &sandbox.path().join("failed-legacy.lua"),
@@ -1228,6 +1234,7 @@ fn populated_v3_store_migrates_to_v4_without_rewriting_canonical_evidence() {
         .unwrap();
     drop(connection);
 
+    assert_native_import_migrates_legacy_copy(&store);
     rejected_legacy_import_keeps_layout(
         &store,
         &sandbox.path().join("failed-legacy.lua"),
@@ -1748,5 +1755,45 @@ fn rejected_legacy_import_keeps_layout(
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
         version
+    );
+}
+
+fn assert_native_import_migrates_legacy_copy(store: &std::path::Path) {
+    use eso_weave::encounter::import_native_log;
+    let native_store = store.with_file_name("native-migration.sqlite");
+    let native_input = store.with_file_name("native-migration.log");
+    fs::copy(store, &native_store).unwrap();
+    fs::write(
+        &native_input,
+        include_str!("../specs/127-native-completed-import/fixtures/representative-v15.log"),
+    )
+    .unwrap();
+    fn originals(path: &std::path::Path) -> Vec<(String, Vec<u8>)> {
+        let connection = rusqlite::Connection::open(path).unwrap();
+        let mut query = connection
+            .prepare(
+                "SELECT content_sha256, canonical_json FROM raw_encounters ORDER BY content_sha256",
+            )
+            .unwrap();
+        query
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+    let before = originals(store);
+    let original_bytes = fs::read(store).unwrap();
+    let report = import_native_log(&ImportRequest::new(
+        &native_input,
+        &native_store,
+        Channel::Live,
+    ))
+    .unwrap();
+    assert_eq!(report.imported_count, 2);
+    assert_eq!(originals(&native_store), before);
+    assert_eq!(fs::read(store).unwrap(), original_bytes);
+    assert_eq!(
+        list_encounters(&native_store).unwrap().len(),
+        before.len() + 2
     );
 }
