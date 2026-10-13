@@ -19,8 +19,8 @@ Independent test: identity and release-note gates agree on v0.18.0 with complete
 - [x] T004 [US1] Record missing-Highlights rejection from scripts/release-notes.sh in target/s128-notes-red.log before notes changes.
 - [x] T005 [US1] Add three bounded Highlights and dated S128 preparation decision to CHANGELOG.md; preserve S125-S127 and earlier records.
 - [x] T006 [US1] Run preparatory gates and inspect clean tracked tree before local preparation commit; record evidence in specs/128-v0180-release/verification.md.
-- [ ] T007 [US1] Inspect governed dry run and execute configured local rollover of Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md and specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json.
-- [ ] T008 [US1] Validate six-file version/date projections and unchanged dependencies/history; rerun notes and candidate gates in specs/128-v0180-release/verification.md.
+- [x] T007 [US1] Inspect governed dry run and execute configured local rollover of Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md and specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json.
+- [x] T008 [US1] Validate six-file version/date projections and unchanged dependencies/history; rerun notes and candidate gates in specs/128-v0180-release/verification.md.
 
 ## Phase 4: User Story 2, Completed and Current Plans (P2)
 
@@ -34,7 +34,7 @@ Independent test: generic documentation policy accepts matching plan lifecycle/i
 
 Independent test: official PR links #277, all checks pass on final head and every returned thread is resolved within two rounds.
 
-- [ ] T012 [US3] Run full existing format/Clippy/locked tests, documentation/render and bundled production build; record actual results in specs/128-v0180-release/verification.md.
+- [x] T012 [US3] Run full existing format/Clippy/locked tests, documentation/render and bundled production build; record actual results in specs/128-v0180-release/verification.md.
 - [ ] T013 [US3] Automatically push codex/s128-v0180-release and publish official PR with Closes #277; move issue project stage to PR review.
 - [ ] T014 [US3] Address every finding and resolve completed threads within two rounds; verify final-head CI/review state in specs/128-v0180-release/verification.md.
 
