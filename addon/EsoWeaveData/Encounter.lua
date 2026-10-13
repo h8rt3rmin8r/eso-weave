@@ -2,8 +2,8 @@ local ADDON_NAME = "EsoWeaveData"
 local MODULE_NAMESPACE = ADDON_NAME .. "Encounter"
 local ADDON_VERSION = 3
 local SCHEMA_VERSION = 2
-local CONTROLLER_ADDON_VERSION = 4
-local STATE_SCHEMA_VERSION = 1
+local CONTROLLER_ADDON_VERSION = 5
+local STATE_SCHEMA_VERSION = 2
 
 local MAX_EVENTS = 100000
 local MAX_RAW_OBSERVATIONS = 100000
@@ -21,6 +21,7 @@ local SAMPLE_UPDATE_MS = 250
 local BOSS_SAMPLE_MS = 500
 local PERFORMANCE_SAMPLE_MS = 1000
 local MAX_SESSION_ENCOUNTERS = 1024
+local MAX_RETAINED_SESSIONS = 32
 local MAX_INTERRUPTION_MARKERS = 1024
 local OUTER_FAILURE_BYTE_RESERVE = 1024
 
@@ -31,6 +32,7 @@ if type(EsoWeaveEncounterTestLimits) == "table" then
     MAX_ESTIMATED_BYTES = EsoWeaveEncounterTestLimits.max_estimated_bytes or MAX_ESTIMATED_BYTES
     MAX_ACTORS = EsoWeaveEncounterTestLimits.max_actors or MAX_ACTORS
     MAX_STRING_BYTES = EsoWeaveEncounterTestLimits.max_string_bytes or MAX_STRING_BYTES
+    MAX_RETAINED_SESSIONS = EsoWeaveEncounterTestLimits.max_retained_sessions or MAX_RETAINED_SESSIONS
     MAX_SESSION_ENCOUNTERS = EsoWeaveEncounterTestLimits.max_session_encounters
         or MAX_SESSION_ENCOUNTERS
     MAX_INTERRUPTION_MARKERS = EsoWeaveEncounterTestLimits.max_interruptions
@@ -180,7 +182,62 @@ local function emptyController(selectedMode, selectedChannel)
         stop_reason = "never-started",
         failure = nil,
         revision = 1,
+        retained_sessions = {},
+        session_sequence = nil,
+        next_session_sequence = 1,
     }
+end
+
+
+local archivedTotals = { events = 0, raw = 0, bytes = 0, slots = 0,
+    interruptions = 0, sessions = 0 }
+local function sequenceKey(sequence)
+    return string.format("%016.0f", sequence)
+end
+local function controllerSnapshot(saved)
+    local snapshot = {}
+    for key, value in pairs(saved) do
+        if key ~= "retained_sessions" and key ~= "session_sequence"
+            and key ~= "next_session_sequence" then snapshot[key] = value end
+    end
+    snapshot.state_schema_version, snapshot.addon_version = STATE_SCHEMA_VERSION, CONTROLLER_ADDON_VERSION
+    if snapshot.session then
+        snapshot.selected_mode, snapshot.selected_channel =
+            snapshot.session.mode, snapshot.session.channel
+    end
+    return snapshot
+end
+local function refreshArchivedTotals()
+    archivedTotals = { events = 0, raw = 0, bytes = 0, slots = 0,
+        interruptions = 0, sessions = 0 }
+    for _, older in pairs(state().retained_sessions or {}) do
+        local session = older.session
+        archivedTotals.events = archivedTotals.events + session.aggregate_event_count
+        archivedTotals.raw = archivedTotals.raw + session.aggregate_raw_observation_count
+        archivedTotals.bytes = archivedTotals.bytes + session.aggregate_estimated_bytes
+        archivedTotals.slots = archivedTotals.slots + session.completed_encounter_count
+        archivedTotals.interruptions = archivedTotals.interruptions + session.interruption_count
+        archivedTotals.sessions = archivedTotals.sessions + 1
+    end
+end
+local function spoolEvents()
+    return archivedTotals.events + (state().session and state().session.aggregate_event_count or 0)
+end
+local function spoolRaw()
+    return archivedTotals.raw + (state().session and state().session.aggregate_raw_observation_count or 0)
+end
+local function spoolBytes()
+    return archivedTotals.bytes + (state().session and state().session.aggregate_estimated_bytes or 0)
+end
+local function spoolSlots()
+    return archivedTotals.slots + (state().session and state().session.completed_encounter_count or 0)
+        + (state().current and 1 or 0)
+end
+local function spoolInterruptions()
+    return archivedTotals.interruptions + #state().interruptions
+end
+local function spoolSessions()
+    return archivedTotals.sessions + (state().session and 1 or 0)
 end
 
 local function addWarning(name)
@@ -347,12 +404,12 @@ local function appendRaw(sourceKind, sourceId, sourceCode, argumentCount,
         and (MAX_ESTIMATED_BYTES - OUTER_FAILURE_BYTE_RESERVE)
         or (MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE
             - OUTER_FAILURE_BYTE_RESERVE)
-    if state().session.aggregate_raw_observation_count >= recordLimit then
+    if spoolRaw() >= recordLimit then
         noteRawOmitted(sequence, "record-limit")
         runtime.hard_failure = "storage-pressure"
         return nil, sequence
     end
-    if state().session.aggregate_estimated_bytes + bytes > byteLimit then
+    if spoolBytes() + bytes > byteLimit then
         noteRawOmitted(sequence, "byte-limit")
         runtime.hard_failure = "storage-pressure"
         return nil, sequence
@@ -401,8 +458,8 @@ local function appendTerminal(kind, payload, projection)
     local event = makeEvent(sequence, kind, payload, projection)
     local bytes = estimateEvent(kind, payload)
     local saved = capture()
-    if state().session.aggregate_event_count >= MAX_EVENTS
-        or state().session.aggregate_estimated_bytes + bytes
+    if spoolEvents() >= MAX_EVENTS
+        or spoolBytes() + bytes
             > MAX_ESTIMATED_BYTES - OUTER_FAILURE_BYTE_RESERVE then
         addWarning("terminal_reserve_exhausted")
         runtime.terminal_failed = true
@@ -447,8 +504,8 @@ local function appendRegular(sequence, kind, payload, projection)
     local byteLimit = MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE
         - OUTER_FAILURE_BYTE_RESERVE
     local saved = capture()
-    if state().session.aggregate_event_count >= regularLimit
-        or state().session.aggregate_estimated_bytes + bytes > byteLimit then
+    if spoolEvents() >= regularLimit
+        or spoolBytes() + bytes > byteLimit then
         noteOmitted(sequence, "capture-overflow")
         runtime.hard_failure = "storage-pressure"
         return false
@@ -484,7 +541,7 @@ local function declareClockReset(rawSourceSequence)
     local regularLimit = MAX_EVENTS - TERMINAL_EVENT_RESERVE
     local byteLimit = MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE
         - OUTER_FAILURE_BYTE_RESERVE
-    if state().session.aggregate_event_count >= regularLimit
+    if spoolEvents() >= regularLimit
         or state().session.aggregate_estimated_bytes
             + estimateEvent("discontinuity", markerPayload) > byteLimit then
         setPartialReason("clock-reset")
@@ -922,7 +979,7 @@ local function boundedText(value, maximum, fallback)
     return value
 end
 
-local function estimatedOpeningBytes(startedMidCombat, ...)
+local function estimatedOpeningBytes(startedMidCombat, sessionId, ...)
     local sourceKind = startedMidCombat and "api-sample" or "callback"
     local sourceId = startedMidCombat and "IsUnitInCombat"
         or "EVENT_PLAYER_COMBAT_STATE"
@@ -938,7 +995,7 @@ local function estimatedOpeningBytes(startedMidCombat, ...)
     local rawBytes = 0
     if values then
         rawBytes = BASE_EVENT_BYTES + estimateValue({
-            session_id = state().session.session_id,
+            session_id = sessionId,
             encounter_id = string.rep("0", 128),
             sequence = 1,
             monotonic_ms = 0,
@@ -961,11 +1018,11 @@ local function canBeginCapture(startedMidCombat, ...)
     local saved = state()
     local session = saved.session
     return session
-        and session.completed_encounter_count < MAX_SESSION_ENCOUNTERS
-        and session.aggregate_event_count <= MAX_EVENTS - 3
-        and session.aggregate_raw_observation_count <= MAX_RAW_OBSERVATIONS - 4
-        and session.aggregate_estimated_bytes
-            + estimatedOpeningBytes(startedMidCombat == true, ...)
+        and spoolSlots() < MAX_SESSION_ENCOUNTERS
+        and spoolEvents() <= MAX_EVENTS - 3
+        and spoolRaw() <= MAX_RAW_OBSERVATIONS - 4
+        and spoolBytes()
+            + estimatedOpeningBytes(startedMidCombat == true, session.session_id, ...)
             + TERMINAL_BYTE_RESERVE
             <= MAX_ESTIMATED_BYTES - OUTER_FAILURE_BYTE_RESERVE
 end
@@ -980,10 +1037,8 @@ local function beginCapture(startedMidCombat, ...)
     local raw = GetGameTimeMilliseconds()
     local stamp = tostring(GetTimeStamp())
     local ordinal = session.next_encounter_ordinal
-    local sessionSuffix = string.match(session.session_id,
-        "^session%-%d+%-(%d+)$") or tostring(raw)
-    local encounterId = "encounter-" .. session.started_at .. "-"
-        .. sessionSuffix .. string.format("%04d", ordinal)
+    local sessionSuffix = string.match(session.session_id, "^session%-%d+%-(%d+)$") or tostring(raw)
+    local encounterId = "encounter-" .. session.started_at .. "-" .. sessionSuffix .. string.format("%04d", ordinal)
     local channel = session.channel
     local apiVersion = GetAPIVersion()
     local working = {
@@ -1112,7 +1167,7 @@ end
 
 local function appendInterruption(reason)
     local saved = state()
-    if #saved.interruptions >= MAX_INTERRUPTION_MARKERS then
+    if spoolInterruptions() >= MAX_INTERRUPTION_MARKERS then
         failSession("interruption-limit", nil)
         return false
     end
@@ -1209,7 +1264,7 @@ local function handlePlayerDeactivated(...)
 end
 
 local function selectMode(arguments)
-    local mode = string.match(arguments or "", "^(%S+)")
+    local mode = string.match(arguments or "", "^(%S+)$")
     if mode ~= "single" and mode ~= "continuous" then
         message("Choose /ewencounter mode single for one fight, or /ewencounter mode continuous for multiple fights until stopped.")
         return
@@ -1219,17 +1274,13 @@ local function selectMode(arguments)
         message("Use /ewencounter toggle to stop recording before changing mode. Stopping keeps recorded fights.")
         return
     end
-    if saved.session or next(saved.records) ~= nil then
-        message("A recording session is retained; clear the addon copy before changing mode. " .. PRESERVE_AND_CLEAR)
-        return
-    end
     saved.selected_mode = mode
     touch()
     message("Selected recording mode: " .. MODE_LABELS[mode] .. ". Choose /ewencounter channel live|pts, then /ewencounter toggle to enable it.")
 end
 
 local function selectChannel(arguments)
-    local channel = string.match(arguments or "", "^(%S+)")
+    local channel = string.match(arguments or "", "^(%S+)$")
     if channel ~= "live" and channel ~= "pts" then
         message("Choose /ewencounter channel live for the normal game, or /ewencounter channel pts for the Public Test Server. Match the game you are playing.")
         return
@@ -1239,75 +1290,164 @@ local function selectChannel(arguments)
         message("Use /ewencounter toggle to stop recording before changing game environment. Stopping keeps recorded fights.")
         return
     end
-    if saved.session or next(saved.records) ~= nil then
-        message("A recording session is retained; clear the addon copy before changing game environment. " .. PRESERVE_AND_CLEAR)
-        return
-    end
     saved.selected_channel = channel
     touch()
     message("Selected game environment: " .. (channel == "live" and "Live (normal game)" or "PTS (Public Test Server)")
         .. ". /ewencounter toggle enables the chosen recording mode; it does not start automatically.")
 end
 
-local function startSession()
+local function recordingRoom()
+    return spoolSlots() < MAX_SESSION_ENCOUNTERS
+        and spoolEvents() <= MAX_EVENTS - 3
+        and spoolRaw() <= MAX_RAW_OBSERVATIONS - 4
+        and spoolBytes() + estimatedOpeningBytes(IsUnitInCombat("player") == true,
+            string.rep("0", 128), EVENT_PLAYER_COMBAT_STATE, true) + TERMINAL_BYTE_RESERVE
+            <= MAX_ESTIMATED_BYTES - OUTER_FAILURE_BYTE_RESERVE
+end
+local function capacityMessage()
+    message("Recording capacity is full; retained data was kept. "
+        .. SAVE_AND_IMPORT .. " Use /ewencounter sessions, then /ewencounter discard SESSION_ID confirm to free a selected inactive session. Import is optional; discard deletes only the addon copy.")
+end
+local function startSession(channel, mode)
     local saved = state()
-    if saved.state == "failed" then
-        message("The previous recording failed; clear its retained addon data before starting another session. " .. PRESERVE_AND_CLEAR)
+    channel, mode = channel or saved.selected_channel, mode or saved.selected_mode
+    if channel ~= "live" and channel ~= "pts" then
+        message("Choose /ewencounter start live single (or pts / continuous) before recording.")
         return
     end
-    if saved.session or next(saved.records) ~= nil then
-        message("A recording session is retained; clear the addon copy before starting another. " .. PRESERVE_AND_CLEAR)
+    if spoolSessions() >= MAX_RETAINED_SESSIONS or not recordingRoom()
+        or saved.next_session_sequence >= MAX_EXACT_INTEGER then
+        capacityMessage()
         return
     end
-    if saved.selected_channel ~= "live" and saved.selected_channel ~= "pts" then
-        message("Before enabling recording, choose /ewencounter channel live for the normal game or /ewencounter channel pts for the Public Test Server.")
-        return
-    end
-    local warned = message("Enabling local fight recording: " .. MODE_LABELS[saved.selected_mode]
+    local warned = message("Enabling local fight recording: " .. MODE_LABELS[mode]
         .. ". Recorded game events can include names and identifiers. Outside combat it waits for the next fight; during combat it starts immediately with earlier events missing.")
     if not warned then
         message("Chat is initializing; recording remains OFF. Repeat /ewencounter start live single (or pts / continuous) after help appears.")
         return
     end
-    local raw = GetGameTimeMilliseconds()
-    local stamp = tostring(GetTimeStamp())
-    local mode = saved.selected_mode
+    local sequence = saved.next_session_sequence
+    local retained = saved.retained_sessions
+    if saved.session then retained[sequenceKey(saved.session_sequence)] = controllerSnapshot(saved) end
+    local nextState = emptyController(mode, channel)
+    nextState.retained_sessions = retained
+    nextState.session_sequence, nextState.next_session_sequence = sequence, sequence + 1
+    nextState.revision = saved.revision + 1
+    for key in pairs(saved) do saved[key] = nil end
+    for key, value in pairs(nextState) do saved[key] = value end
+    refreshArchivedTotals()
+    local raw, stamp = GetGameTimeMilliseconds(), tostring(GetTimeStamp())
     saved.session = {
-        session_id = "session-" .. stamp .. "-" .. tostring(raw),
-        mode = mode,
-        channel = saved.selected_channel,
-        status = "active",
-        started_at = stamp,
-        finished_at = nil,
-        next_encounter_ordinal = 1,
-        completed_encounter_count = 0,
-        degraded_encounter_count = 0,
-        aggregate_estimated_bytes = 0,
-        aggregate_event_count = 0,
-        aggregate_raw_observation_count = 0,
-        interruption_count = 0,
+        session_id = "session-" .. stamp .. "-" .. sequenceKey(sequence) .. tostring(raw),
+        mode = mode, channel = channel, status = "active",
+        started_at = stamp, finished_at = nil, next_encounter_ordinal = 1,
+        completed_encounter_count = 0, degraded_encounter_count = 0,
+        aggregate_estimated_bytes = 0, aggregate_event_count = 0,
+        aggregate_raw_observation_count = 0, interruption_count = 0,
     }
-    saved.requested_mode = mode
-    saved.active_mode = mode
-    saved.state = "waiting"
-    saved.stop_reason = nil
-    saved.failure = nil
+    saved.requested_mode, saved.active_mode = mode, mode
+    saved.state, saved.stop_reason, saved.failure = "waiting", nil, nil
+    if IsUnitInCombat("player") == true then beginCapture(true) end
+end
+
+local function resumeSession()
+    local saved, session = state(), state().session
+    if saved.requested_mode then
+        message("Recording is already enabled; resume changed nothing. Use /ewencounter status.")
+        return
+    end
+    if saved.state ~= "stopped" or not session or session.mode ~= "continuous"
+        or session.status ~= "stopped" then
+        message("Resume requires the most recent stopped continuous session. Single, failed and archived sessions cannot resume; use start for a new session.")
+        return
+    end
+    if not recordingRoom() or spoolInterruptions() >= MAX_INTERRUPTION_MARKERS then
+        capacityMessage()
+        return
+    end
+    if not message("Resuming local continuous recording for " .. session.channel
+        .. ". Recorded game events can include names and identifiers; earlier terminal fights are kept unchanged.") then
+        message("Chat is initializing; recording remains OFF. Repeat /ewencounter resume after help appears.")
+        return
+    end
+    local sequence = #saved.interruptions + 1
+    saved.interruptions[sequence] = {
+        sequence = sequence, occurred_at = tostring(GetTimeStamp()),
+        after_encounter_ordinal = session.completed_encounter_count,
+        reason = "user-resumed", prior_finished_at = session.finished_at,
+    }
+    session.interruption_count = sequence
+    session.status, session.finished_at = "active", nil
+    saved.selected_mode, saved.selected_channel = session.mode, session.channel
+    saved.requested_mode, saved.active_mode = session.mode, session.mode
+    saved.state, saved.stop_reason = "waiting", nil
     touch()
     if IsUnitInCombat("player") == true then beginCapture(true) end
 end
 
+local function listSessions()
+    message("Retained recording capacity: " .. tostring(spoolSessions()) .. "/" .. tostring(MAX_RETAINED_SESSIONS)
+        .. " sessions; " .. tostring(spoolSlots()) .. "/" .. tostring(MAX_SESSION_ENCOUNTERS)
+        .. " fights; " .. tostring(spoolBytes()) .. "/" .. tostring(MAX_ESTIMATED_BYTES)
+        .. " estimated bytes. Start keeps earlier sessions; resume continues only the latest stopped continuous session.")
+    local ordered = {}
+    for key, older in pairs(state().retained_sessions) do
+        table.insert(ordered, { key = key, controller = older })
+    end
+    if state().session then
+        table.insert(ordered, { key = sequenceKey(state().session_sequence), controller = state() })
+    end
+    table.sort(ordered, function(a, b) return a.key < b.key end)
+    for _, entry in ipairs(ordered) do
+        local session = entry.controller.session
+        message(session.session_id .. "; " .. session.channel .. "; " .. session.mode
+            .. "; " .. session.status .. "; retained fights: " .. tostring(session.completed_encounter_count)
+            .. "; partial: " .. tostring(session.degraded_encounter_count) .. ".")
+    end
+end
+
+local function discardSession(arguments)
+    local id, confirm = string.match(arguments or "", "^(%S+)%s+(%S+)$")
+    if not id or confirm ~= "confirm" then
+        message("Use /ewencounter sessions, then /ewencounter discard SESSION_ID confirm to delete exactly that addon session. Save/import first only if you want to keep it.")
+        return
+    end
+    local saved = state()
+    if runtime or saved.requested_mode or (saved.state ~= "stopped" and saved.state ~= "failed") then
+        message("Stop recording before discarding an addon session. No data was deleted.")
+        return
+    end
+    local archiveKey
+    for key, older in pairs(saved.retained_sessions) do
+        if older.session.session_id == id then archiveKey = key end
+    end
+    if archiveKey then
+        saved.retained_sessions[archiveKey] = nil
+        touch()
+    elseif saved.session and saved.session.session_id == id then
+        local nextState = emptyController(saved.selected_mode, saved.selected_channel)
+        nextState.retained_sessions, nextState.next_session_sequence =
+            saved.retained_sessions, saved.next_session_sequence
+        nextState.revision = saved.revision + 1
+        EsoWeaveDataSaved.encounter = nextState
+    else
+        message("That retained session was not found; no data was deleted. Use /ewencounter sessions.")
+        return
+    end
+    refreshArchivedTotals()
+    message("Selected addon session discarded. Other recordings, catalog data and desktop history were kept. Use /reloadui, logout, or exit ESO to save the deletion.")
+end
+
 local function toggle()
     local saved = state()
-    if saved.state == "failed" then
-        message("Recording is off because the session failed. " .. PRESERVE_AND_CLEAR)
-    elseif saved.requested_mode then
+    if saved.requested_mode then
         if runtime then
             local finished = finishAndRetain("user-stopped", false)
             if not finished or state().state == "failed" then return end
         end
         stopSession("user-disabled")
         message("Fight recording stopped; recorded data was kept. Stopping during a fight leaves that recording partial. " .. SAVE_AND_IMPORT)
-    elseif saved.state == "stopped" then
+    elseif saved.state == "stopped" or saved.state == "failed" then
         startSession()
     else
         message("Recording cannot be toggled in this state. Use /ewencounter status to see its current state and any interruption or error.")
@@ -1326,7 +1466,11 @@ local function clear(arguments)
     end
     local selectedMode = saved.selected_mode
     local selectedChannel = saved.selected_channel
+    local counter = saved.next_session_sequence
     EsoWeaveDataSaved.encounter = emptyController(selectedMode, selectedChannel)
+    state().next_session_sequence = counter
+    state().revision = 1
+    refreshArchivedTotals()
     state().stop_reason = "cleared"
     message("Addon encounter recordings and session state cleared. Selected mode and environment, desktop history, and catalog data were kept. Use /reloadui, logout, or exit ESO to save the deletion; /ewencounter toggle can start another session.")
 end
@@ -1353,23 +1497,35 @@ end
 local function showStatus(details)
     if details then showDiagnosticStatus(); return end
     local saved = state()
-    local finished = saved.session and saved.session.completed_encounter_count or 0
-    local partial = saved.session and saved.session.degraded_encounter_count or 0
-    local label, action = "OFF", "Use /ewencounter start live single (or pts) to record a fight."
+    local finished, partial = 0, 0
+    for _, older in pairs(saved.retained_sessions) do
+        finished = finished + older.session.completed_encounter_count
+        partial = partial + older.session.degraded_encounter_count
+    end
+    if saved.session then
+        finished = finished + saved.session.completed_encounter_count
+        partial = partial + saved.session.degraded_encounter_count
+    end
+    local label, action = "OFF", "Use /ewencounter start live single (or pts) to record a fight. Earlier sessions are kept."
     if saved.state == "waiting" then
         label, action = "WAITING FOR COMBAT", "Enter combat; /ewencounter stop keeps retained fights."
     elseif saved.state == "capturing" then
         label, action = "RECORDING", "Finish combat; /ewencounter stop ends early with a partial result."
     elseif saved.state == "failed" then
-        label, action = "FAILURE", reasonLabel(saved.failure and saved.failure.reason or "state-invalid") .. ". " .. PRESERVE_AND_CLEAR
+        label, action = "FAILURE", reasonLabel(saved.failure and saved.failure.reason or "state-invalid")
+            .. ". Retained data was kept. Start begins a new session when capacity allows; failed sessions cannot resume. " .. SAVE_AND_IMPORT
     elseif saved.state == "interrupted" then
         label, action = "INTERRUPTED", "Saved recording was interrupted. " .. SAVE_AND_IMPORT
-    elseif saved.session and finished == 0 and next(saved.records) == nil then
-        action = "An empty session is retained. Use /ewencounter clear confirm, then /ewencounter start " .. saved.selected_channel .. " " .. saved.selected_mode .. "."
-    elseif saved.session or next(saved.records) ~= nil then
-        action = "A session is retained. " .. SAVE_AND_IMPORT .. " " .. PRESERVE_AND_CLEAR
+    elseif spoolSessions() >= MAX_RETAINED_SESSIONS or not recordingRoom() then
+        action = "Recording capacity is full. Use /ewencounter sessions and deliberate discard SESSION_ID confirm; no data was overwritten. " .. SAVE_AND_IMPORT
+    elseif saved.session and finished == 0 then
+        action = "An empty session is retained. Use /ewencounter start " .. saved.selected_channel .. " " .. saved.selected_mode
+            .. " for a new session; no clear is required. /ewencounter resume continues a stopped continuous session."
+    elseif saved.session or next(saved.retained_sessions) ~= nil then
+        action = "Start begins a new session and keeps retained recordings; resume continues only the latest stopped continuous session. " .. SAVE_AND_IMPORT
     end
-    message(label .. "; retained fights: " .. tostring(finished) .. "; partial: " .. tostring(partial) .. ". " .. action)
+    message(label .. "; retained sessions: " .. tostring(spoolSessions()) .. "/" .. tostring(MAX_RETAINED_SESSIONS)
+        .. "; retained fights: " .. tostring(finished) .. "; partial: " .. tostring(partial) .. ". " .. action)
 end
 
 local function explicitStart(arguments)
@@ -1379,32 +1535,39 @@ local function explicitStart(arguments)
         return
     end
     local saved = state()
-    if saved.requested_mode then showStatus(); return end
-    if saved.state == "failed" or saved.session or next(saved.records) ~= nil then
-        showStatus()
-        return
+    if saved.requested_mode then
+        if saved.session.channel ~= channel or saved.session.mode ~= mode then
+            message("Recording is already enabled; use /ewencounter stop before starting a different mode or environment. Existing data was kept.")
+        end
+        showStatus(); return
     end
-    saved.selected_channel, saved.selected_mode = channel, mode
-    startSession()
+    startSession(channel, mode)
     if state().requested_mode then showStatus() end
 end
 
 local function showHelp()
     message("Record fights: single records one fight; continuous records until stopped. Use /ewencounter start live single (or pts / continuous), /ewencounter stop, /ewencounter status, /ewencounter status details.")
-    message(SAVE_AND_IMPORT .. " Retained sessions need deliberate /ewencounter clear confirm before another session. Clearing before import discards the addon copy; desktop history and catalog data are kept.")
+    message("Start begins a new session without clearing; resume continues only the latest stopped continuous session. /ewencounter sessions lists retained data and capacity. " .. SAVE_AND_IMPORT)
+    message("Discard is separate: /ewencounter discard SESSION_ID confirm deletes one inactive addon session; /ewencounter clear confirm deletes all addon recordings. Save/import first only if you want to keep them. Catalog data and desktop history are kept.")
 end
 
 local function command(arguments)
     local verb, rest = string.match(arguments or "", "^(%S*)%s*(.-)%s*$")
     if controllerInvalid then
         if verb == "clear" and string.match(rest or "", "^%s*confirm%s*$") then
-            local saved = state()
+            local saved = type(state()) == "table" and state() or {}
             local selectedMode = saved.selected_mode == "continuous"
                 and "continuous" or "single"
             local selectedChannel = (saved.selected_channel == "live"
                 or saved.selected_channel == "pts") and saved.selected_channel or nil
             EsoWeaveDataSaved.encounter = emptyController(selectedMode, selectedChannel)
             state().stop_reason = "cleared"
+            if type(saved.next_session_sequence) == "number"
+                and saved.next_session_sequence >= 1 and saved.next_session_sequence <= MAX_EXACT_INTEGER
+                and saved.next_session_sequence == math.floor(saved.next_session_sequence) then
+                state().next_session_sequence = saved.next_session_sequence
+            end
+            refreshArchivedTotals()
             controllerInvalid = false
             message("Invalid addon recording data explicitly cleared. Selected mode and environment, desktop history, and catalog data were kept. Use /reloadui, logout, or exit ESO to save the deletion.")
         elseif verb == "status" then
@@ -1444,6 +1607,12 @@ local function command(arguments)
     elseif verb == "status" then
         if rest == "" or rest == "details" then showStatus(rest == "details")
         else message("Use /ewencounter status or /ewencounter status details.") end
+    elseif verb == "resume" then
+        if rest == "" then resumeSession() else message("Use /ewencounter resume without extra arguments.") end
+    elseif verb == "sessions" then
+        if rest == "" then listSessions() else message("Use /ewencounter sessions without extra arguments.") end
+    elseif verb == "discard" then
+        discardSession(rest)
     elseif verb == "clear" then
         clear(rest)
     else
@@ -1595,7 +1764,7 @@ local SESSION_KEYS = {
 local RECORD_KEYS = { ordinal = true, capture = true }
 local INTERRUPTION_KEYS = {
     sequence = true, occurred_at = true, after_encounter_ordinal = true,
-    reason = true,
+    reason = true, prior_finished_at = true,
 }
 local FAILURE_KEYS = {
     reason = true, occurred_at = true, encounter_ordinal = true,
@@ -1611,9 +1780,9 @@ local STOP_REASONS = {
     ["user-disabled"] = true, ["cleared"] = true,
 }
 
-local function validIdentifier(value)
-    return type(value) == "string" and #value >= 1 and #value <= 128
-        and string.match(value, "^[%w._:-]+$") ~= nil
+local function validIdentifier(value, prefix)
+    if type(value) ~= "string" or #value < 1 or #value > 128 then return false end
+    return string.match(value, "^" .. prefix .. "%-%d+%-%d+$") ~= nil
 end
 
 local function validTimestamp(value)
@@ -2097,7 +2266,7 @@ local function validLegacyRecoverableCurrent(inner)
         or inner.addon_version ~= 1 or inner.status ~= "capturing"
         or inner.channel ~= "live" and inner.channel ~= "pts"
         or inner.privacy_profile ~= "anonymous-local-v1"
-        or not validIdentifier(inner.session_id) or not validIdentifier(inner.encounter_id)
+        or not validIdentifier(inner.session_id, "session") or not validIdentifier(inner.encounter_id, "encounter")
         or type(inner.source) ~= "table" or not hasOnlyKeys(inner.source, SOURCE_KEYS)
         or not isInteger(inner.source.api_version, 1, MAX_EXACT_INTEGER)
         or not safeSourceToken(inner.source.game_version, 128)
@@ -2166,7 +2335,7 @@ local function validTerminalCapture(saved, inner, session, ordinal)
         or (inner.status ~= "complete" and inner.status ~= "partial")
         or inner.session_id ~= session.session_id
         or inner.channel ~= session.channel
-        or not validIdentifier(inner.encounter_id)
+        or not validIdentifier(inner.encounter_id, "encounter")
         or not isInteger(inner.stored_event_count, 0, MAX_EVENTS)
         or not isInteger(inner.raw_observation_count or 0, 0, MAX_RAW_OBSERVATIONS)
         or not isInteger(inner.estimated_bytes, 0, MAX_ESTIMATED_BYTES)
@@ -2226,11 +2395,11 @@ local function validTerminalCapture(saved, inner, session, ordinal)
     return evidence == true
 end
 
-local function validController(saved)
+local function validSingleController(saved)
     local function invalid(_) return false end
     if not hasOnlyKeys(saved, OUTER_KEYS)
-        or saved.state_schema_version ~= STATE_SCHEMA_VERSION
-        or saved.addon_version ~= CONTROLLER_ADDON_VERSION
+        or not (saved.state_schema_version == 1 and saved.addon_version == 4
+            or saved.state_schema_version == 2 and saved.addon_version == 5)
         or (saved.selected_mode ~= "single" and saved.selected_mode ~= "continuous")
         or (saved.selected_channel ~= nil and saved.selected_channel ~= "live"
             and saved.selected_channel ~= "pts")
@@ -2252,7 +2421,7 @@ local function validController(saved)
     end
     local session = saved.session
     if not hasOnlyKeys(session, SESSION_KEYS)
-        or not validIdentifier(session.session_id)
+        or not validIdentifier(session.session_id, "session")
         or (session.mode ~= "single" and session.mode ~= "continuous")
         or (session.channel ~= "live" and session.channel ~= "pts")
         or session.mode ~= saved.selected_mode
@@ -2321,7 +2490,10 @@ local function validController(saved)
             or not isInteger(marker.after_encounter_ordinal, 0,
                 session.completed_encounter_count)
             or (marker.reason ~= "player-deactivated"
-                and marker.reason ~= "runtime-interrupted") then
+                and marker.reason ~= "runtime-interrupted" and marker.reason ~= "user-resumed")
+            or (marker.reason == "user-resumed" and (saved.state_schema_version ~= 2 or session.mode ~= "continuous"
+                or not validTimestamp(marker.prior_finished_at)))
+            or (marker.reason ~= "user-resumed" and marker.prior_finished_at ~= nil) then
             return invalid("interruption")
         end
     end
@@ -2341,7 +2513,7 @@ local function validController(saved)
         if type(inner) ~= "table" or inner.schema_version ~= SCHEMA_VERSION
             or inner.addon_version ~= ADDON_VERSION or inner.status ~= "capturing"
             or inner.session_id ~= session.session_id or inner.channel ~= session.channel
-            or not validIdentifier(inner.encounter_id)
+            or not validIdentifier(inner.encounter_id, "encounter")
             or inner.encounter_id ~= saved.current_encounter_id
             or encounterIds[inner.encounter_id] == true
             or not isInteger(inner.stored_event_count, 0, MAX_EVENTS)
@@ -2406,6 +2578,77 @@ local function validController(saved)
         and saved.failure == nil and STOP_REASONS[saved.stop_reason] == true
 end
 
+
+local function validController(saved)
+    if saved.state_schema_version == 1 and saved.addon_version == 4 then
+        return validSingleController(saved)
+    end
+    local keys = {}
+    for key in pairs(OUTER_KEYS) do keys[key] = true end
+    keys.retained_sessions, keys.session_sequence, keys.next_session_sequence = true, true, true
+    if not hasOnlyKeys(saved, keys) or saved.state_schema_version ~= STATE_SCHEMA_VERSION
+        or saved.addon_version ~= CONTROLLER_ADDON_VERSION
+        or type(saved.retained_sessions) ~= "table"
+        or not isInteger(saved.next_session_sequence, 1, MAX_EXACT_INTEGER) then return false end
+    if saved.session then
+        if not isInteger(saved.session_sequence, 1, saved.next_session_sequence - 1) then return false end
+    elseif saved.session_sequence ~= nil then return false end
+    if saved.requested_mode and (not saved.session
+        or saved.selected_mode ~= saved.session.mode
+        or saved.selected_channel ~= saved.session.channel) then return false end
+    if saved.selected_mode ~= "single" and saved.selected_mode ~= "continuous"
+        or saved.selected_channel ~= nil and saved.selected_channel ~= "live"
+            and saved.selected_channel ~= "pts" then return false end
+    local totals = { sessions = 0, slots = 0, events = 0, raw = 0, bytes = 0, interruptions = 0 }
+    local ids, encounters = {}, {}
+    local function include(controller, archived)
+        if not validSingleController(controller) then return false end
+        local session = controller.session
+        if archived and (not session or controller.state ~= "stopped" and controller.state ~= "failed") then return false end
+        if session then
+            if ids[session.session_id] then return false end
+            ids[session.session_id] = true
+            totals.sessions = totals.sessions + 1
+            totals.slots = totals.slots + session.completed_encounter_count
+            totals.events = totals.events + session.aggregate_event_count
+            totals.raw = totals.raw + session.aggregate_raw_observation_count
+            totals.bytes = totals.bytes + session.aggregate_estimated_bytes
+            totals.interruptions = totals.interruptions + session.interruption_count
+            for _, record in pairs(controller.records) do
+                local id = record.capture.encounter_id
+                if encounters[id] then return false end
+                encounters[id] = true
+            end
+            if controller.current then
+                if encounters[controller.current.encounter_id] then return false end
+                encounters[controller.current.encounter_id] = true
+                totals.slots = totals.slots + 1
+            end
+        end
+        return totals.sessions <= MAX_RETAINED_SESSIONS and totals.slots <= MAX_SESSION_ENCOUNTERS
+            and totals.events <= MAX_EVENTS and totals.raw <= MAX_RAW_OBSERVATIONS
+            and totals.bytes <= MAX_ESTIMATED_BYTES and totals.interruptions <= MAX_INTERRUPTION_MARKERS
+    end
+    for key, older in pairs(saved.retained_sessions) do
+        if type(key) ~= "string" or #key ~= 16 or string.match(key, "^%d+$") == nil then return false end
+        local sequence = tonumber(key)
+        if not isInteger(sequence, 1, (saved.session_sequence or saved.next_session_sequence) - 1)
+            or sequenceKey(sequence) ~= key or not include(older, true) then return false end
+    end
+    if not include(controllerSnapshot(saved), false) then return false end
+    if saved.current and (totals.events > MAX_EVENTS - TERMINAL_EVENT_RESERVE
+        or totals.raw > MAX_RAW_OBSERVATIONS - RAW_TERMINAL_RESERVE
+        or totals.bytes > MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE - OUTER_FAILURE_BYTE_RESERVE) then return false end
+    return true
+end
+
+local function upgradeController(saved)
+    saved.state_schema_version, saved.addon_version = STATE_SCHEMA_VERSION, CONTROLLER_ADDON_VERSION
+    saved.retained_sessions = {}
+    saved.session_sequence = saved.session and 1 or nil
+    saved.next_session_sequence = saved.session and 2 or 1
+end
+
 local function resumeInterrupted()
     local saved = state()
     if saved.state ~= "interrupted" or not saved.requested_mode then return end
@@ -2424,10 +2667,16 @@ local function onLoaded(_, addonName)
     EVENT_MANAGER:UnregisterForEvent(MODULE_NAMESPACE, EVENT_ADD_ON_LOADED)
     if type(EsoWeaveDataSaved) ~= "table" then EsoWeaveDataSaved = {} end
     local saved = EsoWeaveDataSaved.encounter
-    if type(saved) ~= "table" then
+    if saved == nil then
         EsoWeaveDataSaved.encounter = emptyController("single", nil)
+    elseif type(saved) ~= "table" then
+        controllerInvalid = true
     elseif saved.state_schema_version ~= nil then
+        if saved.state_schema_version == 1 and saved.addon_version == 4 then
+            if validSingleController(saved) then upgradeController(saved) else controllerInvalid = true end
+        end
         if validController(saved) then
+            refreshArchivedTotals()
             if saved.state == "capturing" then recoverInterruptedSavedCapture() end
             if saved.state == "waiting" and saved.session.mode == "single" then
                 if appendInterruption("runtime-interrupted") then
@@ -2443,13 +2692,18 @@ local function onLoaded(_, addonName)
         or (saved.schema_version == 2 and (saved.addon_version == 2
             or saved.addon_version == 3)) then
         if saved.status == "complete" or saved.status == "partial" then
-            EsoWeaveDataSaved.encounter = wrapLegacyTerminal(saved)
+            local wrapped = wrapLegacyTerminal(saved)
+            if validSingleController(controllerSnapshot(wrapped)) then
+                upgradeController(wrapped)
+                EsoWeaveDataSaved.encounter = wrapped
+            else controllerInvalid = true end
         elseif saved.status == "capturing" then
             local validLegacy = saved.schema_version == 1
                 and validLegacyRecoverableCurrent(saved)
                 or saved.schema_version == 2 and validV2Evidence(saved, false)
             if validLegacy then
                 EsoWeaveDataSaved.encounter = wrapLegacyCurrent(saved)
+                upgradeController(state())
                 recoverInterruptedSavedCapture()
             else
                 controllerInvalid = true

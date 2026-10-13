@@ -1703,13 +1703,23 @@
     },
     {
       "id": "051",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-051.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-051.md",
       "specs": [
         "specs/125-data-addon-workflow-recovery"
       ],
-      "evidence": "S125 groups data-addon workflow recovery for issue #265 through issue #271. Implementation and automated validation precede official PR review; owner merge remains pending."
+      "evidence": "S125 completed issues #265 through #271 when owner squash-merged PR #274 on 2026-10-12 at 7939729f302611f911c39216aea0c00f5dfe3ef1. Tag and release publication remain separate."
+    },
+    {
+      "id": "052",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-052.md",
+      "specs": [
+        "specs/126-retained-recording-sessions"
+      ],
+      "evidence": "S126 implements retained recording sessions for issue #273 through the full spec-kit and autopilot sequence. Official PR review and owner merge remain the delivery boundary."
     }
   ],
   "safetyCrosswalk": [

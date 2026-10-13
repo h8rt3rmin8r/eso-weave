@@ -1181,6 +1181,26 @@ impl EsoWeaveApp {
                 widgets::label_surface_strong(ui, source.readiness.description());
                 ui.label(format!("Saved for {}: {} finished, {} partial/interrupted encounters ready for import.",
                     source.channel, source.finished_count, source.partial_count));
+                ui.label(format!("Retained recording capacity: {} / {} sessions; {} / {} estimated bytes across all environments.",
+                    source.spool_session_count, crate::encounter::MAX_RETAINED_SESSIONS,
+                    source.spool_estimated_bytes, crate::encounter::MAX_ESTIMATED_BYTES));
+                egui::CollapsingHeader::new("Saved sessions for selected environment").show(
+                    ui,
+                    |ui| {
+                        for session in &source.sessions {
+                            ui.label(format!(
+                                "{} | {} | {} | {} retained fights | {} partial",
+                                session.session_id.as_deref().unwrap_or("none"),
+                                session
+                                    .selected_channel
+                                    .map_or("unselected", |channel| channel.as_str()),
+                                capture_mode_label(session.selected_mode),
+                                session.completed_encounter_count,
+                                session.degraded_encounter_count
+                            ));
+                        }
+                    },
+                );
                 if let Some(state) = &source.state {
                     egui::CollapsingHeader::new("Saved recording details").show(ui, |ui| {
                         ui.label(format!(
@@ -2844,7 +2864,9 @@ impl EsoWeaveApp {
                         egui::CollapsingHeader::new("Continuous recording and recovery").show(ui, |ui| {
                             recording_command(ui, &format!("/ewencounter start {channel} continuous"), "Waits between fights until stopped. Repeated start keeps the active mode and environment.");
                             recording_command(ui, "/ewencounter stop", "Chat: OFF. Stops and retains recordings; repeating stop keeps them.");
-                            recording_command(ui, "/ewencounter clear confirm", "Deletes the addon recording copy only. Save and import first if you want to keep it; retained sessions block a new start.");
+                            recording_command(ui, "/ewencounter resume", "Continues the latest stopped continuous session in its original environment. Start begins a new session and keeps earlier ones.");
+                            recording_command(ui, "/ewencounter sessions", "Lists retained sessions and capacity. Use discard SESSION_ID confirm in ESO to delete one inactive addon session deliberately.");
+                            recording_command(ui, "/ewencounter clear confirm", "Deletes all addon recording copies only. Start needs no clear; save/import first only if you want to keep data before deletion.");
                             recording_command(ui, "/ewencounter status details", "Optional technical state and failure details.");
                         });
                         ui.label("Catalog collection produces game-data definitions for maintainers, not fights. Native Encounter.log ingestion is not implemented. Application diagnostics are separate.");

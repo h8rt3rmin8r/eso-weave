@@ -154,7 +154,7 @@ function __contains_saved_string(needle)
 end
 function __capture()
     local saved = EsoWeaveDataSaved.encounter
-    if saved.state_schema_version ~= 1 then return saved end
+    if saved.state_schema_version == nil then return saved end
     if saved.current then return saved.current end
     if saved.session and saved.session.completed_encounter_count > 0 then
         local key = string.format("%010d", saved.session.completed_encounter_count)
@@ -818,8 +818,8 @@ fn addon_exposes_exactly_two_modes_and_one_toggle_transition() {
         &lua,
         r#"
         local saved = EsoWeaveDataSaved.encounter
-        assert(saved.state_schema_version == 1)
-        assert(saved.addon_version == 4)
+        assert(saved.state_schema_version == 2)
+        assert(saved.addon_version == 5)
         assert(saved.selected_mode == "single")
         assert(saved.state == "stopped")
 
@@ -1527,11 +1527,12 @@ fn addon_is_dormant_until_one_explicit_channel_arm() {
         SLASH_COMMANDS["/ewencounter"]("mode continuous")
         SLASH_COMMANDS["/ewencounter"]("channel pts")
         SLASH_COMMANDS["/ewencounter"]("arm pts")
-        assert(EsoWeaveDataSaved.encounter.state == "stopped")
+        assert(EsoWeaveDataSaved.encounter.state == "waiting")
         assert(EsoWeaveDataSaved.encounter.selected_mode == "single")
-        assert(EsoWeaveDataSaved.encounter.selected_channel == "live")
-        assert(EsoWeaveDataSaved.encounter.session.session_id == retainedSession)
-        assert(__capture().status == "complete")
+        assert(EsoWeaveDataSaved.encounter.selected_channel == "pts")
+        assert(EsoWeaveDataSaved.encounter.retained_sessions["0000000000000001"].session.session_id == retainedSession)
+        assert(EsoWeaveDataSaved.encounter.retained_sessions["0000000000000001"].records["0000000001"].capture.status == "complete")
+        SLASH_COMMANDS["/ewencounter"]("stop")
         SLASH_COMMANDS["/ewencounter"]("clear")
         assert(EsoWeaveDataSaved.encounter.session ~= nil)
         SLASH_COMMANDS["/ewencounter"]("clear confirm")
@@ -1608,7 +1609,7 @@ fn schema_v1_terminal_capture_is_preserved_without_fabricated_raw_evidence() {
     run(
         &lua,
         r#"
-        assert(EsoWeaveDataSaved.encounter.state_schema_version == 1)
+        assert(EsoWeaveDataSaved.encounter.state_schema_version == 2)
         assert(__capture() == __legacy_encounter)
         assert(__capture().schema_version == 1)
         assert(__capture().status == "complete")
@@ -1616,13 +1617,13 @@ fn schema_v1_terminal_capture_is_preserved_without_fabricated_raw_evidence() {
         assert(__capture().raw_observation_count == nil)
         assert(__capture().events[2].payload.complete == true)
         SLASH_COMMANDS["/ewencounter"]("arm live")
-        assert(__capture() == __legacy_encounter)
+        assert(EsoWeaveDataSaved.encounter.retained_sessions["0000000000000001"].records["0000000001"].capture == __legacy_encounter)
         "#,
     );
 
     let wrapped = serialized_saved_variables(&lua);
     let invalid_continuous = harness(&format!(
-        "{wrapped}; local saved = EsoWeaveDataSaved.encounter; saved.selected_mode = 'continuous'; saved.session.mode = 'continuous'; saved.requested_mode = 'continuous'; saved.active_mode = 'continuous'; saved.state = 'waiting'; saved.session.status = 'active'; saved.session.finished_at = nil; saved.stop_reason = nil; __corrupted = saved"
+        "{wrapped}; local saved = EsoWeaveDataSaved.encounter.retained_sessions['0000000000000001']; saved.selected_mode = 'continuous'; saved.session.mode = 'continuous'; saved.requested_mode = 'continuous'; saved.active_mode = 'continuous'; saved.state = 'waiting'; saved.session.status = 'active'; saved.session.finished_at = nil; saved.stop_reason = nil; __corrupted = EsoWeaveDataSaved.encounter"
     ));
     run(
         &invalid_continuous,
@@ -1665,8 +1666,8 @@ fn pre_profile_v2_terminal_is_preserved_and_idle_state_advances_safely() {
         &idle,
         r#"
         assert(EsoWeaveDataSaved.encounter.state == "stopped")
-        assert(EsoWeaveDataSaved.encounter.addon_version == 4)
-        assert(EsoWeaveDataSaved.encounter.state_schema_version == 1)
+        assert(EsoWeaveDataSaved.encounter.addon_version == 5)
+        assert(EsoWeaveDataSaved.encounter.state_schema_version == 2)
         "#,
     );
 }
@@ -2507,8 +2508,9 @@ fn s125_start_stop_are_explicit_idempotent_and_preserve_retained_data() {
         assert(record and saved.state == 'stopped')
         command('stop')
         command('start pts continuous')
-        assert(saved.records['0000000001'] == record and saved.session == session)
-        assert(saved.selected_channel == 'live' and saved.selected_mode == 'single')
+        assert(saved.retained_sessions['0000000000000001'].records['0000000001'] == record)
+        assert(saved.retained_sessions['0000000000000001'].session == session)
+        assert(saved.session ~= session and saved.selected_channel == 'pts' and saved.selected_mode == 'continuous')
         assert(string.find(__messages[#__messages], 'retained', 1, true))
         assert(#__debug_messages == 0)
     "#,
@@ -2633,13 +2635,730 @@ fn s125_empty_stopped_session_status_and_repeated_start_explain_restart() {
             local session = EsoWeaveDataSaved.encounter.session
             c('status')
             assert(string.find(__messages[#__messages], 'empty session', 1, true))
-            assert(string.find(__messages[#__messages], 'clear confirm', 1, true))
+            assert(string.find(__messages[#__messages], 'no clear is required', 1, true))
             assert(not string.find(__messages[#__messages], 'Import Saved Capture', 1, true))
             c('start ' .. channel .. ' single')
-            assert(EsoWeaveDataSaved.encounter.session == session)
-            assert(string.find(__messages[#__messages], 'empty session', 1, true))
+            assert(EsoWeaveDataSaved.encounter.session ~= session)
+            assert(EsoWeaveDataSaved.encounter.retained_sessions[string.format('%016.0f', EsoWeaveDataSaved.encounter.session_sequence - 1)].session == session)
+            c('stop')
             c('clear confirm')
         end
     "#,
     );
+}
+
+fn retained_finish_fight(lua: &Lua) {
+    run(
+        lua,
+        r#"
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        __advance(50)
+        __in_combat = false
+        __fire(EVENT_PLAYER_COMBAT_STATE, false)
+    "#,
+    );
+}
+
+#[test]
+fn retained_two_single_sessions_same_clock_reload_and_import_preserve_order() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    let first = parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    let first_bytes = canonical_bytes(&first).unwrap();
+    run(
+        &lua,
+        r#"
+        local old = EsoWeaveDataSaved.encounter.session.session_id
+        __now = 1000
+        SLASH_COMMANDS['/ewencounter']('start live single')
+        assert(EsoWeaveDataSaved.encounter.session.session_id ~= old)
+        assert(EsoWeaveDataSaved.encounter.state == 'waiting')
+    "#,
+    );
+    retained_finish_fight(&lua);
+    let source = serialized_saved_variables(&lua);
+    let reloaded = harness(&source);
+    let source = serialized_saved_variables(&reloaded);
+    let parsed = parse_capture_set(source.as_bytes(), Channel::Live).unwrap();
+    assert_eq!(parsed.records.len(), 2);
+    assert_eq!(
+        canonical_bytes(&parsed.records[0].capture).unwrap(),
+        first_bytes
+    );
+    assert_ne!(
+        parsed.records[0].capture.session_id,
+        parsed.records[1].capture.session_id
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("source.lua");
+    std::fs::write(&input, source).unwrap();
+    let request = ImportRequest::new(input, dir.path().join("history.sqlite"), Channel::Live);
+    let receipt = import_capture_set(&request).unwrap();
+    assert_eq!(receipt.imported_count, 2);
+    assert_eq!(receipt.receipts[0].session_id, first.session_id);
+    assert_eq!(
+        import_capture_set(&request).unwrap().already_present_count,
+        2
+    );
+}
+
+#[test]
+fn retained_continuous_resume_after_import_preserves_terminal_prefix() {
+    let lua = harness("");
+    run(
+        &lua,
+        "SLASH_COMMANDS['/ewencounter']('start live continuous')",
+    );
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('stop')");
+    let source = serialized_saved_variables(&lua);
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("source.lua");
+    std::fs::write(&input, source).unwrap();
+    let request = ImportRequest::new(&input, dir.path().join("history.sqlite"), Channel::Live);
+    let first = import_capture_set(&request).unwrap();
+    run(
+        &lua,
+        r#"
+        local id = EsoWeaveDataSaved.encounter.session.session_id
+        local terminal = EsoWeaveDataSaved.encounter.records['0000000001'].capture
+        SLASH_COMMANDS['/ewencounter']('resume')
+        assert(EsoWeaveDataSaved.encounter.state == 'waiting')
+        assert(EsoWeaveDataSaved.encounter.session.session_id == id)
+        assert(EsoWeaveDataSaved.encounter.records['0000000001'].capture == terminal)
+        local revision = EsoWeaveDataSaved.encounter.revision
+        SLASH_COMMANDS['/ewencounter']('resume')
+        assert(EsoWeaveDataSaved.encounter.revision == revision)
+    "#,
+    );
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('stop')");
+    std::fs::write(&input, serialized_saved_variables(&lua)).unwrap();
+    let second = import_capture_set(&request).unwrap();
+    assert_eq!(second.imported_count, 1);
+    assert_eq!(second.already_present_count, 1);
+    assert_eq!(second.receipts[0].session_id, first.receipts[0].session_id);
+    assert_eq!(second.receipts[1].encounter_ordinal, 2);
+}
+
+#[test]
+fn retained_capacity_refusal_and_confirmed_discard_preserve_catalog() {
+    let lua = harness("EsoWeaveEncounterTestLimits = { max_retained_sessions = 2 }");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(
+        &lua,
+        r#"__first_session = EsoWeaveDataSaved.encounter.session.session_id
+        SLASH_COMMANDS['/ewencounter']('start live single')"#,
+    );
+    retained_finish_fight(&lua);
+    run(
+        &lua,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        local revision = saved.revision
+        local counter = saved.next_session_sequence
+        local catalog = EsoWeaveDataSaved.collector
+        SLASH_COMMANDS['/ewencounter']('start pts continuous')
+        assert(EsoWeaveDataSaved.encounter == saved)
+        assert(saved.revision == revision and saved.next_session_sequence == counter)
+        assert(saved.selected_channel == 'live')
+        assert(string.find(__messages[#__messages], 'capacity', 1, true))
+        SLASH_COMMANDS['/ewencounter']('discard ' .. __first_session)
+        assert(next(saved.retained_sessions) ~= nil)
+        SLASH_COMMANDS['/ewencounter']('discard ' .. __first_session .. ' confirm')
+        assert(next(saved.retained_sessions) == nil)
+        assert(EsoWeaveDataSaved.collector == catalog)
+        SLASH_COMMANDS['/ewencounter']('start pts continuous')
+        assert(EsoWeaveDataSaved.encounter.state == 'waiting')
+        assert(EsoWeaveDataSaved.encounter.session.channel == 'pts')
+        SLASH_COMMANDS['/ewencounter']('discard ' .. EsoWeaveDataSaved.encounter.session.session_id .. ' confirm')
+        assert(EsoWeaveDataSaved.encounter.state == 'waiting')
+    "#,
+    );
+}
+
+#[test]
+fn retained_mixed_environment_validates_all_then_filters_without_source_changes() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start pts single')");
+    retained_finish_fight(&lua);
+    let source = serialized_saved_variables(&lua);
+    let live = parse_capture_set(source.as_bytes(), Channel::Live).unwrap();
+    let pts = parse_capture_set(source.as_bytes(), Channel::Pts).unwrap();
+    assert_eq!(live.records.len(), 1);
+    assert_eq!(pts.records.len(), 1);
+    assert_eq!(live.records[0].capture.channel, Channel::Live);
+    assert_eq!(pts.records[0].capture.channel, Channel::Pts);
+    run(
+        &lua,
+        r#"
+        for _, older in pairs(EsoWeaveDataSaved.encounter.retained_sessions) do
+            older.records['0000000001'].capture.stored_event_count = 999
+        end
+    "#,
+    );
+    let bad = serialized_saved_variables(&lua);
+    assert!(parse_capture_set(bad.as_bytes(), Channel::Pts).is_err());
+}
+
+#[test]
+fn retained_supported_controller_migration_preserves_capture_and_next_identity() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    let first = parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    run(
+        &lua,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        saved.state_schema_version, saved.addon_version = 1, 4
+        saved.retained_sessions, saved.session_sequence, saved.next_session_sequence = nil, nil, nil
+    "#,
+    );
+    let reloaded = harness(&serialized_saved_variables(&lua));
+    run(
+        &reloaded,
+        r#"
+        assert(EsoWeaveDataSaved.encounter.state_schema_version == 2)
+        assert(EsoWeaveDataSaved.encounter.addon_version == 5)
+        SLASH_COMMANDS['/ewencounter']('start live single')
+    "#,
+    );
+    retained_finish_fight(&reloaded);
+    let parsed = parse_capture_set(
+        serialized_saved_variables(&reloaded).as_bytes(),
+        Channel::Live,
+    )
+    .unwrap();
+    assert_eq!(parsed.records.len(), 2);
+    assert_eq!(
+        canonical_bytes(&parsed.records[0].capture).unwrap(),
+        canonical_bytes(&first).unwrap()
+    );
+}
+
+#[test]
+fn retained_clear_preserves_identity_counter_and_terminal_data_is_never_reused() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    let first = parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    run(
+        &lua,
+        r#"
+        local counter = EsoWeaveDataSaved.encounter.next_session_sequence
+        local catalog = EsoWeaveDataSaved.collector
+        SLASH_COMMANDS['/ewencounter']('clear confirm')
+        assert(EsoWeaveDataSaved.encounter.next_session_sequence == counter)
+        assert(EsoWeaveDataSaved.collector == catalog)
+        __now = 1000
+        SLASH_COMMANDS['/ewencounter']('start live single')
+    "#,
+    );
+    retained_finish_fight(&lua);
+    let second = parse_capture(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+    assert_ne!(first.session_id, second.session_id);
+    assert_ne!(first.encounter_id, second.encounter_id);
+}
+
+#[test]
+fn retained_resume_uses_original_provenance_and_rejects_single_or_archived_sessions() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        local c = SLASH_COMMANDS['/ewencounter']
+        c('start live continuous')
+        c('stop')
+        local session = EsoWeaveDataSaved.encounter.session
+        c('mode single')
+        c('channel pts')
+        assert(session.mode == 'continuous' and session.channel == 'live')
+        c('resume')
+        assert(EsoWeaveDataSaved.encounter.session == session)
+        assert(EsoWeaveDataSaved.encounter.selected_channel == 'live')
+        assert(EsoWeaveDataSaved.encounter.selected_mode == 'continuous')
+        c('stop')
+        c('start pts single')
+        c('stop')
+        local revision = EsoWeaveDataSaved.encounter.revision
+        c('resume')
+        c('resume extra')
+        c('discard unknown confirm')
+        assert(EsoWeaveDataSaved.encounter.revision == revision)
+        assert(EsoWeaveDataSaved.encounter.state == 'stopped')
+        assert(EsoWeaveDataSaved.encounter.retained_sessions['0000000000000001'].session == session)
+    "#,
+    );
+    parse_capture_set(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+}
+
+#[test]
+fn retained_global_event_budget_keeps_previous_session_and_declares_pressure() {
+    let lua = harness("EsoWeaveEncounterTestLimits = { max_events = 16 }");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(
+        &lua,
+        r#"
+        __retained_capture = EsoWeaveDataSaved.encounter.records['0000000001'].capture
+        SLASH_COMMANDS['/ewencounter']('start live continuous')
+        __in_combat = true
+        __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        for i = 1, 100 do
+            __advance(1)
+            __fire(EVENT_COMBAT_EVENT, ACTION_RESULT_DAMAGE, false, '', 0, 0,
+                '', COMBAT_UNIT_TYPE_PLAYER, '', 2, 1, POWERTYPE_HEALTH, 0, false, 1, 2, 10, 0)
+        end
+        local saved = EsoWeaveDataSaved.encounter
+        assert(saved.state == 'failed')
+        local older = saved.retained_sessions['0000000000000001']
+        assert(older.records['0000000001'].capture == __retained_capture)
+        assert(older.session.aggregate_event_count + saved.session.aggregate_event_count <= 16)
+    "#,
+    );
+    parse_capture_set(serialized_saved_variables(&lua).as_bytes(), Channel::Live).unwrap();
+}
+
+#[test]
+fn retained_import_collision_rolls_back_new_earlier_session_atomically() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    let both = serialized_saved_variables(&lua);
+    let only_second = harness(&both);
+    run(
+        &only_second,
+        "EsoWeaveDataSaved.encounter.retained_sessions = {}",
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("source.lua");
+    let store = dir.path().join("history.sqlite");
+    std::fs::write(&input, serialized_saved_variables(&only_second)).unwrap();
+    let request = ImportRequest::new(&input, &store, Channel::Live);
+    let first = import_capture_set(&request).unwrap();
+    assert_eq!(first.imported_count, 1);
+    run(
+        &lua,
+        "EsoWeaveDataSaved.encounter.records['0000000001'].capture.source.game_version = '12.0.8'",
+    );
+    let conflict = serialized_saved_variables(&lua);
+    assert_eq!(
+        parse_capture_set(conflict.as_bytes(), Channel::Live)
+            .unwrap()
+            .records
+            .len(),
+        2
+    );
+    std::fs::write(&input, conflict).unwrap();
+    let before = std::fs::read(&store).unwrap();
+    assert!(import_capture_set(&request).is_err());
+    assert_eq!(std::fs::read(&store).unwrap(), before);
+    let history = list_encounters(&store).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].session_id, first.receipts[0].session_id);
+}
+
+#[test]
+fn retained_source_order_survives_clock_reversal_deletion_and_reimport() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(
+        &lua,
+        r#"__timestamp = __timestamp - 100
+        SLASH_COMMANDS['/ewencounter']('start live single')"#,
+    );
+    retained_finish_fight(&lua);
+    let source = serialized_saved_variables(&lua);
+    let parsed = parse_capture_set(source.as_bytes(), Channel::Live).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("source.lua");
+    let store = dir.path().join("history.sqlite");
+    std::fs::write(&input, source).unwrap();
+    let request = ImportRequest::new(input, &store, Channel::Live);
+    import_capture_set(&request).unwrap();
+    let history = list_encounters(&store).unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|row| &row.session_id)
+            .collect::<Vec<_>>(),
+        parsed
+            .records
+            .iter()
+            .map(|row| &row.capture.session_id)
+            .collect::<Vec<_>>()
+    );
+    eso_weave::encounter::delete_encounter(
+        &store,
+        &history[0].session_id,
+        &history[0].encounter_id,
+    )
+    .unwrap();
+    assert_eq!(import_capture_set(&request).unwrap().imported_count, 1);
+    assert_eq!(list_encounters(&store).unwrap(), history);
+}
+
+#[test]
+fn retained_v4_store_migration_preserves_canonical_bytes_and_read_only_access() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("source.lua");
+    let store = dir.path().join("history.sqlite");
+    std::fs::write(&input, serialized_saved_variables(&lua)).unwrap();
+    let request = ImportRequest::new(input, &store, Channel::Live);
+    import_capture_set(&request).unwrap();
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    let raw_before: Vec<u8> = connection
+        .query_row("SELECT canonical_json FROM raw_encounters", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let snapshots_before: Vec<u8> = connection
+        .query_row(
+            "SELECT canonical_json FROM encounter_session_snapshots",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    connection
+        .execute_batch(
+            r#"
+        BEGIN IMMEDIATE;
+        DROP TRIGGER encounter_session_order_no_update;
+        DROP TABLE encounter_session_order;
+        DROP TABLE encounter_store_meta;
+        CREATE TABLE encounter_store_meta (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 4),
+            canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+        );
+        INSERT INTO encounter_store_meta VALUES (1,4,2);
+        PRAGMA user_version = 4;
+        COMMIT;
+    "#,
+        )
+        .unwrap();
+    drop(connection);
+    let old_bytes = std::fs::read(&store).unwrap();
+    assert_eq!(list_encounters(&store).unwrap().len(), 1);
+    assert_eq!(std::fs::read(&store).unwrap(), old_bytes);
+    assert_eq!(
+        import_capture_set(&request).unwrap().already_present_count,
+        1
+    );
+    let connection = rusqlite::Connection::open(&store).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        eso_weave::encounter::STORE_SCHEMA_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row::<Vec<u8>, _, _>("SELECT canonical_json FROM raw_encounters", [], |row| row
+                .get(0))
+            .unwrap(),
+        raw_before
+    );
+    assert_eq!(
+        connection
+            .query_row::<Vec<u8>, _, _>(
+                "SELECT canonical_json FROM encounter_session_snapshots",
+                [],
+                |row| row.get(0)
+            )
+            .unwrap(),
+        snapshots_before
+    );
+}
+
+#[test]
+fn retained_unknown_nested_and_invalid_envelopes_remain_preserved_inactive() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    let good = serialized_saved_variables(&lua);
+    for mutation in [
+        "EsoWeaveDataSaved.encounter.state_schema_version = 99",
+        "EsoWeaveDataSaved.encounter.next_session_sequence = 1",
+        "EsoWeaveDataSaved.encounter.retained_sessions['0000000000000001'].retained_sessions = {}",
+        "EsoWeaveDataSaved.encounter.retained_sessions['0000000000000001'].session.channel = 'pts'",
+    ] {
+        let corrupted = harness(&format!("{good}; {mutation}"));
+        let before = serialized_saved_variables(&corrupted);
+        run(
+            &corrupted,
+            r#"
+            SLASH_COMMANDS['/ewencounter']('start live single')
+            SLASH_COMMANDS['/ewencounter']('resume')
+            __fire(EVENT_PLAYER_COMBAT_STATE, true)
+        "#,
+        );
+        assert_eq!(serialized_saved_variables(&corrupted), before);
+        assert!(parse_capture_set(before.as_bytes(), Channel::Live).is_err());
+    }
+}
+
+#[test]
+fn retained_saved_source_summaries_are_environment_specific_and_read_only() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start pts single')");
+    retained_finish_fight(&lua);
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("source.lua");
+    let source = serialized_saved_variables(&lua);
+    std::fs::write(&input, &source).unwrap();
+    let service = eso_weave::encounter::EncounterHistoryService::new(
+        dir.path().join("app"),
+        dir.path().join("catalog.sqlite"),
+    );
+    for channel in [Channel::Live, Channel::Pts] {
+        let inspected = service.inspect_source(&input, channel).unwrap();
+        assert_eq!(inspected.sessions.len(), 1);
+        assert_eq!(inspected.finished_count, 1);
+        assert_eq!(inspected.spool_session_count, 2);
+        assert_eq!(
+            inspected.state.as_ref().unwrap().selected_channel,
+            Some(channel)
+        );
+        assert!(inspected.spool_estimated_bytes > 0);
+    }
+    assert!(!service.store_path().exists());
+    assert_eq!(std::fs::read_to_string(input).unwrap(), source);
+}
+
+#[test]
+fn retained_resume_requires_warning_delivery_before_any_state_change() {
+    let lua = harness("");
+    run(
+        &lua,
+        r#"
+        local c = SLASH_COMMANDS['/ewencounter']
+        c('start live continuous')
+        c('stop')
+        local saved = EsoWeaveDataSaved.encounter
+        local revision = saved.revision
+        CHAT_ROUTER = nil
+        c('resume')
+        assert(saved.state == 'stopped' and saved.requested_mode == nil)
+        assert(saved.revision == revision and #saved.interruptions == 0)
+        CHAT_ROUTER = {}
+        function CHAT_ROUTER:AddSystemMessage(text) table.insert(__messages,text) end
+        __run_updates()
+        assert(saved.state == 'stopped')
+        c('resume')
+        assert(saved.state == 'waiting' and #saved.interruptions == 1)
+    "#,
+    );
+}
+
+#[test]
+fn retained_stopped_snapshot_can_resume_but_old_marker_cannot_rewrite_a_later_stop() {
+    let lua = harness("");
+    run(
+        &lua,
+        "SLASH_COMMANDS['/ewencounter']('start live continuous')",
+    );
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('stop')");
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source.lua");
+    let store = root.path().join("history.sqlite");
+    let request = ImportRequest::new(&source, &store, Channel::Live);
+    std::fs::write(&source, serialized_saved_variables(&lua)).unwrap();
+    import_capture_set(&request).unwrap();
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('resume')");
+    retained_finish_fight(&lua);
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('stop')");
+    let good = serialized_saved_variables(&lua);
+    std::fs::write(&source, &good).unwrap();
+    assert_eq!(import_capture_set(&request).unwrap().imported_count, 1);
+    run(
+        &lua,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        saved.revision = saved.revision + 1
+        saved.session.finished_at = tostring(tonumber(saved.session.finished_at) + 1)
+    "#,
+    );
+    let altered = serialized_saved_variables(&lua);
+    parse_capture_set(altered.as_bytes(), Channel::Live).unwrap();
+    std::fs::write(&source, altered).unwrap();
+    let before = std::fs::read(&store).unwrap();
+    assert!(import_capture_set(&request).is_err());
+    assert_eq!(std::fs::read(&store).unwrap(), before);
+    let reloaded = harness(&good);
+    run(&reloaded, "SLASH_COMMANDS['/ewencounter']('resume')");
+    std::fs::write(&source, serialized_saved_variables(&reloaded)).unwrap();
+    let resumed = import_capture_set(&request).unwrap();
+    assert_eq!(resumed.imported_count, 0);
+    assert_eq!(resumed.already_present_count, 2);
+}
+
+#[test]
+fn retained_primitive_invalid_data_is_preserved_until_explicit_discard() {
+    for value in ["17", "'invalid-recording'", "false"] {
+        let lua = harness(&format!("EsoWeaveDataSaved.encounter = {value}"));
+        let before = serialized_saved_variables(&lua);
+        run(
+            &lua,
+            r#"
+            SLASH_COMMANDS['/ewencounter']('start live single')
+            SLASH_COMMANDS['/ewencounter']('resume')
+            __fire(EVENT_PLAYER_COMBAT_STATE,true)
+        "#,
+        );
+        assert_eq!(serialized_saved_variables(&lua), before);
+        run(
+            &lua,
+            r#"
+            SLASH_COMMANDS['/ewencounter']('clear confirm')
+            assert(EsoWeaveDataSaved.encounter.state_schema_version == 2)
+            assert(EsoWeaveDataSaved.encounter.state == 'stopped')
+        "#,
+        );
+    }
+}
+
+#[test]
+fn retained_invalid_identifier_metadata_is_preserved_without_session_list_disclosure() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+    retained_finish_fight(&lua);
+    run(
+        &lua,
+        r#"
+        local saved = EsoWeaveDataSaved.encounter
+        saved.session.session_id = 'IdentifierCanary'
+        local capture = saved.records['0000000001'].capture
+        capture.session_id = 'IdentifierCanary'
+        for _, event in ipairs(capture.events) do event.session_id = 'IdentifierCanary' end
+        for _, observation in ipairs(capture.raw_observations) do observation.session_id = 'IdentifierCanary' end
+    "#,
+    );
+    let reloaded = harness(&serialized_saved_variables(&lua));
+    let before = serialized_saved_variables(&reloaded);
+    run(
+        &reloaded,
+        r#"
+        SLASH_COMMANDS['/ewencounter']('sessions')
+        SLASH_COMMANDS['/ewencounter']('start live single')
+        assert(not string.find(table.concat(__messages,'\n'),'IdentifierCanary',1,true))
+    "#,
+    );
+    assert_eq!(serialized_saved_variables(&reloaded), before);
+}
+
+#[test]
+fn retained_legacy_selection_commands_reject_extra_arguments_without_mutation() {
+    let lua = harness("");
+    run(&lua, "SLASH_COMMANDS['/ewencounter']('channel live')");
+    let before = serialized_saved_variables(&lua);
+    run(
+        &lua,
+        r#"
+        SLASH_COMMANDS['/ewencounter']('mode continuous extra')
+        SLASH_COMMANDS['/ewencounter']('channel pts extra')
+    "#,
+    );
+    assert_eq!(serialized_saved_variables(&lua), before);
+}
+
+fn retained_downgrade_fixture_to_v4(connection: &rusqlite::Connection) {
+    connection
+        .execute_batch(
+            r#"
+        BEGIN IMMEDIATE;
+        DROP TRIGGER encounter_session_order_no_update;
+        DROP TABLE encounter_session_order;
+        DROP TABLE encounter_store_meta;
+        CREATE TABLE encounter_store_meta (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 4),
+            canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+        );
+        INSERT INTO encounter_store_meta VALUES (1,4,2);
+        PRAGMA user_version = 4;
+        COMMIT;
+    "#,
+        )
+        .unwrap();
+}
+
+#[test]
+fn retained_rejected_v4_import_rolls_back_migration_with_record_or_snapshot_collision() {
+    for snapshot_collision in [false, true] {
+        let lua = harness("");
+        run(&lua, "SLASH_COMMANDS['/ewencounter']('start live single')");
+        retained_finish_fight(&lua);
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("source.lua");
+        let store = dir.path().join("history.sqlite");
+        std::fs::write(&input, serialized_saved_variables(&lua)).unwrap();
+        let request = ImportRequest::new(&input, &store, Channel::Live);
+        import_capture_set(&request).unwrap();
+        let connection = rusqlite::Connection::open(&store).unwrap();
+        retained_downgrade_fixture_to_v4(&connection);
+        drop(connection);
+        let before = std::fs::read(&store).unwrap();
+        assert_eq!(
+            eso_weave::encounter::delete_encounter(&store, "session-0-0", "encounter-0-0")
+                .unwrap()
+                .deleted_records,
+            0
+        );
+        assert!(
+            std::fs::read(&store).unwrap() == before,
+            "missing deletion upgraded schema4"
+        );
+        if snapshot_collision {
+            run(
+                &lua,
+                "EsoWeaveDataSaved.encounter.session.finished_at = '1788912001'",
+            );
+        } else {
+            run(&lua,"EsoWeaveDataSaved.encounter.records['0000000001'].capture.source.game_version = '12.0.8'");
+        }
+        let source = serialized_saved_variables(&lua);
+        parse_capture_set(source.as_bytes(), Channel::Live).unwrap();
+        std::fs::write(&input, &source).unwrap();
+        assert!(import_capture_set(&request).is_err());
+        assert!(
+            std::fs::read(&store).unwrap() == before,
+            "rejected schema4 import changed the store bytes"
+        );
+        let connection = rusqlite::Connection::open(&store).unwrap();
+        assert_eq!(
+            connection
+                .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            connection
+                .query_row::<i64, _, _>(
+                    "SELECT count(*) FROM sqlite_schema WHERE name='encounter_session_order'",
+                    [],
+                    |row| row.get(0)
+                )
+                .unwrap(),
+            0
+        );
+        assert_eq!(std::fs::read_to_string(input).unwrap(), source);
+    }
 }

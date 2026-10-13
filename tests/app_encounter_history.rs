@@ -1103,7 +1103,7 @@ fn s125_empty_stopped_session_guidance_does_not_request_nonexistent_encounters()
     assert!(inspected
         .readiness
         .description()
-        .contains("/ewencounter clear confirm"));
+        .contains("no clear is required"));
     assert!(!service.store_path().exists());
     let worker = EncounterHistoryWorker::spawn(service);
     worker
@@ -1117,12 +1117,151 @@ fn s125_empty_stopped_session_guidance_does_not_request_nonexistent_encounters()
         } => {
             assert!(encounters.is_empty());
             let message = message.unwrap();
-            assert!(
-                message.contains("empty session") && message.contains("/ewencounter clear confirm")
-            );
+            assert!(message.contains("empty session") && message.contains("no clear is required"));
             assert!(!message.contains("Import retained encounters"));
         }
         event => panic!("unexpected event: {event:?}"),
     }
     assert_eq!(fs::read_to_string(source).unwrap(), bytes);
+}
+
+fn retained_source_lua() -> String {
+    let controller = |session: &str, encounter: &str, channel: &str| {
+        let mut capture = continuous_terminal(session, encounter);
+        capture["channel"] = serde_json::json!(channel);
+        serde_json::json!({
+            "state_schema_version":1,"addon_version":4,"selected_mode":"single",
+            "selected_channel":channel,"state":"stopped","stop_reason":"single-partial",
+            "records":{"0000000001":{"ordinal":1,"capture":capture}},
+            "interruptions":[],"revision":7,
+            "session":{"session_id":session,"mode":"single","channel":channel,
+                "status":"stopped","started_at":capture["started_at"],
+                "finished_at":capture["finished_at"],"next_encounter_ordinal":2,
+                "completed_encounter_count":1,"degraded_encounter_count":1,
+                "aggregate_estimated_bytes":capture["estimated_bytes"],
+                "aggregate_event_count":capture["stored_event_count"],
+                "aggregate_raw_observation_count":capture["raw_observation_count"],
+                "interruption_count":0}
+        })
+    };
+    let first = controller("session-1788912002-1", "encounter-1788912002-1", "live");
+    let second = controller("session-1788912002-2", "encounter-1788912002-2", "pts");
+    let mut current = controller("session-1788912002-3", "encounter-1788912002-3", "live");
+    current["state_schema_version"] = serde_json::json!(2);
+    current["addon_version"] = serde_json::json!(5);
+    current["session_sequence"] = serde_json::json!(3);
+    current["next_session_sequence"] = serde_json::json!(4);
+    current["retained_sessions"] = serde_json::json!({
+        "0000000000000001":first,"0000000000000002":second
+    });
+    format!(
+        "EsoWeaveDataSaved = {{ [\"schema_version\"]=1,[\"addon_version\"]=1,[\"encounter\"]={} }}",
+        json_to_lua(&current)
+    )
+}
+
+#[test]
+fn retained_worker_reports_selected_sessions_and_global_capacity_without_import() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source.lua");
+    let bytes = retained_source_lua();
+    fs::write(&source, &bytes).unwrap();
+    let service =
+        EncounterHistoryService::new(root.path().join("app"), root.path().join("catalog.sqlite"));
+    let worker = EncounterHistoryWorker::spawn(service.clone());
+    for (generation, channel, count) in [(99, Channel::Live, 2), (100, Channel::Pts, 1)] {
+        worker
+            .inspect_source(generation, source.clone(), channel)
+            .unwrap();
+        match worker.receive_timeout(WORKER_TIMEOUT).unwrap() {
+            HistoryEvent::SourceInspected {
+                generation: actual,
+                expected_channel,
+                result,
+                ..
+            } => {
+                assert_eq!(actual, generation);
+                assert_eq!(expected_channel, channel);
+                let result = result.unwrap();
+                assert_eq!(result.sessions.len(), count);
+                assert_eq!(result.partial_count, count);
+                assert_eq!(result.spool_session_count, 3);
+                assert!(result
+                    .sessions
+                    .iter()
+                    .all(|s| s.selected_channel == Some(channel)));
+            }
+            event => panic!("unexpected inspection: {event:?}"),
+        }
+    }
+    assert!(!service.store_path().exists());
+    assert_eq!(fs::read_to_string(source).unwrap(), bytes);
+}
+
+#[test]
+fn retained_rendered_source_lists_matching_sessions_and_refreshes_after_import() {
+    for width in [420.0, 760.0] {
+        let root = tempfile::tempdir().unwrap();
+        let environment = root.path().join("live");
+        let addons = environment.join("AddOns");
+        let saved = environment.join("SavedVariables");
+        fs::create_dir_all(&addons).unwrap();
+        fs::create_dir_all(&saved).unwrap();
+        let input = saved.join("EsoWeaveData.lua");
+        let bytes = retained_source_lua();
+        fs::write(&input, &bytes).unwrap();
+        let service = EncounterHistoryService::new(
+            root.path().join("app"),
+            root.path().join("catalog.sqlite"),
+        );
+        let settings = Settings {
+            beacon: eso_weave::beacon::prefs_to_value(&BeaconPrefs {
+                path_override: Some(addons),
+                environment: Environment::Live,
+            }),
+            ..Settings::default()
+        };
+        let mut harness = harness_with_size(service, settings, egui::vec2(width, 1000.0));
+        for _ in 0..6 {
+            harness.step();
+        }
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "File")
+            .click_accesskit();
+        harness.step();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::Button,
+                eso_weave::app::strings::MENU_ENCOUNTER_HISTORY,
+            )
+            .click_accesskit();
+        settle(&mut harness);
+        harness
+            .get_by_label("Saved sessions for selected environment")
+            .click_accesskit();
+        harness.step();
+        harness.get_by_label(
+            "session-1788912002-1 | live | Single fight | 1 retained fights | 1 partial",
+        );
+        harness.get_by_label(
+            "session-1788912002-3 | live | Single fight | 1 retained fights | 1 partial",
+        );
+        assert!(harness
+            .query_by_label(
+                "session-1788912002-2 | pts | Single fight | 1 retained fights | 1 partial"
+            )
+            .is_none());
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Import Saved Capture")
+            .click_accesskit();
+        settle(&mut harness);
+        assert_eq!(harness.state().encounter_history_count(), 2);
+        harness.get_by_label("2 encounters imported.");
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Refresh Saved Source")
+            .click_accesskit();
+        settle(&mut harness);
+        harness.get_by_label("Saved sessions for selected environment");
+        assert_eq!(fs::read_to_string(&input).unwrap(), bytes);
+    }
 }

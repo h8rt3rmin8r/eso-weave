@@ -871,6 +871,8 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
              DROP TRIGGER raw_encounters_no_update;
              DROP TRIGGER encounter_session_snapshots_no_update;
              DROP TABLE encounter_session_snapshots;
+             DROP TRIGGER encounter_session_order_no_update;
+             DROP TABLE encounter_session_order;
              ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
              DROP TABLE encounter_store_meta;
              CREATE TABLE encounter_store_meta (
@@ -934,6 +936,12 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
         .unwrap();
     drop(connection);
 
+    rejected_legacy_import_keeps_layout(
+        &store,
+        &sandbox.path().join("failed-legacy.lua"),
+        &parse_capture(COMPLETE.as_bytes(), Channel::Live).unwrap(),
+        1,
+    );
     fs::write(&v2_input, lossless_v2_lua()).unwrap();
     let v2_receipt =
         import_encounter(&ImportRequest::new(&v2_input, &store, Channel::Live)).unwrap();
@@ -1074,6 +1082,12 @@ fn populated_v2_store_migrates_to_v4_without_rewriting_canonical_evidence() {
         .unwrap();
     drop(connection);
 
+    rejected_legacy_import_keeps_layout(
+        &store,
+        &sandbox.path().join("failed-legacy.lua"),
+        &capture,
+        2,
+    );
     fs::write(&input, source).unwrap();
     let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
     assert_eq!(receipt.outcome, ImportOutcome::AlreadyPresent);
@@ -1214,6 +1228,12 @@ fn populated_v3_store_migrates_to_v4_without_rewriting_canonical_evidence() {
         .unwrap();
     drop(connection);
 
+    rejected_legacy_import_keeps_layout(
+        &store,
+        &sandbox.path().join("failed-legacy.lua"),
+        &capture,
+        3,
+    );
     let receipt = import_encounter(&ImportRequest::new(&input, &store, Channel::Live)).unwrap();
     assert_eq!(receipt.outcome, ImportOutcome::AlreadyPresent);
     let connection = rusqlite::Connection::open(&store).unwrap();
@@ -1704,4 +1724,29 @@ fn s125_inspection_distinguishes_every_saved_controller_state_without_importing_
         assert_eq!(fs::read(&source).unwrap(), bytes.as_bytes());
         assert!(!service.store_path().exists());
     }
+}
+
+fn rejected_legacy_import_keeps_layout(
+    store: &std::path::Path,
+    input: &std::path::Path,
+    capture: &eso_weave::encounter::EncounterCapture,
+    version: u32,
+) {
+    let before = fs::read(store).unwrap();
+    let mut conflicting = serde_json::to_value(capture).unwrap();
+    conflicting["source"]["game_version"] = serde_json::json!("review-collision");
+    fs::write(input, capture_lua(&conflicting)).unwrap();
+    parse_capture(fs::read(input).unwrap().as_slice(), Channel::Live).unwrap();
+    assert!(import_encounter(&ImportRequest::new(input, store, Channel::Live)).is_err());
+    assert!(
+        fs::read(store).unwrap() == before,
+        "rejected legacy import changed the store bytes"
+    );
+    let connection = rusqlite::Connection::open(store).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        version
+    );
 }

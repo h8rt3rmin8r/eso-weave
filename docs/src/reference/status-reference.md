@@ -58,9 +58,13 @@ showing path, timestamp, saved state and counts. **Refresh Saved Source** reread
 that file; **Refresh Imported History** rereads desktop copies. Successful and
 failed import attempts clear and refresh the source summary. Environment/folder
 changes reject stale results. These facts do not establish current game activity.
-An **empty session** stopped before combat needs `/ewencounter clear confirm`
-inside ESO before starting again; it has no encounters to import. Retained
-encounters in a stopped session should be imported before clearing.
+An **empty session** stopped before combat has no encounters to import. Start
+again without clearing, or resume the latest stopped continuous session.
+Last saved source also reports matching session provenance and whole-file
+retained capacity; import before deliberate discard only if you want a desktop copy.
+`/ewencounter discard SESSION_ID confirm` deletes one inactive addon session.
+`/ewencounter clear confirm` deliberately deletes all addon recordings while
+recording is off. Both preserve catalog data and desktop history.
 
 Maintainer review candidates have no application status row. Candidate generation
 cannot authenticate its origin. A user-approved candidate appears here only after
@@ -91,10 +95,10 @@ one combat period and stops; `continuous` retains one bounded session across
 combat gaps until explicit disablement or hard failure. Live authority belongs
 only to user commands inside ESO:
 
-- `stopped` means no capture request is effective. Mode/channel changes require
-  recording off and no retained session. If one remains, optionally save/import
-  wanted fights, then deliberately use `/ewencounter clear confirm` before
-  changing those selections. Use `/ewencounter start live single` or its matching environment/mode variant.
+- `stopped` means no capture request is effective. Mode/channel changes select
+  the next session and preserve earlier provenance. Start creates a new retained
+  session; resume continues only the latest stopped continuous session. Sessions
+  lists capacity and IDs; confirmed discard removes one inactive session.
 - `waiting` means single or continuous is enabled outside combat. Detailed
   handlers stay dormant until combat begins; use `/ewencounter stop` to disable.
 - `capturing` means one encounter is active. A combat exit completes it;

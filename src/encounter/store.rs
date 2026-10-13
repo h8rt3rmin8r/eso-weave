@@ -8,9 +8,9 @@ use crate::bounded_file::is_link_like;
 use crate::catalog::Channel;
 
 use super::model::{
-    BackupReceipt, CaptureImportReport, CaptureMode, CaptureStateSummary, CaptureStatus,
-    DeleteReceipt, EncounterCapture, EncounterSummary, ImportOutcome, ImportReceipt,
-    OrderedEncounterCapture, ParsedCaptureSet, SessionEncounterReference, SessionSnapshot,
+    BackupReceipt, CaptureImportReport, CaptureMode, CaptureStatus, DeleteReceipt,
+    EncounterCapture, EncounterSummary, ImportOutcome, ImportReceipt, OrderedEncounterCapture,
+    ParsedCaptureSet, SessionEncounterReference, SessionSnapshot,
 };
 use super::{
     ensure_distinct_paths, invalid, sha256, EncounterError, CANONICAL_FORMAT_VERSION,
@@ -94,13 +94,30 @@ const V3_RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     CHECK ((capture_schema_version = 1 AND canonical_format_version = 1) OR
            (capture_schema_version = 2 AND canonical_format_version = 2))
 )"#;
-const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+const V4_META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version = 4),
     canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
 )"#;
+const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 5),
+    canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+)"#;
+const ORDER_TABLE_SQL: &str = r#"CREATE TABLE encounter_session_order (
+    session_id TEXT PRIMARY KEY,
+    import_ordinal INTEGER NOT NULL UNIQUE CHECK (import_ordinal > 0)
+)"#;
+const ORDER_IMMUTABILITY_TRIGGER_SQL: &str = r#"CREATE TRIGGER encounter_session_order_no_update
+BEFORE UPDATE ON encounter_session_order
+BEGIN
+    SELECT RAISE(ABORT, 'encounter session order is immutable');
+END"#;
+const ORDER_BACKFILL_SQL: &str = r#"INSERT INTO encounter_session_order(session_id, import_ordinal)
+SELECT session_id, ROW_NUMBER() OVER (ORDER BY session_id)
+FROM (SELECT session_id FROM raw_encounters UNION SELECT session_id FROM encounter_session_snapshots)"#;
 const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
-VALUES (1, 4, 2)"#;
+VALUES (1, 5, 2)"#;
 const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
     source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
@@ -191,33 +208,46 @@ pub(crate) fn append_set(
     }
     let mut connection = open_store(store_path, true, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
     let outcomes = parsed
         .records
         .iter()
         .zip(prepared)
         .map(|(record, (_, hash))| preflight_record(&transaction, record, hash))
         .collect::<Result<Vec<_>, EncounterError>>()?;
-    let snapshot = build_snapshot(parsed, prepared)?;
-    let snapshot_advances = snapshot
-        .as_ref()
+    let snapshots = parsed
+        .sessions
+        .iter()
+        .map(|state| build_snapshot(state, parsed, prepared))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    let snapshot_advances = snapshots
+        .iter()
         .map(|(snapshot, canonical, hash)| {
             preflight_snapshot(&transaction, snapshot, canonical, hash)
         })
-        .transpose()?;
+        .collect::<Result<Vec<_>, _>>()?;
+    for (snapshot, _, _) in &snapshots {
+        ensure_session_order(&transaction, &snapshot.session_id)?;
+    }
     for ((record, (canonical, hash)), outcome) in parsed.records.iter().zip(prepared).zip(&outcomes)
     {
+        ensure_session_order(&transaction, &record.capture.session_id)?;
         if *outcome == ImportOutcome::Imported {
             insert_record(&transaction, record, canonical, &source_sha256, hash)?;
         }
     }
-    if let Some((snapshot, canonical, hash)) = snapshot.as_ref() {
-        if snapshot_advances == Some(true) {
+    for ((snapshot, canonical, hash), advances) in snapshots.iter().zip(snapshot_advances) {
+        if advances {
             validate_snapshot_members(&transaction, snapshot)?;
         } else if let Some(latest) = latest_session_snapshot(&transaction, &snapshot.session_id)? {
             validate_snapshot_members(&transaction, &latest)?;
         }
         insert_snapshot_if_absent(&transaction, snapshot, canonical, hash)?;
-    } else {
+    }
+    if snapshots.is_empty() {
         for record in &parsed.records {
             if let Some(snapshot) =
                 latest_session_snapshot(&transaction, &record.capture.session_id)?
@@ -247,7 +277,7 @@ pub(crate) fn append_set(
             .filter(|outcome| **outcome == ImportOutcome::AlreadyPresent)
             .count(),
         receipts,
-        last_saved_state: parsed.state.as_ref().map(CaptureStateSummary::from),
+        last_saved_state: parsed.last_saved_summary(),
     })
 }
 
@@ -421,12 +451,10 @@ fn receipt(
 }
 
 fn build_snapshot(
+    state: &super::model::EncounterModuleState,
     parsed: &ParsedCaptureSet,
     prepared: &[(Vec<u8>, String)],
 ) -> Result<Option<(SessionSnapshot, Vec<u8>, String)>, EncounterError> {
-    let Some(state) = parsed.state.as_ref() else {
-        return Ok(None);
-    };
     let Some(session) = state.session.as_ref() else {
         return Ok(None);
     };
@@ -434,6 +462,7 @@ fn build_snapshot(
         .records
         .iter()
         .zip(prepared)
+        .filter(|(record, _)| record.capture.session_id == session.session_id)
         .map(|(record, (_, content_sha256))| SessionEncounterReference {
             ordinal: record.ordinal,
             encounter_id: record.capture.encounter_id.clone(),
@@ -519,12 +548,26 @@ fn validate_snapshot_extension(
         .failure
         .as_ref()
         .is_none_or(|failure| current.failure.as_ref() == Some(failure));
+    let resumed = previous.mode == CaptureMode::Continuous
+        && previous.disposition == super::model::CaptureSessionStatus::Stopped
+        && current
+            .interruptions
+            .iter()
+            .skip(previous.interruptions.len())
+            .any(|marker| {
+                marker.reason == super::model::CaptureInterruptionReason::UserResumed
+                    && marker.prior_finished_at == previous.finished_at
+                    && marker.after_encounter_ordinal == previous.encounters.len() as u64
+            });
     let finished_monotonic = previous
         .finished_at
         .as_ref()
-        .is_none_or(|finished| current.finished_at.as_ref() == Some(finished));
+        .is_none_or(|finished| current.finished_at.as_ref() == Some(finished) || resumed);
     let disposition_monotonic = match previous.disposition {
         super::model::CaptureSessionStatus::Active => true,
+        super::model::CaptureSessionStatus::Stopped => {
+            resumed || current.disposition == super::model::CaptureSessionStatus::Stopped
+        }
         disposition => current.disposition == disposition,
     };
     if previous.session_id != current.session_id
@@ -576,7 +619,13 @@ pub fn list_encounters(
 ) -> Result<Vec<EncounterSummary>, EncounterError> {
     let connection = open_store(store_path.as_ref(), false, false)?;
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    let query = if version == STORE_SCHEMA_VERSION {
+    let query = if version == 5 {
+        "SELECT content_sha256, session_id, encounter_id, channel, status, started_at,
+                finished_at, first_sequence, last_sequence, stored_event_count,
+                omitted_event_count, capture_mode, encounter_ordinal
+         FROM raw_encounters JOIN encounter_session_order USING (session_id)
+         ORDER BY import_ordinal, encounter_ordinal"
+    } else if version == 4 {
         "SELECT content_sha256, session_id, encounter_id, channel, status, started_at,
                 finished_at, first_sequence, last_sequence, stored_event_count,
                 omitted_event_count, capture_mode, encounter_ordinal
@@ -686,11 +735,16 @@ pub fn delete_encounter(
 ) -> Result<DeleteReceipt, EncounterError> {
     let mut connection = open_store(store_path.as_ref(), false, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
     let deleted = transaction.execute(
         "DELETE FROM raw_encounters WHERE session_id = ?1 AND encounter_id = ?2",
         params![session_id, encounter_id],
     )?;
-    transaction.commit()?;
+    if deleted > 0 {
+        transaction.commit()?;
+    } else {
+        transaction.rollback()?;
+    }
     Ok(DeleteReceipt {
         deleted_records: deleted,
     })
@@ -699,8 +753,13 @@ pub fn delete_encounter(
 pub fn delete_all(store_path: impl AsRef<Path>) -> Result<DeleteReceipt, EncounterError> {
     let mut connection = open_store(store_path.as_ref(), false, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
     let deleted = transaction.execute("DELETE FROM raw_encounters", [])?;
-    transaction.commit()?;
+    if deleted > 0 {
+        transaction.commit()?;
+    } else {
+        transaction.rollback()?;
+    }
     Ok(DeleteReceipt {
         deleted_records: deleted,
     })
@@ -772,7 +831,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
             return invalid("encounter store has an unrecognized schema");
         }
         let schema = format!(
-            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{SESSION_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\n{SESSION_IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 4;"
+            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{SESSION_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\n{SESSION_IMMUTABILITY_TRIGGER_SQL};\n{ORDER_TABLE_SQL};\n{ORDER_IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 5;"
         );
         connection.execute_batch("BEGIN IMMEDIATE;")?;
         if let Err(error) = connection
@@ -787,27 +846,15 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
     } else if version == 1 {
         validate_schema(&connection, 1)?;
         validate_records(&connection, 1)?;
-        if write {
-            migrate_v1_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
     } else if version == 2 {
         validate_schema(&connection, 2)?;
         validate_records(&connection, 2)?;
-        if write {
-            migrate_v2_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
     } else if version == 3 {
         validate_schema(&connection, 3)?;
         validate_records(&connection, 3)?;
-        if write {
-            migrate_v3_to_current(&connection)?;
-            validate_schema(&connection, STORE_SCHEMA_VERSION)?;
-            validate_records(&connection, STORE_SCHEMA_VERSION)?;
-        }
+    } else if version == 4 {
+        validate_schema(&connection, 4)?;
+        validate_records(&connection, 4)?;
     } else if version == STORE_SCHEMA_VERSION {
         validate_schema(&connection, STORE_SCHEMA_VERSION)?;
         validate_records(&connection, STORE_SCHEMA_VERSION)?;
@@ -819,17 +866,31 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
 
 fn validate_store_contents(connection: &Connection) -> Result<(), EncounterError> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if !matches!(version, 1 | 2 | 3 | STORE_SCHEMA_VERSION) {
+    if !matches!(version, 1 | 2 | 3 | 4 | STORE_SCHEMA_VERSION) {
         return invalid(format!("unsupported encounter store schema {version}"));
     }
     validate_schema(connection, version)?;
     validate_records(connection, version)
 }
 
-fn migrate_v1_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_for_write(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
+    let version: u32 = transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    match version {
+        1 => migrate_v1_to_current(transaction)?,
+        2 => migrate_v2_to_current(transaction)?,
+        3 => migrate_v3_to_current(transaction)?,
+        4 => migrate_v4_to_current(transaction)?,
+        STORE_SCHEMA_VERSION => return Ok(()),
+        _ => return invalid("unsupported encounter store schema"),
+    }
+    validate_schema(transaction, STORE_SCHEMA_VERSION)?;
+    validate_records(transaction, STORE_SCHEMA_VERSION)?;
+    Ok(())
+}
+
+fn migrate_v1_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TRIGGER raw_encounters_no_update;
+        "DROP TRIGGER raw_encounters_no_update;
          ALTER TABLE raw_encounters RENAME TO raw_encounters_v1;
          DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
@@ -854,20 +915,19 @@ fn migrate_v1_to_current(connection: &Connection) -> Result<(), EncounterError> 
          DROP TABLE raw_encounters_v1;
          {IMMUTABILITY_TRIGGER_SQL};
          {SESSION_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 4;
-         COMMIT;"
+         {ORDER_TABLE_SQL};
+         {ORDER_BACKFILL_SQL};
+         {ORDER_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 5;
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
-    }
+    transaction.execute_batch(&migration)?;
     Ok(())
 }
 
-fn migrate_v2_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_v2_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TRIGGER raw_encounters_no_update;
+        "DROP TRIGGER raw_encounters_no_update;
          ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
          DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
@@ -892,20 +952,19 @@ fn migrate_v2_to_current(connection: &Connection) -> Result<(), EncounterError> 
          DROP TABLE raw_encounters_v2;
          {IMMUTABILITY_TRIGGER_SQL};
          {SESSION_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 4;
-         COMMIT;"
+         {ORDER_TABLE_SQL};
+         {ORDER_BACKFILL_SQL};
+         {ORDER_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 5;
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
-    }
+    transaction.execute_batch(&migration)?;
     Ok(())
 }
 
-fn migrate_v3_to_current(connection: &Connection) -> Result<(), EncounterError> {
+fn migrate_v3_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
     let migration = format!(
-        "BEGIN IMMEDIATE;
-         DROP TRIGGER raw_encounters_no_update;
+        "DROP TRIGGER raw_encounters_no_update;
          ALTER TABLE raw_encounters RENAME TO raw_encounters_v3;
          DROP TABLE encounter_store_meta;
          {META_TABLE_SQL};
@@ -930,16 +989,84 @@ fn migrate_v3_to_current(connection: &Connection) -> Result<(), EncounterError> 
          DROP TABLE raw_encounters_v3;
          {IMMUTABILITY_TRIGGER_SQL};
          {SESSION_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 4;
-         COMMIT;"
+         {ORDER_TABLE_SQL};
+         {ORDER_BACKFILL_SQL};
+         {ORDER_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 5;
+"
     );
-    if let Err(error) = connection.execute_batch(&migration) {
-        let _ = connection.execute_batch("ROLLBACK;");
-        return Err(error.into());
+    transaction.execute_batch(&migration)?;
+    Ok(())
+}
+
+fn migrate_v4_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), EncounterError> {
+    let migration = format!(
+        "DROP TABLE encounter_store_meta;
+         {META_TABLE_SQL};
+         {META_INSERT_SQL};
+         {ORDER_TABLE_SQL};
+         {ORDER_BACKFILL_SQL};
+         {ORDER_IMMUTABILITY_TRIGGER_SQL};
+         PRAGMA user_version = 5;
+"
+    );
+    transaction.execute_batch(&migration)?;
+    Ok(())
+}
+
+fn ensure_session_order(
+    transaction: &rusqlite::Transaction<'_>,
+    id: &str,
+) -> Result<(), EncounterError> {
+    let exists: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM encounter_session_order WHERE session_id = ?1)",
+        [id],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        let last: i64 = transaction.query_row(
+            "SELECT COALESCE(MAX(import_ordinal), 0) FROM encounter_session_order",
+            [],
+            |row| row.get(0),
+        )?;
+        let next = last
+            .checked_add(1)
+            .ok_or_else(|| EncounterError::Validation("session order exhausted".into()))?;
+        transaction.execute(
+            "INSERT INTO encounter_session_order(session_id, import_ordinal) VALUES (?1, ?2)",
+            params![id, next],
+        )?;
     }
     Ok(())
 }
 
+fn validate_session_order(connection: &Connection) -> Result<(), EncounterError> {
+    let missing: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM
+          (SELECT session_id FROM raw_encounters UNION SELECT session_id FROM encounter_session_snapshots) AS sessions
+          WHERE NOT EXISTS(SELECT 1 FROM encounter_session_order AS ordering WHERE ordering.session_id = sessions.session_id))",
+        [], |row| row.get(0))?;
+    if missing {
+        return invalid("encounter session ordering is incomplete");
+    }
+    let mut statement =
+        connection.prepare("SELECT session_id, import_ordinal FROM encounter_session_order")?;
+    for row in statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    })? {
+        let (id, ordinal) = row?;
+        if ordinal <= 0
+            || id.is_empty()
+            || id.len() > 128
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+        {
+            return invalid("encounter session ordering is invalid");
+        }
+    }
+    Ok(())
+}
 fn validate_integrity(connection: &Connection) -> Result<(), EncounterError> {
     let result: String = connection.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))?;
     if result != "ok" {
@@ -978,7 +1105,8 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
         1 => (V1_META_TABLE_SQL, V1_RAW_TABLE_SQL),
         2 => (V2_META_TABLE_SQL, V2_RAW_TABLE_SQL),
         3 => (V3_META_TABLE_SQL, V3_RAW_TABLE_SQL),
-        4 => (META_TABLE_SQL, RAW_TABLE_SQL),
+        4 => (V4_META_TABLE_SQL, RAW_TABLE_SQL),
+        5 => (META_TABLE_SQL, RAW_TABLE_SQL),
         _ => return invalid("unsupported encounter store schema"),
     };
     let mut expected = vec![
@@ -996,7 +1124,7 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
             IMMUTABILITY_TRIGGER_SQL,
         ),
     ];
-    if version == STORE_SCHEMA_VERSION {
+    if version >= 4 {
         expected.insert(
             1,
             (
@@ -1011,6 +1139,21 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
             "encounter_session_snapshots_no_update",
             "encounter_session_snapshots",
             SESSION_IMMUTABILITY_TRIGGER_SQL,
+        ));
+        expected.sort_by_key(|entry| (entry.0, entry.1));
+    }
+    if version == 5 {
+        expected.push((
+            "table",
+            "encounter_session_order",
+            "encounter_session_order",
+            ORDER_TABLE_SQL,
+        ));
+        expected.push((
+            "trigger",
+            "encounter_session_order_no_update",
+            "encounter_session_order",
+            ORDER_IMMUTABILITY_TRIGGER_SQL,
         ));
         expected.sort_by_key(|entry| (entry.0, entry.1));
     }
@@ -1038,7 +1181,8 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
         1 => (1, 1),
         2 => (2, 2),
         3 => (3, CANONICAL_FORMAT_VERSION),
-        4 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
+        4 => (4, CANONICAL_FORMAT_VERSION),
+        5 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
         _ => unreachable!(),
     };
     if meta != Some(expected_meta) {
@@ -1058,7 +1202,7 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
                 first_sequence, last_sequence, stored_event_count, omitted_event_count,
                 'single', 1, canonical_json
          FROM raw_encounters"
-    } else if version < STORE_SCHEMA_VERSION {
+    } else if version < 4 {
         "SELECT content_sha256, source_sha256, session_id, encounter_id, channel,
                 capture_schema_version, addon_version, canonical_format_version,
                 status, started_at, finished_at, first_sequence, last_sequence,
@@ -1131,7 +1275,7 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
         if !indexed_fields_match {
             return invalid("encounter store index fields do not match canonical content");
         }
-        if version == STORE_SCHEMA_VERSION {
+        if version >= 4 {
             session_members.push(StoredSessionMember {
                 content_sha256: stored.content_sha256,
                 session_id: stored.session_id,
@@ -1142,8 +1286,11 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
             });
         }
     }
-    if version == STORE_SCHEMA_VERSION {
+    if version >= 4 {
         validate_session_snapshots(connection, &session_members)?;
+    }
+    if version == 5 {
+        validate_session_order(connection)?;
     }
     Ok(())
 }
@@ -1281,7 +1428,7 @@ fn validate_snapshot_facts(snapshot: &SessionSnapshot) -> Result<(), EncounterEr
         {
             return invalid("stored session interruption references are invalid");
         }
-        super::validate::validate_decimal_time(&interruption.occurred_at)?;
+        super::validate::validate_interruption_marker(interruption, snapshot.mode)?;
     }
     if let Some(failure) = snapshot.failure.as_ref() {
         super::validate::validate_decimal_time(&failure.occurred_at)?;

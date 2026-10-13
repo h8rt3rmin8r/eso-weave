@@ -165,9 +165,10 @@ serialized background worker so large captures do not block the GUI.
 **Last saved source** inspects validated metadata before import: selected
 environment, path, timestamp, readiness and finished/partial counts. Opening the
 workflow, source refresh, and successful and failed import attempts reread it;
-selection changes reject stale results. An empty stopped session needs clearing
-and a new start, while a stopped session with encounters needs import before
-clearing. The desktop cannot select a mode, toggle capture, write live
+selection changes reject stale results. Matching per-session summaries and
+whole-file capacity are visible. An empty stopped session can start again
+without clearing; a stopped continuous session can resume. Import before
+confirmed discard only if a desktop copy is wanted. The desktop cannot select a mode, toggle capture, write live
 SavedVariables or acknowledge current addon state. Current requested and
 effective state is available through `/ewencounter status` inside ESO.
 

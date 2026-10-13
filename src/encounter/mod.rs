@@ -37,7 +37,7 @@ pub use replay::{assess_replay, ReplayAssessment};
 pub use store::{backup_store, delete_all, delete_encounter, list_encounters, load_encounter};
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
-pub const STORE_SCHEMA_VERSION: u32 = 4;
+pub const STORE_SCHEMA_VERSION: u32 = 5;
 pub const CANONICAL_FORMAT_VERSION: u32 = 2;
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;
@@ -48,6 +48,8 @@ pub const MAX_PARSE_TOKENS: usize = crate::data_addon::MAX_SAVED_VARIABLES_TOKEN
 pub const MAX_TABLE_ENTRIES: usize = crate::data_addon::MAX_SAVED_VARIABLES_ENTRIES;
 pub const MAX_ACTORS: u64 = 4_096;
 pub const MAX_SESSION_ENCOUNTERS: usize = 1_024;
+pub const MAX_RETAINED_SESSIONS: usize = 32;
+pub const MAX_SESSION_SEQUENCE: u64 = 9_007_199_254_740_991;
 pub const MAX_SESSION_INTERRUPTION_MARKERS: usize = 1_024;
 
 const ROOT: &str = "EsoWeaveDataSaved";
@@ -207,10 +209,33 @@ pub fn parse_capture_set(
     let mut value = crate::data_addon::take_module(&mut root, "encounter")
         .map_err(EncounterError::Validation)?;
     if value.get("state_schema_version").is_some() {
-        if capture_version(&value, "state_schema_version")? != 1
-            || capture_version(&value, "addon_version")? != 4
-        {
+        let version = (
+            capture_version(&value, "state_schema_version")?,
+            capture_version(&value, "addon_version")?,
+        );
+        if !matches!(version, (1, 4) | (2, 5)) {
             return Err(EncounterError::UnsupportedVersion);
+        }
+        let extension_fields = [
+            "retained_sessions",
+            "session_sequence",
+            "next_session_sequence",
+        ];
+        if version == (1, 4) && extension_fields.iter().any(|key| value.get(key).is_some()) {
+            return invalid("legacy controller has retention fields");
+        }
+        if version == (2, 5) {
+            let archives = value
+                .get("retained_sessions")
+                .and_then(serde_json::Value::as_object)
+                .ok_or_else(|| EncounterError::Validation("invalid retained sessions".into()))?;
+            if archives.values().any(|archive| {
+                extension_fields
+                    .iter()
+                    .any(|key| archive.get(key).is_some())
+            }) {
+                return invalid("nested retained sessions are unsupported");
+            }
         }
         normalize_state_empty_arrays(&mut value);
         let state: EncounterModuleState = serde_json::from_value(value)
@@ -241,10 +266,19 @@ pub fn parse_capture_set(
             capture,
         }],
         state: None,
+        sessions: Vec::new(),
     })
 }
 
 fn normalize_state_empty_arrays(value: &mut serde_json::Value) {
+    if let Some(archives) = value
+        .get_mut("retained_sessions")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for archive in archives.values_mut() {
+            normalize_state_empty_arrays(archive);
+        }
+    }
     for field in ["interruptions"] {
         if value
             .get(field)

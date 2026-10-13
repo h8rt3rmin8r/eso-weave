@@ -221,7 +221,136 @@ pub(crate) fn validate_state(
     state: EncounterModuleState,
     expected_channel: Channel,
 ) -> Result<ParsedCaptureSet, EncounterError> {
-    if state.state_schema_version != 1 || state.addon_version != 4 {
+    if state.state_schema_version == 1 && state.addon_version == 4 {
+        return validate_single_state(state, expected_channel);
+    }
+    if state.state_schema_version != 2 || state.addon_version != 5 {
+        return Err(EncounterError::UnsupportedVersion);
+    }
+    let next = state
+        .next_session_sequence
+        .filter(|n| (1..=super::MAX_SESSION_SEQUENCE).contains(n))
+        .ok_or_else(|| EncounterError::Validation("invalid next session sequence".into()))?;
+    let current_sequence = match (&state.session, state.session_sequence) {
+        (None, None) => next,
+        (Some(_), Some(n)) if n > 0 && n < next => n,
+        _ => return invalid("current session sequence is inconsistent"),
+    };
+    if state.retained_sessions.len() + usize::from(state.session.is_some())
+        > super::MAX_RETAINED_SESSIONS
+    {
+        return invalid("retained session capacity exceeded");
+    }
+    let mut controllers = Vec::with_capacity(state.retained_sessions.len() + 1);
+    for (key, archive) in &state.retained_sessions {
+        let sequence = key
+            .parse::<u64>()
+            .map_err(|_| EncounterError::Validation("invalid archive sequence".into()))?;
+        if sequence == 0
+            || sequence >= current_sequence
+            || key != &format!("{sequence:016}")
+            || !matches!(
+                (archive.state_schema_version, archive.addon_version),
+                (1, 4) | (2, 5)
+            )
+            || !archive.retained_sessions.is_empty()
+            || archive.session_sequence.is_some()
+            || archive.next_session_sequence.is_some()
+            || archive.session.is_none()
+            || !matches!(
+                archive.state,
+                CaptureControllerState::Stopped | CaptureControllerState::Failed
+            )
+            || archive.current.is_some()
+            || archive.requested_mode.is_some()
+            || archive.active_mode.is_some()
+        {
+            return invalid("retained session envelope is invalid");
+        }
+        controllers.push(archive.clone());
+    }
+    if state.requested_mode.is_some()
+        && state.session.as_ref().is_some_and(|session| {
+            state.selected_mode != session.mode || state.selected_channel != Some(session.channel)
+        })
+    {
+        return invalid("active selection does not match session");
+    }
+    controllers.push(state.current_controller());
+    let mut identities = BTreeSet::new();
+    let mut encounter_ids = BTreeSet::new();
+    let mut total_events = 0;
+    let mut total_raw = 0;
+    let mut total_bytes = 0;
+    let mut total_slots = 0;
+    let mut total_interruptions = 0;
+    let mut records = Vec::new();
+    let mut sessions = Vec::new();
+    for controller in controllers {
+        let channel = controller
+            .session
+            .as_ref()
+            .map(|s| s.channel)
+            .or(controller.selected_channel)
+            .unwrap_or(expected_channel);
+        let validated = validate_single_state(controller, channel)?;
+        let controller = validated.state.expect("validated controller");
+        if let Some(session) = &controller.session {
+            if !identities.insert(session.session_id.clone()) {
+                return invalid("duplicate retained session identity");
+            }
+            total_events += session.aggregate_event_count;
+            total_raw += session.aggregate_raw_observation_count;
+            total_bytes += session.aggregate_estimated_bytes;
+        }
+        total_slots += controller.records.len() + usize::from(controller.current.is_some());
+        total_interruptions += controller.interruptions.len();
+        for record in &validated.records {
+            if !encounter_ids.insert(record.capture.encounter_id.clone()) {
+                return invalid("duplicate retained encounter identity");
+            }
+        }
+        if let Some(id) = &controller.current_encounter_id {
+            if !encounter_ids.insert(id.clone()) {
+                return invalid("duplicate current encounter identity");
+            }
+        }
+        if channel == expected_channel {
+            records.extend(validated.records);
+            sessions.push(controller);
+        }
+    }
+    if total_events > MAX_EVENTS
+        || total_raw > MAX_EVENTS
+        || total_bytes > MAX_ESTIMATED_BYTES
+        || total_slots > MAX_SESSION_ENCOUNTERS
+        || total_interruptions > MAX_SESSION_INTERRUPTION_MARKERS
+        || (state.current.is_some()
+            && (total_events > MAX_EVENTS - TERMINAL_EVENT_RESERVE
+                || total_raw > MAX_EVENTS - RAW_TERMINAL_RESERVE
+                || total_bytes
+                    > MAX_ESTIMATED_BYTES - TERMINAL_BYTE_RESERVE - OUTER_FAILURE_BYTE_RESERVE))
+    {
+        return invalid("retained spool exceeds aggregate capacity");
+    }
+    if sessions.is_empty() {
+        return Err(EncounterError::EnvironmentMismatch);
+    }
+    Ok(ParsedCaptureSet {
+        state: Some(state),
+        records,
+        sessions,
+    })
+}
+
+fn validate_single_state(
+    state: EncounterModuleState,
+    expected_channel: Channel,
+) -> Result<ParsedCaptureSet, EncounterError> {
+    if !matches!(
+        (state.state_schema_version, state.addon_version),
+        (1, 4) | (2, 5)
+    ) {
         return Err(EncounterError::UnsupportedVersion);
     }
     if state.revision == 0 {
@@ -296,7 +425,12 @@ pub(crate) fn validate_state(
         {
             return invalid("encounter interruption ordering is invalid");
         }
-        validate_decimal_time(&interruption.occurred_at)?;
+        if state.state_schema_version == 1
+            && interruption.reason == super::model::CaptureInterruptionReason::UserResumed
+        {
+            return invalid("legacy controller cannot declare resume markers");
+        }
+        validate_interruption_marker(interruption, state.selected_mode)?;
     }
 
     if let Some(session) = session {
@@ -379,8 +513,28 @@ pub(crate) fn validate_state(
     }
     Ok(ParsedCaptureSet {
         records,
+        sessions: vec![state.clone()],
         state: Some(state),
     })
+}
+
+pub(crate) fn validate_interruption_marker(
+    marker: &super::model::CaptureInterruption,
+    mode: CaptureMode,
+) -> Result<(), EncounterError> {
+    validate_decimal_time(&marker.occurred_at)?;
+    match (marker.reason, marker.prior_finished_at.as_deref()) {
+        (super::model::CaptureInterruptionReason::UserResumed, Some(prior))
+            if mode == CaptureMode::Continuous =>
+        {
+            validate_decimal_time(prior)?;
+        }
+        (super::model::CaptureInterruptionReason::UserResumed, _) | (_, Some(_)) => {
+            return invalid("resume marker stop boundary is invalid")
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn active_reserves_available(session: &CaptureSession) -> bool {

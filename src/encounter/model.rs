@@ -125,6 +125,7 @@ pub enum CaptureFailureReason {
 pub enum CaptureInterruptionReason {
     PlayerDeactivated,
     RuntimeInterrupted,
+    UserResumed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,6 +161,8 @@ pub struct CaptureInterruption {
     pub occurred_at: String,
     pub after_encounter_ordinal: u64,
     pub reason: CaptureInterruptionReason,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prior_finished_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,6 +200,41 @@ pub struct EncounterModuleState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<CaptureFailure>,
     pub revision: u64,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub retained_sessions: BTreeMap<String, EncounterModuleState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_sequence: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_session_sequence: Option<u64>,
+}
+
+impl EncounterModuleState {
+    pub(crate) fn current_controller(&self) -> Self {
+        Self {
+            state_schema_version: 2,
+            addon_version: 5,
+            selected_mode: self.session.as_ref().map_or(self.selected_mode, |s| s.mode),
+            selected_channel: self
+                .session
+                .as_ref()
+                .map(|s| s.channel)
+                .or(self.selected_channel),
+            requested_mode: self.requested_mode,
+            active_mode: self.active_mode,
+            state: self.state,
+            current_encounter_id: self.current_encounter_id.clone(),
+            session: self.session.clone(),
+            current: self.current.clone(),
+            records: self.records.clone(),
+            interruptions: self.interruptions.clone(),
+            stop_reason: self.stop_reason,
+            failure: self.failure.clone(),
+            revision: self.revision,
+            retained_sessions: BTreeMap::new(),
+            session_sequence: None,
+            next_session_sequence: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -210,6 +248,13 @@ pub struct OrderedEncounterCapture {
 pub struct ParsedCaptureSet {
     pub state: Option<EncounterModuleState>,
     pub records: Vec<OrderedEncounterCapture>,
+    pub sessions: Vec<EncounterModuleState>,
+}
+
+impl ParsedCaptureSet {
+    pub(crate) fn last_saved_summary(&self) -> Option<CaptureStateSummary> {
+        self.sessions.last().map(CaptureStateSummary::from)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

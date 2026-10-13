@@ -31,11 +31,9 @@ raw values.
    Use `/ewencounter status` for current activity and the next action.
    Starting during combat reports **RECORDING** with an incomplete opening.
 
-To change mode or channel later, recording must be off **and** the retained
-session must be cleared with `/ewencounter clear confirm`. Stopping alone keeps
-that session. Save and import any usable fights you want to retain before
-clearing, then choose the new mode/channel. Preservation through import is
-optional; clearing deliberately discards the addon's retained recordings.
+To change the next session's mode or channel, stop recording first. Earlier
+sessions keep their original mode and environment. Starting again keeps those
+recordings; clearing is a separate deliberate deletion choice.
 
 Catalog collection and encounter recording share the `EsoWeaveData` package and
 the game's `SavedVariables/EsoWeaveData.lua` file, but retain separate data.
@@ -66,8 +64,8 @@ Use these additional commands:
 | `/ewencounter start pts single` | Start one fight in the Public Test Server |
 | `/ewencounter start live continuous` | Start continuous recording in Live; substitute pts for the Public Test Server |
 | `/ewencounter stop` | Stop and retain recordings; repeating stop keeps them |
-| `/ewencounter mode single\|continuous` | Select one of the two modes while off with no retained session; clear the old session deliberately before changing it |
-| `/ewencounter channel live\|pts` | Select the source channel while off with no retained session |
+| `/ewencounter mode single\|continuous` | Select one of the two modes while recording is off; applies only to the next session |
+| `/ewencounter channel live\|pts` | Select the next session's source channel while recording is off |
 | `/ewencounter toggle` | Start recording with the chosen mode, or stop recording and retain the data already collected |
 | `/ewencounter status` | Show OFF, WAITING FOR COMBAT or RECORDING, retained counts and the next action |
 | `/ewencounter status details` | Show optional technical state, interruption and failure details |
@@ -75,10 +73,9 @@ Use these additional commands:
 | `/ewencounter help` | Show the command summary |
 
 Historical `arm`, `disarm`, `mode`, `channel` and `toggle` forms remain compatible.
-Explicit start validates all arguments before changing configuration and refuses
-to replace a retained session. They do not add a mode. Retained evidence is never silently
-overwritten or evicted; clear it explicitly when the status instructs you to do
-so.
+Explicit start validates all arguments and capacity before changing configuration
+or retaining the prior session. Repeated active start is idempotent. These
+commands add no mode; retained evidence is never silently overwritten or evicted.
 
 The prior channel-specific forms remain aliases for selecting and enabling
 single mode:
@@ -87,6 +84,41 @@ single mode:
 /ewencounter arm live
 /ewencounter arm pts
 ```
+
+## Start again, resume or discard
+
+After a session stops, another start command begins a distinct session and keeps
+the prior one. No clear or desktop-import acknowledgment is required. The addon
+retains up to **32 sessions** within the same whole-spool observation, fight,
+interruption and estimated-byte limits. Earlier sessions are immutable archives.
+
+For a stopped continuous session, choose deliberately:
+
+- **Resume** with `/ewencounter resume` to continue its original identity, mode,
+  environment and next fight ordinal. A counted resume marker preserves the
+  previous stop time. Finished fights remain unchanged.
+- **Start** with `/ewencounter start live continuous` (or the matching environment/mode)
+  to begin a distinct session and retain the previous one.
+- **List** with `/ewencounter sessions` to see chronological IDs, provenance,
+  status, counts and capacity.
+- **Discard one** with `/ewencounter discard SESSION_ID confirm` while recording is
+  off. It deletes exactly that addon session; other recordings, catalog data
+  and desktop history remain. Save/import first only if you want to keep it.
+- **Clear all** with `/ewencounter clear confirm` deliberately removes all addon
+  recordings. It preserves the identity counter, so later sessions do not reuse
+  earlier identities.
+
+Only the latest stopped continuous session can resume. Single, failed and
+archived sessions cannot resume. A valid failed session can be retained by a new
+start when capacity permits. Full capacity refuses a new start or resume before
+rotation or selection changes, and explains deliberate discard choices. It never
+silently replaces or evicts data.
+
+Supported older captures and controllers migrate without changing terminal
+payloads or identities. Invalid or unsupported evidence stays preserved and
+inactive. A reload during an active fight retains its explicit partial and
+interruption facts; existing durably saved continuous authority can recover as
+before. Stopping and resuming are separate from this reload recovery.
 
 ## Save, import and view
 
@@ -185,8 +217,8 @@ controlled failure class but never display compared values.
 
 ## Bounds, ordering, and incomplete capture
 
-The complete spool is limited to 100,000 raw observations, 100,000 compatibility
-events, 1,024 terminal encounters, 1,024 interruption markers, and a conservative
+The complete spool is limited to 32 sessions, 100,000 raw observations, 100,000 compatibility
+events, 1,024 terminal or current encounters, 1,024 interruption markers, and a conservative
 32 MiB estimated encounter-data budget. Each observation remains limited to 256
 tagged values, each encounter to 4,096 derived actor mappings, and each raw string
 to 64 KiB. Exact serialized size depends on ESO and is not claimed by the in-game
@@ -231,16 +263,21 @@ environment selected in Settings and stores accepted raw history only in the
 per-user application data directory.
 
 The importer treats the SavedVariables file as hostile text, validates the
-controller and every terminal member before writing, then commits the whole
-batch atomically. A repeated or growing valid spool is idempotent; any malformed
+current controller, every archived session and every terminal member before
+writing. It then selects the requested environment and commits all matching
+records and per-session snapshots atomically. A repeated or growing valid spool is idempotent; any malformed
 member, conflicting identity, changed prior prefix, or invalid ordinal rejects
 the batch and preserves prior history. Session snapshots authenticate every
 present member's mode, ordinal, identity, channel, and content hash before a
-transaction commits. Store schema v4 accepts legacy capture v1
+transaction commits. Store schema v5 accepts legacy capture v1
 and raw-authority capture v2, including addon versions 2 and 3.
 Migration copies legacy canonical bytes and hashes unchanged. If an older valid
 store reused a session identity, read and migration assign stable deterministic
 ordinals within that historical session without changing canonical evidence.
+Store versions 1-4 remain readable and migrate transactionally on import.
+Durable first-import session order preserves grouping after clock reversal,
+record deletion and reimport; source session order comes from persisted creation
+sequences, never wall-clock sorting.
 Encounter History
 retains session mode and ordinal, labels derived results as observed, and exposes
 partial capture loss and unresolved catalog IDs without displaying raw payload
@@ -248,7 +285,8 @@ values. Deletion remains an explicit confirmed local action.
 
 **Last saved source** inspects the selected saved file before an import. It
 shows the selected Live or PTS environment, file path, last-save timestamp,
-saved controller state, and finished and partial/interrupted counts. Inspection
+saved controller state, finished and partial/interrupted counts, matching
+per-session provenance, and whole-file retained capacity. Inspection
 is bounded and read-only; it does not create history. **Refresh Saved Source**
 rereads that file, while **Refresh Imported History** rereads desktop copies.
 Changing the environment or folder rejects an older pending inspection result.
@@ -261,8 +299,9 @@ is enabled, loaded or recording now. Use `/ewencounter status` inside ESO for
 current activity. An initialized file with no retained session means no recording
 has been saved; start a fight instead of repeatedly importing that empty state.
 A stopped **empty session** means recording started and stopped before a fight.
-Use `/ewencounter clear confirm` in ESO, then start again; it has no encounters
-to import. A stopped session with encounters still needs import before clearing.
+Start again without clearing; the empty session has no encounters to import.
+A stopped continuous session may instead resume. Import before discard or clear
+only if you want to preserve those addon copies in desktop history.
 
 Command replies use ESO's system-chat route independently of the debug sink.
 If chat is still initializing, replies wait for it. Recording stays off until
