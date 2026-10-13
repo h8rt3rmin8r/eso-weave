@@ -13,7 +13,7 @@ Fresh Unreleased remains available after rollover. The complete prior Unreleased
 ## Plan lifecycle
 
 Plan053: In Progress/Active becomes Complete/Archived at docs/archive/build-plans/plan-053.md, supported by PR #276 merge 05c97041b9d12f5e5c10fae14ba1b80511c5974d on 2026-10-13.
-Plan054: In Progress/Active at docs/project/build-plans/plan-054.md, owning S128/#277 candidate preparation. Both indexes and migration-ledger JSON/prose must agree. Existing generic policy checks the relationship and destinations.
+Plan054: In Progress/Active at docs/project/build-plans/plan-054.md, owning S128/#279 candidate preparation. Both indexes and migration-ledger JSON/prose must agree. Existing generic policy checks the relationship and destinations.
 
 ## Integration receipt
 

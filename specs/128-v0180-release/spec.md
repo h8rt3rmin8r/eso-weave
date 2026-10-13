@@ -3,7 +3,7 @@
 **Feature Branch**: `codex/s128-v0180-release`
 **Created**: 2026-10-13
 **Status**: Specification validated
-**Input**: Owner-authorized S128 for [issue #277](https://github.com/h8rt3rmin8r/eso-weave/issues/277), preparing the merged S125-S127 work as a reviewed v0.18.0 candidate. Automatic push, official PR and at most two external review rounds are authorized.
+**Input**: Owner-authorized S128 for [issue #279](https://github.com/h8rt3rmin8r/eso-weave/issues/279), preparing the merged S125-S127 work as a reviewed v0.18.0 candidate. Automatic push, official PR and at most two external review rounds are authorized.
 
 ## User Scenarios & Testing
 
@@ -28,7 +28,7 @@ A maintainer finds Plan053 archived with the actual S127 merge and a chronologic
 **Acceptance Scenarios**:
 
 1. **Given** PR #276 merged at 05c97041b9d12f5e5c10fae14ba1b80511c5974d, **when** planning is refreshed, **then** Plan053 is Complete/Archived and records the owner merge.
-2. **Given** the active planning index and ledger, **when** a reader follows them, **then** they identify Plan054, S128 and #277 as candidate preparation with separate later publication.
+2. **Given** the active planning index and ledger, **when** a reader follows them, **then** they identify Plan054, S128 and #279 as candidate preparation with separate later publication.
 3. **Given** historical S125-S127 records, **when** the archive is updated, **then** chronology and delivery evidence remain intact.
 
 ### User Story 3 - Review before publication (Priority: P3)
@@ -57,7 +57,7 @@ The owner receives an official candidate PR with successful automated evidence a
 
 - Q: Version and scope? A: The owner selected v0.18.0 candidate preparation for S125-S127; the native import and retained-session expansion justify the proposed minor version.
 - Q: Candidate or artifact publication? A: The existing local rollover is authorized as preparation; final owner merge and later annotated tag/package publication remain separate.
-- Q: Issue completion? A: #277 closes with repository evidence on owner merge of this candidate. No installed/game evidence or field-verification issue is added.
+- Q: Issue completion? A: #279 closes with repository evidence on owner merge of this candidate. Parent release tracker #277 stays open until separately authorized publication completes. No installed/game evidence or field-verification issue is added.
 - Q: Validation strategy? A: Reuse existing automated release, documentation/render, Rust and production-build gates; no runtime implementation or new tests that mirror metadata are needed.
 - Coverage: scope, entities/lifecycle, interactions, quality, dependencies, failures, constraints, terminology and completion are Clear; no unresolved clarification remains.
 
@@ -68,10 +68,10 @@ The owner receives an official candidate PR with successful automated evidence a
 - **FR-001**: The candidate MUST identify v0.18.0 and one preparation date consistently across package/lockfile, badge, bundled documentation metadata and the version-sensitive capture request.
 - **FR-002**: Notes MUST contain one through six Highlights bullets totaling at most 120 words, cover all S125-S127 user outcomes and retain their complete Added/Fixed/Decisions history plus all earlier releases and a fresh Unreleased section.
 - **FR-003**: Plan053 MUST be archived Complete with PR #276 merge evidence, repaired relative references and preserved chronology.
-- **FR-004**: Plan054, current indexes and migration ledger MUST agree on S128/#277 as candidate preparation, owner final merge and separate tag/publication.
+- **FR-004**: Plan054, current indexes and migration ledger MUST agree on S128/#279 as candidate preparation, owner final merge and separate tag/publication.
 - **FR-005**: Runtime, addon, store, service, dependency and tool contracts MUST remain unchanged; native normal/separate version15 support and manual provenance MUST NOT become claims of other variants, tailing or platform parity.
 - **FR-006**: Preparation MUST follow the existing reviewed release procedure, detect existing target identity, use automated gates, record actual outcomes and preserve UTF-8/no-BOM/LF text.
-- **FR-007**: The official PR MUST link #277, pass checks on the final head, answer every finding, resolve completed threads and request no more than two review rounds.
+- **FR-007**: The official PR MUST link #279, pass checks on the final head, answer every finding, resolve completed threads and request no more than two review rounds.
 - **FR-008**: The handoff MUST leave the PR unmerged with no new tag/package publication, no owner installed/game check request and no assertion of unobserved runtime behavior.
 
 ### Key Entities

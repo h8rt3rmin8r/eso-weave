@@ -1,7 +1,7 @@
 # Implementation Plan: S128 v0.18.0 Release Preparation
 
 **Branch**: `codex/s128-v0180-release` | **Date**: 2026-10-13 | **Spec**: [spec.md](spec.md)
-**Input**: S128 / issue #277, owner-authorized automatic push and official PR with at most two review rounds.
+**Input**: S128 / issue #279, owner-authorized automatic push and official PR with at most two review rounds.
 
 ## Summary
 
@@ -21,7 +21,7 @@ Prepare the S125-S127 candidate using the existing cargo-release rollover, prese
 
 ## Constitution Check
 
-Pre-research PASS: Spec precedes implementation and maps to #277/canonical release procedure. Existing safety-critical tests remain mandatory. No architecture, runtime, dependency or pinned process change; all required automated gates and owner publication boundaries apply. No exceptions.
+Pre-research PASS: Spec precedes implementation and maps to #279/canonical release procedure. Existing safety-critical tests remain mandatory. No architecture, runtime, dependency or pinned process change; all required automated gates and owner publication boundaries apply. No exceptions.
 
 Post-design PASS: research resolved all integration questions, and the candidate contract/data model/tasks preserve all identity, history, issue and owner boundaries. No runtime source, dependency, pinned tool or process changes are required.
 

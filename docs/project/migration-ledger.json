@@ -1739,7 +1739,7 @@
       "specs": [
         "specs/128-v0180-release"
       ],
-      "evidence": "S128 prepares the v0.18.0 release candidate for issue #277 through the existing release procedure and full spec-kit/autopilot. Owner final review and merge remain the candidate delivery boundary; later tag and package publication require separate authorization."
+      "evidence": "S128 prepares the v0.18.0 release candidate for issue #279 through the existing release procedure and full spec-kit/autopilot. Owner final review and merge remain the candidate delivery boundary; later tag and package publication require separate authorization."
     }
   ],
   "safetyCrosswalk": [

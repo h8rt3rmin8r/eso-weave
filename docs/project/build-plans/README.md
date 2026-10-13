@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Current slice |
 | --- | --- | --- |
-| [054](plan-054.md) | Active | S128 prepares the v0.18.0 candidate for issue #277 |
+| [054](plan-054.md) | Active | S128 prepares the v0.18.0 candidate for issue #279 |
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -25,7 +25,7 @@ Plan049 completed S123; v0.17.3 subsequently published on 2026-10-07.
 Plan050 completed S124 in PR #264 on 2026-10-07. Plan051 completed S125's seven
 workflow issues in PR #274 on 2026-10-12. Plan052 completed S126/#273 retained
 sessions in owner-merged PR #275 on 2026-10-13. Plan053 completed S127/#272 native import in owner-merged PR #276 on 2026-10-13.
-Plan054 owns S128/#277 v0.18.0 candidate preparation.
+Plan054 owns S128/#279 v0.18.0 candidate preparation.
 Owner final review and merge remain the candidate delivery boundary;
 tag and package publication require separate authorization.
 

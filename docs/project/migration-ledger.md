@@ -43,7 +43,7 @@ manifest, so changing a count cannot hide an omission or substitution.
   S126 retained recording sessions / issue #273 in PR #275 on 2026-10-13.
   Plan 053 completed S127 native import / issue #272 in owner-merged PR #276
   on 2026-10-13. Plan 054 is active for S128 v0.18.0 candidate preparation /
-  issue #277. Owner merge and later tag/publication remain separate.
+  issue #279. Owner merge and later tag/publication remain separate.
   Independent release verification does not reactivate a completed plan. The
   policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.

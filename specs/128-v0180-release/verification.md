@@ -1,7 +1,7 @@
 # S128 Candidate Evidence
 
 Date: 2026-10-13. Baseline: protected main 05c97041b9d12f5e5c10fae14ba1b80511c5974d.
-Issue: #277. Branch: codex/s128-v0180-release. Preparation only.
+Issue: #279. Branch: codex/s128-v0180-release. Preparation only.
 
 ## Specification
 
@@ -43,5 +43,15 @@ installed application or real-game behavior.
 
 ## Integration
 
-Official PR, external reviews and final-head CI await publication. The candidate
-is unmerged and untagged. No package publication or owner field check occurred.
+Official PR #278 opened on 3158b96cef46c7f003da766ecdacededa09d44d2.
+Automatic review was round one. Corrected-head CI and final review remain pending.
+The candidate is unmerged and untagged; no package publication or field check occurred.
+
+## First Review Correction
+
+Automatic opening review completed on 3158b96 at 2026-10-13 11:30 UTC. Finding
+4258054763 identified premature closure of the only release tracker. Parent
+#277 now tracks publication and remains open after merge; child #279 owns
+S128 candidate preparation and is the PR closing issue. Specification, contract,
+plan, ledger, indexes and changelog agree. Publication authority is unchanged.
+Reply, thread resolution, final review and corrected-head checks follow push.

@@ -5,7 +5,7 @@ Tests: reuse existing gates; no runtime implementation or mirrored metadata test
 
 ## Phase 1: Setup
 
-- [x] T001 Establish S128/#277/branch alignment and spec-kit artifacts in specs/128-v0180-release/ and .specify/feature.json.
+- [x] T001 Establish S128/#279/branch alignment and spec-kit artifacts in specs/128-v0180-release/ and .specify/feature.json.
 - [x] T002 Inspect protected release/config/workflow authorities and hidden tool availability; record baseline and absence of target identity in specs/128-v0180-release/verification.md.
 
 ## Phase 2: Foundation
@@ -32,10 +32,10 @@ Independent test: generic documentation policy accepts matching plan lifecycle/i
 
 ## Phase 5: User Story 3, Official Reviewed Candidate (P3)
 
-Independent test: official PR links #277, all checks pass on final head and every returned thread is resolved within two rounds.
+Independent test: official PR links #279, all checks pass on final head and every returned thread is resolved within two rounds.
 
 - [x] T012 [US3] Run full existing format/Clippy/locked tests, documentation/render and bundled production build; record actual results in specs/128-v0180-release/verification.md.
-- [ ] T013 [US3] Automatically push codex/s128-v0180-release and publish official PR with Closes #277; move issue project stage to PR review.
+- [x] T013 [US3] Automatically push codex/s128-v0180-release and publish official PR with Closes #279; move issue project stage to PR review.
 - [ ] T014 [US3] Address every finding and resolve completed threads within two rounds; verify final-head CI/review state in specs/128-v0180-release/verification.md.
 
 ## Phase 6: Polish and Handoff

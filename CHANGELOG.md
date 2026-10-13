@@ -126,9 +126,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 2026-10-13: S128 prepares the v0.18.0 candidate for merged S125-S127 through
   the governed local rollover. Plan053 is archived after owner merge of PR #276;
-  Plan054 tracks candidate preparation for issue #277. Runtime, addon/store
+  Plan054 tracks candidate preparation for issue #279. Runtime, addon/store
   contracts, dependencies and pipeline pins remain unchanged. Owner final merge
   and separately authorized tag/package publication remain later steps.
+- 2026-10-13: First S128 review corrected the release issue lifecycle. Parent
+  #277 remains open through publication; candidate-preparation child #279 closes
+  on owner merge. The PR links both without extending publication authority.
 
 ## [0.17.4] - 2026-10-07
 

@@ -6,7 +6,7 @@ Status: Active
 
 After S125-S127 owner merges in PRs #274, #275 and #276, prepare
 [S128](../../../specs/128-v0180-release/spec.md) for candidate
-[issue #277](https://github.com/h8rt3rmin8r/eso-weave/issues/277).
+[issue #279](https://github.com/h8rt3rmin8r/eso-weave/issues/279).
 
 1. Complete the full spec-kit sequence and blocking analysis.
 2. Archive completed Plan053 with PR #276 merge evidence, repair current links
@@ -17,6 +17,7 @@ After S125-S127 owner merges in PRs #274, #275 and #276, prepare
 6. Automatically push and publish the official candidate PR, address every finding
    within two review rounds, verify green final-head CI and deliver owner handoff.
 
-This plan remains Active through owner final review and merge. Issue #277 owns
-candidate preparation. Later annotated tag/package publication requires separate
+This plan remains Active through owner final review and merge. Issue #279 owns
+candidate preparation; parent release tracker #277 remains open through publication.
+Later annotated tag/package publication requires separate
 explicit authorization under the canonical release procedure. No field checks.

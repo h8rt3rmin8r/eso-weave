@@ -4,7 +4,7 @@
 
 **Decision**: Use installed cargo-release 1.1.2 and unchanged release.toml on a clean preparation commit; inspect `cargo release 0.18.0`, then execute with `--execute --no-confirm` through a hidden, noninteractive launcher.
 
-**Rationale**: docs/project/releasing.md is the release authority. The branch matches the configured codex/*-release restriction; tag, push and publish remain false. The six-file rollover synchronizes Cargo package/lock, changelog, badge, bundled snapshot and collector fixture. Installed version was queried successfully. The target remote tag is absent; no matching issue existed before #277. Local/hosted target identity is checked again before execution.
+**Rationale**: docs/project/releasing.md is the release authority. The branch matches the configured codex/*-release restriction; tag, push and publish remain false. The six-file rollover synchronizes Cargo package/lock, changelog, badge, bundled snapshot and collector fixture. Installed version was queried successfully. The target remote tag is absent; no matching issue existed before #279. Local/hosted target identity is checked again before execution.
 
 **Alternatives considered**: Hand-editing package, badge and snapshot metadata duplicates governed replacement logic. A new pipeline or dependency update adds no candidate value. Older release sequencing is superseded by the current procedure.
 
@@ -28,9 +28,9 @@
 
 **Decision**: Reuse release-note/Debian fixtures, docs/render/brand/trust policy suites, spelling, mdBook examples/build/link checks, complete headless render, Rust format/Clippy/locked tests and bundled release build. Verify final-head CI and every review disposition, within two rounds.
 
-**Rationale**: The candidate changes identity and planning, with no runtime code. Existing gates exercise shipped source and packaging contracts. #277 is specifically candidate preparation and closes on owner merge, as prior S123/#255 did; the procedure's generic publication tracker rule does not turn this issue into an artifact-publication request. Later tag/publication still requires separate authority. No owner field checks are requested.
+**Rationale**: The candidate changes identity and planning, with no runtime code. Existing gates exercise shipped source and packaging contracts. #279 specifically owns candidate preparation and closes on owner merge. Parent release tracker #277 remains open through separately authorized tag/package publication, satisfying the canonical release lifecycle. No owner field checks are requested.
 
-**Alternatives considered**: New tests mirroring metadata duplicate established gates. A publication or field tracker would broaden the accepted preparation scope. No unresolved clarification remains.
+**Alternatives considered**: New tests mirroring metadata duplicate established gates. Executing publication or requesting field checks would broaden the accepted preparation scope; maintaining the parent publication tracker does not authorize those actions. No unresolved clarification remains.
 
 ## Research coordination
 
