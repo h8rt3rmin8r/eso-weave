@@ -63,6 +63,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [049](plan-049.md) | Complete, Archived | [S123](../../../specs/123-v0173-release/spec.md) merged in [PR #256](https://github.com/h8rt3rmin8r/eso-weave/pull/256); [v0.17.3](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.17.3) published on 2026-10-07; later packaging repair in [PR #260](https://github.com/h8rt3rmin8r/eso-weave/pull/260) |
 | [050](plan-050.md) | Complete, Archived | [S124](../../../specs/124-v0174-security-maintenance/spec.md) dependency maintenance and v0.17.4 candidate preparation merged in [PR #264](https://github.com/h8rt3rmin8r/eso-weave/pull/264) on 2026-10-07; later publication remains separate |
 | [051](plan-051.md) | Complete, Archived | [S125](../../../specs/125-data-addon-workflow-recovery/spec.md) recovered seven workflow issues #265 through #271 in [PR #274](https://github.com/h8rt3rmin8r/eso-weave/pull/274), owner-merged on 2026-10-12 |
+| [052](plan-052.md) | Complete, Archived | [S126](../../../specs/126-retained-recording-sessions/spec.md) retained sessions for #273 in [PR #275](https://github.com/h8rt3rmin8r/eso-weave/pull/275), owner-squash-merged on 2026-10-13 at 9bfe9e0 |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.

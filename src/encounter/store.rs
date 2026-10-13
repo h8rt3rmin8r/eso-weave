@@ -99,9 +99,14 @@ const V4_META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     schema_version INTEGER NOT NULL CHECK (schema_version = 4),
     canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
 )"#;
-const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+const V5_META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version = 5),
+    canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
+)"#;
+const META_TABLE_SQL: &str = r#"CREATE TABLE encounter_store_meta (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 6),
     canonical_format_version INTEGER NOT NULL CHECK (canonical_format_version = 2)
 )"#;
 const ORDER_TABLE_SQL: &str = r#"CREATE TABLE encounter_session_order (
@@ -117,7 +122,7 @@ const ORDER_BACKFILL_SQL: &str = r#"INSERT INTO encounter_session_order(session_
 SELECT session_id, ROW_NUMBER() OVER (ORDER BY session_id)
 FROM (SELECT session_id FROM raw_encounters UNION SELECT session_id FROM encounter_session_snapshots)"#;
 const META_INSERT_SQL: &str = r#"INSERT INTO encounter_store_meta(singleton, schema_version, canonical_format_version)
-VALUES (1, 5, 2)"#;
+VALUES (1, 6, 2)"#;
 const RAW_TABLE_SQL: &str = r#"CREATE TABLE raw_encounters (
     content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
     source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
@@ -166,6 +171,47 @@ BEFORE UPDATE ON encounter_session_snapshots
 BEGIN
     SELECT RAISE(ABORT, 'encounter session snapshots are immutable');
 END"#;
+
+const NATIVE_RUN_TABLE_SQL: &str = r#"CREATE TABLE native_runs (
+    session_id TEXT PRIMARY KEY,
+    content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+    channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+    native_schema_version INTEGER NOT NULL CHECK (native_schema_version = 1),
+    run_ordinal INTEGER NOT NULL CHECK (run_ordinal > 0),
+    canonical_json BLOB NOT NULL
+)"#;
+const NATIVE_TABLE_SQL: &str = r#"CREATE TABLE native_encounters (
+    content_sha256 TEXT PRIMARY KEY CHECK (length(content_sha256) = 64),
+    source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+    session_id TEXT NOT NULL,
+    encounter_id TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK (channel IN ('live', 'pts')),
+    native_schema_version INTEGER NOT NULL CHECK (native_schema_version = 1),
+    encounter_ordinal INTEGER NOT NULL CHECK (encounter_ordinal > 0),
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    first_sequence INTEGER NOT NULL,
+    last_sequence INTEGER NOT NULL,
+    record_count INTEGER NOT NULL,
+    unknown_count INTEGER NOT NULL,
+    canonical_json BLOB NOT NULL,
+    UNIQUE (session_id, encounter_id),
+    FOREIGN KEY (session_id) REFERENCES native_runs(session_id)
+)"#;
+const NATIVE_RUN_TRIGGER_SQL: &str = r#"CREATE TRIGGER native_runs_no_update
+BEFORE UPDATE ON native_runs
+BEGIN
+    SELECT RAISE(ABORT, 'native recording runs are immutable');
+END"#;
+const NATIVE_TRIGGER_SQL: &str = r#"CREATE TRIGGER native_encounters_no_update
+BEFORE UPDATE ON native_encounters
+BEGIN
+    SELECT RAISE(ABORT, 'native encounters are immutable');
+END"#;
+
+fn native_schema_sql() -> String {
+    format!("{NATIVE_RUN_TABLE_SQL};\n{NATIVE_TABLE_SQL};\n{NATIVE_RUN_TRIGGER_SQL};\n{NATIVE_TRIGGER_SQL};")
+}
 
 struct StoredRecord {
     content_sha256: String,
@@ -619,7 +665,7 @@ pub fn list_encounters(
 ) -> Result<Vec<EncounterSummary>, EncounterError> {
     let connection = open_store(store_path.as_ref(), false, false)?;
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    let query = if version == 5 {
+    let query = if version >= 5 {
         "SELECT content_sha256, session_id, encounter_id, channel, status, started_at,
                 finished_at, first_sequence, last_sequence, stored_event_count,
                 omitted_event_count, capture_mode, encounter_ordinal
@@ -659,43 +705,65 @@ pub fn list_encounters(
             row.get::<_, i64>(12)?,
         ))
     })?;
-    rows.map(|row| {
-        let (
-            content_sha256,
-            session_id,
-            encounter_id,
-            channel,
-            status,
-            started_at,
-            finished_at,
-            first_sequence,
-            last_sequence,
-            stored_event_count,
-            omitted_event_count,
-            capture_mode,
-            encounter_ordinal,
-        ) = row?;
-        Ok(EncounterSummary {
-            content_sha256,
-            session_id,
-            encounter_id,
-            channel: parse_channel(&channel)?,
-            status: parse_status(&status)?,
-            started_at,
-            finished_at,
-            first_sequence: nonnegative_db(first_sequence, "first sequence")?,
-            last_sequence: nonnegative_db(last_sequence, "last sequence")?,
-            stored_event_count: usize::try_from(nonnegative_db(
+    let mut summaries = rows
+        .map(|row| {
+            let (
+                content_sha256,
+                session_id,
+                encounter_id,
+                channel,
+                status,
+                started_at,
+                finished_at,
+                first_sequence,
+                last_sequence,
                 stored_event_count,
-                "stored event count",
-            )?)
-            .map_err(|_| EncounterError::Validation("stored event count is out of range".into()))?,
-            omitted_event_count: nonnegative_db(omitted_event_count, "omitted event count")?,
-            capture_mode: parse_mode(&capture_mode)?,
-            encounter_ordinal: nonnegative_db(encounter_ordinal, "encounter ordinal")?,
+                omitted_event_count,
+                capture_mode,
+                encounter_ordinal,
+            ) = row?;
+            Ok(EncounterSummary {
+                content_sha256,
+                session_id,
+                encounter_id,
+                channel: parse_channel(&channel)?,
+                status: parse_status(&status)?,
+                started_at,
+                finished_at,
+                first_sequence: nonnegative_db(first_sequence, "first sequence")?,
+                last_sequence: nonnegative_db(last_sequence, "last sequence")?,
+                stored_event_count: usize::try_from(nonnegative_db(
+                    stored_event_count,
+                    "stored event count",
+                )?)
+                .map_err(|_| {
+                    EncounterError::Validation("stored event count is out of range".into())
+                })?,
+                omitted_event_count: nonnegative_db(omitted_event_count, "omitted event count")?,
+                capture_mode: Some(parse_mode(&capture_mode)?),
+                source_kind: super::model::EncounterSourceKind::SavedAddon,
+                unknown_record_count: 0,
+                encounter_ordinal: nonnegative_db(encounter_ordinal, "encounter ordinal")?,
+            })
         })
-    })
-    .collect()
+        .collect::<Result<Vec<_>, EncounterError>>()?;
+    if version == 6 {
+        summaries.extend(native_summaries(&connection)?);
+        let mut statement =
+            connection.prepare("SELECT session_id,import_ordinal FROM encounter_session_order")?;
+        let order = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+        summaries.sort_by_key(|summary| {
+            (
+                order.get(&summary.session_id).copied().unwrap_or(i64::MAX),
+                summary.encounter_ordinal,
+            )
+        });
+    }
+    Ok(summaries)
 }
 
 pub fn load_encounter(
@@ -736,11 +804,16 @@ pub fn delete_encounter(
     let mut connection = open_store(store_path.as_ref(), false, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     migrate_for_write(&transaction)?;
-    let deleted = transaction.execute(
+    let mut deleted = transaction.execute(
         "DELETE FROM raw_encounters WHERE session_id = ?1 AND encounter_id = ?2",
         params![session_id, encounter_id],
     )?;
+    deleted += transaction.execute(
+        "DELETE FROM native_encounters WHERE session_id=?1 AND encounter_id=?2",
+        params![session_id, encounter_id],
+    )?;
     if deleted > 0 {
+        transaction.execute("DELETE FROM native_runs WHERE NOT EXISTS(SELECT 1 FROM native_encounters WHERE native_encounters.session_id=native_runs.session_id)",[])?;
         transaction.commit()?;
     } else {
         transaction.rollback()?;
@@ -754,7 +827,11 @@ pub fn delete_all(store_path: impl AsRef<Path>) -> Result<DeleteReceipt, Encount
     let mut connection = open_store(store_path.as_ref(), false, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     migrate_for_write(&transaction)?;
-    let deleted = transaction.execute("DELETE FROM raw_encounters", [])?;
+    let deleted = transaction.execute("DELETE FROM raw_encounters", [])?
+        + transaction.execute("DELETE FROM native_encounters", [])?;
+    if deleted > 0 {
+        transaction.execute("DELETE FROM native_runs", [])?;
+    }
     if deleted > 0 {
         transaction.commit()?;
     } else {
@@ -830,8 +907,9 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
         if !allow_create || !schema_is_empty(&connection)? {
             return invalid("encounter store has an unrecognized schema");
         }
+        let native_schema = native_schema_sql();
         let schema = format!(
-            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{SESSION_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\n{SESSION_IMMUTABILITY_TRIGGER_SQL};\n{ORDER_TABLE_SQL};\n{ORDER_IMMUTABILITY_TRIGGER_SQL};\nPRAGMA user_version = 5;"
+            "{META_TABLE_SQL};\n{META_INSERT_SQL};\n{RAW_TABLE_SQL};\n{SESSION_TABLE_SQL};\n{IMMUTABILITY_TRIGGER_SQL};\n{SESSION_IMMUTABILITY_TRIGGER_SQL};\n{ORDER_TABLE_SQL};\n{ORDER_IMMUTABILITY_TRIGGER_SQL};\n{native_schema}\nPRAGMA user_version = 6;"
         );
         connection.execute_batch("BEGIN IMMEDIATE;")?;
         if let Err(error) = connection
@@ -855,6 +933,9 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
     } else if version == 4 {
         validate_schema(&connection, 4)?;
         validate_records(&connection, 4)?;
+    } else if version == 5 {
+        validate_schema(&connection, 5)?;
+        validate_records(&connection, 5)?;
     } else if version == STORE_SCHEMA_VERSION {
         validate_schema(&connection, STORE_SCHEMA_VERSION)?;
         validate_records(&connection, STORE_SCHEMA_VERSION)?;
@@ -866,7 +947,7 @@ fn open_store(path: &Path, allow_create: bool, write: bool) -> Result<Connection
 
 fn validate_store_contents(connection: &Connection) -> Result<(), EncounterError> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if !matches!(version, 1 | 2 | 3 | 4 | STORE_SCHEMA_VERSION) {
+    if !matches!(version, 1 | 2 | 3 | 4 | 5 | STORE_SCHEMA_VERSION) {
         return invalid(format!("unsupported encounter store schema {version}"));
     }
     validate_schema(connection, version)?;
@@ -880,9 +961,13 @@ fn migrate_for_write(transaction: &rusqlite::Transaction<'_>) -> Result<(), Enco
         2 => migrate_v2_to_current(transaction)?,
         3 => migrate_v3_to_current(transaction)?,
         4 => migrate_v4_to_current(transaction)?,
+        5 => {
+            transaction.execute_batch(&format!("DROP TABLE encounter_store_meta; {META_TABLE_SQL}; {META_INSERT_SQL}; PRAGMA user_version=6;"))?;
+        }
         STORE_SCHEMA_VERSION => return Ok(()),
         _ => return invalid("unsupported encounter store schema"),
     }
+    transaction.execute_batch(&native_schema_sql())?;
     validate_schema(transaction, STORE_SCHEMA_VERSION)?;
     validate_records(transaction, STORE_SCHEMA_VERSION)?;
     Ok(())
@@ -918,7 +1003,7 @@ fn migrate_v1_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), 
          {ORDER_TABLE_SQL};
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 5;
+         PRAGMA user_version = 6;
 "
     );
     transaction.execute_batch(&migration)?;
@@ -955,7 +1040,7 @@ fn migrate_v2_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), 
          {ORDER_TABLE_SQL};
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 5;
+         PRAGMA user_version = 6;
 "
     );
     transaction.execute_batch(&migration)?;
@@ -992,7 +1077,7 @@ fn migrate_v3_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), 
          {ORDER_TABLE_SQL};
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 5;
+         PRAGMA user_version = 6;
 "
     );
     transaction.execute_batch(&migration)?;
@@ -1007,7 +1092,7 @@ fn migrate_v4_to_current(transaction: &rusqlite::Transaction<'_>) -> Result<(), 
          {ORDER_TABLE_SQL};
          {ORDER_BACKFILL_SQL};
          {ORDER_IMMUTABILITY_TRIGGER_SQL};
-         PRAGMA user_version = 5;
+         PRAGMA user_version = 6;
 "
     );
     transaction.execute_batch(&migration)?;
@@ -1041,11 +1126,15 @@ fn ensure_session_order(
 }
 
 fn validate_session_order(connection: &Connection) -> Result<(), EncounterError> {
-    let missing: bool = connection.query_row(
+    let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let order_query = if version == 6 {
+        "SELECT EXISTS(SELECT 1 FROM (SELECT session_id FROM raw_encounters UNION SELECT session_id FROM encounter_session_snapshots UNION SELECT session_id FROM native_runs) AS sessions WHERE NOT EXISTS(SELECT 1 FROM encounter_session_order AS ordering WHERE ordering.session_id=sessions.session_id))"
+    } else {
         "SELECT EXISTS(SELECT 1 FROM
           (SELECT session_id FROM raw_encounters UNION SELECT session_id FROM encounter_session_snapshots) AS sessions
-          WHERE NOT EXISTS(SELECT 1 FROM encounter_session_order AS ordering WHERE ordering.session_id = sessions.session_id))",
-        [], |row| row.get(0))?;
+          WHERE NOT EXISTS(SELECT 1 FROM encounter_session_order AS ordering WHERE ordering.session_id = sessions.session_id))"
+    };
+    let missing: bool = connection.query_row(order_query, [], |row| row.get(0))?;
     if missing {
         return invalid("encounter session ordering is incomplete");
     }
@@ -1106,7 +1195,8 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
         2 => (V2_META_TABLE_SQL, V2_RAW_TABLE_SQL),
         3 => (V3_META_TABLE_SQL, V3_RAW_TABLE_SQL),
         4 => (V4_META_TABLE_SQL, RAW_TABLE_SQL),
-        5 => (META_TABLE_SQL, RAW_TABLE_SQL),
+        5 => (V5_META_TABLE_SQL, RAW_TABLE_SQL),
+        6 => (META_TABLE_SQL, RAW_TABLE_SQL),
         _ => return invalid("unsupported encounter store schema"),
     };
     let mut expected = vec![
@@ -1142,7 +1232,7 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
         ));
         expected.sort_by_key(|entry| (entry.0, entry.1));
     }
-    if version == 5 {
+    if version >= 5 {
         expected.push((
             "table",
             "encounter_session_order",
@@ -1155,6 +1245,30 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
             "encounter_session_order",
             ORDER_IMMUTABILITY_TRIGGER_SQL,
         ));
+        expected.sort_by_key(|entry| (entry.0, entry.1));
+    }
+    if version == 6 {
+        expected.extend([
+            ("table", "native_runs", "native_runs", NATIVE_RUN_TABLE_SQL),
+            (
+                "table",
+                "native_encounters",
+                "native_encounters",
+                NATIVE_TABLE_SQL,
+            ),
+            (
+                "trigger",
+                "native_runs_no_update",
+                "native_runs",
+                NATIVE_RUN_TRIGGER_SQL,
+            ),
+            (
+                "trigger",
+                "native_encounters_no_update",
+                "native_encounters",
+                NATIVE_TRIGGER_SQL,
+            ),
+        ]);
         expected.sort_by_key(|entry| (entry.0, entry.1));
     }
     let schema_matches = actual.len() == expected.len()
@@ -1182,7 +1296,8 @@ fn validate_schema(connection: &Connection, version: u32) -> Result<(), Encounte
         2 => (2, 2),
         3 => (3, CANONICAL_FORMAT_VERSION),
         4 => (4, CANONICAL_FORMAT_VERSION),
-        5 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
+        5 => (5, CANONICAL_FORMAT_VERSION),
+        6 => (STORE_SCHEMA_VERSION, CANONICAL_FORMAT_VERSION),
         _ => unreachable!(),
     };
     if meta != Some(expected_meta) {
@@ -1289,7 +1404,10 @@ fn validate_records(connection: &Connection, version: u32) -> Result<(), Encount
     if version >= 4 {
         validate_session_snapshots(connection, &session_members)?;
     }
-    if version == 5 {
+    if version >= 5 {
+        if version == 6 {
+            validate_native_records(connection)?;
+        }
         validate_session_order(connection)?;
     }
     Ok(())
@@ -1519,4 +1637,344 @@ fn reject_link_like_file(path: &Path) -> Result<(), EncounterError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
+}
+
+pub(crate) fn append_native_set(
+    store_path: &Path,
+    parsed: &super::native::ParsedNativeLog,
+    prepared: &[(Vec<u8>, String)],
+    source_sha256: String,
+) -> Result<super::native::NativeImportReport, EncounterError> {
+    use super::native::{canonical_native_run_bytes, NativeImportReceipt, NativeImportReport};
+    if parsed.encounters.len() != prepared.len() || !is_sha256(&source_sha256) {
+        return invalid("native prepared import is invalid");
+    }
+    let mut connection = open_store(store_path, true, true)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_for_write(&transaction)?;
+    let mut outcomes = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut runs = std::collections::BTreeMap::new();
+    for (capture, (canonical, hash)) in parsed.encounters.iter().zip(prepared) {
+        if !seen.insert((&capture.run.session_id, &capture.encounter_id))
+            || super::native::canonical_native_bytes(capture)? != *canonical
+            || sha256(canonical) != *hash
+        {
+            return invalid("native prepared encounter is invalid");
+        }
+        let run_bytes = canonical_native_run_bytes(&capture.run)?;
+        if let Some(existing) = runs.insert(
+            capture.run.session_id.clone(),
+            (capture.run.clone(), run_bytes.clone()),
+        ) {
+            if existing.1 != run_bytes {
+                return invalid("native run identity collision");
+            }
+        }
+        let existing: Option<(String,Vec<u8>)> = transaction.query_row(
+            "SELECT content_sha256,canonical_json FROM native_encounters WHERE session_id=?1 AND encounter_id=?2",
+            params![capture.run.session_id,capture.encounter_id],
+            |row|Ok((row.get(0)?,row.get(1)?))
+        ).optional()?;
+        outcomes.push(match existing {
+            Some((existing_hash, existing_bytes))
+                if existing_hash == *hash && existing_bytes == *canonical =>
+            {
+                ImportOutcome::AlreadyPresent
+            }
+            Some(_) => return invalid("native encounter identity collision"),
+            None => ImportOutcome::Imported,
+        });
+    }
+    for (id, (_, canonical)) in &runs {
+        let existing: Option<Vec<u8>> = transaction
+            .query_row(
+                "SELECT canonical_json FROM native_runs WHERE session_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if existing.is_some_and(|bytes| bytes != *canonical) {
+            return invalid("native run identity collision");
+        }
+    }
+    // Allocation follows file order, not hash-key order.
+    for capture in &parsed.encounters {
+        ensure_session_order(&transaction, &capture.run.session_id)?;
+    }
+    for (run, canonical) in runs.values() {
+        transaction.execute(
+            "INSERT OR IGNORE INTO native_runs VALUES (?1,?2,?3,1,?4,?5)",
+            params![
+                run.session_id,
+                sha256(canonical),
+                run.channel.as_str(),
+                to_db(run.run_ordinal)?,
+                canonical
+            ],
+        )?;
+    }
+    for ((capture, (canonical, hash)), outcome) in
+        parsed.encounters.iter().zip(prepared).zip(&outcomes)
+    {
+        if *outcome == ImportOutcome::Imported {
+            let (started, finished) = native_times(capture)?;
+            transaction.execute(
+                "INSERT INTO native_encounters VALUES (?1,?2,?3,?4,?5,1,?6,?7,?8,?9,?10,?11,?12,?13)",
+                params![hash,source_sha256,capture.run.session_id,capture.encounter_id,
+                    capture.run.channel.as_str(),to_db(capture.encounter_ordinal)?,started,finished,
+                    to_db(capture.first_ordinal)?,to_db(capture.last_ordinal)?,
+                    to_db(capture.records.len() as u64)?,
+                    to_db((capture.unknown_record_count+capture.unknown_context_count) as u64)?,canonical]
+            )?;
+        }
+    }
+    transaction.commit()?;
+    let receipts = parsed
+        .encounters
+        .iter()
+        .zip(prepared)
+        .zip(&outcomes)
+        .map(|((capture, (_, hash)), outcome)| NativeImportReceipt {
+            outcome: *outcome,
+            session_id: capture.run.session_id.clone(),
+            encounter_id: capture.encounter_id.clone(),
+            content_sha256: hash.clone(),
+        })
+        .collect();
+    Ok(NativeImportReport {
+        source_sha256,
+        imported_count: outcomes
+            .iter()
+            .filter(|o| **o == ImportOutcome::Imported)
+            .count(),
+        already_present_count: outcomes
+            .iter()
+            .filter(|o| **o == ImportOutcome::AlreadyPresent)
+            .count(),
+        source: parsed.report.clone(),
+        receipts,
+    })
+}
+
+fn to_db(value: u64) -> Result<i64, EncounterError> {
+    i64::try_from(value)
+        .map_err(|_| EncounterError::Validation("native index value exceeds its range".into()))
+}
+fn native_times(
+    capture: &super::native::NativeEncounter,
+) -> Result<(String, String), EncounterError> {
+    let epoch = capture.run.header.epoch_ms;
+    let started = epoch
+        .checked_add(capture.started_ms)
+        .ok_or_else(|| EncounterError::Validation("native timestamp overflowed".into()))?;
+    let finished = epoch
+        .checked_add(capture.finished_ms)
+        .ok_or_else(|| EncounterError::Validation("native timestamp overflowed".into()))?;
+    Ok(((started / 1000).to_string(), (finished / 1000).to_string()))
+}
+
+pub fn load_native_encounter(
+    store_path: impl AsRef<Path>,
+    session_id: &str,
+    encounter_id: &str,
+) -> Result<Option<super::native::NativeEncounter>, EncounterError> {
+    let connection = open_store(store_path.as_ref(), false, false)?;
+    let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < 6 {
+        return Ok(None);
+    }
+    let canonical: Option<Vec<u8>> = connection
+        .query_row(
+            "SELECT canonical_json FROM native_encounters WHERE session_id=?1 AND encounter_id=?2",
+            params![session_id, encounter_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    canonical
+        .map(|bytes| {
+            serde_json::from_slice(&bytes).map_err(|_| {
+                EncounterError::Validation("stored native encounter is invalid".into())
+            })
+        })
+        .transpose()
+}
+
+fn native_summaries(connection: &Connection) -> Result<Vec<EncounterSummary>, EncounterError> {
+    let mut statement = connection.prepare(
+        "SELECT content_sha256,session_id,encounter_id,channel,started_at,finished_at,
+         first_sequence,last_sequence,record_count,unknown_count,encounter_ordinal FROM native_encounters"
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, i64>(6)?,
+            row.get::<_, i64>(7)?,
+            row.get::<_, i64>(8)?,
+            row.get::<_, i64>(9)?,
+            row.get::<_, i64>(10)?,
+        ))
+    })?;
+    rows.map(|row| {
+        let (
+            hash,
+            session_id,
+            encounter_id,
+            channel,
+            started,
+            finished,
+            first,
+            last,
+            count,
+            unknown,
+            ordinal,
+        ) = row?;
+        Ok(EncounterSummary {
+            content_sha256: hash,
+            session_id,
+            encounter_id,
+            channel: parse_channel(&channel)?,
+            status: CaptureStatus::Complete,
+            started_at: started,
+            finished_at: finished,
+            first_sequence: nonnegative_db(first, "native first sequence")?,
+            last_sequence: nonnegative_db(last, "native last sequence")?,
+            stored_event_count: usize::try_from(count)
+                .map_err(|_| EncounterError::Validation("native record count is invalid".into()))?,
+            omitted_event_count: 0,
+            capture_mode: None,
+            encounter_ordinal: nonnegative_db(ordinal, "native ordinal")?,
+            source_kind: super::model::EncounterSourceKind::NativeLog,
+            unknown_record_count: usize::try_from(unknown).map_err(|_| {
+                EncounterError::Validation("native unknown count is invalid".into())
+            })?,
+        })
+    })
+    .collect()
+}
+
+fn validate_native_records(connection: &Connection) -> Result<(), EncounterError> {
+    use super::native::{
+        canonical_native_bytes, canonical_native_run_bytes, NativeEncounter, NativeRun,
+        MAX_NATIVE_CANONICAL_BYTES,
+    };
+    let mut runs = std::collections::BTreeMap::new();
+    let mut statement = connection.prepare(
+        "SELECT session_id,content_sha256,channel,native_schema_version,run_ordinal,length(canonical_json),
+         CASE WHEN length(canonical_json)<=262144 THEN canonical_json END FROM native_runs"
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
+            row.get::<_, Option<Vec<u8>>>(6)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, hash, channel, schema, ordinal, length, canonical) = row?;
+        if !(0..=262144).contains(&length) {
+            return invalid("native run exceeds its byte limit");
+        }
+        let canonical = canonical.ok_or_else(|| {
+            EncounterError::Validation("native run exceeds its byte limit".into())
+        })?;
+        let run: NativeRun = serde_json::from_slice(&canonical)
+            .map_err(|_| EncounterError::Validation("stored native run is invalid".into()))?;
+        if canonical_native_run_bytes(&run)? != canonical
+            || sha256(&canonical) != hash
+            || run.session_id != id
+            || run.channel.as_str() != channel
+            || schema != 1
+            || u64::try_from(ordinal) != Ok(run.run_ordinal)
+        {
+            return invalid("native run index does not match canonical evidence");
+        }
+        runs.insert(id, run);
+    }
+    let mut statement=connection.prepare(
+        "SELECT content_sha256,source_sha256,session_id,encounter_id,channel,native_schema_version,
+         encounter_ordinal,started_at,finished_at,first_sequence,last_sequence,record_count,unknown_count,
+         length(canonical_json),CASE WHEN length(canonical_json)<=67108864 THEN canonical_json END FROM native_encounters"
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, i64>(5)?,
+            row.get::<_, i64>(6)?,
+            row.get::<_, String>(7)?,
+            row.get::<_, String>(8)?,
+            row.get::<_, i64>(9)?,
+            row.get::<_, i64>(10)?,
+            row.get::<_, i64>(11)?,
+            row.get::<_, i64>(12)?,
+            row.get::<_, i64>(13)?,
+            row.get::<_, Option<Vec<u8>>>(14)?,
+        ))
+    })?;
+    let mut referenced = std::collections::BTreeSet::new();
+    for row in rows {
+        let (
+            hash,
+            source,
+            id,
+            encounter,
+            channel,
+            schema,
+            ordinal,
+            started,
+            finished,
+            first,
+            last,
+            count,
+            unknown,
+            length,
+            canonical,
+        ) = row?;
+        if length < 0 || length as usize > MAX_NATIVE_CANONICAL_BYTES {
+            return invalid("native encounter exceeds its byte limit");
+        }
+        let canonical = canonical.ok_or_else(|| {
+            EncounterError::Validation("native encounter exceeds its byte limit".into())
+        })?;
+        let capture: NativeEncounter = serde_json::from_slice(&canonical)
+            .map_err(|_| EncounterError::Validation("stored native encounter is invalid".into()))?;
+        let times = native_times(&capture)?;
+        if canonical_native_bytes(&capture)? != canonical
+            || sha256(&canonical) != hash
+            || !is_sha256(&source)
+            || capture.run.session_id != id
+            || capture.encounter_id != encounter
+            || capture.run.channel.as_str() != channel
+            || schema != 1
+            || u64::try_from(ordinal) != Ok(capture.encounter_ordinal)
+            || started != times.0
+            || finished != times.1
+            || u64::try_from(first) != Ok(capture.first_ordinal)
+            || u64::try_from(last) != Ok(capture.last_ordinal)
+            || usize::try_from(count) != Ok(capture.records.len())
+            || usize::try_from(unknown)
+                != Ok(capture.unknown_record_count + capture.unknown_context_count)
+            || runs.get(&id) != Some(&capture.run)
+        {
+            return invalid("native encounter index does not match canonical evidence");
+        }
+        referenced.insert(id);
+    }
+    if runs.keys().any(|id| !referenced.contains(id)) {
+        return invalid("native run has no imported encounter");
+    }
+    Ok(())
 }

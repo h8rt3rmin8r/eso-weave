@@ -25,8 +25,9 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 use crate::app::encounter_history::{
-    loss_labels, metric_presentation, quality_label, recommendation_presentation, EncounterDetail,
-    EncounterHistoryWorker, HistoryEvent, HistoryOperation,
+    accept_native_selection, loss_labels, metric_presentation, quality_label,
+    recommendation_presentation, EncounterDetail, EncounterHistoryWorker, EncounterSourceSelection,
+    HistoryEvent, HistoryOperation,
 };
 use crate::app::log_view::build_log_view;
 use crate::app::settings_form::{SettingsForm, UiPrefs};
@@ -359,6 +360,13 @@ pub struct EsoWeaveApp {
     encounter_history_detail: Option<Result<EncounterDetail, HistoryDiagnostic>>,
     encounter_history_diagnostic: Option<HistoryDiagnostic>,
     encounter_history_message: Option<String>,
+    encounter_source_kind: crate::encounter::EncounterSourceKind,
+    native_source_path: String,
+    native_source_generation: u64,
+    native_source_key: Option<EncounterSourceSelection>,
+    native_source_result:
+        Option<Result<crate::encounter::NativeSourceInspection, HistoryDiagnostic>>,
+    native_history_detail: Option<Result<crate::encounter::NativeProjection, HistoryDiagnostic>>,
     saved_source_key: Option<(std::path::PathBuf, Channel)>,
     saved_source_generation: u64,
     saved_source_pending: bool,
@@ -448,6 +456,12 @@ impl EsoWeaveApp {
             encounter_history_detail: None,
             encounter_history_diagnostic: None,
             encounter_history_message: None,
+            encounter_source_kind: crate::encounter::EncounterSourceKind::SavedAddon,
+            native_source_path: String::new(),
+            native_source_generation: 0,
+            native_source_key: None,
+            native_source_result: None,
+            native_history_detail: None,
             saved_source_key: None,
             saved_source_generation: 0,
             saved_source_pending: true,
@@ -470,6 +484,162 @@ impl EsoWeaveApp {
     pub fn with_encounter_history(mut self, service: EncounterHistoryService) -> Self {
         self.encounter_history_worker = Some(EncounterHistoryWorker::spawn(service));
         self
+    }
+
+    pub fn set_native_encounter_source(&mut self, path: std::path::PathBuf) {
+        self.encounter_source_kind = crate::encounter::EncounterSourceKind::NativeLog;
+        self.native_source_path = path.to_string_lossy().into_owned();
+        self.invalidate_native_source();
+    }
+
+    pub fn encounter_identities(&self) -> Vec<EncounterIdentity> {
+        self.encounter_history
+            .iter()
+            .map(EncounterIdentity::from)
+            .collect()
+    }
+
+    fn native_selection(&self) -> Option<EncounterSourceSelection> {
+        if self.encounter_source_kind != crate::encounter::EncounterSourceKind::NativeLog
+            || self.native_source_path.trim().is_empty()
+        {
+            return None;
+        }
+        Some(EncounterSourceSelection {
+            generation: self.native_source_generation,
+            source_path: std::path::PathBuf::from(self.native_source_path.trim()),
+            channel: if self.model.settings_form().beacon.environment
+                == crate::beacon::Environment::Pts
+            {
+                Channel::Pts
+            } else {
+                Channel::Live
+            },
+        })
+    }
+
+    fn invalidate_native_source(&mut self) {
+        self.native_source_generation = self.native_source_generation.wrapping_add(1);
+        self.native_source_result = None;
+        self.native_source_key = self.native_selection();
+        self.encounter_history_message = None;
+    }
+
+    fn encounter_source_ui(&mut self, ui: &mut egui::Ui) {
+        let before = self.encounter_source_kind;
+        ui.horizontal_wrapped(|ui| {
+            ui.radio_value(
+                &mut self.encounter_source_kind,
+                crate::encounter::EncounterSourceKind::SavedAddon,
+                "Saved Addon Capture",
+            );
+            ui.radio_value(
+                &mut self.encounter_source_kind,
+                crate::encounter::EncounterSourceKind::NativeLog,
+                "Native Encounter Log",
+            );
+        });
+        if before != self.encounter_source_kind {
+            self.invalidate_native_source();
+        }
+        if self.encounter_source_kind == crate::encounter::EncounterSourceKind::NativeLog {
+            self.native_source_ui(ui);
+        }
+    }
+
+    fn native_source_ui(&mut self, ui: &mut egui::Ui) {
+        let current = self.native_selection();
+        if current != self.native_source_key {
+            self.invalidate_native_source();
+        }
+        ui.label("Select a completed local Encounter.log file. Stop ESO's native logging or use a stable copy before inspection. Live tailing is unavailable.");
+        ui.label("Environment provenance is your selected Live or PTS choice; the native header does not declare a game API version.");
+        let label = ui.label("Native file path");
+        if ui
+            .add(
+                egui::TextEdit::singleline(&mut self.native_source_path)
+                    .desired_width(f32::INFINITY),
+            )
+            .labelled_by(label.id)
+            .changed()
+        {
+            self.invalidate_native_source();
+        }
+        let selected = self.native_selection();
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .add_enabled(
+                    !self.encounter_history_busy
+                        && self.encounter_history_worker.is_some()
+                        && selected.is_some(),
+                    egui::Button::new("Inspect Native File"),
+                )
+                .clicked()
+            {
+                self.native_source_result = None;
+                if let (Some(worker), Some(selection)) =
+                    (&self.encounter_history_worker, selected.clone())
+                {
+                    if worker.inspect_native(selection).is_ok() {
+                        self.encounter_history_busy = true;
+                    }
+                }
+            }
+            let hash = self
+                .native_source_result
+                .as_ref()
+                .and_then(|result| result.as_ref().ok())
+                .map(|source| source.source_sha256.clone());
+            if ui
+                .add_enabled(
+                    !self.encounter_history_busy
+                        && hash.is_some()
+                        && self.encounter_history_worker.is_some(),
+                    egui::Button::new("Import Native File"),
+                )
+                .clicked()
+            {
+                if let (Some(worker), Some(selection), Some(hash)) =
+                    (&self.encounter_history_worker, selected.clone(), hash)
+                {
+                    if worker.import_native(selection, hash).is_ok() {
+                        self.encounter_history_busy = true;
+                        self.encounter_history_diagnostic = None;
+                        self.encounter_history_message = None;
+                    }
+                }
+            }
+        });
+        if let Some(result) = &self.native_source_result {
+            match result {
+                Ok(source) => {
+                    ui.label("Supported profile: normal/separate native log version15");
+                    ui.label(format!(
+                        "Completed fights: {}",
+                        source.report.completed_encounter_count
+                    ));
+                    ui.label(format!(
+                        "{} runs | {} records | {} unknown records | {} outside combat",
+                        source.report.run_count,
+                        source.report.record_count,
+                        source.report.unknown_record_count,
+                        source.report.outside_combat_record_count
+                    ));
+                    ui.label(format!(
+                        "{} unfinished fights | {} unfinished runs | {} unterminated final lines",
+                        source.report.incomplete_combat_count,
+                        source.report.incomplete_run_count,
+                        source.report.unterminated_line_count
+                    ));
+                    ui.label("Only paired completed fights are imported. Original native fields stay in local history; summaries omit raw values.");
+                }
+                Err(diagnostic) => {
+                    ui.label(&diagnostic.message);
+                }
+            }
+        } else {
+            ui.label("Inspect the selected file before importing.");
+        }
     }
 
     pub fn encounter_history_busy(&self) -> bool {
@@ -925,6 +1095,7 @@ impl EsoWeaveApp {
         self.model.set_catalog(access);
         if self.encounter_history_selected.is_some() {
             self.encounter_history_detail = None;
+            self.native_history_detail = None;
             self.encounter_history_catalog_refresh_pending = true;
         }
         warning
@@ -1006,6 +1177,7 @@ impl EsoWeaveApp {
             Some(Ok(())) => {
                 self.encounter_history_selected = Some(identity);
                 self.encounter_history_detail = None;
+                self.native_history_detail = None;
                 self.encounter_history_catalog_refresh_pending = false;
                 self.encounter_history_busy = true;
             }
@@ -1047,6 +1219,36 @@ impl EsoWeaveApp {
         {
             self.encounter_history_busy = false;
             match event {
+                HistoryEvent::NativeInspected { selection, result } => {
+                    if accept_native_selection(self.native_selection().as_ref(), &selection) {
+                        self.native_source_result = Some(result);
+                    }
+                }
+                HistoryEvent::NativeImported { selection, result } => {
+                    if accept_native_selection(self.native_selection().as_ref(), &selection) {
+                        match result {
+                            Ok((encounters, report)) => {
+                                self.encounter_history = encounters;
+                                self.encounter_history_diagnostic = None;
+                                self.encounter_history_message = Some(format!("{} native fights imported; {} already present. {} unfinished fights and {} unterminated lines were not imported.", report.imported_count, report.already_present_count, report.source.incomplete_combat_count, report.source.unterminated_line_count));
+                            }
+                            Err(diagnostic) => {
+                                self.native_source_result = None;
+                                self.encounter_history_message = None;
+                                self.encounter_history_diagnostic = Some(diagnostic);
+                            }
+                        }
+                    }
+                }
+                HistoryEvent::NativeDetail { identity, result } => {
+                    if should_accept_history_detail(
+                        self.encounter_history_selected.as_ref(),
+                        self.encounter_history_catalog_refresh_pending,
+                        &identity,
+                    ) {
+                        self.native_history_detail = Some(result.map(|detail| *detail));
+                    }
+                }
                 HistoryEvent::SourceInspected {
                     generation,
                     source_path,
@@ -1087,6 +1289,7 @@ impl EsoWeaveApp {
                     if !selection_still_exists {
                         self.encounter_history_selected = None;
                         self.encounter_history_detail = None;
+                        self.native_history_detail = None;
                         self.encounter_history_catalog_refresh_pending = false;
                     }
                 }
@@ -2844,10 +3047,12 @@ impl EsoWeaveApp {
             .vscroll(true)
             .show(ctx, |ui| {
                 ui.label(
-                    "Import recordings made by ESO Weave Data and view results stored on this computer. Results cover only the recorded observations; missing events can leave them incomplete.",
+                    "Import saved addon captures or completed native files. Results cover recorded observations; missing events can leave them incomplete.",
                 );
                 let selected_environment = self.model.settings_form().beacon.environment;
+                if self.encounter_history_selected.is_none() { self.encounter_source_ui(ui); }
                 ui.label(format!("Saved capture source: {}. Change Game Environment in Settings to select Live or PTS (Public Test Server).", env_name(selected_environment)));
+                if self.encounter_source_kind == crate::encounter::EncounterSourceKind::SavedAddon {
                 egui::CollapsingHeader::new("How to record and import")
                     .default_open(false)
                     .open(self.show_recording_guide.then_some(true))
@@ -2869,8 +3074,9 @@ impl EsoWeaveApp {
                             recording_command(ui, "/ewencounter clear confirm", "Deletes all addon recording copies only. Start needs no clear; save/import first only if you want to keep data before deletion.");
                             recording_command(ui, "/ewencounter status details", "Optional technical state and failure details.");
                         });
-                        ui.label("Catalog collection produces game-data definitions for maintainers, not fights. Native Encounter.log ingestion is not implemented. Application diagnostics are separate.");
+                        ui.label("Catalog collection produces game-data definitions for maintainers, not fights. Completed native files can be imported with Native Encounter Log; live tailing is unavailable. Application diagnostics are separate.");
                     });
+                }
                 self.show_recording_guide = false;
                 ui.horizontal_wrapped(|ui| {
                     if ui
@@ -2888,7 +3094,8 @@ impl EsoWeaveApp {
                     if ui
                         .add_enabled(
                             !self.encounter_history_busy
-                                && self.encounter_history_worker.is_some(),
+                                && self.encounter_history_worker.is_some()
+                                && self.encounter_source_kind == crate::encounter::EncounterSourceKind::SavedAddon,
                             egui::Button::new("Import Saved Capture"),
                         )
                         .on_hover_text(
@@ -2935,7 +3142,7 @@ impl EsoWeaveApp {
                 }
 
                 ui.separator();
-                if self.encounter_history_selected.is_none() { self.saved_source_ui(ui); }
+                if self.encounter_history_selected.is_none() && self.encounter_source_kind == crate::encounter::EncounterSourceKind::SavedAddon { self.saved_source_ui(ui); }
 
                 ui.separator();
                 ui.heading("Local Encounters");
@@ -2967,7 +3174,7 @@ impl EsoWeaveApp {
                                 widgets::label_surface_strong(ui, format!(
                                     "Session {} | {} mode",
                                     first.session_id,
-                                    capture_mode_label(first.capture_mode)
+                                    first.capture_mode.map(capture_mode_label).unwrap_or("Native completed file")
                                 ));
                                 for summary in &self.encounter_history[range] {
                                     let identity = EncounterIdentity::from(summary);
@@ -2988,6 +3195,7 @@ impl EsoWeaveApp {
                                         summary.stored_event_count,
                                         summary.omitted_event_count
                                     ));
+                                    if summary.source_kind == crate::encounter::EncounterSourceKind::NativeLog { ui.label(format!("Source: Native Encounter Log | {} unknown native records", summary.unknown_record_count)); }
                                     ui.small(format!(
                                         "{} to {}",
                                         summary.started_at, summary.finished_at
@@ -3019,6 +3227,9 @@ impl EsoWeaveApp {
                                 .map(EncounterDeleteConfirmation::One);
                         }
                     });
+                    if let Some(result) = &self.native_history_detail {
+                        match result { Ok(projection) => render_native_projection(ui, projection), Err(diagnostic) => { ui.label(&diagnostic.message); } }
+                    } else {
                     match &self.encounter_history_detail {
                         Some(Ok(detail)) => render_encounter_projection(
                             ui,
@@ -3037,9 +3248,11 @@ impl EsoWeaveApp {
                         }
                     }
                 }
+                }
                 if self.encounter_history_selected.is_some() {
                     ui.separator();
-                    self.saved_source_ui(ui);
+                    self.encounter_source_ui(ui);
+                    if self.encounter_source_kind == crate::encounter::EncounterSourceKind::SavedAddon { self.saved_source_ui(ui); }
                 }
             });
         self.encounter_history_open = open;
@@ -3049,6 +3262,9 @@ impl EsoWeaveApp {
     }
 
     fn request_history_import(&mut self) {
+        if self.encounter_source_kind != crate::encounter::EncounterSourceKind::SavedAddon {
+            return;
+        }
         let Some((source_path, expected_channel)) = self.model.encounter_capture_source() else {
             self.encounter_history_diagnostic = Some(HistoryDiagnostic::source_unavailable());
             self.encounter_history_message = None;
@@ -3327,6 +3543,54 @@ fn capture_session_status_label(status: CaptureSessionStatus) -> &'static str {
         CaptureSessionStatus::Active => "active",
         CaptureSessionStatus::Stopped => "stopped",
         CaptureSessionStatus::Failed => "failed",
+    }
+}
+
+fn render_native_projection(ui: &mut egui::Ui, projection: &crate::encounter::NativeProjection) {
+    ui.heading("Native Observations");
+    ui.label(format!("Native log version: {}", projection.log_version));
+    ui.label(format!(
+        "Selected environment: {} (user-selected provenance)",
+        projection.channel
+    ));
+    ui.label(format!("Elapsed duration: {} ms", projection.duration_ms));
+    ui.label(format!("{} native records | {} combat events | {} cast starts | {} effect changes | {} unknown records", projection.record_count, projection.combat_event_count, projection.cast_start_count, projection.effect_change_count, projection.unknown_record_count));
+    ui.label(
+        "Reviewed native quantities across observed actors (hit and overflow are separate fields):",
+    );
+    ui.label(format!(
+        "Damage hit: {} | damage overflow: {}",
+        projection.damage_hit, projection.damage_overflow
+    ));
+    ui.label(format!(
+        "Healing hit: {} | healing overflow: {}",
+        projection.healing_hit, projection.healing_overflow
+    ));
+    ui.label(format!(
+        "Local-player damage hit: {}",
+        projection
+            .local_damage_hit
+            .map_or_else(|| "Unavailable".into(), |v| v.to_string())
+    ));
+    ui.label(format!(
+        "Local-player healing hit: {}",
+        projection
+            .local_healing_hit
+            .map_or_else(|| "Unavailable".into(), |v| v.to_string())
+    ));
+    ui.label(format!(
+        "Local observed damage rate: {}",
+        projection
+            .local_damage_per_second
+            .map_or_else(|| "Unavailable".into(), |v| format!("{v:.2} damage/s"))
+    ));
+    ui.label("These are observed quantities, not proof of complete game combat coverage.");
+    for reason in &projection.quality_reasons {
+        ui.label(reason);
+    }
+    ui.heading("Unavailable Native Capabilities");
+    for reason in &projection.unavailable {
+        ui.label(reason);
     }
 }
 

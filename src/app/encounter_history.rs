@@ -7,12 +7,27 @@ use crate::catalog::Channel;
 use crate::encounter::{
     CaptureImportReport, CaptureStateSummary, EncounterHistoryService, EncounterIdentity,
     EncounterProjection, EncounterSummary, HistoryDiagnostic, LossRange, MetricQuality,
-    MetricResult, SavedRecordingReadiness, SavedSourceInspection,
+    MetricResult, NativeImportReport, NativeProjection, NativeSourceInspection,
+    SavedRecordingReadiness, SavedSourceInspection,
 };
 use crate::recommendation::{
     generate_recommendations, AdviceQualification, AdviceRule, RecommendationAvailability,
     RecommendationReport,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EncounterSourceSelection {
+    pub generation: u64,
+    pub source_path: PathBuf,
+    pub channel: Channel,
+}
+
+pub fn accept_native_selection(
+    current: Option<&EncounterSourceSelection>,
+    completed: &EncounterSourceSelection,
+) -> bool {
+    current == Some(completed)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoryOperation {
@@ -24,6 +39,11 @@ pub enum HistoryOperation {
 
 #[derive(Debug)]
 enum HistoryCommand {
+    InspectNative(EncounterSourceSelection),
+    ImportNative {
+        selection: EncounterSourceSelection,
+        source_sha256: String,
+    },
     InspectSource {
         generation: u64,
         source_path: PathBuf,
@@ -42,6 +62,18 @@ enum HistoryCommand {
 
 #[derive(Debug)]
 pub enum HistoryEvent {
+    NativeInspected {
+        selection: EncounterSourceSelection,
+        result: Result<NativeSourceInspection, HistoryDiagnostic>,
+    },
+    NativeImported {
+        selection: EncounterSourceSelection,
+        result: Result<(Vec<EncounterSummary>, NativeImportReport), HistoryDiagnostic>,
+    },
+    NativeDetail {
+        identity: EncounterIdentity,
+        result: Result<Box<NativeProjection>, HistoryDiagnostic>,
+    },
     SourceInspected {
         generation: u64,
         source_path: PathBuf,
@@ -82,6 +114,16 @@ impl EncounterHistoryWorker {
         let join = std::thread::spawn(move || {
             while let Ok(command) = command_rx.recv() {
                 let event = match command {
+                    HistoryCommand::InspectNative(selection) => {
+                        let result = thread_service.inspect_native_source(&selection.source_path, selection.channel);
+                        HistoryEvent::NativeInspected { selection, result }
+                    }
+                    HistoryCommand::ImportNative { selection, source_sha256 } => {
+                        let result = thread_service.import_native_inspected(&selection.source_path, selection.channel, &source_sha256)
+                            .and_then(|report| thread_service.snapshot().map(|history| (history, report)));
+                        HistoryEvent::NativeImported { selection, result }
+                    }
+
                     HistoryCommand::InspectSource { generation, source_path, expected_channel } => {
                         let result = thread_service.inspect_source(&source_path, expected_channel);
                         HistoryEvent::SourceInspected { generation, source_path, expected_channel, result }
@@ -105,11 +147,15 @@ impl EncounterHistoryWorker {
                         },
                     },
                     HistoryCommand::LoadDetail(identity) => {
-                        let result = thread_service
-                            .detail(&identity)
-                            .map(EncounterDetail::from_projection)
-                            .map(Box::new);
-                        HistoryEvent::Detail { identity, result }
+                        match thread_service.native_detail(&identity) {
+                            Ok(Some(projection)) => HistoryEvent::NativeDetail { identity, result: Ok(Box::new(projection)) },
+                            Err(diagnostic) => HistoryEvent::NativeDetail { identity, result: Err(diagnostic) },
+                            Ok(None) => {
+                                let result = thread_service.detail(&identity)
+                                    .map(EncounterDetail::from_projection).map(Box::new);
+                                HistoryEvent::Detail { identity, result }
+                            }
+                        }
                     }
                     HistoryCommand::DeleteOne(identity) => {
                         match thread_service.delete_one(&identity) {
@@ -178,6 +224,24 @@ impl EncounterHistoryWorker {
             generation,
             source_path,
             expected_channel,
+        })
+    }
+
+    pub fn inspect_native(
+        &self,
+        selection: EncounterSourceSelection,
+    ) -> Result<(), HistoryWorkerBusy> {
+        self.send(HistoryCommand::InspectNative(selection))
+    }
+
+    pub fn import_native(
+        &self,
+        selection: EncounterSourceSelection,
+        source_sha256: String,
+    ) -> Result<(), HistoryWorkerBusy> {
+        self.send(HistoryCommand::ImportNative {
+            selection,
+            source_sha256,
         })
     }
 

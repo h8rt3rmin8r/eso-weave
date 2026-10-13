@@ -1,7 +1,6 @@
 # Encounter Data and Metrics
 
-Encounter History contains **imported copies of fights recorded by ESO Weave
-Data** on this computer. It first shows observed results, then separately
+Encounter History contains **imported copies of saved-addon fights and completed native recordings** on this computer. It first shows observed results, then separately
 qualified review questions. It does not display a live fight or start recording.
 For setup, mode selection, saving, import and clearing, follow
 [Encounter Capture](../features/encounter-capture.md#install-and-choose-a-mode).
@@ -10,7 +9,7 @@ For setup, mode selection, saving, import and clearing, follow
 effects. A catalog is separate from your fight recordings. **SavedVariables**
 means the game's saved addon data, which ESO writes on `/reloadui`, logout or
 exit. **Application Log** and **File Logging** contain application diagnostics.
-ESO's native combat-log files belong to a separate unsupported import route.
+Completed native files have a separate supported profile and source-specific metrics.
 
 ## Encounter evidence lineage
 
@@ -77,15 +76,42 @@ ESO's native combat-log files belong to a separate unsupported import route.
    relevant qualifications and source/version identities. They do not establish
    a cause, promise improvement, prove Combat Metrics parity or generate input.
 
-**Native combat-log ingestion is unsupported.** ESO's native encounter-log
-files are a separate candidate, outside this supported saved-addon sequence.
-Documented API controls do not establish file durability, timing or complete
-capture parity. Native logs are also separate from application diagnostic logs.
-The figure does not promote that candidate to a supported import workflow.
+**Native completed-file import is supported** through a separate source path.
+Completed normal/separate version 15 fights enter immutable history after native
+validation; source-specific observed facts bypass the addon catalog and prompt
+stages. The figure's final native card summarizes that branch. Live tailing
+and addon replay authority remain unavailable.
 
-Earlier documentation described this unimplemented candidate as "Native
-combat-log ingestion remains provisional." Implementation is tracked by
-[issue #272](https://github.com/h8rt3rmin8r/eso-weave/issues/272).
+## Native observations
+
+**Native completed-file import is supported** for normal/separate native log
+version 15. Select Native Encounter Log, enter the file path, inspect, then import.
+The native header retains epoch, realm, language and game-version fields locally.
+Live/PTS is explicitly user-selected provenance; neither game API nor addon
+version is invented from native log version. See [Encounter Ingestion](../development/encounter-ingestion.md).
+
+Native projection algorithm 1 uses paired elapsed milliseconds, native record
+order and observed unit relations without a catalog. It exposes combat-event,
+cast-start and effect-change counts; reviewed damage/healing hit and overflow
+totals across observed actors; and local-player hit totals/rate when a unique
+observed local PLAYER relation is available. DAMAGE, CRITICAL_DAMAGE, DOT_TICK
+and DOT_TICK_CRITICAL contribute damage; HEAL, CRITICAL_HEAL, HOT_TICK and
+HOT_TICK_CRITICAL contribute healing. Other result amounts are not promoted into
+those totals. Hit and overflow remain separate. Totals cover interpreted
+observations and do not prove complete combat coverage.
+
+Unknown records/context and clock reversal reduce quality; zero duration or
+reduced quality makes rates unavailable. Missing/ambiguous local identity makes
+local-player quantities unavailable. Effect uptime, quickslot actions,
+death-recap snapshots, addon replay, catalog API joins and recommendations are
+explicitly unavailable for this profile. Factual native results remain available
+when addon catalog definitions are missing or incompatible. Original ordered
+native lines remain exact in local immutable rows; default details omit raw
+names, identifiers and field arrays. Live tailing remains unavailable.
+
+Earlier documentation used "Native combat-log ingestion remains provisional"
+for the whole route. S127 now supports the completed-file profile above; live
+tailing remains unavailable.
 
 ## Implementation history and detailed contracts
 
@@ -131,8 +157,9 @@ terminal member, and never executes Lua.
 Accepted observations become deterministic compact JSON and receive separate
 source-byte and canonical-content SHA-256 hashes. The canonical bytes enter a
 caller-selected `encounters.sqlite`, not `catalog.sqlite` or the settings file.
-Store schema v4 holds capture schemas 1 and 2 with a per-row canonical format,
-session mode, and authoritative encounter ordinal.
+Store schema v6 holds addon capture schemas 1 and 2 plus source-specific native
+schema 1 evidence, immutable run metadata and shared first-import ordering.
+Addon rows keep their per-row canonical format, session mode and encounter ordinal.
 Transactional migration copies legacy schema-v1 blobs and hashes byte-for-byte.
 Raw records cannot be updated, exact canonical reimports are idempotent, and
 changed content under an existing session and encounter identity is rejected.

@@ -19,6 +19,7 @@ import {
   validateEncounterEvidence,
   validateEncounterFixture,
   validateEncounterModelContract,
+  validateNativeImportPolicy,
   validateContentCoverage,
   validateContentCoverageRepository,
   validateCorpusSnapshot,
@@ -208,7 +209,7 @@ const diagramRecords = [
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
   ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 1080],
   ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Encounter capture is waiting, interrupted, or failed", "Startup failure", "Use the Application Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Application Log"]],
-  ["reference/encounter-data-and-metrics.md", "encounter-evidence-lineage.svg", "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts", "Encounter lineage text equivalent", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat-log ingestion is unsupported"], 1530],
+  ["reference/encounter-data-and-metrics.md", "encounter-evidence-lineage.svg", "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts", "Encounter lineage text equivalent", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"], 1530],
 ];
 
 function diagramFixture() {
@@ -222,7 +223,7 @@ function diagramFixture() {
     ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
     ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"]],
     ["troubleshooting-decision-tree.svg", ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status and Application Log"]],
-    ["encounter-evidence-lineage.svg", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native combat logs: provisional", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"]],
+    ["encounter-evidence-lineage.svg", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native files: completed import", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"]],
   ]);
   for (const [page, asset, alt, heading, anchors, height, rawAnchors = []] of diagramRecords) {
     pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n\n${rawAnchors.join("\n")}\n`);
@@ -278,7 +279,7 @@ test("S121 requires complete encounter lineage and visible version, channel and 
     incomplete.pages.set("reference/encounter-data-and-metrics.md", incomplete.pages.get("reference/encounter-data-and-metrics.md").replace(new RegExp(anchor, "giu"), "Omitted stage"));
     assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /encounter.*text equivalent/i);
   }
-  for (const anchor of ["s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved", "Native combat logs: provisional"]) {
+  for (const anchor of ["s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved", "Native files: completed import"]) {
     const unqualified = diagramFixture();
     unqualified.svgs.set("encounter-evidence-lineage.svg", unqualified.svgs.get("encounter-evidence-lineage.svg").replace(anchor, "Unqualified"));
     assert.match(validateDocumentationDiagrams(unqualified).join("\n"), /encounter.*label/i);
@@ -757,7 +758,7 @@ function validEncounterContract() {
       },
     },
     catalog_schema_requirements: { entities: ["ability"], relationships: ["ability-alias"], join_key: "stable-numeric-source-id-plus-channel-and-api-version", unknown_id_supported: true },
-    transport_policy: { pixel_bus_bulk_transport: false, automation_independent: true, future_transport: "bounded-saved-variables-import" },
+    transport_policy: { pixel_bus_bulk_transport: false, automation_independent: true, future_transport: "bounded-saved-variables-and-native-completed-import" },
     event_kinds: requiredEncounterKinds.map((id) => ({ id, raw: true })),
     metrics: requiredEncounterMetrics.map((id) => ({ id, algorithm_version: "s069-v1", source_range_required: true, quality_required: true })),
     parity_roadmap: requiredEncounterKinds.map((id, index) => ({ capability: id, source_event: id, calculation: "deterministic", confidence: "design-only", privacy_impact: "none", state: index === 0 ? "fixture-proved" : "verification-required", target_phase: "capture", acceptance: "evidence", owner: index === 0 ? "issue #113" : "issue #132", risk: "medium" })),
@@ -3184,4 +3185,14 @@ test("S111 requires resolved clusters, seven forms, and unique issue handoffs", 
   secondApproval.id = "second-approval";
   duplicateIssue.candidates.push(secondApproval);
   assert.match(validateVisualizationAudit(duplicateIssue, visualizationSummary).join("\n"), /issue.*unique|duplicate.*issue/i);
+});
+
+test("S127 native import policy preserves source, capabilities and atomic evidence boundaries", () => {
+  const contract = { native_import_policy: {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":6,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false} };
+  assert.deepEqual(validateNativeImportPolicy(contract), []);
+  for (const key of Object.keys(contract.native_import_policy)) {
+    const missing = structuredClone(contract);
+    delete missing.native_import_policy[key];
+    assert.match(validateNativeImportPolicy(missing).join("\n"), /S127 native import requires/);
+  }
 });

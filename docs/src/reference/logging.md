@@ -7,7 +7,7 @@ guides meant application events arriving now, not live encounter recording.
 
 For fights, use [Encounter Capture](../features/encounter-capture.md) and import
 ESO's saved addon data into **File > Encounter History**. ESO's own native
-combat-log files are a separate provisional ingestion route, described in
+combat-log files have a separate completed-file import route, described in
 [Encounter Ingestion](../development/encounter-ingestion.md).
 
 ESO Weave uses structured logging with runtime selection of OFF, ERROR, WARN,

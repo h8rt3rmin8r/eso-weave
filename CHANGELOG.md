@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resume and confirmed per-session discard, and shows saved session provenance
   and whole-spool capacity (issue #273).
 
+- S127 imports completed normal/separate version15 native Encounter.log files
+  through explicit source selection, inspection and import, beside addon history
+  (issue #272). Native facts need no catalog; unsupported capabilities have reasons.
+
 ### Fixed
 
 - Use surface-aware emphasis throughout catalog and encounter details, and
@@ -75,6 +79,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected imports and no-op deletions preserve the existing store layout.
 - 2026-10-13: Archive completed Plan051 after owner merge of PR #274 and create
   Plan052 for S126/#273. Native terminal-file import remains separate #272.
+
+- 2026-10-13: S127 uses source-specific native schema1 evidence and store schema6.
+  Migration from schema1-5 and native import share an immediate transaction;
+  canonical original fields and shared first-import ordering remain immutable.
+- 2026-10-13: Native normal/separate log version15 is independent of ESO API
+  and addon versions. Explicit Live/PTS selection is labeled user provenance.
+  Unknown records and incomplete boundaries stay explicit; hit and overflow stay
+  separate. Facts do not require catalog authority; unsupported native capabilities
+  remain unavailable. Native bounds permit completed files up to 256 MiB.
+- 2026-10-13: Documentation policy replaces obsolete native-unsupported anchors
+  with completed-file support, a matching render zoom probe and separate native
+  capability/integrity guards.
+  Negative fixtures preserve each boundary. Live tailing and historical platform
+  qualification are not promoted; frozen historical coverage remains unchanged.
+- 2026-10-13: Archive Plan052 after owner merge of PR #275 and create Plan053
+  for S127/#272. Automatic push and official PR are authorized; owner merge and
+  later publication remain separate.
 
 ## [0.17.4] - 2026-10-07
 
