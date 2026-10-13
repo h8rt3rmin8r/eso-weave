@@ -11,9 +11,9 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plans
 
-| Plan | Status | Current slice |
-| --- | --- | --- |
-| [054](plan-054.md) | Active | S128 prepares the v0.18.0 candidate for issue #279 |
+No active build plan remains. The latest completed plan is
+[054](../../archive/build-plans/plan-054.md), covering S128 candidate preparation
+and the subsequent owner-authorized v0.18.0 publication.
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -25,9 +25,9 @@ Plan049 completed S123; v0.17.3 subsequently published on 2026-10-07.
 Plan050 completed S124 in PR #264 on 2026-10-07. Plan051 completed S125's seven
 workflow issues in PR #274 on 2026-10-12. Plan052 completed S126/#273 retained
 sessions in owner-merged PR #275 on 2026-10-13. Plan053 completed S127/#272 native import in owner-merged PR #276 on 2026-10-13.
-Plan054 owns S128/#279 v0.18.0 candidate preparation.
-Owner final review and merge remain the candidate delivery boundary;
-tag and package publication require separate authorization.
+Plan054 completed S128/#279 in owner-merged PR #278 on 2026-10-13.
+Separately authorized v0.18.0 publication completed #277 that day. The next
+build plan will follow a newly scoped, owner-authorized issue.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence

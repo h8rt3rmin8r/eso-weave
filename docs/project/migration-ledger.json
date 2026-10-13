@@ -1733,13 +1733,13 @@
     },
     {
       "id": "054",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-054.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-054.md",
       "specs": [
         "specs/128-v0180-release"
       ],
-      "evidence": "S128 prepares the v0.18.0 release candidate for issue #279 through the existing release procedure and full spec-kit/autopilot. Owner final review and merge remain the candidate delivery boundary; later tag and package publication require separate authorization."
+      "evidence": "S128 candidate preparation for issue #279 completed when owner squash-merged PR #278 on 2026-10-13 at d88151c3ba1b5523fc29a22f7fcd8b9cc8491289. Separately authorized v0.18.0 publication completed issue #277 that day; release workflow 38396415318 passed and all five downloaded assets matched published sizes and SHA-256 digests."
     }
   ],
   "safetyCrosswalk": [

@@ -65,6 +65,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [051](plan-051.md) | Complete, Archived | [S125](../../../specs/125-data-addon-workflow-recovery/spec.md) recovered seven workflow issues #265 through #271 in [PR #274](https://github.com/h8rt3rmin8r/eso-weave/pull/274), owner-merged on 2026-10-12 |
 | [052](plan-052.md) | Complete, Archived | [S126](../../../specs/126-retained-recording-sessions/spec.md) retained sessions for #273 in [PR #275](https://github.com/h8rt3rmin8r/eso-weave/pull/275), owner-squash-merged on 2026-10-13 at 9bfe9e0 |
 | [053](plan-053.md) | Complete, Archived | [S127](../../../specs/127-native-completed-import/spec.md) completed native import for #272 in [PR #276](https://github.com/h8rt3rmin8r/eso-weave/pull/276), owner-squash-merged on 2026-10-13 at 05c9704 |
+| [054](plan-054.md) | Complete, Archived | [S128](../../../specs/128-v0180-release/spec.md) candidate #279 merged in [PR #278](https://github.com/h8rt3rmin8r/eso-weave/pull/278) on 2026-10-13 at d88151c; separately authorized [v0.18.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.18.0) publication completed #277 that day |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.
