@@ -27,8 +27,10 @@ unknown server-visibility risk.
 
 Use `/ewencounter start live single`, `start pts single`, or the
 `continuous` variants inside ESO. Start validates the complete arguments,
-keeps an already enabled recorder unchanged, and never replaces a retained
-session. `/ewencounter stop` retains data and is idempotent.
+keeps an already enabled recorder unchanged, and retains earlier sessions when
+starting again. Resume explicitly continues the latest stopped continuous
+session. Sessions reports IDs/capacity; confirmed discard removes one inactive
+addon session. Clear confirm remains deliberate deletion of all addon recordings. `/ewencounter stop` retains data and is idempotent.
 `/ewencounter status` gives concise activity and next-step guidance;
 `status details` preserves technical diagnostics. Existing aliases remain
 compatible. Desktop Copy actions copy command text but do not execute it.

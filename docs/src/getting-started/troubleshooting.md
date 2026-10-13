@@ -177,11 +177,10 @@ the environment or folder rejects older pending results. The file cannot prove
 current enablement, loading or activity. Start with the complete
 [setup sequence](../features/encounter-capture.md#install-and-choose-a-mode).
 
-- **Recording off**: mode/channel changes require no retained session. If one
-  remains, optionally save/import wanted fights, then deliberately use
-  `/ewencounter clear confirm` before choosing `single` or `continuous` and
-  `live` or `pts`. Start with `/ewencounter start live single` or the matching `pts`/
-   `continuous` variant inside ESO.
+- **Recording off**: select the next mode/environment and start another session;
+  earlier recordings stay retained. Use `/ewencounter resume` only for the
+  latest stopped continuous session in its original environment. No clear or
+  desktop import is required to start again.
 - **Waiting for combat**: the selected mode is on, but no fight is being recorded;
   detailed capture handlers are
   dormant until combat starts. Use `/ewencounter stop` to disable it.
@@ -193,7 +192,8 @@ current enablement, loading or activity. Start with the complete
 - **Stopped after a failure**: callback, clock, recovered-state, marker, or storage pressure made
   continued capture unsafe. Retained evidence remains in place and the failed
   request does not retry automatically. Save and import usable recordings if
-  you want to retain them, then follow the reported clear/restart guidance.
+  you want a desktop copy. Start can retain a valid failed session when capacity
+  permits; failed sessions cannot resume.
 
 A malformed same-version controller is never normalized by guessing. The addon
 preserves it unchanged, keeps it inactive, and reports `state-invalid` through
@@ -210,7 +210,12 @@ replay outcomes. A missing ordinal, changed prior member, malformed spool, or
 identity collision rejects the complete desktop import batch without changing
 existing history.
 
-No old encounter is automatically removed when saved recording storage reaches its record,
+Use `/ewencounter sessions` for chronological IDs, counts and capacity.
+While recording is off, `/ewencounter discard SESSION_ID confirm` deletes
+exactly one addon session. Other recordings, catalog data and desktop history
+remain. Use clear confirm only for deliberate deletion of all addon recordings.
+
+No old encounter is automatically removed when saved recording storage reaches its 32-session, record,
 marker, or 32 MiB estimated-data limit. The controller preserves terminal and
 failure evidence and stops. Run `/reloadui`, relog, or exit ESO to flush data,
 then use **Import Saved Capture** in Encounter History. An ESO or operating-system

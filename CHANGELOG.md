@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command before state changes and preserving active or retained sessions on
   repeated start. Stop remains idempotent (issue #270).
 
+- S126 retains completed recordings across new starts, adds explicit continuous
+  resume and confirmed per-session discard, and shows saved session provenance
+  and whole-spool capacity (issue #273).
+
 ### Fixed
 
 - Use surface-aware emphasis throughout catalog and encounter details, and
@@ -32,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Distinguish missing, inaccessible, malformed, unsupported and mismatched
   saved sources from local-history store failures (issue #271).
 - Refresh source inspection after failed imports and direct stopped empty
-  sessions toward deliberate clearing/restart, preserving source bytes and
+  sessions toward explicit restart guidance, preserving source bytes and
   imported history (issue #271).
 
 ### Decisions
@@ -55,6 +59,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-10-11: Plan050 is archived after S124 merged in PR #264. Plan051 groups
   issues #265 through #271 under S125; native logs and multiple retained sessions
   remain separately tracked by issues #272 and #273.
+
+- 2026-10-13: S126 writes controller envelope v2/addon5 with immutable ordered
+  terminal controller snapshots. Terminal capture formats and catalog/root versions
+  remain unchanged. Whole-spool limits remain 100000 events/raw observations,
+  1024 fights/interruptions and 32 MiB estimated bytes, with 32 retained sessions.
+- 2026-10-13: Persisted creation sequences survive clear; explicit continuous
+  resume appends a marker bound to the previous stop. Start retains old data
+  without requiring an import acknowledgment or deletion.
+- 2026-10-13: Encounter store schema5 adds durable first-import session ordering
+  and atomic per-session snapshot preparation. Transactional schema1-4 migration
+  preserves canonical bytes; deletion/reimport cannot reorder surviving sessions.
+- 2026-10-13: Archive completed Plan051 after owner merge of PR #274 and create
+  Plan052 for S126/#273. Native terminal-file import remains separate #272.
 
 ## [0.17.4] - 2026-10-07
 

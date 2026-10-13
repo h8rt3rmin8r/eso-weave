@@ -167,7 +167,7 @@ fn both_modules_execute_with_isolated_namespaces_and_clear_state() {
         SLASH_COMMANDS["/ewencounter"]("clear confirm")
         assert(EsoWeaveDataSaved.catalog.sentinel == "catalog")
         assert(EsoWeaveDataSaved.encounter.state == "stopped")
-        assert(EsoWeaveDataSaved.encounter.state_schema_version == 1)
+        assert(EsoWeaveDataSaved.encounter.state_schema_version == 2)
         "#,
     )
     .exec()

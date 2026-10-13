@@ -871,6 +871,8 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
              DROP TRIGGER raw_encounters_no_update;
              DROP TRIGGER encounter_session_snapshots_no_update;
              DROP TABLE encounter_session_snapshots;
+             DROP TRIGGER encounter_session_order_no_update;
+             DROP TABLE encounter_session_order;
              ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
              DROP TABLE encounter_store_meta;
              CREATE TABLE encounter_store_meta (

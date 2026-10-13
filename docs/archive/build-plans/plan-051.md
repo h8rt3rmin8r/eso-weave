@@ -1,6 +1,6 @@
 # Plan 051: Data Addon Workflow Recovery
 
-Status: Active
+Status: Complete, Archived
 
 ## S125 (2026-10-11)
 
@@ -38,3 +38,11 @@ failed-import source invalidation and stopped empty-session guidance, including
 current game status and repeated start. Revalidate, push to PR #274, reply to
 and resolve both threads, then request the second and final authorized review.
 Finish with green checks on the final head and owner merge handoff.
+
+## S125 merge closeout (2026-10-12)
+
+Owner squash-merged [PR #274](https://github.com/h8rt3rmin8r/eso-weave/pull/274)
+at 7939729f302611f911c39216aea0c00f5dfe3ef1, closing issues #265 through #271.
+The merged tree matches the reviewed final branch. Both permitted external
+review rounds completed, both findings were answered and resolved, and all nine
+final-head checks passed. Tag and release publication remain separate.

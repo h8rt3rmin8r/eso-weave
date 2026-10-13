@@ -137,7 +137,38 @@ impl EncounterHistoryService {
         let source_path = source_path.as_ref();
         let (_, parsed, modified) =
             read_saved_source(source_path, expected_channel).map_err(source_diagnostic)?;
-        let state = parsed.state.as_ref().map(CaptureStateSummary::from);
+        let state = parsed.last_saved_summary();
+        let sessions = parsed
+            .sessions
+            .iter()
+            .filter(|state| state.session.is_some())
+            .map(CaptureStateSummary::from)
+            .collect();
+        let spool_session_count = parsed
+            .state
+            .as_ref()
+            .map_or(usize::from(!parsed.records.is_empty()), |state| {
+                state.retained_sessions.len() + usize::from(state.session.is_some())
+            });
+        let spool_estimated_bytes = parsed.state.as_ref().map_or_else(
+            || {
+                parsed
+                    .records
+                    .iter()
+                    .map(|record| record.capture.estimated_bytes)
+                    .sum()
+            },
+            |state| {
+                state
+                    .retained_sessions
+                    .values()
+                    .chain(std::iter::once(state))
+                    .filter_map(|controller| controller.session.as_ref())
+                    .map(|session| session.aggregate_estimated_bytes)
+                    .sum()
+            },
+        );
+
         let partial_count = parsed
             .records
             .iter()
@@ -147,6 +178,9 @@ impl EncounterHistoryService {
             path: source_path.to_path_buf(),
             channel: expected_channel,
             modified,
+            sessions,
+            spool_session_count,
+            spool_estimated_bytes,
             finished_count: parsed.records.len() - partial_count,
             partial_count,
             readiness: SavedRecordingReadiness::from_state(state.as_ref(), parsed.records.len()),
@@ -305,8 +339,8 @@ impl SavedRecordingReadiness {
             Self::NeverStarted => "Recording was OFF with no retained session. Start one fight in ESO.",
             Self::Waiting => "The saved recorder was WAITING FOR COMBAT. Fight, then save new data.",
             Self::Recording => "The saved recorder was RECORDING. Finish or stop, then save new data.",
-            Self::Stopped => "The saved recorder was OFF. Import retained encounters before clearing.",
-            Self::StoppedEmpty => "The saved recorder was OFF with an empty session. Use /ewencounter clear confirm in ESO, then start a new fight.",
+            Self::Stopped => "The saved recorder was OFF. Import retained encounters or start a new session; earlier recordings stay retained.",
+            Self::StoppedEmpty => "The saved recorder was OFF with an empty session. Start a new fight; no clear is required.",
             Self::Interrupted => "The saved recording was interrupted. Import retained encounters; some observations may be missing.",
             Self::Failed => "The saved recorder stopped after a failure. Import usable retained encounters before recovery.",
             Self::LegacyFinished => "A finished recording is saved and ready to import.",
@@ -320,6 +354,9 @@ pub struct SavedSourceInspection {
     pub channel: Channel,
     pub modified: Option<std::time::SystemTime>,
     pub state: Option<CaptureStateSummary>,
+    pub sessions: Vec<CaptureStateSummary>,
+    pub spool_session_count: usize,
+    pub spool_estimated_bytes: u64,
     pub finished_count: usize,
     pub partial_count: usize,
     pub readiness: SavedRecordingReadiness,
