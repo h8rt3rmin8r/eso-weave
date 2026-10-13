@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s127-native-completed-import`
 **Created**: 2026-10-13
-**Status**: Specified
+**Status**: Implemented; owner review and merge pending
 **Slice**: S127
 **Issue**: [#272](https://github.com/h8rt3rmin8r/eso-weave/issues/272)
 **Input**: Complete native completed-file import under spec-kit/autopilot; automatic push and official PR, at most two review rounds, owner final review and merge.

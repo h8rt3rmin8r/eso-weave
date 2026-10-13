@@ -84,3 +84,8 @@ size and a whole-file20-million-visit/512MiB work reservation now bound snapshot
 and scans before they begin. Tests cover byte amplification, atomic rejection,
 exact counter boundaries and replacement/removal/unknown accounting. Native limit
 diagnostics expose only controlled counts. No third review request is permitted.
+
+Both external findings are corrected, replied to and resolved. Both authorized
+rounds are complete. Final implementation5672cae passes all9 distinct CI checks,
+including default-harness Windows/Linux tests and CodeQL. The final record-only
+head is verified live before owner handoff; no merge/tag/release is performed.

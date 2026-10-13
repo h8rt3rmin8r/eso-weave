@@ -65,7 +65,7 @@ Independent criterion: reimport/copy/append-run, collision rollback, old-store m
 - [x] T032 Reconcile chronological plan indexes and migration ledger under docs/project and dated CHANGELOG.md decisions.
 - [x] T033 Run focused/private representative-size and all foreground Rust/policy/docs/render/text gates; record audit/verification in specs/127-native-completed-import.
 - [x] T034 Commit, automatically push and publish official PR; record issue/PR mapping in specs/127-native-completed-import/verification.md.
-- [ ] T035 Address every external finding within two rounds, verify green exact final-head CI, and request owner merge in specs/127-native-completed-import/verification.md.
+- [x] T035 Address every external finding within two rounds, verify green exact final-head CI, and request owner merge in specs/127-native-completed-import/verification.md.
 
 ## Dependencies and execution
 
