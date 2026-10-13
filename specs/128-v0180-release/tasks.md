@@ -36,12 +36,12 @@ Independent test: official PR links #279, all checks pass on final head and ever
 
 - [x] T012 [US3] Run full existing format/Clippy/locked tests, documentation/render and bundled production build; record actual results in specs/128-v0180-release/verification.md.
 - [x] T013 [US3] Automatically push codex/s128-v0180-release and publish official PR with Closes #279; move issue project stage to PR review.
-- [ ] T014 [US3] Address every finding and resolve completed threads within two rounds; verify final-head CI/review state in specs/128-v0180-release/verification.md.
+- [x] T014 [US3] Address every finding and resolve completed threads within two rounds; verify final-head CI/review state in specs/128-v0180-release/verification.md.
 
 ## Phase 6: Polish and Handoff
 
-- [ ] T015 Check UTF-8/no-BOM/LF/punctuation/mojibake and git diff sanity across all changed files; reconcile tasks/receipt and final-head checks in specs/128-v0180-release/verification.md.
-- [ ] T016 Deliver the unmerged, untagged official candidate to the owner with issue/PR and actual validation evidence from specs/128-v0180-release/verification.md.
+- [x] T015 Check UTF-8/no-BOM/LF/punctuation/mojibake and git diff sanity across all changed files; reconcile tasks/receipt and final-head checks in specs/128-v0180-release/verification.md.
+- [x] T016 Deliver the unmerged, untagged official candidate to the owner with issue/PR and actual validation evidence from specs/128-v0180-release/verification.md.
 
 ## Dependencies and Execution Order
 

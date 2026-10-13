@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s128-v0180-release`
 **Created**: 2026-10-13
-**Status**: Specification validated
+**Status**: Implemented, owner final review/merge pending
 **Input**: Owner-authorized S128 for [issue #279](https://github.com/h8rt3rmin8r/eso-weave/issues/279), preparing the merged S125-S127 work as a reviewed v0.18.0 candidate. Automatic push, official PR and at most two external review rounds are authorized.
 
 ## User Scenarios & Testing
