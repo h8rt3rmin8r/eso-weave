@@ -106,6 +106,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   kind and enter one source-specific service path; catalog changes do not rebuild
   native facts. Mixed-source worker/UI regressions cover the corrected routing.
 
+- 2026-10-13: Round2 identified metadata scan amplification across many tiny
+  native fights. Per-file context work now stops before snapshot/scanning beyond
+  20 million record visits or 512 MiB context text, including irrelevant metadata.
+  Context replacement/removal updates cached size, and new runs cannot reset the
+  budget. Rejection occurs before history writes with a controlled diagnosis.
+
 ## [0.17.4] - 2026-10-07
 
 ### Highlights

@@ -75,6 +75,8 @@ pub enum EncounterError {
     Validation(String),
     #[error("unsupported encounter capture version")]
     UnsupportedVersion,
+    #[error("native context work budget exceeded")]
+    NativeWorkLimit,
     #[error("encounter source channel does not match the expected channel")]
     EnvironmentMismatch,
 }

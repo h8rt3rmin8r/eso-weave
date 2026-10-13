@@ -48,7 +48,10 @@ are sanitized. File paths, timestamps and controlled counts are selection facts.
 Limits are 256 MiB per source, 2 million records, 64 KiB per line, 4096 tokens per
 line, bracket depth 8, 100000 context entries, 10000 runs/completed fights,
 200000 records and 32 MiB raw text per fight, 8 MiB relevant context per fight,
-512 MiB retained raw batch text and 64 MiB canonical bytes per fight. Limit
+512 MiB retained raw batch text and 64 MiB canonical bytes per fight. Across the
+whole file, context snapshots may inspect at most 20 million records and 512 MiB
+of original context text, charged before cloning or scanning, including metadata
+that is ultimately irrelevant. New runs do not reset this work budget. Limit
 failures reject atomically. These are ingestion bounds, not platform benchmarks.
 
 Native duration and observed event/cast/effect counts need no catalog. Reviewed

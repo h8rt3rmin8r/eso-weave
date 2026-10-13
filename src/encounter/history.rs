@@ -454,7 +454,7 @@ fn source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
             HistoryDiagnosticKind::SourceEnvironmentMismatch,
             "The saved recording belongs to a different environment. Select its Live or PTS environment in Settings, then refresh the saved source.",
         ),
-        EncounterError::Validation(_) | EncounterError::Database(_) => (
+        EncounterError::Validation(_) | EncounterError::Database(_) | EncounterError::NativeWorkLimit => (
             HistoryDiagnosticKind::SourceInvalid,
             "The saved addon data is malformed, incomplete or changed during reading. Keep it unchanged for troubleshooting; finish or stop recording in ESO, save again, then refresh the saved source.",
         ),
@@ -464,6 +464,10 @@ fn source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
 
 fn native_source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
     match error {
+        EncounterError::NativeWorkLimit => HistoryDiagnostic::new(
+            HistoryDiagnosticKind::SourceInvalid,
+            "This native file exceeds the cumulative context-work limit (20 million record visits or 512 MiB of inspected context). Choose a smaller completed recording. No source or history data was changed.",
+        ),
         EncounterError::UnsupportedVersion=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceVersionUnsupported,
             "This native recording version is unsupported. Native import supports normal version15 completed files; inline and verbose layouts remain unsupported. The source and history were kept."

@@ -336,6 +336,8 @@
     "atomic_migration_and_import": true,
     "copied_file_reimport": "deterministic",
     "hit_overflow": "separate",
-    "catalog_required_for_facts": false
+    "catalog_required_for_facts": false,
+    "context_work_records": 20000000,
+    "context_work_bytes": 536870912
   }
 }

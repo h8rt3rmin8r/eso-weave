@@ -54,3 +54,8 @@ overflow stay separate. Uptime, callback-only snapshots/actions, addon replay,
 catalog API joins and recommendations need evidence this profile does not supply
 and remain explicitly unavailable. Unknown observations reduce completeness claims.
 No installed/platform or callback parity is claimed.
+
+Cumulative context work across all runs is bounded to20 million record visits
+and512MiB original context text. Reservations precede snapshot cloning/scanning
+and include irrelevant metadata. A controlled work-limit rejection occurs before
+store creation or migration. Replacement/removal updates cached context size.

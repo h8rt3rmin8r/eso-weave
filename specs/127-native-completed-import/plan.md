@@ -20,7 +20,9 @@ source-aware history, while preserving all addon formats and replay behavior.
 - Tests: Rust fixtures, real-derived sanitized native records, synthetic hostile
   input, mixed-source transactions, serialized workers, egui sizing and docs policy.
 - Platforms: repository Windows/Linux backends and CI; installed ESO/Proton behavior is unverified.
-- Performance: stable bounded reading on the existing serialized history worker;
+- Performance: cumulative context work is charged before snapshots/scans across
+  the entire file, capped at20 million record visits and512MiB context text;
+  stable bounded reading runs on the existing serialized history worker;
   parse lines without collecting token trees for the whole file.
 - Limits: file256MiB, 2000000 records, line64KiB, nesting8, 4096 fields/tokens per
   record, 100000 metadata entries, 10000 runs and completed combats, 200000 records and

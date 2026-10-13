@@ -103,6 +103,8 @@ const MAX_NATIVE_COMBAT_RECORDS: usize = 200_000;
 const MAX_NATIVE_COMBAT_BYTES: usize = 32 * 1024 * 1024;
 const MAX_NATIVE_CONTEXT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_NATIVE_BATCH_BYTES: usize = 512 * 1024 * 1024;
+const MAX_NATIVE_CONTEXT_WORK_RECORDS: usize = 20_000_000;
+const MAX_NATIVE_CONTEXT_WORK_BYTES: usize = 512 * 1024 * 1024;
 
 fn rejected<T>() -> Result<T, EncounterError> {
     invalid("native record does not match the supported normal version15 profile")
@@ -543,11 +545,50 @@ fn encounter_id(run: &str, ordinal: u64) -> String {
 }
 
 #[derive(Default)]
+struct ContextWork {
+    records: usize,
+    bytes: usize,
+}
+impl ContextWork {
+    fn charge(&mut self, records: usize, bytes: usize) -> Result<(), EncounterError> {
+        let records = self
+            .records
+            .checked_add(records)
+            .ok_or(EncounterError::NativeWorkLimit)?;
+        let bytes = self
+            .bytes
+            .checked_add(bytes)
+            .ok_or(EncounterError::NativeWorkLimit)?;
+        if records > MAX_NATIVE_CONTEXT_WORK_RECORDS || bytes > MAX_NATIVE_CONTEXT_WORK_BYTES {
+            return Err(EncounterError::NativeWorkLimit);
+        }
+        self.records = records;
+        self.bytes = bytes;
+        Ok(())
+    }
+}
+
+#[derive(Default)]
 struct Context {
     metadata: BTreeMap<(String, u64), Arc<NativeRecord>>,
     unknown: Vec<Arc<NativeRecord>>,
+    bytes: usize,
 }
 impl Context {
+    fn remember(
+        &mut self,
+        key: (String, u64),
+        record: &NativeRecord,
+    ) -> Result<(), EncounterError> {
+        let previous = self.metadata.insert(key, Arc::new(record.clone()));
+        self.bytes -= previous.map_or(0, |old| old.line.len());
+        self.bytes = self
+            .bytes
+            .checked_add(record.line.len())
+            .ok_or(EncounterError::NativeWorkLimit)?;
+        Ok(())
+    }
+
     fn observe(
         &mut self,
         record: &NativeRecord,
@@ -556,22 +597,26 @@ impl Context {
     ) -> Result<(), EncounterError> {
         if !known {
             self.unknown.push(Arc::new(record.clone()));
+            self.bytes = self
+                .bytes
+                .checked_add(record.line.len())
+                .ok_or(EncounterError::NativeWorkLimit)?;
         }
         match values[1] {
             "UNIT_ADDED" | "UNIT_CHANGED" | "PLAYER_INFO" | "ABILITY_INFO" | "EFFECT_INFO" => {
                 let id = uint(values[2])?;
-                self.metadata
-                    .insert((values[1].into(), id), Arc::new(record.clone()));
+                self.remember((values[1].into(), id), record)?;
             }
             "UNIT_REMOVED" => {
                 let id = uint(values[2])?;
                 for kind in ["UNIT_ADDED", "UNIT_CHANGED", "PLAYER_INFO"] {
-                    self.metadata.remove(&(kind.into(), id));
+                    if let Some(removed) = self.metadata.remove(&(kind.into(), id)) {
+                        self.bytes -= removed.line.len();
+                    }
                 }
             }
             "MAP_CHANGED" | "MAP_INFO" | "ZONE_CHANGED" | "ZONE_INFO" => {
-                self.metadata
-                    .insert((values[1].into(), 0), Arc::new(record.clone()));
+                self.remember((values[1].into(), 0), record)?;
             }
             _ => {}
         }
@@ -744,6 +789,7 @@ pub fn parse_native_log(bytes: &[u8], channel: Channel) -> Result<ParsedNativeLo
     let mut combat_ordinal = 0_u64;
     let mut offset = 0_u64;
     let mut batch_bytes = 0_usize;
+    let mut context_work = ContextWork::default();
     for terminated_line in text.split_inclusive('\n') {
         let raw = terminated_line
             .trim_end_matches('\n')
@@ -812,6 +858,12 @@ pub fn parse_native_log(bytes: &[u8], channel: Channel) -> Result<ParsedNativeLo
                 if current.is_none() || pending.is_some() {
                     return rejected();
                 }
+                // Reserve cumulative work before cloning or revalidating context.
+                // This budget spans every recording run in the physical file.
+                context_work.charge(
+                    context.metadata.len() + context.unknown.len(),
+                    context.bytes,
+                )?;
                 combat_ordinal += 1;
                 let mut capture = Pending {
                     ordinal: combat_ordinal,
@@ -1290,4 +1342,59 @@ fn add_quantity(total: u128, value: u64) -> Result<u128, EncounterError> {
     total.checked_add(u128::from(value)).ok_or_else(|| {
         EncounterError::Validation("native observed quantity exceeds the supported total".into())
     })
+}
+
+#[cfg(test)]
+mod context_work_tests {
+    use super::*;
+
+    #[test]
+    fn cumulative_context_work_limits_allow_boundary_and_reject_next_charge() {
+        let mut records = ContextWork::default();
+        records.charge(MAX_NATIVE_CONTEXT_WORK_RECORDS, 0).unwrap();
+        assert!(matches!(
+            records.charge(1, 0),
+            Err(EncounterError::NativeWorkLimit)
+        ));
+        let mut bytes = ContextWork::default();
+        bytes.charge(0, MAX_NATIVE_CONTEXT_WORK_BYTES).unwrap();
+        assert!(matches!(
+            bytes.charge(0, 1),
+            Err(EncounterError::NativeWorkLimit)
+        ));
+    }
+
+    #[test]
+    fn context_byte_accounting_tracks_replacement_removal_and_unknown_records() {
+        let mut context = Context::default();
+        for (i, line) in [
+            "0,UNIT_ADDED,1,PLAYER,T,0,1,F,1,1,\"Fixture\",\"Fixture\",1,1,1,0,PLAYER_ALLY,F",
+            "1,UNIT_CHANGED,1,1,1,\"Fixture, Changed\",\"Fixture\",1,1,1,0,PLAYER_ALLY,F",
+            "2,UNIT_CHANGED,1,1,1,\"Fixture\",\"Fixture\",1,1,1,0,PLAYER_ALLY,F",
+            "3,FUTURE_CONTEXT,1",
+            "4,UNIT_REMOVED,1",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let record = NativeRecord {
+                ordinal: i as u64 + 1,
+                byte_offset: i as u64,
+                line: (*line).into(),
+            };
+            let values = fields(line).unwrap();
+            let known = validate_layout(&values).unwrap();
+            context.observe(&record, &values, known).unwrap();
+            assert_eq!(
+                context.bytes,
+                context
+                    .snapshot()
+                    .iter()
+                    .map(|row| row.line.len())
+                    .sum::<usize>()
+            );
+        }
+        assert_eq!(context.metadata.len(), 0);
+        assert_eq!(context.bytes, "3,FUTURE_CONTEXT,1".len());
+    }
 }

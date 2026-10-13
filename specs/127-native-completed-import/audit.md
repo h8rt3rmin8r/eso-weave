@@ -34,7 +34,7 @@ API joins and recommendations have reasons.
 ## Verification and dispositions
 
 - Foreground fmt check, all-target/all-feature Clippy with warnings denied, and
-  all locked Rust tests pass (1114 tests).
+  all locked Rust tests pass (1117 tests).
 - 181 documentation/render/brand/trust policy fixtures pass.
 - Spelling, repository trust, brand adoption, release-note and Debian fixtures pass.
 - mdBook examples, build/link checking, generated-site policy and complete headless
@@ -64,7 +64,7 @@ green final-head CI and owner final review/merge remain the delivery sequence.
 
 After publication, a boundary regression reproduced valid unsigned64 amounts
 overflowing a64-bit aggregate. Native totals now use128-bit arithmetic, bounded
-by the record budget. The new regression, fmt, Clippy and all1114 Rust tests pass.
+by the record budget. The new regression, fmt, Clippy and all1117 Rust tests pass.
 Original source/canonical evidence is unchanged by this projection correction.
 
 Round1 Codex comment4257130239 (PRRT_kwDOTU-tqc6rzQUh) correctly identified
@@ -75,5 +75,12 @@ The mixed-source worker regression and both desktop widths pass.
 
 Full correction verification: fmt/Clippy and optimized build pass. Two
 default-harness reruns encountered Windows OS10053 in unchanged loopback tests.
-Focused documentation/local-service suites passed; the complete1114-test local
+Focused documentation/local-service suites passed; the complete1117-test local
 recheck passed with one harness thread. CI retains its default harness.
+
+Round2 comment4257335544 (PRRT_kwDOTU-tqc6rzwnX) identified repeated irrelevant
+context work. A sub1MiB valid synthetic source reproduced the gap. Cached context
+size and a whole-file20-million-visit/512MiB work reservation now bound snapshots
+and scans before they begin. Tests cover byte amplification, atomic rejection,
+exact counter boundaries and replacement/removal/unknown accounting. Native limit
+diagnostics expose only controlled counts. No third review request is permitted.

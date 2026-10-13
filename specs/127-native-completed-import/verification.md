@@ -10,7 +10,7 @@ Base: 9bfe9e07644d4611cd29bec3293e33457e4c4d69.
 | --- | --- |
 | cargo fmt --all -- --check | Pass |
 | cargo clippy --all-targets --all-features -- -D warnings | Pass |
-| cargo test --all --locked -- --test-threads=1 | 1114 passed (complete local recheck) |
+| cargo test --all --locked -- --test-threads=1 | 1117 passed (complete local recheck) |
 | Policy fixture suites (docs/render/brand/trust) | 181 passed |
 | Spelling / trust / brand | Pass |
 | mdBook examples / build / links / generated-site policy | Pass |
@@ -44,6 +44,18 @@ Initial ff7dd6c CI: all9 checks passed, including Windows/Linux default-harness
 Rust checks and CodeQL; Pages deploy is intentionally skipped on a PR.
 After corrections, two local default-harness reruns reached OS10053 host-aborted
 loopback reads in unchanged documentation/local-service suites. Both focused
-suites passed (9 and18 cases), then all1114 tests passed with one harness thread.
+suites passed (9 and18 cases), then all1117 tests passed with one harness thread.
 The CI configuration and assertions are unchanged. Corrected-head CI remains
 pending publication.
+
+Round2 request: issuecomment6143163204, security-scoped manual request on5043e23,
+completed10:09 UTC with one P2 context-work finding4257335544. The correction
+adds whole-file work reservations before snapshot/scanning and focused regressions.
+Commit, reply/resolution and green corrected-head CI follow full local gates.
+No more review rounds will be requested.
+
+Final-round local gates pass: fmt, all-target/all-feature Clippy, all1117 cases
+with one harness thread,181 policy fixtures, spelling, mdBook build/links/site,
+complete headless render matrix and bundled release build. The43MB source still
+imports205 and repeats as0 new/205 existing under the cumulative work bound;
+source bytes remain unchanged and the isolated private store was removed.

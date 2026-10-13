@@ -3188,7 +3188,7 @@ test("S111 requires resolved clusters, seven forms, and unique issue handoffs", 
 });
 
 test("S127 native import policy preserves source, capabilities and atomic evidence boundaries", () => {
-  const contract = { native_import_policy: {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":6,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false} };
+  const contract = { native_import_policy: {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":6,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false,"context_work_records":20000000,"context_work_bytes":536870912} };
   assert.deepEqual(validateNativeImportPolicy(contract), []);
   for (const key of Object.keys(contract.native_import_policy)) {
     const missing = structuredClone(contract);

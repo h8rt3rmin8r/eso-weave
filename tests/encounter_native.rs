@@ -590,3 +590,33 @@ fn native_observed_totals_keep_valid_large_quantities_exact() {
     );
     assert_eq!(projection.combat_event_count, 2);
 }
+
+#[test]
+fn native_repeated_irrelevant_context_hits_a_cumulative_work_limit_atomically() {
+    use eso_weave::encounter::{import_native_log, ImportRequest};
+    let mut source = header().to_owned();
+    // A small physical file can amplify a long irrelevant name across tiny fights.
+    source.push_str(&format!(
+        "1,ABILITY_INFO,99,\"{}\",\"\",F,F\n",
+        "Synthetic".repeat(7000)
+    ));
+    for _ in 0..10_000 {
+        source.push_str("10,BEGIN_COMBAT\n20,END_COMBAT\n");
+    }
+    source.push_str("30,END_LOG\n");
+    assert!(source.len() < 1024 * 1024);
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("native.log");
+    let store = root.path().join("history.sqlite");
+    std::fs::write(&input, &source).unwrap();
+    let result = import_native_log(&ImportRequest::new(&input, &store, Channel::Live));
+    assert!(
+        result.is_err(),
+        "cumulative context amplification was accepted"
+    );
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("context work"));
+    assert!(!error.to_string().contains("Synthetic"));
+    assert!(!store.exists());
+    assert_eq!(std::fs::read(&input).unwrap(), source.as_bytes());
+}
