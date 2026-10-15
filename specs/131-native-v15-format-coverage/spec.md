@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s131-native-v15-format-coverage`
 **Created**: 2026-10-15
-**Status**: Specification validated; producer grammar established by pinned static v15 serialization evidence
+**Status**: Complete, implemented and owner-merged in PR #299 on 2026-10-15
 **Input**: Owner kickoff of S131 for #296 and #297. Establish grammar first. Automatic push and official PR publication are authorized, with at most two Codex review rounds. Stop for owner final review and merge.
 
 ## User Scenarios & Testing

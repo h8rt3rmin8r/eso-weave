@@ -1,7 +1,7 @@
 # Implementation Plan: S131 Native v15 Format Coverage
 
 **Branch**: `codex/s131-native-v15-format-coverage` | **Date**: 2026-10-15 | **Spec**: [spec.md](spec.md)
-**Status**: PR #299 published; local and implementation-head hosted gates passed; Codex round 1 clean; final delivery receipt tracked on the PR before owner handoff.
+**Status**: Complete, owner-merged PR #299 at b28d34e on 2026-10-15; Plan057 archived and both issues Done.
 
 ## Summary
 
