@@ -1767,11 +1767,11 @@
     },
     {
       "id": "058",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-058.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-058.md",
       "specs": ["specs/132-v0190-release"],
-      "evidence": "Owner-authorized S132 prepares the reviewed v0.19.0 candidate for issue #302 under release coordinator #301, including #284's three dependency updates. Final owner merge and later authorized tag/publication remain separate."
+      "evidence": "S132 completed candidate issue #302 including #284's dependency updates when the owner squash-merged PR #303 on 2026-10-15 at 629bc92ffb8685a65d4a4ae2b3e793e0f3492569. The merged tree matches reviewed delivery head 8e5542c. After exact-main CI/docs/CodeQL passed, separately authorized v0.19.0 published at 20:40:52 UTC through successful workflow 38801670245. All five downloaded assets matched GitHub sizes/digests and all package hashes matched SHA256SUMS, completing #301. #304 records documentary closeout."
     }
   ],
   "safetyCrosswalk": [

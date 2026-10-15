@@ -69,6 +69,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [055](plan-055.md) | Complete, Archived | [S129](../../../specs/129-automatic-catalog-maintenance/spec.md) combined PixelBeacon and automatic Catalog maintenance for #285-#288/#291, owner-squash-merged in [PR #295](https://github.com/h8rt3rmin8r/eso-weave/pull/295) on 2026-10-15 at 9a2580d |
 | [056](plan-056.md) | Complete, Archived | [S130](../../../specs/130-automatic-native-processing/spec.md) automatic normal/separate v15 processing and workflow retirement for #289/#290/#292-#294, owner-squash-merged in [PR #298](https://github.com/h8rt3rmin8r/eso-weave/pull/298) on 2026-10-15 at 747885c |
 | [057](plan-057.md) | Complete, Archived | [S131](../../../specs/131-native-v15-format-coverage/spec.md) native v15 normal/inline and both verbose profiles for #296/#297, owner-squash-merged in [PR #299](https://github.com/h8rt3rmin8r/eso-weave/pull/299) on 2026-10-15 at b28d34e |
+| [058](plan-058.md) | Complete, Archived | [S132](../../../specs/132-v0190-release/spec.md) v0.19.0 candidate #302 including #284, owner-squash-merged in [PR #303](https://github.com/h8rt3rmin8r/eso-weave/pull/303) on 2026-10-15 at 629bc92; separately authorized [v0.19.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.19.0) publication and five-asset audit completed #301 that day |
 
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.
