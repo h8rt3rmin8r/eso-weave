@@ -12,4 +12,6 @@ Each root obtains its own native job token. MaintenanceControl serializes prefer
 
 Only durable committed checkpoint state advances the accepted in-memory cursor. Failed parse/checkpoint/storage writes preserve prior progress. Source generations/copies are deduplicated by the parser/store identity contract, not filename. Corrupt stores remain intact. Native retention/calculations do not wait for Catalog and Catalog failures cannot stop native scheduling.
 
+A disappeared source pathname releases its candidate slot without erasing its durable checkpoint. If it returns, discovery restores and verifies that checkpoint before continuing or starting a replacement generation. Permanently rotated-away names cannot exhaust the bounded candidate inventory.
+
 Expose controlled service observations through the existing shared state: dormant, waiting, processing or recoverable failure, bounded diagnostic and counts. Native logging activity remains unknown without current verified game evidence. No dialogs, banners, toasts, repair/import prompts, manual format instructions or game logging/serialization/anonymity changes.

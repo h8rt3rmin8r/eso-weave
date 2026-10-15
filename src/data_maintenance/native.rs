@@ -295,6 +295,13 @@ fn ingest_turn(
             .as_ref()
             .is_some_and(|expected| snapshot.witness(0).ok().as_ref() != Some(expected)),
         Err(_) if truncated => true,
+        Err(crate::bounded_file::StableReadError::Io(error))
+            if error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            // Rotation may remove an old pathname permanently. Its durable checkpoint
+            // remains available if that pathname returns, but it must release a slot.
+            return Ok(Turn::Idle);
+        }
         Err(_) => return Err(()),
     };
     let snapshot = if generation_changed {
@@ -588,6 +595,54 @@ fn backoff(failures: u32) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disappeared_sources_release_the_candidate_budget_without_erasing_checkpoints() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("live/AddOns");
+        let logs = directory.path().join("live/Logs");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&logs).unwrap();
+        let path = logs.join("Encounter.log");
+        fs::write(&path, b"0,BEGIN_LOG,1700000000000,15,\"SyntheticRealm\",\"zz\",\"fixture.game\"\n10,BEGIN_COMBAT\n").unwrap();
+        let control = MaintenanceControl::new(super::super::DataMaintenancePrefs::default());
+        control.set_presence(true);
+        let token = control.register_native_job(&root);
+        let key = source_key(&root, &path, Channel::Live);
+        let mut source = Source {
+            root,
+            logs: fs::canonicalize(&logs).unwrap(),
+            path: path.clone(),
+            channel: Channel::Live,
+            key: key.clone(),
+            token,
+            cache: None,
+            next: Instant::now(),
+            failures: 0,
+        };
+        let mut writer = NativeIngestWriter::open_with_cancellation(
+            directory.path().join("history.sqlite"),
+            source.token.clone(),
+        )
+        .unwrap();
+        assert!(matches!(
+            ingest_turn(&mut source, &mut writer, &control),
+            Ok(Turn::Progress(0, _))
+        ));
+        let before = writer.checkpoint(&key).unwrap().unwrap();
+        fs::remove_file(path).unwrap();
+        assert!(
+            matches!(
+                ingest_turn(&mut source, &mut writer, &control),
+                Ok(Turn::Idle)
+            ),
+            "a rotated-away filename must not pin a bounded candidate slot forever"
+        );
+        assert_eq!(
+            writer.checkpoint(&key).unwrap().unwrap().checkpoint_bytes,
+            before.checkpoint_bytes
+        );
+    }
 
     #[test]
     fn late_root_is_not_starved_by_an_existing_full_source_inventory() {

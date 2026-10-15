@@ -56,7 +56,7 @@ Date: 2026-10-15. Complete all five revised issues; normal/separate v15 only. Fo
 ## Phase 9: Verification and Delivery
 
 - [x] T028 Run full Rust formatting/all-target-all-feature Clippy/locked tests and applicable build/docs/render/trust/brand/package/text gates; update CHANGELOG.md and specs/130-automatic-native-processing/verification.md.
-- [ ] T029 Commit verified S130 with co-author attribution, automatically push and publish official PR closing #289/#290/#292/#293/#294, then attach it to this chat.
+- [x] T029 Commit verified S130 with co-author attribution, automatically push and publish official PR closing #289/#290/#292/#293/#294, then attach it to this chat.
 - [ ] T030 Complete at most two Codex rounds, correct/retest/respond/resolve all findings, verify final-head hosted checks and every thread, and stop for owner final review/merge with exact receipt in specs/130-automatic-native-processing/verification.md.
 
 ## Dependencies and Execution

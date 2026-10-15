@@ -65,6 +65,18 @@ rerunning. Final full-suite results are recorded below.
 
 ## Final local gates
 
+Post-publication inspection found permanently disappeared filenames could retain
+candidate slots indefinitely. The new disappeared_sources_release regression
+failed before the fix, then passed after NotFound retires only the in-memory
+candidate while retaining its checkpoint. Full formatting/Clippy/locked tests
+passed again: **1189 passed, zero failed/ignored**, including all local-service
+tests (`target/s130-review-{fmt,clippy,full}.log`). Red evidence is
+`target/s129-s130-disappearance-red.log`.
+The review-stage release executable, 10 embedded guide tests and one connection
+regression also passed (`target/s130-review-release.log`,
+`target/s130-review-embedded-guide-full.log`,
+`target/s130-review-embedded-connection.log`).
+
 The aggregate Rust gates passed: `cargo fmt --all -- --check`,
 `cargo clippy --all-targets --all-features --locked -- -D warnings`, and
 `cargo test --all --locked --no-fail-fast`. Across 53 target/doc-test summaries,
@@ -81,8 +93,11 @@ UTF-8, BOM, CRLF or mojibake errors. `git diff --check` passed.
 
 ## Review and owner boundary
 
-PR publication and up to two Codex review rounds are authorized. Publication,
-round accounting, final-head hosted checks and unresolved-thread state will be
+PR #298 was published from initial commit
+`e6ce912c1161b6b0a6169dd0239e368ddf2b53c7` and attached to the owner chat.
+All five delivery project items are in PR review. The manual Codex request is
+issue comment 6193435680; no review submission was present before requesting.
+Round accounting, final-head hosted checks and unresolved-thread state will be
 recorded here after completion. The agent stops before merge; no tag or release
 is authorized or created.
 

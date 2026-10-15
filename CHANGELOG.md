@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Release bounded native candidate slots when a source pathname disappears during rotation, retaining its durable checkpoint for a later return.
 - Keep accepted documentation connections in blocking mode under the existing read/write deadlines, preventing premature Windows failures before request bytes arrive.
 
 ### Decisions
