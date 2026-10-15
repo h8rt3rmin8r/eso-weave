@@ -25,7 +25,7 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Maintenance | Actual-root eligibility and independent optouts, stable complete input, compatible accumulation, verified immutable automatic activation, recovery and bounded retries | Source execution, arbitrary-file activation, PTS relabeling, game input or package-data mutation |
 | Discovery Collector | Bounded automatic public-API enumeration, deterministic compatible Catalog records and natural save lifecycle | Package lifecycle, encounter state, input, networking or game art redistribution |
 | Historical Encounter Readers | Compatible retained addon schemas, original evidence, normalization replay and declared loss | Loading or resuming the former recorder, desktop command ingress or gameplay authority |
-| Encounter Ingest and Raw Store | Incremental normal/separate v15 parsing, actual-root discovery, durable source progress, transactional completed fights, historical readers, immutable evidence and explicit contributor backup/deletion | Source mutation, game logger configuration, upload, input generation or gameplay authority |
+| Encounter Ingest and Raw Store | Incremental normal/verbose v15 parsing with separate/inline ability facts, actual-root discovery, durable source progress, transactional completed fights, historical readers, immutable evidence and explicit contributor backup/deletion | Source mutation, game logger configuration, upload, input generation or gameplay authority |
 | Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
 | Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog mutation, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
 
@@ -133,13 +133,14 @@ Encounter ingestion has application-owned background authority:
 
 `actual Live/PTS root -> bounded native discovery/read -> incremental parser -> completed fights and durable progress -> immutable encounter store -> background derived processing -> authenticated read-only local queries`
 
-Normal/separate log version 15 supports catchup and growing files. Partial tails
+All four normal/verbose and separate/inline log version 15 combinations support
+catchup and growing files. Partial tails
 and unfinished fights wait; silence does not complete them. Source generations,
 validated checkpoints and transactional commit admission prevent restart,
 rotation, truncation or cancellation from mixing evidence. Native independent
-facts require no Catalog; missing capabilities remain unavailable. Normal/inline
-and verbose followups are [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296)
-and [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+facts require no Catalog; missing capabilities remain unavailable. Record-local
+semantic decoding preserves exact source lines across profile changes and
+checkpoint restoration without adding persisted format state.
 
 Historical addon readers preserve raw schemas, normalization replay, ordinals,
 loss, canonical bytes and hashes. The combined package does not load the old

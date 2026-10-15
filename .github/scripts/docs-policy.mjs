@@ -1661,7 +1661,7 @@ export function validateEncounterWorkflowDocs(pages) {
     [
       "single managed PixelBeacon",
       "does not load or resume",
-      "Normal/separate log version 15",
+      "Normal and verbose log version 15",
       "independent services",
       "Disable Catalog maintenance",
       "Disable native encounter log processing",
@@ -1669,8 +1669,8 @@ export function validateEncounterWorkflowDocs(pages) {
       "next natural addon load",
       "authenticated read-only",
       "Historical addon recorder compatibility",
-      "issue #296",
-      "issue #297"
+      "separate or inline ability information",
+      "Format changes within a run"
     ]
   ],
   [
@@ -1707,7 +1707,7 @@ export function validateEncounterWorkflowDocs(pages) {
       "next natural addon load",
       "previous completed Catalog snapshot",
       "last-known-good Catalog active",
-      "normal/separate version 15"
+      "normal or verbose version 15"
     ]
   ],
   [
@@ -1736,11 +1736,11 @@ export function validateEncounterWorkflowDocs(pages) {
     "reference/encounter-data-and-metrics.md",
     [
       "Automatic native processing is supported",
-      "normal/separate native log version 15",
+      "all four native log version 15",
       "Background consumers",
       "source-specific capabilities",
-      "#296",
-      "#297"
+      "Record-local decoding",
+      "Signed hit/overflow"
     ]
   ],
   [
@@ -3041,8 +3041,10 @@ export function validateAutomaticDataPolicy(contract) {
   const errors = [];
   const native = contract?.native_processing_policy ?? {};
   const required = {
-    slice: "S130", profile: "normal-separate", log_version: 15,
-    normal_inline_followup: 296, verbose_followup: 297,
+    slice: "S131", issues: [296, 297], profile: "record-local", log_version: 15,
+    profiles: ["normal-separate", "normal-inline", "verbose-separate", "verbose-inline"],
+    grammar_evidence: "static-v15-producer-and-legacy-fixtures",
+    producer_sha256: "208f83b53576bf1a04ecf35e6e4a99779cf157e9e89fbf4457361b0923953d84",
     environment: "actual-source-context", mode: "automatic-incremental-catchup-and-tail",
     requires_viewer: false, requires_manual_import: false,
     game_logger_mutation: false, source_mutation: false,
@@ -3057,7 +3059,7 @@ export function validateAutomaticDataPolicy(contract) {
     field_verification: "not-claimed-not-required",
   };
   for (const [key, value] of Object.entries(required)) {
-    if (native[key] !== value) errors.push(`S130 automatic data requires ${key}=${JSON.stringify(value)}`);
+    if (JSON.stringify(native[key]) !== JSON.stringify(value)) errors.push(`S131 automatic data requires ${key}=${JSON.stringify(value)}`);
   }
   const boundary = contract?.operation_boundary ?? {};
   if (boundary.current_package !== "combined-PixelBeacon" || boundary.desktop_viewer !== "removed" ||

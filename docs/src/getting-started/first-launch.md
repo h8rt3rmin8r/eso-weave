@@ -78,9 +78,8 @@ previous values. Disabling Catalog stops desktop maintenance immediately;
 already-loaded Lua receives the startup preference at the next natural addon
 load. No game reload is forced. Native processing discovers supported logs automatically, catches up completed
 fights, and follows new records without a viewer or import step. ESO owns logging;
-normal/separate native log version 15 is supported. Other serialization layouts
-remain tracked in [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296) and
-[#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+normal and verbose native log version 15 are supported with separate or inline
+ability information, including format changes during a run.
 
 ## 5. Verify fresh telemetry
 

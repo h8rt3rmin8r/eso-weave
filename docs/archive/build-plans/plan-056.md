@@ -1,6 +1,6 @@
 # Plan 056: Automatic Native Processing and Workflow Retirement
 
-Status: In Progress, Active
+Status: Complete, Archived
 
 ## S130 (2026-10-15)
 
@@ -14,3 +14,7 @@ The owner authorized [S130](../../../specs/130-automatic-native-processing/spec.
 6. Audit every affected current help/contract/policy/visual/generated surface, regenerate final captures and verify the release-profile embedded guide.
 7. Run all applicable Rust/repository/documentation/text gates, commit, automatically push and publish one official PR. Resolve all findings within two Codex rounds and verify final-head hosted checks.
 8. Stop for owner final review and merge. No release/tag, automatic merge or owner field-testing task is included.
+
+## Completion (2026-10-15)
+
+The owner squash-merged PR #298 at 747885ced3e7e3423d252eb89434a1b15262b575, completing #289, #290 and #292-#294. The reviewed head and merged commit have the same tree. Normal/inline #296 and verbose #297 remain distinct follow-up work in S131. No tag or release was cut.

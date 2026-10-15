@@ -27,22 +27,35 @@ records leave committed history intact and diagnostics omit raw values. Cancella
 and commit admission share the declared stop boundary. The desktop never changes
 game logging, serialization, anonymity or source bytes.
 
-## Supported profile and evidence
+## Supported profiles and evidence
 
-Normal/separate native log version 15 is the delivered grammar. Reviewed producer
-evidence and representative retained records define known shapes; synthetic cases
-exercise boundaries and chunk partitions. Synthetic fixtures do not prove a new
-producer layout. Normal/inline remains [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296)
-and verbose remains [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+Normal and verbose native log version 15 support separate and inline ability
+information. S131 pins direct static producer writers, including a literal v15
+header, exact labels, TAB/comma delimiters, flat inline tails and nested equipment
+arrays. The official uploader was inspected; its current parser is authenticated
+and its recovered public CDN parser is historical. See the
+[S131 grammar contract](https://github.com/h8rt3rmin8r/eso-weave/blob/main/specs/131-native-v15-format-coverage/contracts/native-v15-grammar.md)
+for hashes, source addresses and evidence limits. Synthetic fixtures derive from
+those writers; they are not captured game sessions or installed-game proof.
 
-The parser accepts LF/CRLF UTF-8 records, an optional initial BOM, quoted separators,
-explicit escapes and bounded bracket groups. Known version 15 shapes include
+The parser accepts LF/CRLF UTF-8 records, an optional initial BOM, quoted separators
+and bounded bracket groups. Verbose fields use exact ordered `name: value`
+labels separated by TAB, including repeated flat unit-state labels. Producer
+strings contain literal bytes inside quotes; the existing normal/separate reader
+also preserves its historical accepted escape forms. Inline numeric ability IDs
+are followed by four metadata fields, and effects append their own metadata.
+Scalar ID arrays stay scalar in inline mode. Independent format switches emit
+no marker, so each record is decoded locally without changing the run identity.
+Known version 15 shapes include
 headers, combat boundaries/events, casts, effects, regeneration, units, ability,
 effect and player metadata, maps, zones and endless-dungeon records. Other types
 remain unknown evidence; unsupported layouts are not guessed into valid records.
 
 Native evidence preserves exact ordered original lines and relevant preceding
-context locally. Epoch, realm, language and game-version fields retain their
+context locally. Semantic decoding never replaces those original lines. Existing
+schema 1/2 canonical evidence, hashes and unknown-record classification remain
+unchanged; no store/checkpoint migration is needed for format coverage. Epoch,
+realm, language and game-version fields retain their
 source meaning; native log version does not supply an ESO API or addon version.
 Unknown evidence and uncertainty remain explicit. The lifetime size or age of a
 log does not replace per-turn, per-record, context, fight and transaction limits.
@@ -94,6 +107,9 @@ reasons. See [Encounter Data and Metrics](../reference/encounter-data-and-metric
 
 Retained contributor utilities inspect/import a completed source into an isolated
 store for investigation. They are not a player prerequisite or product interface:
+
+These frozen schema-1 utilities accept normal/separate input. The automatic
+schema-2 pipeline supports all four profiles described above.
 
 - `catalog-compiler native-encounter-inspect --input PATH --channel live|pts`
 - `catalog-compiler native-encounter-import --input PATH --store PATH --channel live|pts`

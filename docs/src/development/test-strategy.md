@@ -165,8 +165,12 @@ not a substitute for its hosted check.
 S130 adds pure incremental normal/separate version 15 parser partitions and
 checkpoint/resource tests, application ingest/consumer tests, restart/source
 generation and stop-boundary cases, retained read-only HTTP/MCP queries and
-viewer-free calculations. Native inline and verbose layouts remain separate
-followups #296 and #297. Historical readers/storage/metrics keep their domain
+viewer-free calculations. S131 adds producer-derived synthetic normal/inline
+and verbose profiles, literal strings, optional metadata, record-local format
+changes, signed quantities and exhaustive byte-partition/checkpoint equivalence.
+Store rollback/deduplication/suppression, automatic partial append/restart/disable
+and authenticated HTTP/MCP reads exercise those profiles without Catalog data.
+Historical readers/storage/metrics keep their domain
 integrity tests after presentation retirement. UI tests assert the removed
 destinations and dialogs are absent while package lifecycle, both disable
 preferences, keyboard/accessibility and unrelated layout behavior remain usable.

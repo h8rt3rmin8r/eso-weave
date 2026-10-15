@@ -72,12 +72,12 @@ fn release_guide_embeds_automatic_processing_and_no_retired_player_workflows() {
     let text = std::str::from_utf8(capture.bytes).unwrap();
     let readable = text.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
-        "Normal/separate log version 15",
+        "Normal and verbose log version 15",
         "Disable Catalog maintenance",
         "Disable native encounter log processing",
         "gray/inactive",
-        "issues/296",
-        "issues/297",
+        "separate or inline ability information",
+        "Format changes within a run",
     ] {
         assert!(
             readable.contains(required),

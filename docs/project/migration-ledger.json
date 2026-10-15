@@ -1751,11 +1751,19 @@
     },
     {
       "id": "056",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-056.md",
+      "specs": ["specs/130-automatic-native-processing"],
+      "evidence": "S130 completed #289, #290 and #292-#294 when the owner squash-merged PR #298 on 2026-10-15 at 747885ced3e7e3423d252eb89434a1b15262b575. Normal/separate v15 was the owner-approved scope; #296/#297 follow in S131."
+    },
+    {
+      "id": "057",
       "completion": "In Progress",
       "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-056.md",
-      "specs": ["specs/130-automatic-native-processing"],
-      "evidence": "Owner kickoff on 2026-10-15 authorizes S130 for issue #289, issue #290 and issues #292-#294, automatic push/PR and at most two Codex rounds before owner final review/merge. Owner revision scopes native support to normal/separate v15; #296/#297 track other formats."
+      "destination": "docs/project/build-plans/plan-057.md",
+      "specs": ["specs/131-native-v15-format-coverage"],
+      "evidence": "Owner kickoff on 2026-10-15 authorizes S131 for issue #296 and issue #297, establishing producer grammar first, with automatic push/PR and at most two Codex review rounds before owner final review and merge."
     }
   ],
   "safetyCrosswalk": [
