@@ -33,7 +33,7 @@ pub const STATUS_TOOLTIP: &str =
 pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
-    "The combined PixelBeacon package supplies current gameplay signals and automatic Catalog collection. This row shows managed installation and game API support; PixelBeacon Signal independently reports current observations.";
+    "The combined PixelBeacon package supplies current gameplay signals and automatic Catalog collection. This row shows installation state and warns when the installed addon does not support the current game API. PixelBeacon Signal independently reports current observations.";
 pub const BEACON_UNMANAGED_TOOLTIP: &str =
     "This PixelBeacon folder is not a verified ESO Weave-managed copy. Back it up and move it out of AddOns before using Install; ESO Weave will not change it.";
 

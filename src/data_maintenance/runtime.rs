@@ -44,6 +44,76 @@ impl Default for RuntimeTiming {
     }
 }
 
+/// Last attempt and last failure episode are independent: suppressing duplicate
+/// diagnostics must never suppress a retry that can recover.
+#[derive(Default)]
+struct MigrationAttempt {
+    last: Option<Instant>,
+    failure: Option<[u8; 32]>,
+}
+
+impl MigrationAttempt {
+    fn run(
+        &mut self,
+        now: Instant,
+        retry: Duration,
+        root: &Path,
+        environment: Environment,
+        operation: impl FnOnce() -> Result<bool, beacon::LifecycleError>,
+    ) {
+        if self
+            .last
+            .is_some_and(|last| now.saturating_duration_since(last) < retry)
+        {
+            return;
+        }
+        self.last = Some(now);
+        let root_id = Sha256::digest(root.to_string_lossy().as_bytes());
+        let root_id = format!(
+            "{:02x}{:02x}{:02x}{:02x}",
+            root_id[0], root_id[1], root_id[2], root_id[3]
+        );
+        match operation() {
+            Ok(changed) => {
+                if self.failure.take().is_some() {
+                    let outcome = if changed {
+                        "completed"
+                    } else {
+                        "returned to idle"
+                    };
+                    tracing::info!(target: "eso_weave::data_maintenance", "PixelBeacon package reconciliation {outcome} ({}, root {root_id})", environment.segment());
+                }
+            }
+            Err(error) => {
+                let identity: [u8; 32] = Sha256::digest(error.to_string().as_bytes()).into();
+                if self.failure == Some(identity) {
+                    return;
+                }
+                self.failure = Some(identity);
+                let (reason, outcome, action) = migration_diagnostic(&error);
+                // The live viewer records message text only. Never interpolate raw
+                // error strings: recovery errors can contain paths/private bytes.
+                tracing::warn!(target: "eso_weave::data_maintenance", "PixelBeacon package reconciliation ({}, root {root_id}): {reason}; {outcome}; {action}. Automatic retry remains active", environment.segment());
+            }
+        }
+    }
+}
+
+fn migration_diagnostic(
+    error: &beacon::LifecycleError,
+) -> (&'static str, &'static str, &'static str) {
+    use beacon::LifecycleError;
+    match error {
+        LifecycleError::AddonsDirMissing => ("AddOns root unavailable", "reconciliation did not complete", "check the selected AddOns directory"),
+        LifecycleError::Unmanaged => ("unmanaged package conflict", "no ownership was granted", "review the conflicting addon files before retrying"),
+        LifecycleError::Integrity(_) => ("package integrity conflict", "reconciliation did not complete", "review changed or conflicting addon files"),
+        LifecycleError::RecoveryPending {..} => ("package recovery pending", "restoration incomplete", "resolve conflicting files or access restrictions; keep recovery data for automatic retry"),
+        LifecycleError::CleanupPending {..} => ("package cleanup deferred", "transaction committed; cleanup pending", "release file locks or restore directory access; keep recovery data for automatic cleanup"),
+        LifecycleError::Io(error) if error.kind() == std::io::ErrorKind::PermissionDenied => ("filesystem access denied", "reconciliation did not complete", "check AddOns permissions or file locks"),
+        LifecycleError::Io(_) => ("filesystem operation failed", "reconciliation did not complete", "check AddOns availability, free space, and file access"),
+    }
+}
+
 #[derive(Default)]
 struct Schedule {
     eligible: bool,
@@ -391,7 +461,7 @@ fn coordinate(
     let mut last_discovery = None::<Instant>;
     let mut previous_roots = None;
     let mut schedules = BTreeMap::<PathBuf, Arc<Mutex<Schedule>>>::new();
-    let mut migrations = BTreeMap::<PathBuf, Instant>::new();
+    let mut migrations = BTreeMap::<PathBuf, MigrationAttempt>::new();
     let mut config_attempts = BTreeMap::<PathBuf, (bool, Environment, Instant)>::new();
     let mut owner = default_registry_owner(config);
     let mut cursor = 0;
@@ -432,21 +502,22 @@ fn coordinate(
         let prefs = control.preferences();
         let mut eligible = Vec::new();
         for context in &contexts {
-            if migrations
-                .get(&context.addons_root)
-                .is_none_or(|last| now.duration_since(*last) >= timing.retry_max)
-            {
-                migrations.insert(context.addons_root.clone(), now);
-                if beacon::migrate_legacy_if_needed(
+            migrations
+                .entry(context.addons_root.clone())
+                .or_default()
+                .run(
+                    now,
+                    timing.retry_max,
                     &context.addons_root,
-                    prefs.catalog_disabled,
                     context.environment,
-                )
-                .is_err()
-                {
-                    tracing::warn!(target: "eso_weave::data_maintenance", "combined package migration deferred; prior data preserved");
-                }
-            }
+                    || {
+                        beacon::migrate_legacy_if_needed(
+                            &context.addons_root,
+                            prefs.catalog_disabled,
+                            context.environment,
+                        )
+                    },
+                );
             let presence = beacon::inspect_presence(&context.addons_root).ok();
             if presence.is_some_and(|facts| facts.eligible()) {
                 eligible.push(context.clone());
@@ -1413,5 +1484,120 @@ mod tests {
             .unwrap()
             .contains(beacon::MANAGED_MARKER));
         drop(runtime);
+    }
+}
+
+#[cfg(test)]
+mod migration_regressions {
+    use super::*;
+    use crate::beacon::LifecycleError;
+
+    #[test]
+    fn s133_migration_failures_are_bounded_per_root_and_recovery_is_observable() {
+        let (dispatch, log) =
+            crate::logging::build(&crate::config::LoggingPrefs::default(), PathBuf::new());
+        tracing::dispatcher::with_default(&dispatch, || {
+            let mut live = MigrationAttempt::default();
+            let mut pts = MigrationAttempt::default();
+            let now = Instant::now();
+            let retry = Duration::from_secs(60);
+            let mut calls = 0;
+            for seconds in [0, 1, 60, 120] {
+                live.run(
+                    now + Duration::from_secs(seconds),
+                    retry,
+                    Path::new("private/live"),
+                    Environment::Live,
+                    || {
+                        calls += 1;
+                        Err(LifecycleError::Io(std::io::Error::from(
+                            std::io::ErrorKind::PermissionDenied,
+                        )))
+                    },
+                );
+            }
+            assert_eq!(calls, 3);
+            assert_eq!(log.recent(100).len(), 1);
+            pts.run(
+                now,
+                retry,
+                Path::new("private/pts"),
+                Environment::Pts,
+                || {
+                    Err(LifecycleError::Integrity(
+                        "private conflicting bytes".into(),
+                    ))
+                },
+            );
+            live.run(
+                now + retry * 3,
+                retry,
+                Path::new("private/live"),
+                Environment::Live,
+                || {
+                    Err(LifecycleError::RecoveryPending {
+                        recovery: "secret/recovery".into(),
+                        message: "private saved data".into(),
+                    })
+                },
+            );
+            live.run(
+                now + retry * 4,
+                retry,
+                Path::new("private/live"),
+                Environment::Live,
+                || Ok(false),
+            );
+            live.run(
+                now + retry * 5,
+                retry,
+                Path::new("private/live"),
+                Environment::Live,
+                || {
+                    Err(LifecycleError::Io(std::io::Error::from(
+                        std::io::ErrorKind::PermissionDenied,
+                    )))
+                },
+            );
+            let events = log.recent(100);
+            assert_eq!(events.len(), 5);
+            assert!(events
+                .iter()
+                .any(|e| e.message.contains("returned to idle")));
+            assert!(events
+                .iter()
+                .any(|e| e.message.contains("restoration incomplete")));
+            for event in &events {
+                assert!(!event.message.contains("private") && !event.message.contains("secret"));
+                assert!(!event.message.contains("prior data preserved"));
+            }
+        });
+    }
+
+    #[test]
+    fn s133_cleanup_diagnostics_acknowledge_committed_outcome() {
+        let (dispatch, log) =
+            crate::logging::build(&crate::config::LoggingPrefs::default(), PathBuf::new());
+        tracing::dispatcher::with_default(&dispatch, || {
+            MigrationAttempt::default().run(
+                Instant::now(),
+                Duration::ZERO,
+                Path::new("private/root"),
+                Environment::Live,
+                || {
+                    Err(LifecycleError::CleanupPending {
+                        status: beacon::BeaconStatus::ManagedUpToDate,
+                        recovery: "secret/recovery".into(),
+                        message: "private bytes".into(),
+                    })
+                },
+            );
+        });
+        let events = log.recent(10);
+        assert_eq!(events.len(), 1);
+        assert!(events[0]
+            .message
+            .contains("transaction committed; cleanup pending"));
+        assert!(!events[0].message.contains("prior data preserved"));
     }
 }

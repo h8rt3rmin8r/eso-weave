@@ -506,6 +506,34 @@ fn expected_snapshot(block_px: u32, config: StartupConfig) -> Snapshot {
     }
 }
 
+/// Installed declarations are presentation evidence, never mutation ownership.
+pub fn installed_api_support(addons_root: &Path, api: u32) -> Option<bool> {
+    with_inspection(addons_root, |root| {
+        let bytes = read_regular(
+            root,
+            &root.join(super::SUBFOLDER).join(super::MANIFEST_FILE),
+            MAX_MANIFEST_BYTES,
+        )?;
+        let manifest = std::str::from_utf8(&bytes).ok();
+        let versions = manifest
+            .and_then(|text| {
+                text.lines()
+                    .find_map(|line| line.trim().strip_prefix("## APIVersion:"))
+            })
+            .and_then(|tokens| {
+                tokens
+                    .split_whitespace()
+                    .map(str::parse::<u32>)
+                    .collect::<Result<Vec<_>, _>>()
+                    .ok()
+            })
+            .filter(|values| !values.is_empty() && values.iter().all(|api| *api > 0));
+        Ok(versions.map(|values| values.contains(&api)))
+    })
+    .ok()
+    .flatten()
+}
+
 pub fn installed_block_px(addons_root: &Path) -> Option<u32> {
     with_inspection(addons_root, |root| Ok(installed_block_px_locked(root)))
         .ok()
@@ -614,9 +642,21 @@ pub fn migrate_legacy_if_needed(
     catalog_disabled: bool,
     environment: Environment,
 ) -> Result<bool, LifecycleError> {
-    mutation::with_root(addons_root, |root| {
+    let result = mutation::with_root(addons_root, |root| {
         migrate_legacy_locked(root, catalog_disabled, environment)
-    })
+    });
+    match result {
+        Err(error)
+            if matches!(metadata(addons_root), Ok(None))
+                && matches!(
+                    &error,
+                    LifecycleError::AddonsDirMissing | LifecycleError::Io(_)
+                ) =>
+        {
+            Ok(false)
+        }
+        other => other,
+    }
 }
 
 fn migrate_legacy_locked(

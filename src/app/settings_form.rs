@@ -28,6 +28,8 @@ pub struct UiPrefs {
     pub always_on_top: bool,
     /// The persisted live-log panel height in points (a user layout preference).
     pub log_panel_height: u32,
+    /// Whether the live log viewer remains open across restarts.
+    pub log_panel_open: bool,
     /// Whether the System and State dashboard disclosure is expanded.
     pub system_state_expanded: bool,
     /// Whole seconds to retain the last coherent HUD presentation after loss.
@@ -40,6 +42,7 @@ impl Default for UiPrefs {
             theme: Theme::default(),
             always_on_top: false,
             log_panel_height: DEFAULT_LOG_HEIGHT,
+            log_panel_open: false,
             system_state_expanded: true,
             stale_retention_seconds: DEFAULT_STALE_RETENTION_SECONDS,
         }
@@ -102,6 +105,10 @@ pub fn ui_from_value(value: &serde_json::Value) -> (UiPrefs, Vec<Notice>) {
             theme,
             always_on_top,
             log_panel_height,
+            log_panel_open: value
+                .get("log_panel_open")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(defaults.log_panel_open),
             system_state_expanded,
             stale_retention_seconds,
         },
@@ -119,6 +126,7 @@ pub fn ui_to_value(prefs: &UiPrefs) -> serde_json::Value {
         "theme": theme,
         "always_on_top": prefs.always_on_top,
         "log_panel_height": prefs.log_panel_height,
+        "log_panel_open": prefs.log_panel_open,
         "system_state_expanded": prefs.system_state_expanded,
         "stale_retention_seconds": prefs.stale_retention_seconds,
     })

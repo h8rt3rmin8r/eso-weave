@@ -104,5 +104,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/132-v0190-release/plan.md
+at specs/133-ui-maintenance-regressions/plan.md
 <!-- SPECKIT END -->

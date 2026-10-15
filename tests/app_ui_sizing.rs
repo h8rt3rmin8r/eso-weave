@@ -1539,8 +1539,8 @@ fn enforced_minimum_equals_intrinsic_extent_log_closed() {
     );
 }
 
-/// C2 (FR-013): with the log open the minimum adds the width bonus and the open
-/// log reserve on top of the intrinsic extent.
+/// S133 supersedes the old width bonus: only the necessary vertical log reserve
+/// is added to the intrinsic extent.
 #[test]
 fn enforced_minimum_adds_log_reserve_when_open() {
     let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
@@ -1556,7 +1556,7 @@ fn enforced_minimum_adds_log_reserve_when_open() {
         .expect("a minimum should have been sent");
 
     assert!(
-        sent.x > extent.x && sent.y > extent.y,
+        (sent.x - extent.x).abs() <= 0.5 && sent.y > extent.y,
         "open-log minimum {sent:?} should exceed the intrinsic extent {extent:?}"
     );
 }
@@ -2100,38 +2100,81 @@ fn brandbuilder_fine_pointer_responses_meet_the_desktop_target() {
     }
 }
 
-/// FR-004, FR-005: the enforced minimum follows the content when a transient
-/// control row appears and disappears, rather than latching at the largest value
-/// it has ever seen.
 #[test]
-fn enforced_minimum_follows_a_control_row_in_and_out() {
+fn s133_uninstall_modal_does_not_displace_dashboard_or_minimum() {
     let mut harness = harness_at(egui::vec2(1200.0, 1000.0));
     for _ in 0..SETTLE {
         harness.step();
     }
     let base = harness.state().content_extent();
-
-    // A transient row appears: the minimum must grow to fit it.
+    let dashboard = harness.state().dashboard_rects();
     harness.state_mut().set_confirm_uninstall(true);
     for _ in 0..SETTLE {
         harness.step();
     }
-    let with_row = harness.state().content_extent();
-    assert!(
-        with_row.y > base.y + 0.5,
-        "the minimum did not grow for the new control row: {base:?} -> {with_row:?}"
-    );
-
-    // The row goes away: the minimum must come back down, not stay latched.
-    harness.state_mut().set_confirm_uninstall(false);
+    assert_eq!(harness.state().content_extent(), base);
+    assert_eq!(harness.state().dashboard_rects(), dashboard);
+    harness.get_by_label("Uninstall PixelBeacon?");
+    harness.key_press(egui::Key::Escape);
     for _ in 0..SETTLE {
         harness.step();
     }
-    let after = harness.state().content_extent();
-    assert!(
-        (after.y - base.y).abs() <= 0.5,
-        "the minimum latched at the larger value: {base:?} -> {with_row:?} -> {after:?}"
+    assert!(harness.query_by_label("Confirm Uninstall").is_none());
+    assert_eq!(harness.state().content_extent(), base);
+}
+
+#[test]
+fn s133_saved_log_visibility_initializes_the_gui() {
+    let settings = Settings {
+        ui: serde_json::json!({"log_panel_open": true, "log_panel_height": 220}),
+        ..Settings::default()
+    };
+    let app = render_app_at(
+        test_app_with_settings(settings),
+        egui::vec2(1200.0, 1400.0),
+        SETTLE,
     );
+    assert!(app.last_log_top().is_some());
+}
+
+#[test]
+fn s133_log_menu_does_not_resize_a_window_with_spare_space() {
+    let mut harness = harness_at(egui::vec2(1200.0, 1400.0));
+    let inner = egui::Rect::from_min_size(egui::pos2(100.0, 100.0), egui::vec2(1200.0, 1400.0));
+    let viewport = harness
+        .input_mut()
+        .viewports
+        .get_mut(&egui::ViewportId::ROOT)
+        .unwrap();
+    viewport.inner_rect = Some(inner);
+    viewport.outer_rect = Some(inner.expand(4.0));
+    viewport.monitor_size = Some(egui::vec2(4000.0, 2400.0));
+    for _ in 0..SETTLE {
+        harness.step();
+    }
+    for _ in 0..3 {
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "View")
+            .click_accesskit();
+        harness.step();
+        harness
+            .get_by_role_and_label(
+                egui::accesskit::Role::CheckBox,
+                eso_weave::app::strings::MENU_LOG_TOGGLE,
+            )
+            .click_accesskit();
+        harness.step();
+        assert!(!harness.output().viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(
+                command,
+                egui::ViewportCommand::InnerSize(_) | egui::ViewportCommand::OuterPosition(_)
+            )));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+    }
 }
 
 /// S046 FR-016: a scale change is evaluated in logical points and may therefore
@@ -2284,5 +2327,64 @@ fn s125_contrast_detects_wrong_widget_role_despite_valid_palette() {
         let right = painted_text_contrasts(&harness, "surface role");
         assert!(!wrong.is_empty() && wrong.iter().any(|r| *r < 4.5));
         assert!(!right.is_empty() && right.iter().all(|r| *r >= 4.5));
+    }
+}
+
+#[test]
+fn s133_log_growth_respects_usable_edge_and_maximized_geometry() {
+    for maximized in [false, true] {
+        let mut fonts = false;
+        let work = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1000.0, 1000.0));
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(640.0, 250.0))
+            .build_ui_state(
+                move |ui, app: &mut EsoWeaveApp| {
+                    if !fonts {
+                        eso_weave::app::theme::install_fonts(ui.ctx());
+                        fonts = true;
+                        return;
+                    }
+                    app.frame_ui_with_work_area(ui, Some(work));
+                },
+                test_app(),
+            );
+        let viewport = harness
+            .input_mut()
+            .viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap();
+        viewport.inner_rect = Some(egui::Rect::from_min_size(
+            egui::pos2(308.0, 680.0),
+            egui::vec2(640.0, 250.0),
+        ));
+        viewport.outer_rect = Some(egui::Rect::from_min_size(
+            egui::pos2(300.0, 650.0),
+            egui::vec2(656.0, 290.0),
+        ));
+        viewport.maximized = Some(maximized);
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        harness.state_mut().set_log_panel_open(true);
+        for _ in 0..SETTLE {
+            harness.step();
+            for command in &harness.output().viewport_output[&egui::ViewportId::ROOT].commands {
+                match command {
+                    egui::ViewportCommand::InnerSize(size) => {
+                        assert!(!maximized);
+                        assert!(size.x <= 684.0 && size.y <= 310.0);
+                    }
+                    egui::ViewportCommand::MinInnerSize(size) => {
+                        assert!(size.x <= 684.0 && size.y <= if maximized { 250.0 } else { 310.0 });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert!(harness.state().last_log_top().is_some());
+        assert!(
+            harness.state().last_content_bottom().unwrap()
+                <= harness.state().last_log_top().unwrap() + 0.5
+        );
     }
 }

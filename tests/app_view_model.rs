@@ -3061,3 +3061,171 @@ fn quickslot_events_reach_the_engine_and_nothing_else() {
         "the quickslot does not touch the input gate"
     );
 }
+
+#[test]
+fn s133_log_visibility_survives_immediate_close_and_stale_settings() {
+    let root = tempfile::tempdir().unwrap();
+    let mut harness = retention_harness(root.path(), 120);
+    let stale = harness.model.settings_form();
+    harness.model.apply_intent(UiIntent::SetLogHeight(222));
+    harness.model.apply_intent(UiIntent::ToggleLogPanel(true));
+    harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(stale)));
+    harness.model.flush_session_now();
+    let saved = eso_weave::config::load(root.path()).settings;
+    assert_eq!(saved.ui["log_panel_open"], true);
+    assert_eq!(saved.ui["log_panel_height"], 222);
+    assert_eq!(saved.logging.level, LevelName::Info);
+}
+
+#[test]
+fn s133_installed_beacon_status_has_no_routine_api_suffix() {
+    let root = tempfile::tempdir().unwrap();
+    beacon::install(
+        root.path(),
+        beacon::RunningState::NotRunning,
+        beacon::DEFAULT_API_VERSION,
+    )
+    .unwrap();
+    let model = model_with_beacon_root(root.path());
+    assert_eq!(model.view().beacon_line.state_text, "Installed (current)");
+    assert_eq!(model.view().beacon_line.role, StatusRole::Healthy);
+}
+
+#[test]
+fn s133_visibility_round_trips_through_model_reconstruction() {
+    fn reconstruct(settings: Settings, dir: &std::path::Path) -> AppModel {
+        let (input, _) = InputEngine::new(BindingTable::default(), 16);
+        let (_, log) = logging::build(&LoggingPrefs::default(), PathBuf::new());
+        let (reader_tx, _) = std::sync::mpsc::channel();
+        AppModel::new(
+            Arc::new(input),
+            Arc::new(Mutex::new(WeaveEngine::new(WeaveConfig::default()))),
+            Arc::new(Mutex::new(FishingController::new(FishingConfig::default()))),
+            Box::new(MockFishingSink::new()),
+            Arc::new(Mutex::new(eso_weave::potion::AutoPotionController::new(
+                eso_weave::potion::AutoPotionConfig::default(),
+            ))),
+            log,
+            reader_tx,
+            settings,
+            Some(dir.to_path_buf()),
+            Instant::now(),
+        )
+    }
+    let root = tempfile::tempdir().unwrap();
+    let mut model = reconstruct(Settings::default(), root.path());
+    assert!(!model.view().log_panel_open);
+    model.apply_intent(UiIntent::SetLogHeight(222));
+    model.apply_intent(UiIntent::SetLogFilter(LevelName::Debug));
+    for open in [true, true, false, false, true] {
+        model.apply_intent(UiIntent::ToggleLogPanel(open));
+        assert!(model.flush_session_now());
+        model = reconstruct(eso_weave::config::load(root.path()).settings, root.path());
+        assert_eq!(model.view().log_panel_open, open);
+        assert_eq!(model.ui_prefs().log_panel_height, 222);
+        assert_eq!(model.view().log_filter, LevelName::Debug);
+    }
+}
+
+#[test]
+fn s133_api_warning_uses_installed_declarations_and_current_environment() {
+    use eso_weave::beacon::api_check::{ApiCheckOutcome, GameVersion, VersionEvidence};
+    let root = tempfile::tempdir().unwrap();
+    beacon::install(
+        root.path(),
+        beacon::RunningState::NotRunning,
+        beacon::DEFAULT_API_VERSION,
+    )
+    .unwrap();
+    let mut model = model_with_beacon_root(root.path());
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let evidence = VersionEvidence {
+        environment: Environment::Live,
+        game_version: GameVersion::new([12, 1, 5, 0]),
+        api_version: beacon::DEFAULT_API_VERSION,
+        source_revision: [1; 20],
+        source_updated_at: now,
+        checked_at: now,
+    };
+    let apply = |model: &mut AppModel, evidence| {
+        model.apply_api_check(ApiCheckOutcome {
+            evidence: Some(evidence),
+            last_known_api_version: 101051,
+            last_seen_game_version: None,
+            fresh: true,
+        })
+    };
+    let manifest_path = root.path().join("PixelBeacon/PixelBeacon.txt");
+    let original = std::fs::read_to_string(&manifest_path).unwrap();
+    let with_apis = |apis: &str| {
+        original
+            .lines()
+            .map(|line| {
+                if line.starts_with("## APIVersion:") {
+                    format!("## APIVersion: {apis}")
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    };
+    apply(&mut model, evidence);
+    assert!(!model.view().beacon_line.state_text.contains("API"));
+    std::fs::write(&manifest_path, with_apis("999999")).unwrap();
+    assert_eq!(
+        beacon::installed_api_support(root.path(), evidence.api_version),
+        Some(false)
+    );
+    assert!(model
+        .view()
+        .beacon_line
+        .state_text
+        .contains("API unsupported"));
+    assert_eq!(model.view().beacon_line.role, StatusRole::Warning);
+    // The installed declaration can cover an API the embedded package does not.
+    apply(
+        &mut model,
+        VersionEvidence {
+            api_version: 999999,
+            ..evidence
+        },
+    );
+    assert!(!model.view().beacon_line.state_text.contains("API"));
+    for unknown in [
+        VersionEvidence {
+            environment: Environment::Pts,
+            ..evidence
+        },
+        VersionEvidence {
+            checked_at: now - 31 * 86400,
+            ..evidence
+        },
+    ] {
+        apply(&mut model, unknown);
+        assert!(!model.view().beacon_line.state_text.contains("API"));
+    }
+    apply(&mut model, evidence);
+    for apis in ["", "invalid", "101051 invalid"] {
+        std::fs::write(&manifest_path, with_apis(apis)).unwrap();
+        assert_eq!(
+            beacon::installed_api_support(root.path(), evidence.api_version),
+            None
+        );
+        assert!(!model.view().beacon_line.state_text.contains("API"));
+    }
+    std::fs::write(
+        &manifest_path,
+        with_apis(&format!("999999 {}", evidence.api_version)),
+    )
+    .unwrap();
+    assert_eq!(
+        beacon::installed_api_support(root.path(), evidence.api_version),
+        Some(true)
+    );
+    std::fs::remove_dir_all(root.path().join("PixelBeacon")).unwrap();
+    assert!(!model.view().beacon_line.state_text.contains("API"));
+}

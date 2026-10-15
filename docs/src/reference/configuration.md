@@ -23,7 +23,7 @@ line endings, and end with a newline.
 The configuration contains user settings only. Module-owned sections include
 timing, skills, beacon, fishing, potion, latency, pixelbus, and interface options. The typed `data_maintenance` section stores independent `catalog_disabled` and `native_processing_disabled` booleans; missing fields default to false. Availability, active work, cancellation generations and loaded Lua state never enter this file. These two optouts persist directly rather than waiting for the ordinary settle-write; failed disables still stop the current run and failed enables do not claim durable success.
 A bounded `ui.stale_retention_seconds` preference controls display-only HUD
-retention and defaults to 120 when absent.
+retention and defaults to 120 when absent. The boolean `ui.log_panel_open` retains the last explicit Application Log visibility choice; missing or invalid values default to false.
 A top-level `schema_version` supports forward migration. Invalid configuration
 falls back to safe defaults, preserves the rejected file with an `.invalid`
 suffix, and surfaces a notice.
@@ -54,16 +54,15 @@ PixelBeacon evidence of ESO controls.
 Writes are coalesced. A change marks the relevant store dirty and one write occurs
 after the configured settling interval.
 
-Window position and size, System and State disclosure, and Application Log height are
-layout preferences. Closing the window or choosing Exit forces pending window
-geometry to the session store so a final move or resize is not lost.
+Window position and size, System and State disclosure, and Application Log visibility/height are
+layout preferences. Closing the window or choosing Exit forces pending window geometry to the session store and saves pending layout preferences to configuration, so a final toggle, move, or resize is not lost.
 
 ## Persistence matrix
 
 | Value | Store | Restart behavior |
 | --- | --- | --- |
 | Modal settings, keybindings, Skills configuration | `config.json` | Restored; see Settings for current live versus restart timing |
-| Theme, Always on Top, stale-retention interval, disclosure, Application Log height | `config.json` | Restored |
+| Theme, Always on Top, stale-retention interval, disclosure, Application Log visibility and height | `config.json` | Restored |
 | Window geometry, suspension, Fishing request, Auto Potion request, API-version cache | `state.json` | Restored, but input still requires fresh safety evidence |
 | Current game and controller observations | Neither | Re-established from current runtime evidence |
 | Retained HUD snapshot, stale cause, age, and deadline | Neither | Process-local only; never restored after ESO Weave exits |

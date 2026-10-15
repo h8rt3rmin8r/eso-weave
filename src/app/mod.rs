@@ -1874,6 +1874,7 @@ impl AppModel {
             .and_then(|root| crate::data_addon::inspect(&root).ok());
         let data_addon_inspection_available = data_addon_status.is_some();
         let log_filter = settings.logging.level;
+        let log_panel_open = settings_form::ui_from_value(&settings.ui).0.log_panel_open;
         let mut reader_notices = Vec::new();
         let runtime_reader_config =
             crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices);
@@ -1897,7 +1898,7 @@ impl AppModel {
             data_addon_reload_required: Cell::new(false),
             runtime_reader_config,
             reader_update_tx,
-            log_panel_open: false,
+            log_panel_open,
             log_filter,
             scheduler: SaveScheduler::new(Duration::from_millis(400)),
             api_version: ApiVersionCache::default(),
@@ -2369,26 +2370,24 @@ impl AppModel {
             log_filter: self.log_filter,
         };
         self.apply_hud_retention(&mut view, &game, presentation_loss_at_ms, now_ms);
-        let api_summary = match self.api_evidence.filter(|evidence| {
+        if let Some(evidence) = self.api_evidence.filter(|evidence| {
             evidence.is_current(
                 self.beacon_prefs.environment,
                 time::OffsetDateTime::now_utc().unix_timestamp(),
             )
         }) {
-            Some(evidence)
-                if beacon::supports_api(evidence.api_version)
-                    && crate::data_addon::supports_api(evidence.api_version) =>
+            if beacon::resolve_addons_dir(&self.beacon_prefs)
+                .ok()
+                .and_then(|root| beacon::installed_api_support(&root, evidence.api_version))
+                == Some(false)
             {
-                "API supported"
+                view.beacon_line
+                    .state_text
+                    .push_str(" | API unsupported; update addon");
+                if view.beacon_line.role != StatusRole::Error {
+                    view.beacon_line.role = StatusRole::Warning;
+                }
             }
-            Some(_) => "API unsupported; update ESO Weave",
-            None => "API unknown",
-        };
-        view.beacon_line.state_text = format!("{} | {api_summary}", view.beacon_line.state_text);
-        if view.addon_api_line.role == StatusRole::Warning
-            && view.beacon_line.role != StatusRole::Error
-        {
-            view.beacon_line.role = StatusRole::Warning;
         }
         view
     }
@@ -2551,6 +2550,10 @@ impl AppModel {
             UiIntent::ApplySettings(form) => self.apply_settings(*form),
             UiIntent::ToggleLogPanel(open) => {
                 self.log_panel_open = open;
+                let mut prefs = self.ui_prefs();
+                prefs.log_panel_open = open;
+                self.settings.ui = settings_form::ui_to_value(&prefs);
+                self.scheduler.mark_config_layout(Instant::now());
                 Vec::new()
             }
             UiIntent::SetLogFilter(level) => {
@@ -2715,6 +2718,12 @@ impl AppModel {
     }
 
     fn apply_settings(&mut self, mut form: SettingsForm) -> Vec<Notice> {
+        // A Settings draft may predate a menu toggle or pane resize. These layout
+        // preferences have their own intents and are not editable in Settings.
+        let layout = self.ui_prefs();
+        form.ui.log_panel_open = layout.log_panel_open;
+        form.ui.log_panel_height = layout.log_panel_height;
+        form.ui.system_state_expanded = layout.system_state_expanded;
         if !self.data_maintenance.controls_enabled() {
             form.data_maintenance = self.settings.data_maintenance;
         }
@@ -3088,6 +3097,16 @@ impl AppModel {
         let Some(dir) = self.config_dir.clone() else {
             return false;
         };
+        // Persist final-moment layout preferences as well as session geometry.
+        if self.scheduler.dirty_config {
+            self.store_live_into_settings();
+            match config::save(&dir, &self.settings) {
+                Ok(()) => self.scheduler.dirty_config = false,
+                Err(err) => {
+                    tracing::warn!(target: "eso_weave::config", "could not save settings on close: {err}")
+                }
+            }
+        }
         let state = self.current_session_state();
         match config::state::save(&dir, &state) {
             Ok(()) => {

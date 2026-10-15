@@ -222,3 +222,18 @@ fn window_growth_request_grows_but_never_shrinks() {
     // A hairline difference is not a growth trigger (no per-frame churn).
     assert_eq!(window_growth_request((800.2, 900.2), (800.0, 900.0)), None);
 }
+
+#[test]
+fn s133_client_capacity_accounts_for_origin_chrome_and_negative_monitors() {
+    use eframe::egui::{pos2, vec2, Rect};
+    use eso_weave::app::ui::viewport_client_capacity;
+    for scale in [1.0, 1.5, 2.0] {
+        let work = Rect::from_min_max(pos2(-1920.0, 0.0) / scale, pos2(0.0, 1040.0) / scale);
+        let outer = Rect::from_min_size(pos2(-1000.0, 600.0) / scale, vec2(800.0, 400.0) / scale);
+        let inner = Rect::from_min_size(pos2(-992.0, 630.0) / scale, vec2(784.0, 362.0) / scale);
+        assert!(
+            (viewport_client_capacity(inner, outer, work) - vec2(984.0, 402.0) / scale).length()
+                < 0.001
+        );
+    }
+}

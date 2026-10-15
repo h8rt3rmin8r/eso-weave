@@ -1772,6 +1772,14 @@
       "destination": "docs/archive/build-plans/plan-058.md",
       "specs": ["specs/132-v0190-release"],
       "evidence": "S132 completed candidate issue #302 including #284's dependency updates when the owner squash-merged PR #303 on 2026-10-15 at 629bc92ffb8685a65d4a4ae2b3e793e0f3492569. The merged tree matches reviewed delivery head 8e5542c. After exact-main CI/docs/CodeQL passed, separately authorized v0.19.0 published at 20:40:52 UTC through successful workflow 38801670245. All five downloaded assets matched GitHub sizes/digests and all package hashes matched SHA256SUMS, completing #301. #304 records documentary closeout."
+    },
+    {
+      "id": "059",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-059.md",
+      "specs": ["specs/133-ui-maintenance-regressions"],
+      "evidence": "Owner selected issue #306, issue #307, issue #308, issue #309 and issue #310 on 2026-10-15 for S133 implementation, regression coverage, and PR review. No merge, tag, or release is authorized."
     }
   ],
   "safetyCrosswalk": [

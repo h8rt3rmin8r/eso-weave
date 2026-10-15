@@ -51,6 +51,7 @@ fn ui_section_round_trips_and_defaults() {
         theme: Theme::Light,
         always_on_top: true,
         log_panel_height: 240,
+        log_panel_open: true,
         system_state_expanded: false,
         stale_retention_seconds: 999,
     };
@@ -266,5 +267,21 @@ fn the_footprint_caption_follows_the_block_size() {
     assert!(
         grid_footprint_caption(16, LayoutState::Unavailable(LayoutFailure::CorruptHighByte))
             .contains("unavailable")
+    );
+}
+
+#[test]
+fn s133_log_visibility_round_trips_and_old_settings_stay_closed() {
+    for open in [true, false] {
+        let (prefs, notices) =
+            ui_from_value(&serde_json::json!({"log_panel_open": open, "log_panel_height": 222}));
+        assert!(notices.is_empty());
+        let stored = ui_to_value(&prefs);
+        assert_eq!(stored["log_panel_open"], open);
+        assert_eq!(stored["log_panel_height"], 222);
+    }
+    assert_eq!(
+        ui_to_value(&ui_from_value(&serde_json::json!({})).0)["log_panel_open"],
+        false
     );
 }

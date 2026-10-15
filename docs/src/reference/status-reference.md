@@ -86,15 +86,15 @@ capabilities and [Local API and MCP](local-api-and-mcp.md) for client access.
 
 ## Game Context and player state
 
-The existing PixelBeacon field summarizes API support, uncertainty, or an
-application-update action for the combined companion package. API and client
-evidence remain distinct from installed package compatibility in canonical state.
+The PixelBeacon field keeps ordinary installation text concise, for example
+**Installed (current)**. It adds **API unsupported; update addon** with warning
+styling only when current selected-environment evidence is excluded by the
+installed manifest's valid API declarations. Missing, stale, malformed, or
+other-environment evidence does not fabricate incompatibility or add routine API
+text. Technical API/client evidence remains separate in canonical diagnostics.
 
 | Field and text | Meaning | Automation impact or next action |
 | --- | --- | --- |
-| Game API: **Bundled addons support API...** | Published selected-channel evidence matches reviewed PixelBeacon declarations | Installed package state and input gates remain separate |
-| Game API: **API... is not supported** | The observed numeric API is outside reviewed declarations | Update ESO Weave; a saved observation does not dismiss this warning |
-| Game API: **Unknown...** | Check pending, unavailable, stale, malformed, or for another environment | Check connection and restart; remembered unsupported API guidance remains visible |
 | Game Context: **Gameplay** | Active, focused game with fresh no-menu observation | Can authorize input with the other gates |
 | Game Context: **Unfocused** | ESO lacks keyboard focus | No focused-game interception or autonomous input |
 | Game Context: **Signal unavailable** or **Unknown** | Surface evidence is missing or inconclusive | Does not authorize generated input |
