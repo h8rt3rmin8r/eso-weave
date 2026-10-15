@@ -14,3 +14,13 @@ The owner authorized [S131](../../../specs/131-native-v15-format-coverage/spec.m
 6. Reconcile source capabilities and current guide/API/MCP/contracts without changing game settings, adding player workflows or inventing unavailable measurements.
 7. Run applicable Rust, storage/runtime/API and documentation gates, commit, push and publish one official PR. Resolve all findings within two Codex review rounds and verify final-head hosted checks.
 8. Stop for owner final review and merge. No automatic merge, release/tag or owner field-testing task is included.
+
+## Delivery evidence (2026-10-15)
+
+S131 is implemented in [PR #299](https://github.com/h8rt3rmin8r/eso-weave/pull/299).
+Pinned static v15 producer writers established grammar before implementation.
+All 1207 local Rust tests, documentation/browser and release gates passed.
+Codex round 1 completed without findings; no second round was needed. Windows,
+Linux, documentation, trust, dependency and CodeQL gates passed on implementation
+head `376b0e6`. The PR conversation records final delivery-head checks. The plan
+remains active pending owner final review and merge.

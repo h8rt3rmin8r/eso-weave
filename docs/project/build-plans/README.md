@@ -35,4 +35,5 @@ build plan is Plan057 for owner-authorized S131. Plan055 completed S129 in PR #2
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence
 of installed behavior or live parity. Completed native-file import was delivered in S127 / issue #272; live tailing
-is implemented in S130 for normal/separate v15, with S131/#296/#297 establishing grammar before adding the remaining profiles.
+is implemented in S130 for normal/separate v15. S131/#296/#297 adds the remaining
+profiles after pinned producer-grammar research in PR #299, pending owner merge.

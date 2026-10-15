@@ -44,10 +44,24 @@ atomic progress, cancellation and fixed read-only HTTP/MCP services are reused.
 
 ## Publication and review boundary
 
-Automatic feature-branch push and official PR publication are owner-authorized.
-No review round has been used before publication. The PR conversation will
-carry review findings, resolutions and exact-head hosted-check receipts.
-At most two Codex rounds are permitted. Stop for owner final review and merge.
+Published [PR #299](https://github.com/h8rt3rmin8r/eso-weave/pull/299) from
+implementation commit `376b0e658e225bd61fae3dc98851de324054d8cf` under the
+owner's push/PR authorization. Issues #296 and #297 are in Project PR review.
+
+Codex round 1 (PR-open automatic trigger) completed at 2026-10-15 16:00:32 UTC
+without findings. The bot's +1 reaction at 16:00:37 UTC and empty submitted-review
+and inline-thread lists confirm the result. The
+[review summary](https://github.com/h8rt3rmin8r/eso-weave/pull/299#issuecomment-6196377734)
+identifies reviewed commit `376b0e6`. One of the two authorized rounds was used;
+no second review is needed for a clean result. No finding remains unresolved.
+
+All hosted gates passed on reviewed implementation head `376b0e6`: Windows and
+Linux Rust checks/release builds, documentation build/browser validation,
+protected trust policy, proposed policy, closing-issue, dependency review and
+CodeQL. PR deployment was correctly skipped. The final commit updates delivery
+records only; implementation code remains identical to the reviewed head.
+The PR conversation carries the complete exact-head hosted-check receipt after
+that final publication. Delivery stops for owner final review and merge.
 
 No game or uploader code was executed, no source settings or logs were changed,
 and no binary/raw private source log is committed. Static producer inspection,

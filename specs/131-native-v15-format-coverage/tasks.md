@@ -38,7 +38,7 @@ the same restart, store, automatic-worker and authenticated read boundaries.
 
 - [x] T012 Reconcile capability/grammar/guide/API/MCP claims in `docs/src/`, current contracts and dated `CHANGELOG.md` (FR-009, SC-005).
 - [x] T013 Run full Rust/docs/release and text-integrity gates; record actual results in `specs/131-native-v15-format-coverage/verification.md` (FR-010, SC-006).
-- [ ] T014 Commit, push, publish/attach PR, resolve every finding within two Codex rounds, verify exact final-head checks and stop for owner merge; record receipts in `specs/131-native-v15-format-coverage/verification.md` (FR-010, SC-006).
+- [x] T014 Commit, push, publish/attach PR, resolve every finding within two Codex rounds, verify hosted implementation gates and publish the final delivery-head receipt in PR #299 before owner merge; record receipts in `specs/131-native-v15-format-coverage/verification.md` (FR-010, SC-006).
 
 ## Dependencies and execution
 
