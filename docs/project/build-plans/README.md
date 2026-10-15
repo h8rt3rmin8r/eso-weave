@@ -29,9 +29,9 @@ Plan050 completed S124 in PR #264 on 2026-10-07. Plan051 completed S125's seven
 workflow issues in PR #274 on 2026-10-12. Plan052 completed S126/#273 retained
 sessions in owner-merged PR #275 on 2026-10-13. Plan053 completed S127/#272 native import in owner-merged PR #276 on 2026-10-13.
 Plan054 completed S128/#279 in owner-merged PR #278 on 2026-10-13.
-Separately authorized v0.18.0 publication completed #277 that day. The next
-build plan is Plan058 for the owner-authorized S132 release candidate. Plan055 completed S129 in PR #295, Plan056 completed
-S130 in PR #298, and Plan057 completed S131 in PR #299 on 2026-10-15.
+Separately authorized v0.18.0 publication completed #277 that day. Plan055 completed
+S129 in PR #295, Plan056 completed S130 in PR #298, and Plan057 completed S131 in
+PR #299 on 2026-10-15. Plan058 now directs the owner-authorized S132 release candidate.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence

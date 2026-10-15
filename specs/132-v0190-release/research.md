@@ -16,7 +16,7 @@ Alternatives: manually edit all version fields, or tag before merge. Rejected be
 
 ## Guidance and validation
 
-Decision: correct stale two-addon prose in maintainer and canonical release pages, plus the agent overview's obsolete deferred v15 statement. Preserve the package matrix and all historical release statements. Record the pinned release-guide edit as a dated changelog decision.
+Decision: correct stale two-addon prose in maintainer and canonical release pages. After synchronizing protected main, the agent overview already describes complete v15 coverage; only its managed plan pointer needs updating. Preserve the package matrix and all historical release statements. Record the pinned release-guide edit as a dated changelog decision.
 Rationale: S129-S131 have already implemented one combined package and all four v15 profiles; release readers need current content.
 Alternative: leave stale guidance for another slice. Rejected because it directly contradicts the candidate's release content.
 

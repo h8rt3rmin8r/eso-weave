@@ -19,8 +19,8 @@ Independent criterion: release identity and notes agree; only three intended dep
 - [x] T004 [US1] Record existing missing-Highlights rejection from `scripts/release-notes.sh` before editing `CHANGELOG.md` (FR-003/FR-006).
 - [x] T005 [US1] Incorporate #284's exact dependency changes in `Cargo.toml` and `Cargo.lock` (FR-001).
 - [x] T006 [US1] Add Highlights, dependency/preparation records and dated pinned-guide decision to `CHANGELOG.md` (FR-003/FR-004).
-- [ ] T007 [US1] Validate preparatory gates and commit the clean pre-rollover tree, recording outcomes in `verification.md` (FR-006).
-- [ ] T008 [US1] Inspect dry run and execute configured rollover; audit `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`, `README.md`, `docs/src/README.md` and `specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json` (FR-002/FR-003).
+- [x] T007 [US1] Validate preparatory gates and commit the clean pre-rollover tree, recording outcomes in `verification.md` (FR-006).
+- [x] T008 [US1] Inspect dry run and execute configured rollover; audit `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`, `README.md`, `docs/src/README.md` and `specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json` (FR-002/FR-003).
 
 ## Phase 4: User Story 2 - Current Guidance (P2)
 
@@ -33,7 +33,7 @@ Independent criterion: release guidance describes the implemented package/profil
 
 Independent criterion: official open PR, successful final-head checks and no unresolved findings, with publication deferred.
 
-- [ ] T011 [US3] Run required local candidate gates and record actual evidence in `specs/132-v0190-release/verification.md` (FR-006).
+- [x] T011 [US3] Run required local candidate gates and record actual evidence in `specs/132-v0190-release/verification.md` (FR-006).
 - [ ] T012 [US3] Push `codex/s132-v0190-release`, publish and attach the official PR closing #302, relating to #301/#284 (FR-007).
 - [ ] T013 [US3] Complete up to two Codex reviews, correct findings, answer and resolve all completed threads on the PR; record dispositions in `verification.md` (FR-007).
 - [ ] T014 [US3] Confirm required successful checks on the final PR head and owner merge/publication boundaries in `verification.md` (FR-007/FR-008).

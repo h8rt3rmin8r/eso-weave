@@ -19,7 +19,20 @@ Notes contain four Highlights bullets within the 120-word budget. Current releas
 
 ## Candidate Gates
 
-Pending execution. This draft is not a passing receipt. Final checks, identity audit, reviewed head, PR and review dispositions will be recorded after they exist.
+Preparation commit: 51cd49a471c19bd42ef1e21d1eb323fb5da8f8d6. Installed cargo-release 1.1.2 dry run showed only the expected replacements. Authorized execution produced identity commit 9da8426f23431bf51ad7f1c6746af586faeaa2c7, changing the six expected rollover files. Configuration remains tag=false, push=false and publish=false.
+
+Local candidate gates passed on that identity:
+
+- Formatting and locked all-target/all-feature Clippy with warnings denied.
+- All 1,207 Rust tests across 54 suite results, zero failures or ignored tests.
+- Release-profile Windows binary with the complete generated documentation site.
+- All 184 documentation/render/brand/trust policy tests; trust and brand scans.
+- Spelling, mdBook examples/build, generated-site policy and headless rendered diagram, layout, syntax, figure and table checks.
+- Release-note generator contracts, four-bullet release excerpt and Debian validator contracts. Real dpkg package cases require Linux and remain covered by hosted Linux CI.
+
+An independent metadata audit confirms v0.19.0 / 2026-10-15 across all named identity surfaces, exactly the three intended dependency updates, no other lockfile churn, unchanged release history from v0.18.0 onward, unchanged addon/runtime/pipeline content and clean UTF-8/no-BOM/LF text across all 25 changed files. The local and remote target tag are absent; remote main remains the baseline.
+
+Logs and generated audit output are ignored under target. Final PR head, hosted checks and review dispositions remain pending and will be recorded when observed.
 
 ## Boundary
 

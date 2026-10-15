@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s132-v0190-release`
 **Created**: 2026-10-15
-**Status**: Draft
+**Status**: Implemented locally; PR review and final-head hosted checks pending
 **Input**: Owner-authorized S132 for [#302](https://github.com/h8rt3rmin8r/eso-weave/issues/302), under release coordinator [#301](https://github.com/h8rt3rmin8r/eso-weave/issues/301), including [dependency PR #284](https://github.com/h8rt3rmin8r/eso-weave/pull/284). Automatic push, official PR and at most two Codex review rounds are authorized. Owner merge and later tag/publication remain separate.
 
 ## User Scenarios & Testing
