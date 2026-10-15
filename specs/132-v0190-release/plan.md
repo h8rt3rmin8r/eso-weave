@@ -43,7 +43,7 @@ specs/132-v0190-release/contracts/release-candidate.md
 Cargo.toml, Cargo.lock, CHANGELOG.md, README.md, docs/src/README.md
 specs/073-reviewed-catalog-pipeline/fixtures/capture-request.json
 docs/project/releasing.md, docs/src/development/release-and-packaging.md
-docs/project/build-plans/{plan-058,README}.md
+docs/archive/build-plans/plan-058.md, docs/project/build-plans/README.md
 docs/project/migration-ledger.{json,md}
 .specify/feature.json, CLAUDE.md
 ```

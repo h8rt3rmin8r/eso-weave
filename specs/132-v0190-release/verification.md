@@ -46,3 +46,53 @@ The final delivery commit updates only this slice's status/task/evidence records
 ## Boundary
 
 Owner final review/merge and separately authorized tag/publication remain outstanding. #302 closes on merge; #301 stays open through later publication. #284 remains open until equivalent content is confirmed on main. No package installation or real-game behavior is tested or claimed.
+
+## Owner Merge and Authorized Publication (2026-10-15)
+
+The earlier boundary records candidate-delivery authority. The owner subsequently
+merged PR #303 at 20:09:19 UTC as
+`629bc92ffb8685a65d4a4ae2b3e793e0f3492569` and explicitly authorized tag push
+and v0.19.0 publication after exact-main checks. The merged tree exactly matches
+reviewed delivery head `8e5542c018902a6a009de7eb654f4ce7c198e1f1`.
+
+Candidate #302 closed and moved to Done. #284 was closed as superseded after its
+three dependency updates were confirmed on main. Local main is synchronized;
+merged branch refs are removed. Plan058 is archived in the documentary closeout
+for #304. Exact-main [CI 38799657796](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38799657796),
+[documentation 38799657994](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38799657994)
+and [CodeQL 38799657899](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38799657899)
+all passed. Annotated tag object `ad97fbda0a63d2844e457dd7d04edd7db26dcd84`
+was created at 20:24:12 UTC and subsequently pushed; it peels to the exact merged commit above. Main is
+unchanged. No installed/game evidence is implied by repository or artifact-integrity checks.
+
+## Published Artifact Receipt (2026-10-15)
+
+[Workflow 38801670245](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38801670245)
+completed successfully on tag v0.19.0 / commit 629bc92. Verification and both
+platform package jobs passed before publication. GitHub Release 414253268,
+[v0.19.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.19.0), published
+at 20:40:52 UTC as the latest stable release, not a draft or prerelease.
+
+All five assets were downloaded. Each size and SHA-256 matches GitHub's release
+metadata, and all four package digests match the published SHA256SUMS file:
+
+| Asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| eso-weave-0.19.0-x86_64-linux.tar.gz | 14590409 | `b65a443f050baafeb2a777724c16e3dc60f4c79606b5dbf37b189d00cf3620ca` |
+| eso-weave-0.19.0-x86_64-windows.msi | 13131776 | `b74e97fbfe80639d7088b90d55951499ffb3a3600e8345c0a25897e85e957906` |
+| eso-weave-0.19.0-x86_64.AppImage | 14359032 | `ace24d5634b7df39d00ec9790f6506ce08b14b23cc110e7a8bdeb77d9c5e97f3` |
+| eso-weave-0.19.0-x86_64.deb | 9035384 | `d0cb5b2569641ecdd3aff29139a301cb135ae4099a56a3edfc16f9e702be1d9c` |
+| SHA256SUMS | 399 | `d565952e8dcef3e0211b71230660f051b4c5f8fc1e03af8972f8b7c60ccc2adf` |
+
+The release body exactly matches the governed Highlights excerpt plus tag-specific
+changelog link. Read-only MSI database inspection reports ProductVersion 0.19.0,
+ProductName ESO Weave and Manufacturer ESO Weave. The Linux tarball includes the
+binary, catalog/catalog.sqlite, README and LICENSE; its catalog and text files
+are byte-identical to the tagged source. Audit JSON, downloads and logs remain
+ignored under target/v019-release-audit and target/s129-v019-*.
+
+Release coordinator #301 is complete and Done; milestone v0.19.0 is closed.
+Candidate #302 is closed and Done; dependency PR #284 is closed as superseded.
+#304 tracks the separate documentary archive PR. There is no active feature plan
+or newly assigned slice. No package was installed and no game behavior was tested.
+The published tag and assets were not moved or replaced.

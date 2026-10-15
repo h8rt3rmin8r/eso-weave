@@ -13,10 +13,10 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [058](plan-058.md) | Active | S132 / #302 prepares v0.19.0 including #284; #301 tracks later publication |
+| None | No active feature plan | S132 completed in owner-merged PR #303; v0.19.0 publication completed #301; #304 tracks the archive receipt |
 
 The latest completed plan is
-[057](../../archive/build-plans/plan-057.md), covering S131 native v15 inline and verbose format support in owner-merged PR #299.
+[058](../../archive/build-plans/plan-058.md), covering S132 v0.19.0 candidate preparation in owner-merged PR #303.
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -31,13 +31,15 @@ sessions in owner-merged PR #275 on 2026-10-13. Plan053 completed S127/#272 nati
 Plan054 completed S128/#279 in owner-merged PR #278 on 2026-10-13.
 Separately authorized v0.18.0 publication completed #277 that day. Plan055 completed
 S129 in PR #295, Plan056 completed S130 in PR #298, and Plan057 completed S131 in
-PR #299 on 2026-10-15. Plan058 now directs the owner-authorized S132 release candidate.
+PR #299 on 2026-10-15. Plan058 completed S132/#302 in owner-merged PR #303 that
+day. Separately authorized v0.19.0 published at 20:40:52 UTC and completed #301;
+#304 records the archive and publication receipt without creating another feature slice.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence
 of installed behavior or live parity. Completed native-file import was delivered in S127 / issue #272; live tailing
 is implemented in S130 for normal/separate v15. S131/#296/#297 adds the remaining
 profiles after pinned producer-grammar research in owner-merged PR #299. The
-current work is S132 / #302 under release coordinator #301. Dependabot PR #284's
-three dependency updates are incorporated into that candidate; its PR retirement
-follows owner merge and content confirmation on main.
+v0.19.0 release completed #301. Dependabot PR #284's three updates are included
+on merged main and that redundant PR is closed. #304 is documentary housekeeping;
+no next feature slice is assigned.

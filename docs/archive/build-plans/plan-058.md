@@ -1,6 +1,6 @@
 # Plan 058: v0.19.0 Release Candidate
 
-Status: Active
+Status: Complete, Archived
 
 ## S132 (2026-10-15)
 
@@ -37,3 +37,35 @@ All nine hosted checks pass on that reviewed candidate, with deployment correctl
 skipped. The final delivery commit updates records only; the PR conversation
 records its exact head and checks before owner handoff. This plan completes only
 after owner merge; #301 remains separate publication work.
+
+## Owner Merge and Housekeeping (2026-10-15)
+
+The owner squash-merged PR #303 at 20:09:19 UTC as
+`629bc92ffb8685a65d4a4ae2b3e793e0f3492569`. Its tree exactly matches reviewed
+delivery head `8e5542c018902a6a009de7eb654f4ce7c198e1f1`. Candidate #302 is
+closed and Done. Dependency PR #284 was closed as superseded after all three
+updates were confirmed on main. Local main was synchronized; the merged S132
+branch and stale S131 housekeeping branch were removed and refs pruned.
+
+The owner separately authorized v0.19.0 tag push and release publication after
+the exact-main gates. CI 38799657796, documentation 38799657994 and CodeQL
+38799657899 passed on that exact main commit. Annotated tag object
+`ad97fbda0a63d2844e457dd7d04edd7db26dcd84` points to it, was created at
+20:24:12 UTC and was subsequently pushed.
+
+## Publication and Asset Audit (2026-10-15)
+
+[Release workflow 38801670245](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38801670245)
+passed and [v0.19.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.19.0)
+published as latest stable at 20:40:52 UTC. Windows MSI, Linux Debian/AppImage/
+tarball and SHA256SUMS are available. All five downloaded sizes and SHA-256 values
+match GitHub metadata; all four package hashes match SHA256SUMS. MSI read-only
+metadata identifies version 0.19.0 and ESO Weave. The tarball contains the expected
+binary, catalog, README and license; its catalog and text files match the tagged
+source. The release notes match the governed excerpt. Full hashes and sizes are
+in the [S132 receipt](../../../specs/132-v0190-release/verification.md).
+
+Release coordinator #301 completed and milestone v0.19.0 closed. #304 records this
+documentary archive through a separate owner-reviewed PR. No package installation
+or real-game behavior was tested or claimed. Published tag and assets remain
+unchanged.
