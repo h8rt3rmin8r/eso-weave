@@ -135,6 +135,28 @@ function initializeDocumentationFigures() {
 
   let activeTrigger = null;
 
+  function fitCaptionedRaster() {
+    if (!dialog.open || !expandedImage.complete || !expandedImage.naturalWidth) return;
+    expandedImage.style.maxWidth = "";
+    panel.style.width = "";
+    if (caption.hidden || !/\.(?:png|jpe?g|webp)(?:[?#]|$)/iu.test(expandedImage.src)) return;
+    const viewport = globalThis.visualViewport;
+    const width = viewport?.width ?? innerWidth;
+    const height = viewport?.height ?? innerHeight;
+    const style = getComputedStyle(panel);
+    const horizontal = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight)
+      + Number.parseFloat(style.borderLeftWidth) + Number.parseFloat(style.borderRightWidth);
+    const vertical = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom)
+      + Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth);
+    const margin = 2 * Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    panel.style.width = `${Math.min(expandedImage.naturalWidth + horizontal, width - margin)}px`;
+    const remaining = height - margin - vertical - header.getBoundingClientRect().height
+      - caption.getBoundingClientRect().height - 2 * Number.parseFloat(style.rowGap);
+    const ratio = expandedImage.naturalWidth / expandedImage.naturalHeight;
+    expandedImage.style.maxWidth = `${Math.max(1, Math.min(expandedImage.naturalWidth,
+      width - margin - horizontal, remaining * ratio))}px`;
+  }
+
   function syncDialogViewport() {
     const viewport = globalThis.visualViewport;
     if (!viewport) return;
@@ -142,6 +164,7 @@ function initializeDocumentationFigures() {
     dialog.style.setProperty("--docs-figure-viewport-height", `${viewport.height}px`);
     dialog.style.setProperty("--docs-figure-viewport-left", `${viewport.offsetLeft}px`);
     dialog.style.setProperty("--docs-figure-viewport-top", `${viewport.offsetTop}px`);
+    fitCaptionedRaster();
   }
 
   function closeDialog() {
@@ -166,10 +189,12 @@ function initializeDocumentationFigures() {
 
     syncDialogViewport();
     dialog.showModal();
+    fitCaptionedRaster();
     closeButton.focus({ preventScroll: true });
   }
 
   closeButton.addEventListener("click", closeDialog);
+  expandedImage.addEventListener("load", fitCaptionedRaster);
   dialog.addEventListener("keydown", (event) => {
     if (event.key === "Tab") {
       event.preventDefault();

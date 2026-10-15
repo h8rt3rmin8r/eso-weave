@@ -1,8 +1,7 @@
-//! Verified, user-controlled catalog installation, selection, and rollback.
+//! Verified Catalog maintenance and compatible selection/rollback domain services.
 
 mod availability;
 mod contract;
-mod worker;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
@@ -21,7 +20,6 @@ pub use contract::{
     CatalogSelection, CatalogTarget, UpdateOperation, UpdateProgress, UpdateReceipt, UpdateResult,
     UpdateStage,
 };
-pub use worker::{CatalogUpdateWorker, WorkerEvent, WorkerFailure};
 
 use crate::bounded_file::{
     is_link_like, is_same_or_nested, open_bounded_stable, read_bounded_stable, StableReadError,
@@ -88,6 +86,10 @@ impl CancellationToken {
         self.0.cancelled.load(Ordering::Acquire)
     }
 
+    pub(crate) fn same_generation(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
     fn check(&self) -> Result<(), UpdateError> {
         if self.is_cancelled() {
             Err(UpdateError::Cancelled)
@@ -149,10 +151,6 @@ impl UpdateRoots {
 
     fn operation_lock(&self) -> PathBuf {
         self.root.join("operation.lock")
-    }
-
-    fn receipt_lock(&self) -> PathBuf {
-        self.root.join("receipt.lock")
     }
 
     fn prepare(&self) -> Result<(), UpdateError> {
@@ -478,13 +476,13 @@ impl CatalogUpdateService {
             let first = fingerprint_capture(capture_path)?;
             if first.sha256 == waiting.sha256 {
                 return Err(UpdateError::Validation(
-                "The saved addon data has not changed. Finish /ewcollect catalog collection in ESO, then /reloadui, log out, or exit to save it before building.".into(),
+                "The saved Catalog generation has not changed. Automatic maintenance waits for new complete evidence.".into(),
             ));
             }
             let second = fingerprint_capture(capture_path)?;
             if first != second {
                 return Err(UpdateError::Validation(
-                "ESO's saved addon data is still changing. Wait for the file save to finish, then try building again.".into(),
+                "ESO's saved addon data is still changing. Automatic maintenance retains the last complete generation and retries.".into(),
             ));
             }
         }
@@ -499,7 +497,7 @@ impl CatalogUpdateService {
         let capture_bytes = canonical_catalog_capture(&shared_bytes)
             .map_err(PipelineError::Collector)?
             .ok_or_else(|| {
-                UpdateError::Validation("ESO's saved addon data contains no catalog collection. In ESO, use /ewcollect help and complete collection, then /reloadui, logout, or exit to save it.".into())
+                UpdateError::Validation("Saved addon data contains no complete Catalog generation. Retained data is unchanged.".into())
             })?;
         if envelope.channel != self.roots.channel {
             return Err(UpdateError::Validation(
@@ -1375,26 +1373,6 @@ impl CatalogUpdateService {
         Ok(summary)
     }
 
-    fn import_candidate_path(&self, candidate_sha256: &str) -> Result<PathBuf, UpdateError> {
-        CatalogTarget::User {
-            candidate_sha256: candidate_sha256.to_string(),
-        }
-        .validate()?;
-        for channel in ["live", "pts"] {
-            let path = self
-                .roots
-                .import_root()
-                .join(channel)
-                .join(candidate_sha256);
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-        Err(UpdateError::Validation(
-            "the selected imported candidate is no longer available".into(),
-        ))
-    }
-
     fn active_catalog_path(&self) -> PathBuf {
         self.resolve_catalog().path
     }
@@ -1436,55 +1414,17 @@ impl CatalogUpdateService {
             &canonical_json(&receipt)?,
         )
     }
-
-    pub(crate) fn write_terminal_receipt(
-        &self,
-        operation: UpdateOperation,
-        result: UpdateResult,
-        stage: UpdateStage,
-        candidate_sha256: Option<String>,
-        finding_code: &str,
-    ) -> Result<(), UpdateError> {
-        self.prepare()?;
-        let _lock = OperationLock::acquire_blocking(&self.roots.receipt_lock())?;
-        let sequence = next_event_sequence(&self.roots.receipts())?;
-        let old_target = self
-            .load_selection()
-            .map(|selection| selection.active)
-            .unwrap_or(CatalogTarget::Bundled);
-        let receipt = UpdateReceipt {
-            schema_version: 1,
-            operation,
-            sequence,
-            result,
-            stage,
-            old_target,
-            new_target: None,
-            candidate_sha256,
-            catalog_semantic_sha256: None,
-            channel: None,
-            catalog_version: None,
-            game_version: None,
-            api_version: None,
-            source_count: 0,
-            finding_codes: vec![finding_code.to_string()],
-        };
-        write_atomic(
-            &self.roots.receipts().join(format!("event-{sequence}.json")),
-            &canonical_json(&receipt)?,
-        )
-    }
 }
 
 fn validate_live_candidate(candidate: &CandidateSummary) -> Result<(), UpdateError> {
     if candidate.channel != Channel::Live {
         return Err(UpdateError::Validation(
-            "Only a Live (released game) catalog can be selected here. PTS catalogs remain previews for the Public Test Server.".into(),
+            "The Catalog environment does not match the Live context. Existing environment-specific generations remain separate.".into(),
         ));
     }
     if candidate.catalog_schema != SCHEMA_VERSION {
         return Err(UpdateError::Validation(format!(
-            "This proposed catalog uses unsupported data format {}. Obtain a compatible catalog or update ESO Weave before selecting it.",
+            "This proposed catalog uses unsupported data format {}. The active generation remains unchanged.",
             candidate.catalog_schema
         )));
     }
@@ -1506,7 +1446,7 @@ pub(crate) fn candidate_compatibility(
                 .is_some_and(|(candidate, active)| candidate < active));
     if older {
         return Err(UpdateError::Validation(
-            "This proposed catalog is older than the selected Live catalog. Choose a current update; use Roll back to restore an available previous selection.".into(),
+            "This proposed catalog is older than the selected Live catalog. The active generation remains unchanged.".into(),
         ));
     }
     Ok(())
@@ -1651,23 +1591,6 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn next_event_sequence(receipts: &Path) -> Result<u64, UpdateError> {
-    let mut maximum = 0_u64;
-    for entry in fs::read_dir(receipts)?.take(10_000) {
-        let name = entry?.file_name();
-        let name = name.to_string_lossy();
-        let Some(number) = name
-            .strip_prefix("event-")
-            .and_then(|value| value.strip_suffix(".json"))
-            .and_then(|value| value.parse::<u64>().ok())
-        else {
-            continue;
-        };
-        maximum = maximum.max(number);
-    }
-    Ok(maximum.saturating_add(1))
-}
-
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), UpdateError> {
     let parent = path
         .parent()
@@ -1701,58 +1624,10 @@ impl OperationLock {
         })?;
         Ok(Self(file))
     }
-
-    fn acquire_blocking(path: &Path) -> Result<Self, UpdateError> {
-        let file = Self::open(path)?;
-        file.lock()?;
-        Ok(Self(file))
-    }
 }
 
 impl Drop for OperationLock {
     fn drop(&mut self) {
         let _ = self.0.unlock();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::{Arc, Barrier};
-
-    #[test]
-    fn concurrent_terminal_receipts_keep_distinct_sequences() {
-        let root = tempfile::tempdir().unwrap();
-        let service = CatalogUpdateService::new(root.path(), root.path().join("bundled.sqlite"));
-        service.prepare().unwrap();
-        let participants = 8;
-        let barrier = Arc::new(Barrier::new(participants));
-        let handles = (0..participants)
-            .map(|_| {
-                let service = service.clone();
-                let barrier = barrier.clone();
-                std::thread::spawn(move || {
-                    barrier.wait();
-                    service
-                        .write_terminal_receipt(
-                            UpdateOperation::Install,
-                            UpdateResult::Failed,
-                            UpdateStage::Failed,
-                            None,
-                            "concurrent-test",
-                        )
-                        .unwrap();
-                })
-            })
-            .collect::<Vec<_>>();
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        let receipts = fs::read_dir(service.roots.receipts())
-            .unwrap()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_name().to_string_lossy().starts_with("event-"))
-            .count();
-        assert_eq!(receipts, participants);
     }
 }

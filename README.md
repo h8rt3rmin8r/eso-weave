@@ -35,6 +35,7 @@ then read the
   context, automation state, and installation status.
 - [Ultimate resource](https://h8rt3rmin8r.github.io/eso-weave/features/ultimate-resource.html) shows current
   charge, active-bar cast cost, and readiness without controlling gameplay.
+- [Automatic data processing](https://h8rt3rmin8r.github.io/eso-weave/features/encounter-capture.html) maintains Catalog definitions and processes supported native encounter logs in the background, with two independent disable preferences and retained local API access.
 
 The complete, searchable manual is published at
 [h8rt3rmin8r.github.io/eso-weave](https://h8rt3rmin8r.github.io/eso-weave/).

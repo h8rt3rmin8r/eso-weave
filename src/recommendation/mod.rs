@@ -3,6 +3,7 @@
 //! This module consumes one immutable encounter projection and has no I/O,
 //! persistence, network, logging, or gameplay action surface.
 
+use serde::Serialize;
 use std::collections::BTreeSet;
 
 use crate::catalog::Channel;
@@ -20,32 +21,37 @@ const DOMINANT_DAMAGE_SHARE: f64 = 0.40;
 const LOW_EFFECT_UPTIME: f64 = 0.50;
 const MATERIAL_UNKNOWN_DAMAGE_SHARE: f64 = 0.25;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RecommendationAvailability {
     Ready,
     Qualified,
     Suppressed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum AdviceQualification {
     Provisional,
     ProvisionalQualified,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum AdviceRule {
     DominantDamageShare,
     LowEffectUptime,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum AdviceTargetKind {
     Ability,
     Effect,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RecommendationReasonKind {
     InsufficientDuration,
     InsufficientCasts,
@@ -60,13 +66,13 @@ pub enum RecommendationReasonKind {
     UnknownTargetOmitted,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RecommendationReason {
     pub kind: RecommendationReasonKind,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RecommendationCitation {
     pub session_id: String,
     pub encounter_id: String,
@@ -82,7 +88,7 @@ pub struct RecommendationCitation {
     pub recommendation_policy_version: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RecommendationEvidence {
     pub duration_ms: u64,
     pub cast_count: usize,
@@ -100,7 +106,7 @@ pub struct RecommendationEvidence {
     pub citation: RecommendationCitation,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AdviceItem {
     pub rule: AdviceRule,
     pub target_kind: AdviceTargetKind,
@@ -110,7 +116,7 @@ pub struct AdviceItem {
     pub citation: RecommendationCitation,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RecommendationReport {
     pub schema_version: u32,
     pub policy_version: String,

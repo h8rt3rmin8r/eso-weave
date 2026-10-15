@@ -26,6 +26,19 @@ fn first(source: &str) -> NativeEncounter {
 }
 
 #[test]
+fn native_schema1_canonical_bytes_match_the_frozen_s127_encoding() {
+    use sha2::{Digest, Sha256};
+    let bytes = eso_weave::encounter::canonical_native_bytes(&first(&tiny())).unwrap();
+    assert_eq!(
+        Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>(),
+        "7ac4836f32eb7441dbab6676a7d4768bb46ebe181d8b89836070b0b83ba88e92"
+    );
+}
+
+#[test]
 fn native_representative_fixture_groups_two_completed_combats_with_native_provenance() {
     let parsed = parse_native_log(REPRESENTATIVE.as_bytes(), Channel::Live).unwrap();
     assert_eq!(parsed.encounters.len(), 2);
@@ -180,12 +193,13 @@ fn native_atomic_import_copy_reimport_mixed_history_delete_and_backup() {
         list_encounters(&store).unwrap()[0].encounter_id,
         addon_receipt.encounter_id
     );
-    import_native_log(&ImportRequest::new(&native, &store, Channel::Live)).unwrap();
-    assert_eq!(
-        list_encounters(&store).unwrap()[1].encounter_id,
-        identity.encounter_id
-    );
-    assert_eq!(delete_all(&store).unwrap().deleted_records, 2);
+    let after_delete = std::fs::read(&store).unwrap();
+    let suppressed =
+        import_native_log(&ImportRequest::new(&native, &store, Channel::Live)).unwrap_err();
+    assert!(suppressed.to_string().contains("deliberately deleted"));
+    assert_eq!(std::fs::read(&store).unwrap(), after_delete);
+    assert_eq!(list_encounters(&store).unwrap().len(), 1);
+    assert_eq!(delete_all(&store).unwrap().deleted_records, 1);
     assert!(list_encounters(&store).unwrap().is_empty());
     assert_eq!(std::fs::read(&native).unwrap(), original);
 }
@@ -247,7 +261,8 @@ fn native_rejected_write_rolls_back_schema5_migration_when_order_is_exhausted() 
          DROP TRIGGER IF EXISTS native_runs_no_update;
          DROP TABLE IF EXISTS native_encounters;
          DROP TABLE IF EXISTS native_runs;
-         DROP TABLE encounter_store_meta;
+         DROP TABLE IF EXISTS native_ingest_checkpoints; DROP TABLE IF EXISTS native_deleted_encounters; DROP TABLE IF EXISTS native_logical_aliases; DROP TABLE IF EXISTS encounter_derivations;
+             DROP TABLE encounter_store_meta;
          CREATE TABLE encounter_store_meta (
              singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
              schema_version INTEGER NOT NULL CHECK (schema_version = 5),
@@ -532,7 +547,8 @@ fn native_import_migrates_schema4_and5_without_rewriting_addon_evidence() {
             DROP TRIGGER native_runs_no_update;
             DROP TABLE native_encounters;
             DROP TABLE native_runs;
-            DROP TABLE encounter_store_meta;
+            DROP TABLE IF EXISTS native_ingest_checkpoints; DROP TABLE IF EXISTS native_deleted_encounters; DROP TABLE IF EXISTS native_logical_aliases; DROP TABLE IF EXISTS encounter_derivations;
+             DROP TABLE encounter_store_meta;
             CREATE TABLE encounter_store_meta (
                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                 schema_version INTEGER NOT NULL CHECK (schema_version = {version}),

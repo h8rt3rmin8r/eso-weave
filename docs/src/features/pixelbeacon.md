@@ -1,6 +1,6 @@
 # PixelBeacon
 
-PixelBeacon Status covers install addon, update addon, and unmanaged addon
+PixelBeacon covers install addon, update addon, and unmanaged addon
 states. API Version may appear as `APIVersion`, outdated addon, or ESO client
 version in diagnostic discussions.
 
@@ -53,7 +53,7 @@ library metadata, finds app id `306130`, and resolves the path in the Proton
 prefix. The `live` environment is the default and `pts` can be selected. A manual
 override is also available.
 
-In **Settings > PixelBeacon and Bus**, select **Live** or **PTS**. Use an
+In **Settings > Addons and Game Readings**, select **Live** or **PTS**. Use an
 **AddOns Folder Override** only when discovery cannot find the existing
 environment directory. The override must name the `AddOns` directory itself;
 ESO Weave refuses to create a missing root.
@@ -117,7 +117,7 @@ Catalog startup preference take effect at the next natural addon load or game
 session. No forced reload, gameplay action, or reload-required popup is involved.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing an active game, one installed PixelBeacon package, and a detected signal" width="1280" height="640">
+<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing an active game, one installed PixelBeacon package, and a detected signal" width="1280" height="760">
 <figcaption>Deterministic healthy baseline: the game and world are active, the combined PixelBeacon package is installed, and PixelBeacon Signal is detected.</figcaption>
 </figure>
 
@@ -125,7 +125,7 @@ This deterministic fixture uses synthetic game observations and a temporary
 combined package. Installed files do not establish that ESO has loaded them.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/pixelbeacon-unmanaged.png" alt="ESO Weave showing an unmanaged PixelBeacon target that will not be modified" width="1280" height="640">
+<img src="../assets/screenshots/pixelbeacon-unmanaged.png" alt="ESO Weave showing an unmanaged PixelBeacon target that will not be modified" width="1280" height="760">
 <figcaption>Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.</figcaption>
 </figure>
 
@@ -163,7 +163,7 @@ seconds; stale, future-dated, malformed, or unavailable evidence remains unknown
 Sources older than 30 days cannot confirm current compatibility.
 The check does not block startup on network failure.
 
-The PixelBeacon status in System and State summarizes API compatibility for the combined companion package. **Game API** in **Data Details** provides the numeric evidence, separately from
+The PixelBeacon field in System and State summarizes API compatibility for the combined companion package. Canonical API observations retain numeric evidence separately from
 installed package compatibility. An unsupported API requires an ESO Weave
 update. An unknown check can be retried by checking the connection and restarting;
 remembered unsupported observations retain their update guidance. A supported
@@ -204,3 +204,9 @@ Older layouts remain bounded to the fields they draw. Missing newer fields becom
 unavailable and are never guessed.
 
 See [Pixel Bus Protocol](../reference/pixel-bus-protocol.md) for the wire contract.
+
+## Package Installation
+
+The install addon, update addon and unmanaged addon search terms refer to the
+single combined package lifecycle. Package installation does not prove current
+Lua enablement or loaded state; PixelBeacon Signal reports independent evidence.

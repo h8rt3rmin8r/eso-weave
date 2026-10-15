@@ -41,13 +41,13 @@ for bounded scanning, completed generations and restart behavior.
 ## Historical recording compatibility
 
 The combined package does not load the old Encounter.lua recorder or register
-its /ewencounter control workflow. It also does not register /ewcollect.
+the former player recording or collection workflows.
 Previously saved Catalog and encounter evidence remain in the legacy
 SavedVariables/EsoWeaveData.lua file with its EsoWeaveDataSaved root. Current
 PixelBeacon.txt reads and saves that global table in SavedVariables/PixelBeacon.lua;
 the global name cannot override the manifest-derived filename. New Lua does not
 load the legacy file. The desktop reconciles both Catalog sources into its own
-accumulation and keeps legacy encounter import/history access. Neither source
+accumulation and keeps legacy encounter domain-reader and local API access. Neither source
 file is copied or rewritten, and source fixtures preserve old recorder formats.
 
 The retained /pbquickslot diagnostic belongs to the existing beacon signal

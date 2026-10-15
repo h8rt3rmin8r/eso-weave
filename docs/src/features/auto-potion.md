@@ -136,7 +136,7 @@ The interface displays the first current blocker in evaluation order.
 | **Triggered: RESOURCE at N% (threshold T%)** | One press and release was submitted for the named current reading |
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/auto-potion-blocked.png" alt="ESO Weave showing Auto Potion blocked because PixelBeacon signal is unavailable" width="1280" height="640">
+<img src="../assets/screenshots/auto-potion-blocked.png" alt="ESO Weave showing Auto Potion blocked because PixelBeacon signal is unavailable" width="1280" height="760">
 <figcaption>Deterministic recovery example: the request is retained, but Auto Potion is blocked and sends no input while PixelBeacon Signal is lost.</figcaption>
 </figure>
 

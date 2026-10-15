@@ -20,8 +20,8 @@ and update trigger for every asset.
 | Repository-authored synthetic PixelBeacon schematic | 1 SVG | Keep the visible synthetic label and update when overlay placement or geometry changes |
 
 The seven application images are losslessly cropped to remove empty lower canvas.
-Six dashboard captures use `[0, 0, 1280, 640]`; the Auto Potion settings capture
-uses `[0, 0, 1280, 820]`. No content is scaled or rewritten during curation.
+Six dashboard captures use `[0, 0, 1280, 760]` to retain every Skills row; the Auto Potion settings capture
+uses `[0, 0, 1280, 900]`. No content is scaled or rewritten during curation.
 
 ## Refresh checklist
 

@@ -138,18 +138,23 @@ fn runtime_locator_uses_only_documented_roots() {
 }
 
 #[test]
-fn catalog_status_is_visible_and_truthful() {
+fn catalog_availability_remains_queryable_without_a_dashboard_row() {
     let missing = CatalogAccess::empty(CatalogDiagnosticKind::Missing, "Catalog unavailable");
-    let line = eso_weave::app::status_line_catalog(&missing);
-    assert_eq!(line.title, "Catalog");
-    assert_eq!(line.state_text, "Catalog unavailable");
-    assert_eq!(line.role, eso_weave::app::StatusRole::Warning);
+    assert!(!missing.is_available());
+    assert_eq!(
+        missing.diagnostic().unwrap().kind,
+        CatalogDiagnosticKind::Missing
+    );
+    assert_eq!(missing.diagnostic().unwrap().message, "Catalog unavailable");
 
     let sandbox = CatalogSandbox::new();
     let path = sandbox.path("catalog.sqlite");
     build_catalog(&BuildRequest::new(LIVE_FIXTURE, &path, Channel::Live)).unwrap();
     let available = CatalogAccess::open_or_empty(path);
-    let line = eso_weave::app::status_line_catalog(&available);
-    assert_eq!(line.role, eso_weave::app::StatusRole::Healthy);
-    assert!(line.state_text.contains("s070-live-1"));
+    assert!(available.is_available());
+    assert!(available.diagnostic().is_none());
+    assert_eq!(
+        available.release().unwrap().unwrap().catalog_version,
+        "s070-live-1"
+    );
 }

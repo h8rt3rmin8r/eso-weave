@@ -77,7 +77,7 @@
 
   <rect data-node="encounter-question" data-stage="6" x="205" y="1030" width="180" height="105" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
   <text x="295" y="1059" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e6edf3">Encounter evidence</text>
-  <text x="295" y="1084" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Capture or import is the</text>
+  <text x="295" y="1084" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">Native processing is the</text>
   <text x="295" y="1108" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#b8c2cf">first failing observation?</text>
 
   <path data-edge="encounter-match" data-from="encounter-question" data-to="encounter-evidence" data-branch="true" d="M225 1135 V1185 H100 V1240" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#troubleshooting-arrow)"/>
@@ -87,8 +87,8 @@
 
   <rect data-node="encounter-evidence" data-stage="7" x="15" y="1240" width="170" height="130" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
   <text x="100" y="1269" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#bfdbfe">Encounter evidence</text>
-  <text x="100" y="1294" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Addon status and saved</text>
-  <text x="100" y="1318" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">authority, receipt, loss,</text>
+  <text x="100" y="1294" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">Package and source,</text>
+  <text x="100" y="1318" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">progress, store, loss,</text>
   <text x="100" y="1342" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e6edf3">and validation</text>
 
   <rect data-node="feature-evidence" data-stage="7" x="205" y="1240" width="180" height="130" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>

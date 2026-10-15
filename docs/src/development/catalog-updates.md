@@ -40,4 +40,4 @@ Desktop scheduling stops immediately on disable. The package-owned startup confi
 
 ## Evidence and delivery boundaries
 
-Filesystem, Lua and database fixtures establish their tested desktop/module contracts. They do not prove current in-game save cadence, exhaustive game API visibility or installed platform behavior. Incremental native processing and complete encounter-viewer retirement remain later program issues; the native disable preference/cancellation seam exists before that worker. Stored history and authenticated local database reads remain available independently of maintenance eligibility.
+Filesystem, Lua and database fixtures establish their tested desktop/module contracts. They do not prove current in-game save cadence, exhaustive game API visibility or installed platform behavior. Independent incremental native processing uses the same canonical eligibility and disable foundation. Application-owned consumers run without the retired encounter viewer. Stored history and authenticated local database reads remain available independently of maintenance eligibility.

@@ -49,7 +49,7 @@ supported native encounter-log files have a separate inspection and import path.
 without importing or writing it. Changing the selected folder or environment
 discards older pending results. A disk file can lag current activity and does not
 prove addon enablement, loading, or recording. Historical recorder procedures are
-identified in [Encounter Capture](../features/encounter-capture.md).
+identified in [Automatic Native Processing](../features/encounter-capture.md).
 
 ## Privacy and network behavior
 

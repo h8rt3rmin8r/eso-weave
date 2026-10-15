@@ -174,7 +174,7 @@ attack, block, or bash around the skill while respecting this shared cooldown.
 
 **Aliases:** beacon freshness, status block, B0
 
-The recurring PixelBeacon status signal used to prove that screen observations
+The recurring PixelBeacon field signal used to prove that screen observations
 are still current. A heartbeat timeout moves dependent observations to Signal Lost.
 
 **Related:** [Pixel Bus Protocol heartbeat](pixel-bus-protocol.md)
@@ -298,6 +298,15 @@ within the arm window, commonly because bait or another cast prerequisite is abs
 
 ## P
 
+### Package Installation
+
+**Aliases:** install addon, update addon, unmanaged addon
+
+The desktop lifecycle state that distinguishes a missing, current, outdated, or
+Unmanaged PixelBeacon installation and exposes only the safe applicable actions.
+
+**Related:** [PixelBeacon installation states](../features/pixelbeacon.md)
+
 ### Payload Block
 
 **Aliases:** beacon block, B0 through B28, marker, checksum
@@ -326,15 +335,6 @@ the existing SavedVariables global/schema, saves to PixelBeacon.lua, and leaves
 the legacy EsoWeaveData.lua readable without loading the former encounter recorder.
 
 **Related:** [PixelBeacon feature guide](../features/pixelbeacon.md)
-
-### PixelBeacon Status
-
-**Aliases:** install addon, update addon, unmanaged addon
-
-The desktop lifecycle state that distinguishes a missing, current, outdated, or
-Unmanaged PixelBeacon installation and exposes only the safe applicable actions.
-
-**Related:** [PixelBeacon installation states](../features/pixelbeacon.md)
 
 ## Q
 

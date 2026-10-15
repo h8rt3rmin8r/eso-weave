@@ -878,6 +878,7 @@ fn populated_v1_store_migrates_without_rewriting_legacy_evidence() {
              DROP TRIGGER encounter_session_order_no_update;
              DROP TABLE encounter_session_order;
              ALTER TABLE raw_encounters RENAME TO raw_encounters_v2;
+             DROP TABLE IF EXISTS native_ingest_checkpoints; DROP TABLE IF EXISTS native_deleted_encounters; DROP TABLE IF EXISTS native_logical_aliases; DROP TABLE IF EXISTS encounter_derivations;
              DROP TABLE encounter_store_meta;
              CREATE TABLE encounter_store_meta (
                  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),

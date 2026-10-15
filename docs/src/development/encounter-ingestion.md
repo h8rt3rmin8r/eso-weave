@@ -1,90 +1,106 @@
 # Encounter Ingestion
 
-Use [Encounter Capture](../features/encounter-capture.md#import-retained-addon-captures)
-for retained saved-addon import and historical recorder semantics. Desktop Encounter History also supports **Native Encounter Log** for
-completed local files in the **normal/separate native log version 15** profile.
-These sources keep their own provenance and metric capabilities. Neither is the
-desktop Application Log or File Logging setting. Bulk records never use Pixel Bus.
+The application owns native discovery, incremental parsing, durable progress and
+downstream processing. These services run without a viewer or selected encounter.
+[Automatic Native Processing](../features/encounter-capture.md) describes normal operation.
+Bulk encounter evidence never uses Pixel Bus and never becomes gameplay input.
 
-## Completed native files
+## Automatic discovery and ingestion
 
-1. Finish native recording in ESO, or select a stable copy of the finished file.
-2. Open **File > Encounter History** and select **Native Encounter Log**.
-3. Select Live or PTS in Settings, then enter the local **Native file path**.
-   The selected environment is user-selected provenance. The native header does
-   not declare an ESO API version; log version 15 is a separate format version.
-4. Choose **Inspect Native File**. Check completed fights, runs, unknown records,
-   records outside combat, unfinished fights/runs and unterminated final lines.
-5. Choose **Import Native File**. Select an imported fight for Native Observations.
-   Reimporting an identical file or copy reports already-present fights.
+Eligible combined-addon contexts provide actual Live or PTS source roots.
+Discovery includes supported Windows Documents and Linux Steam/Proton locations
+and configured overrides. Later sources are discovered without restarting the
+application. The source context remains attached to queued work if the UI's
+selected environment changes.
 
-Inspection is read-only and creates no history. A changed source needs a fresh
-inspection before desktop import. The background worker echoes selection and
-generation; changing source kind, path or environment discards stale results.
-Import rereads a bounded stable no-follow regular file and rejects changes during
-the read. Source files remain unchanged.
+Bounded turns catch up completed fights and follow growing files. Parser state
+retains incomplete UTF-8/record tails, run metadata and ordered context; a quiet
+file does not terminate a combat. Combat completion is independent from run
+completion. Native processing and automatic Catalog maintenance use independent
+preferences and scheduling. No picker, inspection, import or acknowledgement is
+required.
+
+Fights and accepted progress commit consistently. Restart validates progress
+against source identity before resuming. Copy, rotation, replacement and truncation
+cannot mix old partial state with a new file generation. Unsupported or malformed
+records leave committed history intact and diagnostics omit raw values. Cancellation
+and commit admission share the declared stop boundary. The desktop never changes
+game logging, serialization, anonymity or source bytes.
 
 ## Supported profile and evidence
 
-The parser consumes UTF-8 newline-terminated records (LF or CRLF, optional initial
-UTF-8 BOM), quoted separators and explicit escapes, and bounded bracket groups.
-It validates known version 15 shapes for headers, combat boundaries/events, casts,
-effects, regeneration, units, ability/effect/player metadata, maps, zones and
-endless-dungeon records. Other types, including undeclared trial shapes, remain
-unknown evidence.
-Malformed known shapes, unsupported log versions and unsupported inline/verbose
-layouts reject the whole import before history writes. Unknown record types remain
-retained and counted. The unterminated final line is unconsumed and reported.
-Unclosed combats are counted and omitted; independently completed fights in an
-unfinished run remain importable. Nested/orphan combat boundaries and reversed
-combat endpoints reject the batch.
+Normal/separate native log version 15 is the delivered grammar. Reviewed producer
+evidence and representative retained records define known shapes; synthetic cases
+exercise boundaries and chunk partitions. Synthetic fixtures do not prove a new
+producer layout. Normal/inline remains [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296)
+and verbose remains [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
 
-Each BEGIN_LOG starts isolated context. Completed fights retain exact ordered
-original lines and relevant preceding unit, ability, effect, player, map/zone and
-unknown context. Names, identifiers and original fields remain local in history;
-default summaries, diagnostics and receipts omit those values. Public fixtures
-are sanitized. File paths, timestamps and controlled counts are selection facts.
+The parser accepts LF/CRLF UTF-8 records, an optional initial BOM, quoted separators,
+explicit escapes and bounded bracket groups. Known version 15 shapes include
+headers, combat boundaries/events, casts, effects, regeneration, units, ability,
+effect and player metadata, maps, zones and endless-dungeon records. Other types
+remain unknown evidence; unsupported layouts are not guessed into valid records.
 
-Limits are 256 MiB per source, 2 million records, 64 KiB per line, 4096 tokens per
-line, bracket depth 8, 100000 context entries, 10000 runs/completed fights,
-200000 records and 32 MiB raw text per fight, 8 MiB relevant context per fight,
-512 MiB retained raw batch text and 64 MiB canonical bytes per fight. Across the
-whole file, context snapshots may inspect at most 20 million records and 512 MiB
-of original context text, charged before cloning or scanning, including metadata
-that is ultimately irrelevant. New runs do not reset this work budget. Limit
-failures reject atomically. These are ingestion bounds, not platform benchmarks.
+Native evidence preserves exact ordered original lines and relevant preceding
+context locally. Epoch, realm, language and game-version fields retain their
+source meaning; native log version does not supply an ESO API or addon version.
+Unknown evidence and uncertainty remain explicit. The lifetime size or age of a
+log does not replace per-turn, per-record, context, fight and transaction limits.
 
-Native duration and observed event/cast/effect counts need no catalog. Reviewed
-damage/healing hit quantities and overflow are separate; overflow is never
-subtracted from hit. Local-player totals/rates require a unique observed local
-PLAYER relation, with rates unavailable for unknown evidence, clock reversal or
-zero duration. Effect-change counts do not establish uptime. Callback-only
-quickslot/death-recap observations, addon replay, catalog API joins and
-recommendations remain unavailable with reasons. See
-[Encounter Data and Metrics](../reference/encounter-data-and-metrics.md#native-observations).
+## Storage and consumers
 
-Store schema 6 adds immutable native runs/fights alongside addon rows and shared
-first-import ordering. Migration from schema 1-5 and all accepted fights share one
-transaction. Invalid input, identity/content collisions and no-op writes leave
-previous history bytes/schema intact. Copy/reimport and append-later-run identities
-are deterministic; deletion affects only local copies, and backup includes both sources.
+The user-owned `encounters/encounters.sqlite` retains addon and native canonical
+evidence, first-import ordering and compatible historical rows. Durable ingest
+progress and rebuildable derived results are separate from immutable source
+content. Retained deletion utilities do not cause automatic catchup to resurrect
+deleted fights. Unsupported/corrupt stores are preserved, never silently reset.
+
+The completed-file native compatibility importer checks logical aliases before
+insertion, including schema-1 copies of automatically ingested schema-2 evidence.
+An identical fight returns the first retained identity as already present. A
+deliberately deleted native fight rejects that compatibility batch with a
+controlled suppression error and no partial writes. Source files remain unchanged.
+
+For a newly discovered source, the application prepares a complete empty store
+privately and publishes it without replacement through the same root cancellation
+and commit gate. An empty log therefore exposes either an absent store or valid
+empty history, never an uninitialized public database. Existing invalid databases
+remain rejected and unchanged.
+
+Store schema 7 retains the existing native run/fight tables, accepting canonical
+native schemas 1 and 2. Schema 1-6 migration preserves original rows, canonical
+bytes and hashes. Logical aliases, validated ingest checkpoints, explicit-deletion
+suppression and derived receipts occupy separate tables. Automatic schema-2
+`source_sha256` identifies retained literal header/context/fight lines joined with
+LF, independently from the final growing file. Legacy whole-file hashes keep
+their original meaning. Derived checksummed JSON binds raw/source/algorithm and
+Catalog identities, Catalog context, and processing generation.
+
+Background consumers calculate supported results without opening a window.
+Catalog changes invalidate applicable derived generations using actual source,
+Catalog and algorithm identities. Stale work cannot replace newer results;
+unchanged inputs reuse results. Authenticated HTTP/MCP queries keep their fixed,
+read-only database authority, independent of collection eligibility.
+
+Native duration and observed event/cast/effect counts need no Catalog. Reviewed
+damage/healing hit and overflow remain separate. Local-player totals/rates need a
+unique observed local PLAYER relation; rates remain unavailable when duration or
+quality cannot support them. Effect-change counts do not establish uptime.
+Callback-only quickslot/death-recap observations, addon replay, Catalog API joins
+and recommendations remain unavailable for this native profile with explicit
+reasons. See [Encounter Data and Metrics](../reference/encounter-data-and-metrics.md#native-observations).
 
 ## Maintainer validation
 
-These commands inspect/import a completed file without displaying its raw values:
+Retained contributor utilities inspect/import a completed source into an isolated
+store for investigation. They are not a player prerequisite or product interface:
 
 - `catalog-compiler native-encounter-inspect --input PATH --channel live|pts`
 - `catalog-compiler native-encounter-import --input PATH --store PATH --channel live|pts`
 
-Use an isolated store for investigation. The source identity is the original byte
-hash; each canonical fight has a separate content hash. The sanitized representative
-fixture and synthetic boundary/format/hostile cases support repository behavior.
-
-## Remaining runtime scope
-
-Live tailing, enabling native logging from desktop, every native format variant,
-flush cadence, crash durability, callback parity and Windows/Linux/Proton runtime
-qualification remain unimplemented or unverified. ESO API declarations alone do
-not establish those behaviors. Historical issue #190's closure is not installed
-verification and does not block completed-file import. S127/#272 requests no new
-owner field-verification task.
+Historical addon readers, deterministic replay, store backup and explicit deletion
+remain domain utilities. Preserve canonical bytes and hashes during investigation.
+Repository tests cover incremental partitions, restart, failure, source generations,
+cancellation, retained history and local reads. They do not establish installed-game
+flush cadence, platform qualification or callback parity. No owner field-testing
+task is a completion gate.

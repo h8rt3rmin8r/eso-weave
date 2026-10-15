@@ -213,7 +213,7 @@ internal `sqlite_%` objects.
 Each available database reports user tables and views with ordered visible
 columns, declared SQLite types, nullability, and primary-key position. The
 catalog contains shipped or selected game-data reference material. Encounters
-contains user-owned imported encounter history when that store exists.
+contains user-owned retained addon and automatically ingested native encounter history, durable progress and rebuildable derived results when that store exists.
 
 ## Query requests and results
 
@@ -326,6 +326,6 @@ For general application startup and game-observation diagnosis, continue with
 
 ## Automatic data preferences and eligibility
 
-`application.data_maintenance` is an additive observation carrying independent requested optouts, whether the last preference write persisted, compatible combined-package eligibility, and the next-natural-load Lua preference boundary. `startup_config_persisted` separately reports whether every eligible package has the requested on-disk startup config: true for a verified match, false for a mismatch or failed write, and null when none is eligible. Compatible manually maintained packages support an exact configuration-only transaction; this does not authorize replacing their manifest/modules or deleting their package. `loaded_lua_preference` remains unknown; a file update never proves already-loaded Lua changed. Eligibility is separate from running work, and `native_worker_implemented` remains false until the separately scoped native watcher ships. The compatibility observation `application.addons.data` now refers to the Catalog capability of the same PixelBeacon package, not a second installation.
+`application.data_maintenance` is an additive observation carrying independent requested optouts, whether the last preference write persisted, compatible combined-package eligibility, and the next-natural-load Lua preference boundary. `startup_config_persisted` separately reports whether every eligible package has the requested on-disk startup config: true for a verified match, false for a mismatch or failed write, and null when none is eligible. Compatible manually maintained packages support an exact configuration-only transaction; this does not authorize replacing their manifest/modules or deleting their package. `loaded_lua_preference` remains unknown; a file update never proves already-loaded Lua changed. Eligibility is separate from running work. `native_worker_implemented` is true; the `native` object reports `worker_running`, `phase` (`dormant`, `waiting`, `processing`, or `recoverable_failure`), `source_count`, `committed_fights`, `logging_activity` and a controlled nullable `diagnostic` code. `logging_activity` remains `unknown`: observed files do not prove the current game logger state. The compatibility observation `application.addons.data` now refers to the Catalog capability of the same PixelBeacon package, not a second installation.
 
 The fixed `catalog` and `encounters` database identifiers, authentication and bounded read-only query contract are unchanged. Disabling maintenance or removing the addon does not delete stored data or revoke reads. Current Catalog swaps update the canonical query path; each existing query finishes on one coherent immutable generation.

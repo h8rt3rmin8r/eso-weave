@@ -4,7 +4,7 @@ Desktop companion application for The Elder Scrolls Online, written in Rust for
 Windows 10/11 x64 and Linux x64. The desktop runs outside the game: an input
 engine intercepts and synthesizes keys while the game window is focused, a weave
 engine executes combat action sequences, and an optional fishing module reads a
-pixel-bus signal rendered by the embedded PixelBeacon companion addon. One combined PixelBeacon package contains isolated beacon and automatic Catalog modules. Catalog maintenance is automatic unless independently disabled, pauses during unsuitable game states and preserves the last completed snapshot. Desktop native processing has a separate persisted optout; both services are dormant without a compatible combined package. Startup configuration applies to Lua at the next natural load; never force a reload or write live SavedVariables commands. Legacy encounter data remains readable; consolidation never auto-enables the old addon recorder. Raw values stay local and out of public diagnostics.
+pixel-bus signal rendered by the embedded PixelBeacon companion addon. One combined PixelBeacon package contains isolated beacon and automatic Catalog modules. Catalog maintenance is automatic unless independently disabled, pauses during unsuitable game states and preserves the last completed snapshot. Desktop native processing automatically ingests normal/separate v15 logs with transactional restart checkpoints and a separate persisted optout; both services are dormant without a compatible combined package. Inline and verbose support follows in issues #296/#297. Catalog and encounter processing run independently of the interface, which has no Catalog Update, Encounter History or Data Details surface. Startup configuration applies to Lua at the next natural load; never force a reload or write live SavedVariables commands. Legacy encounter data remains readable; consolidation never auto-enables the old addon recorder. Raw values stay local and out of public diagnostics.
 Canonical shipped behavior and architecture live under `docs/src`; every feature traces
 to an actionable issue and that corpus. Current build plans under
 `docs/project/build-plans/` define ordered work slices, while completed plans
@@ -104,5 +104,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/129-automatic-catalog-maintenance/plan.md
+at specs/130-automatic-native-processing/plan.md
 <!-- SPECKIT END -->

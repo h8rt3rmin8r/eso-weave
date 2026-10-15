@@ -34,7 +34,7 @@ discarded and any held mouse button is released.
 7. Focus ESO, enter normal gameplay, and press the exact skill chord once.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/weaving-configuration.png" alt="ESO Weave Weaving settings with enabled slots, selected weave types, and effective delays" width="1280" height="640">
+<img src="../assets/screenshots/weaving-configuration.png" alt="ESO Weave Weaving settings with enabled slots, selected weave types, and effective delays" width="1280" height="760">
 <figcaption>Deterministic configuration example: each Skills row shows whether it is enabled, its weave type, override state, effective delay, and observed cooldown.</figcaption>
 </figure>
 

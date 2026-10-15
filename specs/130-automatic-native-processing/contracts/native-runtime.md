@@ -1,0 +1,17 @@
+# S130 Native Runtime Contract
+
+Date: 2026-10-15. Normal/separate v15 only; #296/#297 own other formats.
+
+The application starts one independent native worker with normal service construction, outside UI paint. It reuses actual root discovery and shared MaintenanceControl. Polling discovers late sources and processes bounded appended prefixes round-robin. Root inventory <=16; candidate inventory and directory enumeration are bounded; reads <=256 KiB per turn, parser state bounded by its own contract; recoverable error backoff <=60 seconds. No per-line queue or repeated whole-file parse.
+
+Use at most 64 concurrent source candidates and 256 directory entries per root per discovery turn. Share the candidate budget across eligible roots, including when a late root appears after another root filled the inventory; evicted parser cache is already durable. Preserve directory iteration across turns so large inventories eventually advance. Retained encoded parser/checkpoint cache has a 128 MiB aggregate ceiling; evict only after its durable checkpoint is stored, then restore from that checkpoint for a later source turn. A resource bound is a controlled internal state, never permission to delete sources or silently acknowledge missing fights. Persisted generation is a witness for the checkpoint's exact source boundary, including physical identity, bounded prefix and trailing-window digests. Recompute it at the recorded cursor before resume; moving the cursor writes its updated witness atomically with parser state.
+
+Source handles are read-only, regular, non-link and root-confined. Windows sharing allows write/delete. Compare physical identity before/after the bounded read and reopen-path verification; append after the sampled boundary is allowed. Checkpoints bind physical identity plus bounded prefix/trailing witnesses and cursor, detecting replacement/truncation. New generations never reuse old tails. Confirmed generation termination records uncertainty without fabricating a completed fight.
+
+Each root obtains its own native job token. MaintenanceControl serializes preference/root/presence cancellation and final commit admission under the same mutex. A prepared database transaction enters the gate only after it acquired its write lock. If its root token is cancelled or preference/presence is no longer eligible, rollback. A completed disable waits for earlier admitted commit to finish, and later admission fails. Never hold this gate while waiting for a database lock or parsing.
+
+Only durable committed checkpoint state advances the accepted in-memory cursor. Failed parse/checkpoint/storage writes preserve prior progress. Source generations/copies are deduplicated by the parser/store identity contract, not filename. Corrupt stores remain intact. Native retention/calculations do not wait for Catalog and Catalog failures cannot stop native scheduling.
+
+A disappeared source pathname releases its candidate slot without erasing its durable checkpoint. If it returns, discovery restores and verifies that checkpoint before continuing or starting a replacement generation. Permanently rotated-away names cannot exhaust the bounded candidate inventory.
+
+Expose controlled service observations through the existing shared state: dormant, waiting, processing or recoverable failure, bounded diagnostic and counts. Native logging activity remains unknown without current verified game evidence. No dialogs, banners, toasts, repair/import prompts, manual format instructions or game logging/serialization/anonymity changes.

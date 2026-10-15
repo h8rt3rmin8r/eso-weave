@@ -2,12 +2,12 @@
 
 **Application Log** shows recent ESO Weave diagnostic events for troubleshooting.
 **File Logging** optionally saves those events in a monthly file. Neither
-records fights or enables the ESO Weave Data addon. The word "live" in older
+records fights or changes ESO's own logging feature. The word "live" in older
 guides meant application events arriving now, not live encounter recording.
 
-For fights, use [Encounter Capture](../features/encounter-capture.md) and import
-ESO's saved addon data into **File > Encounter History**. ESO's own native
-combat-log files have a separate completed-file import route, described in
+ESO Weave automatically processes supported native logs when ESO writes them;
+neither Application Logging nor File Logging starts that game feature. See
+[Automatic Native Processing](../features/encounter-capture.md) and
 [Encounter Ingestion](../development/encounter-ingestion.md).
 
 ESO Weave uses structured logging with runtime selection of OFF, ERROR, WARN,

@@ -53,7 +53,7 @@ an unchanged form does not interrupt a session.
 
 **Game Environment** selects Live or PTS for ordinary PixelBeacon lifecycle actions. **AddOns Folder Override** supplies an existing root when needed. Automatic data work discovers actual installed contexts independently; changing lifecycle selection does not relabel queued work or change the two application-wide preferences. One PixelBeacon package supplies beacon signals and automatic Catalog collection. File changes take effect at the next natural addon load. They do not turn on encounter recording.
 
-The two direct controls below persist immediately, without Apply or confirmation. They remain visible but gray/inactive when no compatible combined package is available, retaining saved choices. Neither changes weaving, Fishing, Auto Potion or ESO's native logger. Native processing's preference/eligibility contract is available before its subsequent automatic watcher implementation.
+The two direct controls below persist immediately, without Apply or confirmation. They remain visible but gray/inactive when no compatible combined package is available, retaining saved choices. Neither changes weaving, Fishing, Auto Potion or ESO's native logger. Native processing discovers supported sources and resumes durable progress automatically when eligible.
 
 | Setting | Choices and default | Effect |
 | --- | --- | --- |
@@ -92,7 +92,7 @@ value into eligibility.
 
 These settings capture ESO Weave troubleshooting events. They do not turn on
 encounter recording or ESO's native combat logs. For fight recordings, use
-[Encounter Capture](../features/encounter-capture.md).
+[Automatic Native Processing](../features/encounter-capture.md).
 
 | Setting | Choices and default | Effect |
 | --- | --- | --- |

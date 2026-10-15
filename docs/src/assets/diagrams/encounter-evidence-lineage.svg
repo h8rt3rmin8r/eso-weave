@@ -1,24 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="1530" viewBox="0 0 400 1530" role="img" focusable="false" aria-labelledby="encounter-lineage-title encounter-lineage-desc" data-flow-direction="top-down">
   <title id="encounter-lineage-title">Encounter data and result lineage</title>
-  <desc id="encounter-lineage-desc">Explicit addon recording saves ordered observations. Import validates versions, replay and declared loss before immutable original storage. A compatible kind-specific catalog supplies definitions. Observed metrics use s069-v1 and separate provisional prompts use s090-v1 evidence gates. Completed native files use separate provenance and factual metrics; live tailing remains unavailable.</desc>
+  <desc id="encounter-lineage-desc">Automatic native discovery and retained addon readers preserve ordered source evidence. Validation precedes immutable storage and durable progress. Compatible Catalog lookups qualify supported historical addon metrics and s090-v1 prompts. Native facts have source-specific capabilities; background processing and local reads require no viewer.</desc>
   <rect width="400" height="1530" rx="12" fill="#0e1116" stroke="#65758b"/>
   <defs><marker id="lineage-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/></marker></defs>
   <text x="200" y="38" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#e6edf3">Where encounter results come from</text>
 
   <rect data-node="observations" data-stage="1" x="20" y="70" width="360" height="155" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-  <text x="200" y="101" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Ordered addon observations</text>
-  <text x="200" y="131" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Single fight or continuous session</text>
-  <text x="200" y="157" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Session ordinal, then source sequence</text>
-  <text x="200" y="183" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Save in ESO, then explicit desktop import</text>
+  <text x="200" y="101" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Ordered source observations</text>
+  <text x="200" y="131" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Native logs and retained addon evidence</text>
+  <text x="200" y="157" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Actual environment, run and source order</text>
+  <text x="200" y="183" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Automatic discovery and incremental read</text>
   <text x="200" y="209" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Selected raw values stay exact and local</text>
   <path data-edge="observations-validate" data-from="observations" data-to="validation" d="M200 225 V285" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
 
   <rect data-node="validation" data-stage="2" x="20" y="285" width="360" height="180" rx="8" fill="#1c2530" stroke="#f2b03c" stroke-width="2"/>
   <text x="200" y="316" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#e6edf3">Validation and loss</text>
-  <text x="200" y="346" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Supported capture and controller versions</text>
+  <text x="200" y="346" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Supported source versions and context</text>
   <text x="200" y="372" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Check ordering, identity and declared gaps</text>
-  <text x="200" y="398" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Replay current complete data before storage</text>
-  <text x="200" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#f7c3c3">Invalid batch: preserve prior history</text>
+  <text x="200" y="398" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Historical addon replay remains separate</text>
+  <text x="200" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#f7c3c3">Invalid evidence: preserve prior history</text>
   <text x="200" y="450" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#b8c2cf">Accepted loss stays visible as incomplete</text>
   <path data-edge="validation-storage" data-from="validation" data-to="storage" d="M200 465 V525" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#lineage-arrow)"/>
 
@@ -55,7 +55,7 @@
   <text x="200" y="1335" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#f2b03c">No Combat Metrics parity claim</text>
 
   <rect x="20" y="1410" width="360" height="90" rx="8" fill="#3a1d22" stroke="#f87171" stroke-width="2"/>
-  <text x="200" y="1440" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#f7c3c3">Native files: completed import</text>
+  <text x="200" y="1440" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="bold" fill="#f7c3c3">Native files: automatic processing</text>
   <text x="200" y="1465" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#e6edf3">Observed facts, own metric capabilities</text>
-  <text x="200" y="1489" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#e6edf3">No live tailing or addon replay authority</text>
+  <text x="200" y="1489" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#e6edf3">No invented addon replay or API values</text>
 </svg>

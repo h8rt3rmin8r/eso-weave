@@ -3035,6 +3035,10 @@ fn retained_v4_store_migration_preserves_canonical_bytes_and_read_only_access() 
         .execute_batch(
             r#"
         BEGIN IMMEDIATE;
+        DROP TABLE native_logical_aliases;
+        DROP TABLE native_ingest_checkpoints;
+        DROP TABLE native_deleted_encounters;
+        DROP TABLE encounter_derivations;
         DROP TRIGGER native_encounters_no_update;
         DROP TRIGGER native_runs_no_update;
         DROP TABLE native_encounters;
@@ -3288,6 +3292,10 @@ fn retained_downgrade_fixture_to_v4(connection: &rusqlite::Connection) {
         .execute_batch(
             r#"
         BEGIN IMMEDIATE;
+        DROP TABLE native_logical_aliases;
+        DROP TABLE native_ingest_checkpoints;
+        DROP TABLE native_deleted_encounters;
+        DROP TABLE encounter_derivations;
         DROP TRIGGER native_encounters_no_update;
         DROP TRIGGER native_runs_no_update;
         DROP TABLE native_encounters;
