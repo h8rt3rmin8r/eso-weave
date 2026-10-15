@@ -24,12 +24,25 @@ Session: 2026-10-15. This receipt records repository and synthetic fixture evide
 | Retry and bounds | One worker and one queued job serialize builds. Discovery is bounded to 16 roots, scheduling rotates fairly, retries back off from job completion, and metadata hints cannot prevent the periodic full reconciliation. Eligibility changes invalidate cached observations; stale jobs cannot restore them. Superseded same-domain storage is pruned while historical domains are retained; publication pressure stops new selection rather than evicting historical support. |
 | Preferences and startup files | Both service tokens begin canceled while presence is absent and remain canceled through preference changes until recognized presence. The coordinator reports `startup_config_persisted` as null for no eligible roots, false for any mismatched/unwritten literal, and true only when every eligible root's on-disk startup representation matches. This is separate from application settings durability and never establishes already-loaded Lua state. Config write failures use bounded existing-log diagnostics. |
 
-## Final parent verification
+## Parent verification
 
-The parent completed cargo fmt, all-target/all-feature Clippy with warnings denied,
+The initial implementation passed cargo fmt, all-target/all-feature Clippy with warnings denied,
 and the full locked Rust suite: 1,171 passed, zero failures or ignored tests.
 This includes all thirteen automatic Catalog cases, seven runtime cases and the
 final model/root-fingerprint changes. See verification.md and
-target/s129-full-final.log. Hosted final-head checks and review remain separate.
+target/s129-full-final.log.
+
+After the two authorized review rounds, the final correction passes the same
+gates with 1,182 tests, zero failures or ignored tests
+(target/s129-review2-full.log). Ten runtime unit cases and thirteen maintenance
+integration cases include manifest-derived current-file startup, compatible
+legacy/current accumulation, independent partial-input retry and periodic
+reconciliation, restart/no-op and cancellation. SavedVariables stay untouched.
+The deterministic package cleanup race first failed, then passed after per-root
+mutation/recovery serialization. A later hosted Windows failure exposed bounded
+inspection handles denying retirement. A second deterministic regression
+reproduced that OS error 5 before public inspections shared the same root lease;
+it and the unchanged original runtime test now pass in the final full suite.
+Hosted final-head checks remain a separate delivery gate in verification.md.
 
 All runtime fixture operations target temporary directories, use non-running test game state, and preserve the source SavedVariables fixtures. No actual game profile, installed game session, release or tag was used.

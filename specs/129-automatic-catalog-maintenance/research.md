@@ -35,3 +35,10 @@ primary addon-developer explanation linked from lua-verification.md.
 Windows CI also exposed in-process package recovery racing a lifecycle mutation.
 The correction serializes mutation and recovery per canonical AddOns root,
 retaining the existing checks for external filesystem changes.
+
+The next hosted Windows run isolated a second path: a production bounded
+inspection handle denies directory retirement while open. A deterministic
+held-handle regression reproduced the same OS error 5. Public presence/status/
+geometry inspections now share the per-root lease; internal mutation readers
+reuse their caller's lease. Stable-read sharing and identity checks remain
+unchanged, and the lease covers only bounded package I/O.

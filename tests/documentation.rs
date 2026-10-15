@@ -136,7 +136,11 @@ fn service_rejects_methods_unknown_paths_and_ambiguous_targets() {
     let address = service.address().unwrap();
 
     let post = response_text(address, b"POST /eso-weave/ HTTP/1.1\r\n\r\n");
-    assert!(post.starts_with("HTTP/1.1 405 Method Not Allowed\r\n"));
+    assert!(
+        post.starts_with("HTTP/1.1 405 Method Not Allowed\r\n"),
+        "unexpected documentation status: {:?}",
+        post.lines().next()
+    );
     assert!(post.contains("Allow: GET, HEAD\r\n"));
 
     for target in [
@@ -263,5 +267,9 @@ fn browser_failure_leaves_the_service_reusable() {
     assert!(service.open_with(&FailingOpener).is_err());
     let address = service.address().expect("server remains available");
     let response = response_text(address, b"GET /eso-weave/ HTTP/1.1\r\n\r\n");
-    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(
+        response.starts_with("HTTP/1.1 200 OK\r\n"),
+        "unexpected documentation status: {:?}",
+        response.lines().next()
+    );
 }

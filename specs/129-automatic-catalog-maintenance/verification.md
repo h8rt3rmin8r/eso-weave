@@ -161,16 +161,57 @@ is synthetic evidence, not an executed ESO save.
 | --- | --- |
 | Rust format | PASS, target/s129-review2-fmt.log |
 | Clippy all targets/features, locked, warnings denied | PASS, target/s129-review2-clippy.log |
-| Complete Rust suite, locked | PASS: 1,180 passed, zero failures or ignored tests across 50 suites, target/s129-review2-full.log. Required socket tests ran unrestricted through the hidden launcher. |
-| Documentation, render, brand and trust unit tests | PASS: 183/183, target/s129-review2-policy.log |
+| Complete Rust suite, locked | PASS: 1,182 passed, zero failures or ignored tests across 50 suites after the final package and documentation socket corrections, target/s129-review2-full.log. Required socket tests ran unrestricted through the hidden launcher. Earlier 1,180/1,181-test passes are retained in target/s129-review2-initial-full.log and target/s129-review2-inspection-full.log. |
+| Documentation, render, brand and trust unit tests | PASS: 183/183, target/s129-final-policy.log |
 | Brand assets and repository trust | PASS, target/s129-review2-brand.log and target/s129-review2-trust.log |
 | Spelling and book examples | PASS, target/s129-review2-spelling.log and target/s129-review2-book-examples.log |
-| Book build/linkcheck and generated-site policy | PASS, target/s129-review2-book-build.log and target/s129-review2-generated.log |
+| Book build/linkcheck and generated-site policy | PASS, target/s129-review2-book-build.log and target/s129-final-generated.log |
 | Actual headless browser | PASS: all five sentinels, target/s129-review2-browser-unrestricted.log. The sandbox denied Chrome's crashpad named pipe; the unchanged check passed unrestricted. |
-| Release binary and embedded guide | PASS: target/s129-review2-release.log and target/s129-review2-embedded-guide-full.log, all nine documentation integration tests passed. An earlier library-only filter selected zero tests and is not counted as verification. |
-| Text integrity | PASS: all 100 changed/relocated text files, including three retained legacy fixtures, strict UTF-8 without BOM, LF and no mojibake, target/s129-review2-text-integrity.log; git diff --check is clean. |
+| Release binary and embedded guide | PASS: target/s129-review2-release.log, target/s129-final-embedded-connection.log (one accepted-socket regression) and target/s129-review2-embedded-guide-full.log (all nine documentation integration tests). An earlier library-only filter selected zero tests and is not counted as verification. |
+| Text integrity | PASS: all 102 changed/relocated text files, including three retained legacy fixtures, strict UTF-8 without BOM, LF and no mojibake, target/s129-review2-text-integrity.log; git diff --check is clean. |
 
-Correction publication, the round-2 response/thread resolution and exact
-final-head CI are in progress.
+Correction 6248a692db9b37f9a6fd6053a72d964e7beb9757 is published. The round-2
+finding has a response naming the correction and its regression evidence; its
+thread is explicitly resolved. Direct review/thread reads confirm exactly two
+Codex review submissions and zero unresolved threads.
+
+Hosted Windows CI on that correction passes the deterministic journal-race test
+but still fails the original primary-removal scenario at uninstall, now with
+PermissionDenied (OS error 5) rather than deleted-journal cleanup. This reveals
+a separate inspection-versus-retirement contention path. A deterministic
+regression held the actual production bounded manifest handle through the
+public presence-inspection helper and reproduced the same OS error 5
+(target/s129-review2-inspection-red.log). Public presence/status/geometry
+inspections now share the per-root lease; internal mutation/configuration
+readers reuse that lease without recursive acquisition. Stable-read sharing,
+identity, ownership and external-race checks remain unchanged. The lease covers
+bounded package I/O, never Catalog compilation. All 169 focused cases pass
+(target/s129-review2-inspection-green.log), including the original runtime test
+and both concurrency regressions. Its full-suite pass contained 1,181 tests.
+Exact final-head CI remains required before handoff.
+
+The next release-profile guide run again failed an unchanged HTTP assertion
+(browser_failure_leaves_the_service_reusable, retained in
+target/s129-review2-embedded-guide-second-failure.log). Investigation found
+that accepted sockets can inherit the nonblocking listener mode on Windows,
+while the handler assumes bounded blocking reads. The
+[Winsock accept contract](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept)
+documents inherited socket properties; the [pinned Rust Windows accept implementation](https://github.com/rust-lang/rust/blob/1.96.0/library/std/src/sys/net/connection/socket/windows.rs#L197-L204)
+returns that socket without resetting its mode. A new cross-platform regression forces
+that accepted mode and sends valid request bytes after 50 ms. It failed before
+correction with no valid HTTP response
+(target/s129-documentation-nonblocking-response-red.log) and passes after the
+handler explicitly restores blocking mode
+(target/s129-documentation-nonblocking-green.log). Existing request/connection
+deadlines and status assertions are unchanged; the two previously failing
+assertions now report their status line for future diagnostics. The old runs
+did not record their responses, so their exact status/cause is not retroactively
+claimed. This bounded correction supports the required embedded-guide gate;
+it adds no documentation endpoint or product workflow.
+
+After both Windows package corrections and the documentation socket correction,
+the final local gates above pass. The accepted-socket regression also passes in
+release profile, followed by all nine original release-guide integration tests.
+Hosted checks on the next published correction remain required.
 The two authorized Codex rounds are complete. No third review, merge, tag or
 release is authorized.

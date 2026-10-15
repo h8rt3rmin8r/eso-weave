@@ -206,6 +206,11 @@ fn run_server(listener: TcpListener, shutdown: Receiver<()>) {
 }
 
 fn handle_connection(mut stream: TcpStream) {
+    // Accepted Winsock sockets can inherit the listener's nonblocking mode.
+    // This handler uses bounded blocking I/O, including a first-byte timeout.
+    if stream.set_nonblocking(false).is_err() {
+        return;
+    }
     let deadline = Instant::now() + CONNECTION_LIFETIME;
     let response = read_request(&mut stream, deadline)
         .map(|request| route_request(&request))
@@ -419,6 +424,44 @@ fn write_all_before(stream: &mut TcpStream, mut bytes: &[u8], deadline: Instant)
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod connection_tests {
+    use super::*;
+
+    #[test]
+    fn accepted_nonblocking_socket_waits_for_request_bytes() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let (accepted, _) = listener.accept().unwrap();
+        // Winsock can inherit this mode from the nonblocking listener. Force it
+        // on every platform so the regression covers the actual connection path.
+        accepted.set_nonblocking(true).unwrap();
+        let response = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            client
+                .write_all(b"GET /eso-weave/ HTTP/1.1\r\n\r\n")
+                .unwrap();
+            let mut bytes = Vec::new();
+            match client.read_to_end(&mut bytes) {
+                Ok(_) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted
+                    ) => {}
+                Err(error) => panic!("read documentation response: {error}"),
+            }
+            String::from_utf8(bytes).unwrap()
+        });
+        handle_connection(accepted);
+        let response = response.join().unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response:?}");
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]

@@ -138,8 +138,38 @@ fn canonical_root(addons_root: &Path) -> Result<PathBuf, LifecycleError> {
     }
 }
 
+fn with_inspection<T>(
+    addons_root: &Path,
+    inspect: impl FnOnce(&Path) -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    let root = match metadata(addons_root)? {
+        Some(value) if value.is_dir() && !is_link_like(&value) => fs::canonicalize(addons_root)?,
+        // Inspectors retain their distinct absent/unmanaged outcomes without
+        // creating a directory or requiring installation eligibility.
+        _ => return inspect(addons_root),
+    };
+    // Windows can deny directory retirement while even a bounded read handle
+    // remains open in its subtree. Keep the complete inspection under the same
+    // per-root lease as mutations, including all stable-read identity checks.
+    mutation::with_canonical_root(&root, || inspect(&root))
+}
+
 /// Capability recognition is deliberately independent of mutation ownership.
 pub fn inspect_presence(addons_root: &Path) -> std::io::Result<PackagePresence> {
+    inspect_presence_with(addons_root, |_| {})
+}
+
+fn inspect_presence_with(
+    addons_root: &Path,
+    before_inspect: impl FnOnce(&Path),
+) -> std::io::Result<PackagePresence> {
+    with_inspection(addons_root, |root| {
+        before_inspect(root);
+        inspect_presence_locked(root)
+    })
+}
+
+fn inspect_presence_locked(addons_root: &Path) -> std::io::Result<PackagePresence> {
     let Some(root_metadata) = metadata(addons_root)? else {
         return Ok(PackagePresence::default());
     };
@@ -405,6 +435,10 @@ fn snapshot(
 }
 
 pub fn inspect(addons_root: &Path) -> std::io::Result<BeaconStatus> {
+    with_inspection(addons_root, inspect_locked)
+}
+
+fn inspect_locked(addons_root: &Path) -> std::io::Result<BeaconStatus> {
     let Some(value) = metadata(addons_root)? else {
         return Ok(BeaconStatus::NotInstalled);
     };
@@ -473,6 +507,12 @@ fn expected_snapshot(block_px: u32, config: StartupConfig) -> Snapshot {
 }
 
 pub fn installed_block_px(addons_root: &Path) -> Option<u32> {
+    with_inspection(addons_root, |root| Ok(installed_block_px_locked(root)))
+        .ok()
+        .flatten()
+}
+
+fn installed_block_px_locked(addons_root: &Path) -> Option<u32> {
     let root = canonical_root(addons_root).ok()?;
     let bytes = read_regular(
         &root,
@@ -485,7 +525,7 @@ pub fn installed_block_px(addons_root: &Path) -> Option<u32> {
 }
 
 fn retained_config(addons_root: &Path) -> StartupConfig {
-    inspect_presence(addons_root)
+    inspect_presence_locked(addons_root)
         .ok()
         .and_then(|presence| presence.startup_config)
         .unwrap_or(StartupConfig {
@@ -603,10 +643,10 @@ fn migrate_legacy_locked(
     if pixel.is_none() && data.is_none() {
         return Ok(false);
     }
-    if data.is_none() && inspect(root)? == BeaconStatus::ManagedUpToDate {
+    if data.is_none() && inspect_locked(root)? == BeaconStatus::ManagedUpToDate {
         return Ok(false);
     }
-    let block_px = installed_block_px(root).unwrap_or(crate::pixelbus::DEFAULT_BLOCK_PX);
+    let block_px = installed_block_px_locked(root).unwrap_or(crate::pixelbus::DEFAULT_BLOCK_PX);
     install_locked(
         root,
         block_px,
@@ -781,7 +821,7 @@ fn transact(
     if let Err(error) = result {
         if replacement_committed {
             return Err(LifecycleError::CleanupPending {
-                status: inspect(root).unwrap_or(BeaconStatus::Unmanaged),
+                status: inspect_locked(root).unwrap_or(BeaconStatus::Unmanaged),
                 recovery: transaction,
                 message: error.to_string(),
             });
@@ -1096,6 +1136,67 @@ fn rename_no_replace(_source: &Path, _destination: &Path) -> std::io::Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn inspection_file_handle_cannot_race_package_retirement() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let sandbox = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(sandbox.path()).unwrap();
+        install_configured(
+            &root,
+            RunningState::Unknown,
+            101051,
+            5,
+            false,
+            Environment::Live,
+        )
+        .unwrap();
+        let (opened, opened_wait) = mpsc::channel();
+        let (release, release_wait) = mpsc::channel();
+        let inspected_root = root.clone();
+        let reader = std::thread::spawn(move || {
+            inspect_presence_with(&inspected_root, |root| {
+                // Hold the production bounded reader's actual Windows handle
+                // across the point where another thread requests retirement.
+                let handle = crate::bounded_file::open_bounded_stable(
+                    root,
+                    &root.join("PixelBeacon/PixelBeacon.txt"),
+                    MAX_MANIFEST_BYTES,
+                )
+                .unwrap();
+                opened.send(()).unwrap();
+                release_wait.recv().unwrap();
+                drop(handle);
+            })
+        });
+        opened_wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (attempted, attempted_wait) = mpsc::channel();
+        let (completed, completed_wait) = mpsc::channel();
+        let uninstall_root = root.join(".");
+        let remover = std::thread::spawn(move || {
+            attempted.send(()).unwrap();
+            let result = uninstall(&uninstall_root, RunningState::Unknown);
+            completed.send(()).unwrap();
+            result
+        });
+        attempted_wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        let removed_while_reading = completed_wait
+            .recv_timeout(Duration::from_millis(150))
+            .is_ok();
+        release.send(()).unwrap();
+        let read_result = reader.join().unwrap();
+        let uninstall_result = remover.join().unwrap();
+        assert!(
+            !removed_while_reading,
+            "retirement ran while inspection held an open package file: {uninstall_result:?}"
+        );
+        assert!(read_result.unwrap().eligible());
+        assert_eq!(uninstall_result.unwrap().status, BeaconStatus::NotInstalled);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+    }
 
     #[test]
     fn background_recovery_waits_for_active_uninstall_cleanup() {

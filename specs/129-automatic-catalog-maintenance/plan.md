@@ -34,7 +34,7 @@ Existing src/beacon/package.rs and src/data_addon.rs own migration/facades; addo
 
 - Ship/load only beacon/bootstrap/Catalog/config, never legacy Encounter.lua auto-resume. Keep historical parser/source evidence.
 - Preserve the EsoWeaveDataSaved table contract. ESO derives the saved-data filename from the manifest identity, so the unified package saves PixelBeacon.lua. Automatically read legacy EsoWeaveData.lua before current PixelBeacon.lua with independent stable-input/retry state and compatible accumulation; never rewrite, copy or delete either game-owned file. Keep module state independent.
-- Serialize package and configuration mutation/recovery per canonical AddOns root so the background reconciler cannot retire a journal while an install, uninstall or configuration transaction owns it. Preserve the existing external filesystem race checks.
+- Serialize package inspection and configuration/mutation/recovery per canonical AddOns root so background work cannot retire another operation's journal or hold a Windows file handle across package retirement. Keep internal readers under the caller's existing lease, without recursive locking. Preserve the existing external filesystem race checks and stable-file sharing restrictions.
 - Generate channel from actual installation context, never current Settings selection or guessed client patch/API.
 - Distinguish compatible presence/capabilities from ownership allowing mutation.
 - Persist the Catalog startup preference through a bounded config-only transaction even for compatible manually maintained packages. Exact literal grammar, stable confined reads, no-replace retirement/commit and recovery protect that single configuration seam; package replacement/deletion authority remains separate.

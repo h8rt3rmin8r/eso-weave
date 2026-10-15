@@ -67,7 +67,7 @@ fn verify_sources(root: &Path, expected: &[String]) -> std::io::Result<()> {
 
 fn outcome(root: &Path) -> Result<LifecycleOutcome, LifecycleError> {
     Ok(LifecycleOutcome {
-        status: inspect(root)?,
+        status: inspect_locked(root)?,
         reload_required: false,
     })
 }
@@ -84,7 +84,7 @@ fn update_with(
     desired: StartupConfig,
     mut boundary: impl FnMut(&str, &Path) -> std::io::Result<()>,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    let presence = inspect_presence(root)?;
+    let presence = inspect_presence_locked(root)?;
     if !presence.eligible() {
         return Err(LifecycleError::Unmanaged);
     }
@@ -161,7 +161,7 @@ fn update_with(
     if let Err(error) = result {
         if committed {
             return Err(LifecycleError::CleanupPending {
-                status: inspect(root).unwrap_or(BeaconStatus::Unmanaged),
+                status: inspect_locked(root).unwrap_or(BeaconStatus::Unmanaged),
                 recovery: transaction,
                 message: error.to_string(),
             });
@@ -178,7 +178,7 @@ fn update_with(
         .and_then(|()| cleanup(root, &transaction, &receipt))
     {
         return Err(LifecycleError::CleanupPending {
-            status: inspect(root).unwrap_or(BeaconStatus::Unmanaged),
+            status: inspect_locked(root).unwrap_or(BeaconStatus::Unmanaged),
             recovery: transaction,
             message: error.to_string(),
         });
@@ -250,7 +250,7 @@ fn recover_one(root: &Path, transaction: &Path) -> Result<(), LifecycleError> {
     if explicit_commit || inferred_commit {
         return cleanup(root, transaction, &receipt).map_err(|error| {
             LifecycleError::CleanupPending {
-                status: inspect(root).unwrap_or(BeaconStatus::Unmanaged),
+                status: inspect_locked(root).unwrap_or(BeaconStatus::Unmanaged),
                 recovery: transaction.to_owned(),
                 message: error.to_string(),
             }

@@ -1,5 +1,5 @@
-//! In-process lifecycle serialization. External writers still face the package's
-//! stable-source, confinement, inventory and no-replace checks.
+//! In-process lifecycle and inspection serialization. External writers still face
+//! the package's stable-source, confinement, inventory and no-replace checks.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -56,19 +56,25 @@ pub(super) fn with_root<T>(
     operation: impl FnOnce(&Path) -> Result<T, LifecycleError>,
 ) -> Result<T, LifecycleError> {
     let root = canonical_root(addons_root)?;
-    let lease = Lease::new(&root);
+    with_canonical_root(&root, || {
+        if canonical_root(&root)? != root {
+            return Err(LifecycleError::Integrity(
+                "AddOns root changed while awaiting its lifecycle operation".into(),
+            ));
+        }
+        operation(&root)
+    })
+}
+
+pub(super) fn with_canonical_root<T>(root: &Path, operation: impl FnOnce() -> T) -> T {
+    let lease = Lease::new(root);
     // A previous panic leaves its journal for ordinary recovery. The next caller
     // still acquires the same mutex and runs recovery before another mutation.
     let _guard = lease
         .mutex
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    if canonical_root(&root)? != root {
-        return Err(LifecycleError::Integrity(
-            "AddOns root changed while awaiting its lifecycle operation".into(),
-        ));
-    }
-    operation(&root)
+    operation()
 }
 
 #[cfg(test)]
