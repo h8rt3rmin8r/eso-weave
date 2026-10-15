@@ -3,66 +3,71 @@
 <desc id="catalog-evidence-lifecycle-desc">Automatic bounded collection and natural ESO saves feed compatible evidence accumulation. Verification precedes automatic atomic activation. Live and PTS stay independent. Disable or failure preserves the last usable generation; retries need no player action.</desc>
 <rect width="400" height="3092" rx="12" fill="#0e1116" stroke="#65758b"/>
 <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#f2b03c"/></marker></defs>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3"><tspan x="200" y="34">Catalog evidence</tspan> <tspan x="200" y="68">lifecycle</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3"><tspan x="200" y="44">Catalog evidence</tspan> <tspan x="200" y="78">lifecycle</tspan></text>
 <rect data-node="sources" data-stage="1" x="20" y="132" width="360" height="244" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="sources"><tspan x="200" y="168">Packaged baseline</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="202">Starting data</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="236">Pinned source evidence</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="270">Exact version, rights</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="sources"><tspan x="200" y="174">Packaged baseline</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="208">Starting data</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="242">Pinned sources</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="276">Exact version</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="sources"><tspan x="200" y="310">Rights retained</tspan></text>
 
 <rect data-node="collector" data-stage="1" x="20" y="446" width="360" height="244" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="collector"><tspan x="200" y="482">Automatic collection</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="516">Game API definitions</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="550">Complete saved data</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="584">ESO controls disk saves</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="618">Local-only values</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="collector"><tspan x="200" y="488">Automatic</tspan> <tspan x="200" y="522">collection</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="556">API definitions</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="590">Complete snapshot</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="624">ESO controls saves</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="collector"><tspan x="200" y="658">Local-only values</tspan></text>
 
-<rect data-node="normalized" data-stage="2" x="20" y="760" width="360" height="210" rx="8" fill="#172b3a" stroke="#2dd4bf" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="normalized"><tspan x="200" y="796">Compatible accumulation</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="normalized"><tspan x="200" y="830">Keep facts and locales</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="normalized"><tspan x="200" y="864">Evidence lineage</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="normalized"><tspan x="200" y="898">Independent Live / PTS</tspan></text>
+<rect data-node="normalized" data-stage="2" x="20" y="760" width="360" height="244" rx="8" fill="#172b3a" stroke="#2dd4bf" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="normalized"><tspan x="200" y="802">Compatible</tspan> <tspan x="200" y="836">accumulation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="normalized"><tspan x="200" y="870">Facts and locales</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="normalized"><tspan x="200" y="904">Evidence lineage</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="normalized"><tspan x="200" y="938">Independent</tspan> <tspan x="200" y="972">Live / PTS</tspan></text>
 
-<rect data-node="candidate" data-stage="3" x="20" y="1040" width="360" height="380" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="candidate"><tspan x="200" y="1076">Verified generation</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1110">Compile, verify, diff</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1144">Immutable artifacts</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1178">Manifest SHA-256</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1212">Reports redacted</tspan> <tspan x="200" y="1246">Rights retained</tspan> <tspan x="200" y="1280">Policy gates</tspan></text>
+<rect data-node="candidate" data-stage="3" x="20" y="1074" width="360" height="346" rx="8" fill="#172b3a" stroke="#60a5fa" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="candidate"><tspan x="200" y="1116">Verified</tspan> <tspan x="200" y="1150">generation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1184">Compile and verify</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1218">Semantic diff</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1252">Immutable data</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1286">Manifest SHA-256</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1320">Reports redacted</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1354">Rights retained</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="candidate"><tspan x="200" y="1388">Policy gates</tspan></text>
 
 <rect data-node="install" data-stage="4" x="20" y="1490" width="360" height="278" rx="8" fill="#172b3a" stroke="#f2b03c" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="install"><tspan x="200" y="1526">Automatic activation</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1560">Eligible combined root</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1594">Maintenance enabled</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1628">No player</tspan> <tspan x="200" y="1662">acknowledgement</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1696">Reverify staged copy</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="install"><tspan x="200" y="1532">Automatic</tspan> <tspan x="200" y="1566">activation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1600">Eligible root</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1634">Maintenance on</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1668">No player</tspan> <tspan x="200" y="1702">acknowledgement</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="install"><tspan x="200" y="1736">Reverify copy</tspan></text>
 
-<rect data-node="pts" data-stage="4" x="20" y="1838" width="360" height="176" rx="8" fill="#172b3a" stroke="#f2b03c" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="pts"><tspan x="200" y="1874">Independent PTS work</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="pts"><tspan x="200" y="1908">Own evidence, selection</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="pts"><tspan x="200" y="1942">No Live promotion</tspan></text>
+<rect data-node="pts" data-stage="4" x="20" y="1838" width="360" height="210" rx="8" fill="#172b3a" stroke="#f2b03c" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="pts"><tspan x="200" y="1880">Independent</tspan> <tspan x="200" y="1914">PTS work</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="pts"><tspan x="200" y="1948">Own evidence</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="pts"><tspan x="200" y="1982">Own selection</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="pts"><tspan x="200" y="2016">No Live promotion</tspan></text>
 
-<rect data-node="selection" data-stage="5" x="20" y="2084" width="360" height="414" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="selection"><tspan x="200" y="2120">Atomic selection</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2154">Read-only version</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2188">Commit per root</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2222">Keep prior generation</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2256">Cancel stale work first</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2290">No in-place overwrite</tspan></text>
+<rect data-node="selection" data-stage="5" x="20" y="2118" width="360" height="380" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="selection"><tspan x="200" y="2160">Atomic selection</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2194">Read-only version</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2228">Commit per root</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2262">Keep prior</tspan> <tspan x="200" y="2296">generation</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2330">Cancel stale work</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="selection"><tspan x="200" y="2364">No in-place</tspan> <tspan x="200" y="2398">overwrite</tspan></text>
 
 <rect data-node="rollback" data-stage="6" x="20" y="2568" width="360" height="278" rx="8" fill="#153329" stroke="#34d399" stroke-width="2"/>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="rollback"><tspan x="200" y="2604">Retry and recovery</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="rollback"><tspan x="200" y="2638">Keep last usable target</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="rollback"><tspan x="200" y="2672">Reuse semantic no-op</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="rollback"><tspan x="200" y="2706">Retain earlier versions</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3" data-label-node="rollback"><tspan x="200" y="2610">Retry and recovery</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="rollback"><tspan x="200" y="2644">Keep last usable</tspan> <tspan x="200" y="2678">target</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="rollback"><tspan x="200" y="2712">Reuse semantic</tspan> <tspan x="200" y="2746">no-op</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf" data-label-node="rollback"><tspan x="200" y="2780">Retain versions</tspan></text>
 
 <path data-edge="sources-normalized" data-from="sources" data-to="normalized" d="M20 254 H10 V865 H20" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
 <path data-edge="collector-normalized" data-from="collector" data-to="normalized" d="M200 690 V760" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
-<path data-edge="normalized-candidate" data-from="normalized" data-to="candidate" d="M200 970 V1040" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
+<path data-edge="normalized-candidate" data-from="normalized" data-to="candidate" d="M200 1004 V1074" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
 <path data-edge="candidate-install" data-from="candidate" data-to="install" d="M200 1420 V1490" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
 <path data-edge="candidate-pts" data-from="candidate" data-to="pts" d="M380 1230 H390 V1926 H380" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
 <path data-edge="install-selection" data-from="install" data-to="selection" d="M20 1629 H10 V2291 H20" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
 <path data-edge="selection-rollback" data-from="selection" data-to="rollback" d="M200 2498 V2568" fill="none" stroke="#f2b03c" stroke-width="3" marker-end="url(#arrow)"/>
 <text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#e6edf3"><tspan x="200" y="2916">Natural saves to</tspan> <tspan x="200" y="2950">active data</tspan></text>
-<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf"><tspan x="200" y="2994">No manual collection</tspan> <tspan x="200" y="3028">or build</tspan></text>
+<text text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#b8c2cf"><tspan x="200" y="2994">No manual</tspan> <tspan x="200" y="3028">collection</tspan> <tspan x="200" y="3062">or build</tspan></text>
 </svg>

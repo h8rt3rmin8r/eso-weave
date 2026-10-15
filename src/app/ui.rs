@@ -112,6 +112,9 @@ const WEAVE_TYPES: [WeaveType; 4] = [
 
 const KEYS: [Key; 13] = Key::ALL;
 
+const COMBINED_UNINSTALL_CONFIRMATION: &str = "Remove the combined PixelBeacon addon files (beacon, Catalog collection, startup configuration, and bootstrap)? SavedVariables, imported encounter history, and neighboring addons are kept. Already-loaded Lua remains active until the next natural addon load or game session.";
+const COMBINED_UNINSTALL_TOOLTIP: &str = "Remove the combined managed PixelBeacon addon files, including Catalog and startup/bootstrap modules. SavedVariables, imported history, and neighboring addons are retained. Loaded Lua changes at the next natural addon load or game session.";
+
 const LEVELS: [LevelName; 6] = [
     LevelName::Off,
     LevelName::Error,
@@ -251,7 +254,6 @@ pub struct EsoWeaveApp {
     settings_draft: Option<SettingsForm>,
     settings_applied: Option<SettingsForm>,
     confirm_uninstall: bool,
-    confirm_data_uninstall: bool,
     toast: Option<widgets::Toast>,
     /// The last window geometry captured from the viewport, used to detect a
     /// change and to keep the normal geometry while maximized. Seeded from the
@@ -381,7 +383,6 @@ impl EsoWeaveApp {
             settings_draft: None,
             settings_applied: None,
             confirm_uninstall: false,
-            confirm_data_uninstall: false,
             toast: None,
             last_geometry: restored_geometry,
             delay_edit: None,
@@ -869,9 +870,9 @@ impl EsoWeaveApp {
         self.confirm_uninstall = confirm;
     }
 
-    /// Shows or hides the data-addon-specific uninstall confirmation row.
+    /// Compatibility alias for the one combined PixelBeacon confirmation.
     pub fn set_confirm_data_uninstall(&mut self, confirm: bool) {
-        self.confirm_data_uninstall = confirm;
+        self.set_confirm_uninstall(confirm);
     }
 
     /// Opens or closes the dedicated data-addon evidence modal.
@@ -1078,6 +1079,7 @@ impl EsoWeaveApp {
             worker.set_catalog_path(path);
         }
         self.model.set_catalog(access);
+        self.model.refresh_data_addon_status();
         if self
             .encounter_history_selected
             .as_ref()
@@ -1930,10 +1932,10 @@ impl EsoWeaveApp {
 
         if self.confirm_uninstall {
             let row = ui.horizontal_wrapped(|ui| {
-                ui.label("Remove the managed PixelBeacon addon files? Current gameplay readings will stop after ESO reloads. ESO Weave Data, saved recordings, and imported encounter history are kept.");
+                ui.label(COMBINED_UNINSTALL_CONFIRMATION);
                 if ui
-                    .button("Uninstall")
-                    .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
+                    .button("Confirm Uninstall")
+                    .on_hover_text(COMBINED_UNINSTALL_TOOLTIP)
                     .clickable()
                     .clicked()
                 {
@@ -1942,36 +1944,11 @@ impl EsoWeaveApp {
                 }
                 if ui
                     .button("Cancel")
-                    .on_hover_text("Keep the addon installed.")
+                    .on_hover_text("Keep the combined PixelBeacon addon installed.")
                     .clickable()
                     .clicked()
                 {
                     self.confirm_uninstall = false;
-                }
-            });
-            self.note_content_width(row.response.rect.width());
-            ui.separator();
-        }
-
-        if self.confirm_data_uninstall {
-            let row = ui.horizontal_wrapped(|ui| {
-                ui.label("Remove the managed ESO Weave Data addon files? ESO's saved recordings and collected catalog data, imported encounter history, and PixelBeacon are kept. Reload ESO if it is open.");
-                if ui
-                    .button("Confirm Data Uninstall")
-                    .on_hover_text(strings::DATA_ADDON_UNINSTALL_TOOLTIP)
-                    .clickable()
-                    .clicked()
-                {
-                    intents.push(UiIntent::UninstallDataAddon);
-                    self.confirm_data_uninstall = false;
-                }
-                if ui
-                    .button("Cancel Data Uninstall")
-                    .on_hover_text("Keep ESO Weave Data installed.")
-                    .clickable()
-                    .clicked()
-                {
-                    self.confirm_data_uninstall = false;
                 }
             });
             self.note_content_width(row.response.rect.width());
@@ -2458,7 +2435,7 @@ impl EsoWeaveApp {
                                     }
                                     if view.uninstall_enabled
                                         && lifecycle_button(ui, palette, "Uninstall", false)
-                                            .on_hover_text(strings::BEACON_UNINSTALL_TOOLTIP)
+                                            .on_hover_text(COMBINED_UNINSTALL_TOOLTIP)
                                             .clicked()
                                     {
                                         self.confirm_uninstall = true;

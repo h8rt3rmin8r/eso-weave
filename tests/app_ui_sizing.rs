@@ -694,6 +694,94 @@ fn s129_combined_addon_has_one_lifecycle_and_no_separate_data_actions() {
 }
 
 #[test]
+fn s129_combined_uninstall_confirmation_is_truthful_and_shared_by_legacy_requests() {
+    const CONFIRMATION: &str = "Remove the combined PixelBeacon addon files (beacon, Catalog collection, startup configuration, and bootstrap)? SavedVariables, imported encounter history, and neighboring addons are kept. Already-loaded Lua remains active until the next natural addon load or game session.";
+    for legacy_request in [false, true] {
+        let tree = tempfile::tempdir().unwrap();
+        let root = tree.path().join("live/AddOns");
+        std::fs::create_dir_all(&root).unwrap();
+        beacon::install(
+            &root,
+            beacon::RunningState::NotRunning,
+            beacon::DEFAULT_API_VERSION,
+        )
+        .unwrap();
+        let saved = tree.path().join("live/SavedVariables/EsoWeaveData.lua");
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
+        std::fs::write(&saved, b"retained catalog and encounter SavedVariables").unwrap();
+        let history = tree.path().join("desktop/history.sqlite");
+        std::fs::create_dir_all(history.parent().unwrap()).unwrap();
+        std::fs::write(&history, b"retained imported history").unwrap();
+        let neighbor = root.join("OtherAddon/keep.lua");
+        std::fs::create_dir_all(neighbor.parent().unwrap()).unwrap();
+        std::fs::write(&neighbor, b"retained neighboring addon").unwrap();
+        let settings = Settings {
+            beacon: beacon::prefs_to_value(&BeaconPrefs {
+                path_override: Some(root.clone()),
+                environment: Environment::Live,
+            }),
+            ..Settings::default()
+        };
+        let mut harness =
+            harness_for_app(test_app_with_settings(settings), egui::vec2(1200.0, 1200.0));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        if legacy_request {
+            harness.state_mut().set_confirm_data_uninstall(true);
+        } else {
+            harness.state_mut().set_confirm_uninstall(true);
+        }
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        harness.get_by_label(CONFIRMATION);
+        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Uninstall");
+        for obsolete in ["Confirm Data Uninstall", "Cancel Data Uninstall"] {
+            assert!(
+                harness.query_by_label(obsolete).is_none(),
+                "second lifecycle confirmation: {obsolete}"
+            );
+        }
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Cancel")
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert!(harness.query_by_label(CONFIRMATION).is_none());
+        assert!(root.join("PixelBeacon/PixelBeacon.txt").is_file());
+        // Both request aliases must coalesce into the same confirmation state.
+        harness.state_mut().set_confirm_uninstall(true);
+        harness.state_mut().set_confirm_data_uninstall(true);
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert_eq!(harness.query_all_by_label(CONFIRMATION).count(), 1);
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Uninstall")
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert!(!root.join("PixelBeacon").exists());
+        assert!(harness.query_by_label(CONFIRMATION).is_none());
+        assert_eq!(
+            std::fs::read(&saved).unwrap(),
+            b"retained catalog and encounter SavedVariables"
+        );
+        assert_eq!(
+            std::fs::read(&history).unwrap(),
+            b"retained imported history"
+        );
+        assert_eq!(
+            std::fs::read(&neighbor).unwrap(),
+            b"retained neighboring addon"
+        );
+    }
+}
+
+#[test]
 fn s129_managed_drift_uses_the_combined_update_and_uninstall_actions() {
     let root = tempfile::tempdir().unwrap();
     beacon::install(

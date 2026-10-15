@@ -85,5 +85,41 @@ No merge, tag, release or game action is included.
 
 ## PR and owner handoff
 
-Pending publication. Review-round count: zero. The final receipt must identify
-the exact checked head, review results and unresolved-thread count before handoff.
+[PR #295](https://github.com/h8rt3rmin8r/eso-weave/pull/295) is open and attached.
+The five issue Project items have Slice S129 and Stage PR review.
+
+Round 1 automatically reviewed d7f08e6bf887721f3eb7a94b3ab739fca55e1d03
+and completed on 2026-10-15 with two P2 findings:
+
+1. Old two-addon uninstall wording described narrower removal than the unified
+   lifecycle performs. Both routes now share one confirmation and action with
+   accurate complete-package removal and retained-data wording. The UI
+   regression failed first, then passed for both routes, cancellation,
+   coalescing and actual byte preservation (target/s129-review1-uninstall-ui-red.log
+   and target/s129-review1-uninstall-ui-final-green.log).
+2. Beacon install/removal left the compatibility lifecycle/API cache stale.
+   Both operations now re-inspect it; activation also refreshes it after
+   background migration. The model/API regression reproduced Not installed
+   after successful install, then passed after correction
+   (target/s129-review1-cache-red.log and target/s129-review1-cache-green.log).
+
+Hosted first-head Linux CI and CodeQL passed. Documentation CI exposed a
+DejaVu-specific Catalog diagram overflow despite the Windows browser pass.
+Labels now wrap to at most eighteen characters per visible line with the same
+24-unit font, canvas, owning nodes, padding and semantic enforcement. Local
+build/policy/163-unit/browser gates pass again (target/s129-linux-font-*.log).
+Actual hosted DejaVu validation is pending the corrected head.
+
+The correction passes formatting, all-target/all-feature Clippy with warnings
+denied, the full locked Rust suite (1,172 passed, zero failures/ignored tests),
+and release compilation. Evidence: target/s129-review1-fmt-check.log,
+target/s129-review1-clippy.log, target/s129-review1-full.log and
+target/s129-review1-release.log. The nine release-guide tests pass in
+target/s129-review1-embedded-guide-recheck.log. The first correction-profile run
+had one unexpected POST status in the unchanged documentation-service test;
+both its isolated rerun and the unchanged nine-test rerun passed. The initial
+failure log is retained (target/s129-review1-embedded-guide.log); its cause was
+not established, and no assertion, timeout or server code was changed to obtain
+the pass. Publication, thread resolution, the second
+authorized review and exact final-head CI remain in progress. No third review,
+merge, tag or release is authorized.

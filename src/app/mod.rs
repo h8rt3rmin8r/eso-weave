@@ -3100,6 +3100,7 @@ impl AppModel {
                 self.beacon_prefs.environment,
             ) {
                 Ok(outcome) => {
+                    self.data_addon_reload_required.set(outcome.reload_required);
                     if outcome.reload_required {
                         tracing::info!(
                             target: "eso_weave::app",
@@ -3117,12 +3118,14 @@ impl AppModel {
                 tracing::warn!(target: "eso_weave::app", "install: AddOns directory not found");
             }
         }
+        self.refresh_data_addon_status();
     }
 
     fn uninstall_beacon(&mut self) {
         match beacon::resolve_addons_dir(&self.beacon_prefs) {
             Ok(root) => match beacon::uninstall(&root, beacon::probe_game_running()) {
                 Ok(outcome) => {
+                    self.data_addon_reload_required.set(outcome.reload_required);
                     if outcome.reload_required {
                         tracing::info!(
                             target: "eso_weave::app",
@@ -3140,6 +3143,7 @@ impl AppModel {
                 tracing::warn!(target: "eso_weave::app", "uninstall: AddOns directory not found");
             }
         }
+        self.refresh_data_addon_status();
     }
 
     fn apply_settings(&mut self, mut form: SettingsForm) -> Vec<Notice> {

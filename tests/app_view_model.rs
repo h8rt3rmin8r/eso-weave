@@ -1995,10 +1995,28 @@ fn install_and_uninstall_beacon_intents() {
         BeaconCondition::InstalledCurrent
     );
     assert!(model.view().uninstall_enabled);
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Installed"
+    );
+    let installed = model.player_state_publisher().current().document(1);
+    assert_eq!(
+        installed["application"]["addons"]["data"]["value"]["ownership"],
+        "eso_weave"
+    );
 
     model.apply_intent(UiIntent::UninstallBeacon);
     assert_eq!(model.view().beacon_condition, BeaconCondition::NotInstalled);
     assert!(!model.view().uninstall_enabled);
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Not installed"
+    );
+    let removed = model.player_state_publisher().current().document(1);
+    assert_eq!(
+        removed["application"]["addons"]["data"]["value"]["ownership"],
+        "none"
+    );
 }
 
 #[test]
