@@ -11,7 +11,11 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plans
 
-No active build plan remains. The latest completed plan is
+| Plan | Status | Scope |
+| --- | --- | --- |
+| [055](plan-055.md) | Active | S129 combined PixelBeacon and automatic Catalog maintenance, #285-#288/#291 |
+
+The latest completed plan is
 [054](../../archive/build-plans/plan-054.md), covering S128 candidate preparation
 and the subsequent owner-authorized v0.18.0 publication.
 

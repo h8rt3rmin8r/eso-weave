@@ -147,6 +147,8 @@ pub struct SettingsForm {
     pub ui: UiPrefs,
     /// Whether the complete local HTTP and MCP service is requested.
     pub local_service_enabled: bool,
+    /// Direct independently persisted data-service optouts.
+    pub data_maintenance: crate::data_maintenance::DataMaintenancePrefs,
 }
 
 impl SettingsForm {
@@ -183,6 +185,7 @@ impl SettingsForm {
                 logging,
                 ui,
                 local_service_enabled,
+                data_maintenance: settings.data_maintenance,
             },
             notices,
         )
@@ -206,5 +209,6 @@ impl SettingsForm {
         let mut local_service = LocalServicePrefs::load(&settings.local_service);
         local_service.enabled = self.local_service_enabled;
         settings.local_service = local_service.store();
+        settings.data_maintenance = self.data_maintenance;
     }
 }

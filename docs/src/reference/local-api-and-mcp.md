@@ -323,3 +323,9 @@ agent should say, retain prompts, execute actions, or expand database access.
 
 For general application startup and game-observation diagnosis, continue with
 [Troubleshooting](../getting-started/troubleshooting.md).
+
+## Automatic data preferences and eligibility
+
+`application.data_maintenance` is an additive observation carrying independent requested optouts, whether the last preference write persisted, compatible combined-package eligibility, and the next-natural-load Lua preference boundary. `startup_config_persisted` separately reports whether every eligible package has the requested on-disk startup config: true for a verified match, false for a mismatch or failed write, and null when none is eligible. Compatible manually maintained packages support an exact configuration-only transaction; this does not authorize replacing their manifest/modules or deleting their package. `loaded_lua_preference` remains unknown; a file update never proves already-loaded Lua changed. Eligibility is separate from running work, and `native_worker_implemented` remains false until the separately scoped native watcher ships. The compatibility observation `application.addons.data` now refers to the Catalog capability of the same PixelBeacon package, not a second installation.
+
+The fixed `catalog` and `encounters` database identifiers, authentication and bounded read-only query contract are unchanged. Disabling maintenance or removing the addon does not delete stored data or revoke reads. Current Catalog swaps update the canonical query path; each existing query finishes on one coherent immutable generation.

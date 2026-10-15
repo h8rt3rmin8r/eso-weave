@@ -72,6 +72,8 @@ fn main() {
     let debug_root =
         cfg!(debug_assertions).then_some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")));
     let bundled_catalog_path = eso_weave::catalog::locate_catalog(&executable, debug_root);
+    let maintenance_bundled = bundled_catalog_path.clone();
+    let maintenance_config = config_dir.clone();
     let catalog_updates = config_dir.as_ref().map(|dir| {
         eso_weave::catalog_update::CatalogUpdateService::new(dir, &bundled_catalog_path)
     });
@@ -520,9 +522,18 @@ fn main() {
         settings,
         config_dir,
         clock_origin,
-        database_queries,
+        database_queries.clone(),
     );
     model.set_catalog(catalog);
+    let maintenance_runtime = maintenance_config.map(|dir| {
+        eso_weave::data_maintenance::MaintenanceRuntime::spawn_with_history(
+            dir,
+            maintenance_bundled,
+            model.data_maintenance_control(),
+            database_queries,
+            encounter_history.clone(),
+        )
+    });
     if let Some((state, notices)) = session {
         for notice in &notices {
             tracing::warn!(target: "eso_weave::config", "{}", notice.message);
@@ -603,8 +614,8 @@ fn main() {
         Box::new(|cc| {
             eso_weave::app::theme::install_fonts(&cc.egui_ctx);
             let mut app = EsoWeaveApp::new(model, toggle_rx, api_rx, restored_geometry);
-            if let Some(service) = catalog_updates {
-                app = app.with_catalog_updates(service);
+            if let Some(runtime) = maintenance_runtime {
+                app = app.with_data_maintenance(runtime);
             }
             if let Some(service) = encounter_history {
                 app = app.with_encounter_history(service);

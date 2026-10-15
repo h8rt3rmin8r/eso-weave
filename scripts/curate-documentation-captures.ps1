@@ -37,7 +37,7 @@ $captures = @(
     @{ Scene = 'pixelbeacon-lost'; Destination = 'pixelbeacon-signal-lost.png'; Height = 640 },
     @{ Scene = 'pixelbeacon-unmanaged'; Destination = 'pixelbeacon-unmanaged.png'; Height = 640 },
     @{ Scene = 'weaving-configuration'; Destination = 'weaving-configuration.png'; Height = 640 },
-    @{ Scene = 'auto-potion-ready'; Destination = 'auto-potion-ready.png'; Height = 820 },
+    @{ Scene = 'auto-potion-ready'; Destination = 'auto-potion-ready.png'; Height = 900 },
     @{ Scene = 'auto-potion-blocked'; Destination = 'auto-potion-blocked.png'; Height = 640 }
 )
 

@@ -843,7 +843,7 @@
         },
         {
           "path": "docs/src/features/pixelbeacon.md",
-          "requiredExcerpt": "Removal deletes the PixelBeacon directory only when the manifest contains"
+          "requiredExcerpt": "Management requires the ownership marker, declared inventory, regular files, and bounded stable reads"
         },
         {
           "path": "docs/src/features/fishing.md",
@@ -851,7 +851,7 @@
         },
         {
           "path": "docs/src/getting-started/installation.md",
-          "requiredExcerpt": "PixelBeacon installation is a separate action inside ESO Weave"
+          "requiredExcerpt": "ordinary PixelBeacon installation action inside ESO Weave supplies the complete single companion package"
         }
       ],
       "evidence": "Baseline H2 unit 11 is preserved in the named canonical page."
@@ -1013,7 +1013,7 @@
         },
         {
           "path": "docs/src/features/interface.md",
-          "requiredExcerpt": "managed-marker uninstall guard and confirmation"
+          "requiredExcerpt": "managed-ownership guard and confirmation"
         },
         {
           "path": "docs/src/features/interface.md",
@@ -1740,6 +1740,14 @@
         "specs/128-v0180-release"
       ],
       "evidence": "S128 candidate preparation for issue #279 completed when owner squash-merged PR #278 on 2026-10-13 at d88151c3ba1b5523fc29a22f7fcd8b9cc8491289. Separately authorized v0.18.0 publication completed issue #277 that day; release workflow 38396415318 passed and all five downloaded assets matched published sizes and SHA-256 digests."
+    },
+    {
+      "id": "055",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-055.md",
+      "specs": ["specs/129-automatic-catalog-maintenance"],
+      "evidence": "Owner kickoff on 2026-10-15 authorizes S129 for issue #285, issue #286, issue #287, issue #288 and issue #291, automatic push/PR, at most two Codex rounds and owner final review/merge. Implementation and verification receipts track progress; no merge or release is claimed."
     }
   ],
   "safetyCrosswalk": [
@@ -1764,7 +1772,7 @@
     {
       "id": "managed-marker-gated-uninstall",
       "destination": "docs/src/features/pixelbeacon.md",
-      "requiredExcerpt": "Removal deletes the PixelBeacon directory only when the manifest contains",
+      "requiredExcerpt": "Management requires the ownership marker, declared inventory, regular files, and bounded stable reads",
       "evidence": "Canonical PixelBeacon page preserves managed-marker deletion safety."
     },
     {

@@ -9,9 +9,9 @@ use eso_weave::encounter::{
 use mlua::{Lua, Table, Value as LuaValue};
 use serde_json::Value;
 
-const MANIFEST: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.txt");
-const BOOTSTRAP: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.lua");
-const ADDON: &str = include_str!("../addon/EsoWeaveData/Encounter.lua");
+const MANIFEST: &str = include_str!("fixtures/legacy-addon/EsoWeaveData.txt");
+const BOOTSTRAP: &str = include_str!("fixtures/legacy-addon/EsoWeaveData.lua");
+const ADDON: &str = include_str!("fixtures/legacy-addon/Encounter.lua");
 const FIXTURE: &str =
     include_str!("../specs/075-encounter-capture/fixtures/representative-capture.json");
 

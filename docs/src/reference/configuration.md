@@ -21,7 +21,7 @@ line endings, and end with a newline.
 ## `config.json`
 
 The configuration contains user settings only. Module-owned sections include
-timing, skills, beacon, fishing, potion, latency, pixelbus, and interface options.
+timing, skills, beacon, fishing, potion, latency, pixelbus, and interface options. The typed `data_maintenance` section stores independent `catalog_disabled` and `native_processing_disabled` booleans; missing fields default to false. Availability, active work, cancellation generations and loaded Lua state never enter this file. These two optouts persist directly rather than waiting for the ordinary settle-write; failed disables still stop the current run and failed enables do not claim durable success.
 A bounded `ui.stale_retention_seconds` preference controls display-only HUD
 retention and defaults to 120 when absent.
 A top-level `schema_version` supports forward migration. Invalid configuration

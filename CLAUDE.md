@@ -4,15 +4,7 @@ Desktop companion application for The Elder Scrolls Online, written in Rust for
 Windows 10/11 x64 and Linux x64. The desktop runs outside the game: an input
 engine intercepts and synthesizes keys while the game window is focused, a weave
 engine executes combat action sequences, and an optional fishing module reads a
-pixel-bus signal rendered by the embedded PixelBeacon companion addon. A
-separately managed ESO Weave Data addon contains isolated catalog and encounter
-modules. Catalog export is user-initiated and bounded. Encounter capture requires
-explicit in-game authority for exactly `single` or `continuous` mode and retains
-exact values from deliberately selected sources in bounded, ordered, loss-aware
-local records. Continuous sessions have aggregate ceilings and no silent
-eviction. The desktop command vocabulary remains empty; capture cannot use Pixel
-Bus or authorize actions. Raw values never enter logs, diagnostics, public
-evidence, or uploads.
+pixel-bus signal rendered by the embedded PixelBeacon companion addon. One combined PixelBeacon package contains isolated beacon and automatic Catalog modules. Catalog maintenance is automatic unless independently disabled, pauses during unsuitable game states and preserves the last completed snapshot. Desktop native processing has a separate persisted optout; both services are dormant without a compatible combined package. Startup configuration applies to Lua at the next natural load; never force a reload or write live SavedVariables commands. Legacy encounter data remains readable; consolidation never auto-enables the old addon recorder. Raw values stay local and out of public diagnostics.
 Canonical shipped behavior and architecture live under `docs/src`; every feature traces
 to an actionable issue and that corpus. Current build plans under
 `docs/project/build-plans/` define ordered work slices, while completed plans
@@ -92,9 +84,7 @@ artifact before the verification issue closes.
 - Safety-critical test surfaces are never weakened or skipped: injected-input
   recursion breaking, input suppression scoped to the focused game window only,
   no blocking work on the hook thread, and PixelBeacon uninstall deleting a
-  folder only after verifying the managed-marker line in its manifest. The data
-  addon lifecycle is separately confined to its exact four-file inventory and
-  never changes PixelBeacon. Catalog and encounter state occupy isolated subtrees;
+  folder only after verifying the managed-marker line in its manifest. The combined package lifecycle validates exact managed inventory, links/races and transactional recovery, preserving legacy SavedVariables and neighboring addons. Catalog and encounter state occupy isolated subtrees;
   neither module may clear the other, and the desktop never deletes their shared
   SavedVariables file while ESO owns in-memory state.
 - CI parity before any commit: `cargo fmt --all -- --check`,
@@ -114,5 +104,5 @@ artifact before the verification issue closes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/128-v0180-release/plan.md
+at specs/129-automatic-catalog-maintenance/plan.md
 <!-- SPECKIT END -->

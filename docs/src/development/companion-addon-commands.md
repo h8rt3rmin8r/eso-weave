@@ -1,41 +1,54 @@
-# Companion-to-Addon Commands
+# Companion-to-Addon Configuration
 
-This page explains the maintainer control boundary. Player instructions for
-installing ESO Weave Data, recording, saving and importing are on
-[Encounter Capture](../features/encounter-capture.md). The desktop can show
-instructions and import ESO's saved addon data, while `/ewcollect` and
-`/ewencounter` commands are entered by the user inside ESO.
+PixelBeacon publishes the existing screen signals and collects Catalog
+definitions automatically. The supported real-time desktop-to-addon command
+vocabulary remains empty. The desktop does not type a collection command,
+synthesize a chat or gameplay binding, modify live SavedVariables, or force an
+addon reload.
 
-S092 makes a no-go decision for real-time desktop-to-addon command ingress. The
-approved desktop command vocabulary is empty. Catalog and encounter capture
-remain explicit user actions through `/ewcollect` and `/ewencounter`.
+## Persisted startup preference
 
-The documented ESO addon API has no inbound socket, file-watch, clipboard, or
-URL primitive. Generated custom bindings have unknown account-associated
-visibility, contextual focus and action-layer failures, and no supported
-acknowledgement. Piggybacking a native action adds gameplay side effects, while
-generated slash-command typing can leak text into chat. Writing SavedVariables
-while ESO owns its in-memory state is neither real-time nor safe.
+The package-owned StartupConfig.lua representation contains only the Catalog
+disable boolean and the actual installation context's Live/PTS channel. The
+package manager renders and validates that bounded representation. It does not
+accept arbitrary Lua supplied through application settings.
 
-This decision is separate from native binding discovery for user-configured
-input features. Reconsider real-time ingress only if ESO publishes a documented
-inbound API with adequate delivery and visibility guarantees, or if the operator
-separately authorizes a live-account binding experiment after accepting its
-unknown server-visibility risk.
+Desktop Catalog disable cancels desktop scheduling and blocks stale activation
+immediately. Already-loaded Lua applies the persisted value at the next natural
+addon load or game session. The application must keep these two facts distinct;
+writing configuration does not acknowledge a live Lua change. A stale result
+cannot re-enable disabled desktop maintenance. Re-enable reconciles retained
+progress automatically.
 
-## Deliberate recording commands
+Catalog and native log processing have independent preferences. Neither changes
+weaving, fishing, auto-potion, beacon signals or game-native logging. Combined
+package availability supplies shared eligibility, evaluated for each actual
+installation context. Preference values survive temporary absence.
 
-Use `/ewencounter start live single`, `start pts single`, or the
-`continuous` variants inside ESO. Start validates the complete arguments,
-keeps an already enabled recorder unchanged, and retains earlier sessions when
-starting again. Resume explicitly continues the latest stopped continuous
-session. Sessions reports IDs/capacity; confirmed discard removes one inactive
-addon session. Clear confirm remains deliberate deletion of all addon recordings. `/ewencounter stop` retains data and is idempotent.
-`/ewencounter status` gives concise activity and next-step guidance;
-`status details` preserves technical diagnostics. Existing aliases remain
-compatible. Desktop Copy actions copy command text but do not execute it.
+## Public game boundary
 
-Both data modules use the shared system-chat message route, independently of
-debug logging. Delayed initialization queues bounded replies and retries; it
-never silently falls back to the intercepted debug sink. The exact-data warning
-must be delivered before capture authority is enabled.
+The documented ESO addon API supplies no supported inbound desktop socket,
+file-watch, clipboard or URL command transport. Generated custom bindings and
+slash-command typing provide no supported delivery acknowledgement and can
+interfere with contextual input. Such mechanisms are not used for maintenance.
+The ordinary native binding-discovery feature keeps its existing input contract.
+
+The automatic collector uses public read APIs and supported game-managed save
+opportunities. A priority-save request changes queue priority; it does not prove
+that bytes reached disk. See [Automatic Catalog Collection](discovery-collector.md)
+for bounded scanning, completed generations and restart behavior.
+
+## Historical recording compatibility
+
+The combined package does not load the old Encounter.lua recorder or register
+its /ewencounter control workflow. It also does not register /ewcollect.
+Previously saved Catalog and encounter evidence remain in the legacy
+SavedVariables/EsoWeaveData.lua file with its EsoWeaveDataSaved root. Current
+PixelBeacon.txt reads and saves that global table in SavedVariables/PixelBeacon.lua;
+the global name cannot override the manifest-derived filename. New Lua does not
+load the legacy file. The desktop reconciles both Catalog sources into its own
+accumulation and keeps legacy encounter import/history access. Neither source
+file is copied or rewritten, and source fixtures preserve old recorder formats.
+
+The retained /pbquickslot diagnostic belongs to the existing beacon signal
+feature. It does not start maintenance or supply a desktop-to-addon transport.

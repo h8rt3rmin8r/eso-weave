@@ -202,13 +202,13 @@ test("S081 requires bounded swatches, contained images, and narrow gallery reflo
 });
 
 const diagramRecords = [
-  ["development/catalog-candidate-pipeline.md", "catalog-evidence-lifecycle.svg", "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only", "Catalog lifecycle text equivalent", ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"], 3092],
+  ["development/catalog-candidate-pipeline.md", "catalog-evidence-lifecycle.svg", "Automatic Catalog evidence flows through compatible accumulation and verification to atomic activation, with independent Live and PTS contexts and retained recovery", "Catalog lifecycle text equivalent", ["Alternative evidence inputs", "Compatible accumulation", "Verified generation", "Automatic activation", "Atomic selection", "Retry and recovery", "Independent Live / PTS", "Reports are redacted", "Collector values remain local-only"], 3092],
   ["reference/local-api-and-mcp.md", "local-extension-authority-map.svg", "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases", "Local authority text equivalent", ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"], 3272],
   ["development/architecture.md", "architecture-ownership.svg", "Architecture ownership flow keeps physical input and observed game evidence separate until named consumers", "Ownership flow text equivalent", ["Physical input remains on the input path", "Observed game evidence remains on the observation path", "Named engines and controllers consume only their owned inputs"], 860],
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
   ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 1080],
-  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Encounter capture is waiting, interrupted, or failed", "Startup failure", "Use the Application Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Application Log"]],
+  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Retained encounter capture or import fails", "Startup failure", "Use the Application Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Application Log"]],
   ["reference/encounter-data-and-metrics.md", "encounter-evidence-lineage.svg", "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts", "Encounter lineage text equivalent", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"], 1530],
 ];
 
@@ -216,7 +216,7 @@ function diagramFixture() {
   const pages = new Map();
   const svgs = new Map();
   const labels = new Map([
-    ["catalog-evidence-lifecycle.svg", ["Pinned sources", "Collector evidence", "Normalized bundle", "Verified review candidate", "Explicit install", "Origin acknowledged", "Atomic Live selection", "Explicit rollback", "PTS preview only", "Local-only values", "Independent Live / PTS"]],
+    ["catalog-evidence-lifecycle.svg", ["Packaged baseline", "Automatic collection", "Compatible accumulation", "Verified generation", "Automatic activation", "No player acknowledgement", "Atomic selection", "Retry and recovery", "Independent PTS work", "Local-only values", "Independent Live / PTS"]],
     ["local-extension-authority-map.svg", ["Local client", "Discovery: no credential", "Copied bearer credential", "One loopback generation", "Bearer on every request", "HTTP /api/v1", "MCP /mcp", "Shared canonical authorities", "Canonical player state", "Shared query executor", "Fixed catalog and encounters", "Read-only, no actions"]],
     ["architecture-ownership.svg", ["Physical input", "Observed evidence", "Named consumers"]],
     ["action-authorization.svg", ["Physical event", "Positive gates", "Authorized", "Fails closed"]],
@@ -250,7 +250,7 @@ test("S122 rejects omitted catalog and local-authority boundaries", () => {
     assert.match(validateDocumentationDiagrams(missing).join("\n"), /SVG source is missing/i);
   }
   for (const [asset, anchors] of [
-    ["catalog-evidence-lifecycle.svg", ["Origin acknowledged", "PTS preview only", "Local-only values", "Independent Live / PTS"]],
+    ["catalog-evidence-lifecycle.svg", ["No player acknowledgement", "Independent PTS work", "Local-only values", "Independent Live / PTS"]],
     ["local-extension-authority-map.svg", ["Discovery: no credential", "Bearer on every request", "Shared query executor", "Read-only, no actions"]],
   ]) {
     for (const anchor of anchors) {
@@ -264,10 +264,10 @@ test("S122 rejects omitted catalog and local-authority boundaries", () => {
 test("S122 accepts wrapped visible labels and rejects metadata-only labels", () => {
   const fixture = diagramFixture();
   const asset = "catalog-evidence-lifecycle.svg";
-  fixture.svgs.set(asset, fixture.svgs.get(asset).replace("Verified review candidate</text>", "<tspan>Verified review</tspan><tspan>candidate</tspan></text>"));
+  fixture.svgs.set(asset, fixture.svgs.get(asset).replace("Verified generation</text>", "<tspan>Verified</tspan><tspan>generation</tspan></text>"));
   assert.deepEqual(validateDocumentationDiagrams(fixture), []);
-  fixture.svgs.set(asset, fixture.svgs.get(asset).replace("Explicit rollback</text>", "Omitted</text>").replace("</svg>", "<desc>Explicit rollback</desc></svg>"));
-  assert.match(validateDocumentationDiagrams(fixture).join("\n"), /SVG requires the Explicit rollback label/i);
+  fixture.svgs.set(asset, fixture.svgs.get(asset).replace("Retry and recovery</text>", "Omitted</text>").replace("</svg>", "<desc>Retry and recovery</desc></svg>"));
+  assert.match(validateDocumentationDiagrams(fixture).join("\n"), /SVG requires the Retry and recovery label/i);
 });
 
 test("S121 requires complete encounter lineage and visible version, channel and provisional gates", () => {
@@ -291,6 +291,7 @@ test("S125 keeps recording, saved-source, deletion and catalog recovery instruct
     "features/encounter-capture.md", "reference/logging.md", "features/interface.md",
     "getting-started/troubleshooting.md", "development/discovery-collector.md", "reference/settings.md",
     "reference/status-reference.md", "reference/encounter-data-and-metrics.md",
+    "getting-started/responsible-use.md", "reference/glossary.md", "SUMMARY.md", "development/README.md",
   ].map(async (page) => [page, await readFile(path.join("docs", "src", page), "utf8")])));
   assert.deepEqual(validateEncounterWorkflowDocs(pages), []);
   const missing = new Map(pages);
@@ -301,20 +302,36 @@ test("S125 keeps recording, saved-source, deletion and catalog recovery instruct
     ["features/encounter-capture.md", "Refresh Imported History", /encounter-capture/i],
     ["features/encounter-capture.md", "unsupported saved-data version", /encounter-capture/i],
     ["features/encounter-capture.md", "Import Saved Capture", /encounter-capture/i],
+    ["features/encounter-capture.md", "Historical addon recorder setup", /encounter-capture/i],
+    ["features/encounter-capture.md", "does not load or\nresume", /encounter-capture/i],
+    ["features/encounter-capture.md", "Inspect Native File", /encounter-capture/i],
+    ["features/encounter-capture.md", "Import Native File", /encounter-capture/i],
     ["getting-started/troubleshooting.md", "current activity", /troubleshooting/i],
-    ["development/discovery-collector.md", "incomplete snapshot", /discovery-collector/i],
+    ["getting-started/troubleshooting.md", "single combined\nPixelBeacon package", /troubleshooting/i],
+    ["getting-started/troubleshooting.md", "last-known-good Catalog active", /troubleshooting/i],
+    ["getting-started/troubleshooting.md", "next natural\naddon load", /troubleshooting/i],
+    ["development/discovery-collector.md", "previous completed Catalog snapshot", /discovery-collector/i],
     ["reference/logging.md", "native", /logging/i],
-    ["features/interface.md", "Last saved source", /interface/i],
-    ["features/interface.md", "before\nimport", /interface/i],
-    ["features/interface.md", "saved state and importable counts", /interface/i],
-    ["features/interface.md", "Environment/folder changes discard older pending results", /interface/i],
-    ["features/interface.md", "last-save timestamp", /interface/i],
-    ["features/interface.md", "Refresh Saved Source", /interface/i],
+    ["features/interface.md", "single PixelBeacon lifecycle", /interface/i],
+    ["features/interface.md", "Separate Data installation/remediation rows are retired", /interface/i],
+    ["features/interface.md", "Catalog maintenance runs automatically", /interface/i],
+    ["features/interface.md", "Disable Catalog maintenance", /interface/i],
+    ["features/interface.md", "Disable native encounter log processing", /interface/i],
+    ["features/interface.md", "gray/inactive", /interface/i],
+    ["features/interface.md", "next natural addon load", /interface/i],
+    ["features/interface.md", "Import\nSaved Capture", /interface/i],
+    ["features/interface.md", "Delete confirmations", /interface/i],
     ["features/interface.md", "Refresh Imported History", /interface/i],
     ["reference/status-reference.md", "Last saved source", /status-reference/i],
     ["reference/status-reference.md", "empty session", /status-reference/i],
     ["reference/encounter-data-and-metrics.md", "successful and failed import", /encounter-data/i],
     ["reference/settings.md", "Application Logging", /settings/i],
+    ["reference/encounter-data-and-metrics.md", "does not load that recorder", /encounter-data/i],
+    ["getting-started/responsible-use.md", "starts and resumes without a chat", /responsible-use/i],
+    ["getting-started/responsible-use.md", "never uploads it", /responsible-use/i],
+    ["reference/glossary.md", "without loading the former encounter recorder", /glossary/i],
+    ["SUMMARY.md", "Automatic Catalog Maintenance", /SUMMARY/i],
+    ["development/README.md", "Automatic Catalog Collection", /README/i],
   ]) {
     const incomplete = new Map(pages);
     incomplete.set(page, incomplete.get(page).replaceAll(phrase, "Removed instruction"));
@@ -1199,7 +1216,7 @@ test("S087 binds deliberate plain blocks to exact content and rationale", () => 
   assert.match(validateDocumentationCodeFences(new Map([["guide.md", source]]), { complete: false, plainExceptions: [{ ...plainExceptions[0], rationale: "flow" }] }).join("\n"), /rationale/i);
 });
 
-test("S087 requires the complete canonical 26-fence repository inventory", async () => {
+test("S087 requires the complete canonical 21-fence repository inventory", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationCodeFences(pages), []);
 });
@@ -1967,12 +1984,15 @@ test("rejects erased specification units and safety statements", async () => {
     "unused slot, nil API result",
     "sampled and published together",
     "special or temporary hotbar",
+    "Management requires the ownership marker, declared inventory, regular files",
+    "ordinary PixelBeacon installation action inside ESO Weave supplies the complete single companion package",
   ]) {
     const anchor = multiDestination.destinations.find((item) => item.requiredExcerpt.includes(phrase));
     assert.ok(anchor, `missing test anchor for ${phrase}`);
     const removed = structuredClone(corpus);
     removed.textFiles = new Map(corpus.textFiles);
-    removed.textFiles.set(anchor.path, removed.textFiles.get(anchor.path).replace(anchor.requiredExcerpt, ""));
+    // Ownership appears in both the specification unit and the safety crosswalk.
+    removed.textFiles.set(anchor.path, removed.textFiles.get(anchor.path).replaceAll(anchor.requiredExcerpt, ""));
     assert.match(
       validateMigrationLedger(ledger, removed).join("\n"),
       /10\. PixelBeacon Companion Addon: required excerpt is missing/,
@@ -2021,7 +2041,7 @@ test("rejects erased specification units and safety statements", async () => {
       "fixed trailing region is reserved only for System and State",
       "At most two lifecycle actions",
       "primary-then-secondary horizontal row",
-      "managed-marker uninstall guard and confirmation",
+      "managed-ownership guard and confirmation",
       "grows sub-linearly with the window on both axes",
       "colorizes events by level",
       "resizable between a six-line readable minimum and the space above it",
@@ -3063,17 +3083,26 @@ test("S089 requires local containment, readable tokens, visible guidance, and st
   }
 });
 
-test("S092 keeps desktop command ingress empty and user controls explicit", async () => {
+test("S129 keeps desktop ingress empty and automatic Catalog lifecycle explicit", async () => {
   const root = path.resolve(".");
   const decision = await readFile(path.join(root, "docs", "src", "development", "companion-addon-commands.md"), "utf8");
-  const catalog = await readFile(path.join(root, "addon", "EsoWeaveData", "Catalog.lua"), "utf8");
-  const encounter = await readFile(path.join(root, "addon", "EsoWeaveData", "Encounter.lua"), "utf8");
-  const runtime = `${catalog}\n${encounter}`;
-  assert.match(decision, /approved desktop command vocabulary is empty/i);
-  assert.match(decision, /\/ewcollect/);
-  assert.match(decision, /\/ewencounter/);
-  for (const forbidden of ["CreateDefaultActionBind", "BindKeyToAction", "SendHTTPRequest", "RequestOpenUnsafeURL", "CopyToClipboard"]) {
-    assert.equal(runtime.includes(forbidden), false, `runtime command ingress surface: ${forbidden}`);
+  const catalog = await readFile(path.join(root, "addon", "PixelBeacon", "Catalog.lua"), "utf8");
+  const bootstrap = await readFile(path.join(root, "addon", "PixelBeacon", "EsoWeaveData.lua"), "utf8");
+  const manifest = await readFile(path.join(root, "addon", "PixelBeacon", "PixelBeacon.txt"), "utf8");
+  assert.match(decision, /real-time desktop-to-addon command\s+vocabulary remains empty/i);
+  assert.match(decision, /next natural\s+addon load/i);
+  assert.match(decision, /Desktop Catalog disable cancels desktop scheduling/i);
+  assert.match(catalog, /EVENT_PLAYER_ACTIVATED/);
+  assert.match(catalog, /MAX_SERIALIZE_BYTES_PER_TICK/);
+  assert.match(catalog, /MAX_STEPS_PER_TICK/);
+  assert.match(catalog, /RequestAddOnSavedVariablesPrioritySave/);
+  assert.match(bootstrap, /EsoWeaveDataSaved/);
+  assert.match(manifest, /## SavedVariables: EsoWeaveDataSaved/);
+  assert.equal(manifest.includes("Encounter.lua"), false);
+  assert.equal(catalog.includes("SLASH_COMMANDS"), false);
+  const runtime = catalog + "\n" + bootstrap;
+  for (const forbidden of ["CreateDefaultActionBind", "BindKeyToAction", "SendHTTPRequest", "RequestOpenUnsafeURL", "CopyToClipboard", "ReloadUI("]) {
+    assert.equal(runtime.includes(forbidden), false, 'runtime command ingress surface: ' + forbidden);
   }
 });
 

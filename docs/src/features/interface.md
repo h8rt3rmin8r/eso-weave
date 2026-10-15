@@ -12,7 +12,7 @@ region, and optional application log panel.
 | --- | --- |
 | Menu bar | Settings, Exit, Application Log, and the offline Documentation action |
 | Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, and one composed Quickslot classification, availability, and cooldown row |
-| System and State | Game/provider state, World State, ESO Weave state, PixelBeacon Status and Signal, first-class ESO Weave Data lifecycle and evidence, Fishing, and Auto Potion |
+| System and State | Game/provider state, World State, ESO Weave state, one PixelBeacon lifecycle and Signal, current Catalog identity, Fishing, and Auto Potion |
 | Skills | Slot label, enablement, weave type, timing override, effective delay, and cooldown |
 | Application Log | Recent structured events with a local level filter |
 
@@ -43,39 +43,9 @@ Dashboard rows reserve stable label and interaction regions. Dynamic values use
 the remaining width, and full constrained text is available through pointer hover
 and keyboard focus, with identical text for both access paths. A fixed trailing
 region is reserved only for System and State interactions. PixelBeacon actions
-use equal compact sizes and share a right-aligned column with toggles. ESO Weave
-Data appears immediately beneath PixelBeacon with uniquely named Install,
-Update, Repair, and Uninstall actions when each action is safe. Managed drift
-exposes both Update and Repair without hiding removal. Each addon has its own
-marker guard and unmistakable uninstall confirmation.
-At most two lifecycle actions share a primary-then-secondary horizontal row.
-Every uninstall retains the managed-marker uninstall guard and confirmation.
+use equal compact sizes and share a right-aligned column with toggles. The single PixelBeacon lifecycle manages the combined package with exact ownership, inventory and transactional recovery checks. Separate Data installation/remediation rows are retired. At most two lifecycle actions share a primary-then-secondary horizontal row. Uninstall retains its managed-ownership guard and confirmation.
 
-Choose **Data Details** beside **Addon Next Step** for package status and setup
-instructions. Essential **Addon Next Step** text wraps completely, and the
-scrolling details body keeps Close reachable in a short window. **Addon Management** says whether ESO Weave can manage the files;
-**Addon Package Version** compares them with the bundled package. **Enabled in
-ESO** and **Loaded in ESO** remain **Unconfirmed** because file
-installation and an active game process do not prove those facts. Check ESO's
-Add-Ons menu and reload after changes. **Reload Reminder** explains when that
-reload is needed, and **ESO Client** describes the game process only.
-
-**Catalog Collection** and **Encounter Recording** describe separate workflows.
-Their current state may be **Unknown (check inside ESO)**.
-For current status, run `/ewcollect status` or `/ewencounter status` inside ESO.
-**Data Details** also provides **Record a fight** and **Open Encounter History**.
-The recording guide orders enablement, environment/mode, start, fight, save,
-import and view, with individual **Copy** actions for commands entered in ESO.
-Continuous recording and recovery appear in a separate disclosure.
-
-**Last saved source** inspects the selected environment's disk file before
-import, showing its path, last-save timestamp, saved state and importable counts.
-**Refresh Saved Source** rereads it. These facts cannot establish current
-enablement, loading or recording activity; the current-recording row stays
-unknown. Environment/folder changes discard older pending results.
-The desktop does not send recording commands or write ESO's live addon data.
-Each row has the same explanation on hover and keyboard focus. Closing the
-modal returns focus to the lifecycle surface.
+Catalog maintenance runs automatically. File no longer exposes Catalog Update, and the dashboard no longer asks for Review or Dismiss. File > Settings contains two direct controls: **Disable Catalog maintenance** and **Disable native encounter log processing**. They retain independent choices and are gray/inactive without a compatible combined addon. Neither changes gameplay automation or ESO's native logger. Desktop disable stops scheduling directly; loaded Lua observes its startup preference at the next natural addon load. Native watcher implementation and the complete encounter-viewer retirement remain subsequent program work.
 
 **File > Encounter History** imports saved fights for later analysis. **Import
 Saved Capture** reads ESO's saved addon file for the selected environment;
@@ -173,8 +143,8 @@ absolute size increases while it occupies a progressively smaller fraction of a
 larger window. It never exceeds 1040 by 1120 logical points or 92 percent of the
 window. Settings are persisted through a coalesced save without a separate Save
 action. Fishing controls and scalar Pixel Bus reader controls apply to their
-running subsystems. PixelBeacon Block Size remains staged and requires managed
-addon redeploy, `/reloadui` or relog, and ESO Weave restart; see the
+running subsystems. PixelBeacon Block Size remains staged: managed redeploy writes
+the package, Lua uses it at the next natural addon load and the reader at its next start; see the
 [Settings Reference](../reference/settings.md#application-timing).
 
 Its rendered rectangle equals its computed extent. The room above the body is

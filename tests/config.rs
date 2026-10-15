@@ -28,6 +28,20 @@ fn round_trip_preserves_settings() {
 }
 
 #[test]
+fn malformed_catalog_optout_does_not_reset_a_valid_native_optout() {
+    let root = tmp();
+    fs::write(root.path().join("config.json"), r#"{"schema_version":1,"logging":{"level":"debug"},"data_maintenance":{"catalog_disabled":"invalid","native_processing_disabled":true}}"#).unwrap();
+    let loaded = config::load(root.path());
+    assert!(loaded.settings.data_maintenance.native_processing_disabled);
+    assert!(!loaded.settings.data_maintenance.catalog_disabled);
+    assert_eq!(loaded.settings.logging.level, LevelName::Debug);
+    assert!(loaded
+        .notices
+        .iter()
+        .any(|notice| notice.kind == NoticeKind::InvalidValue));
+}
+
+#[test]
 fn file_encoding_has_no_bom_lf_and_trailing_newline() {
     let dir = tmp();
     config::save(dir.path(), &Settings::default()).unwrap();

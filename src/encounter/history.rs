@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -74,23 +75,29 @@ impl HistoryDiagnostic {
 pub struct EncounterHistoryService {
     store_path: PathBuf,
     catalog_path: Arc<RwLock<PathBuf>>,
+    catalog_registry_root: Option<PathBuf>,
+    catalog_registry_paths: Arc<RwLock<BTreeMap<PathBuf, PathBuf>>>,
 }
 
 impl EncounterHistoryService {
     pub fn new(application_root: impl AsRef<Path>, catalog_path: impl Into<PathBuf>) -> Self {
-        Self::from_paths(
+        let mut service = Self::from_paths(
             application_root
                 .as_ref()
                 .join("encounters")
                 .join("encounters.sqlite"),
             catalog_path,
-        )
+        );
+        service.catalog_registry_root = Some(application_root.as_ref().to_path_buf());
+        service
     }
 
     pub fn from_paths(store_path: impl Into<PathBuf>, catalog_path: impl Into<PathBuf>) -> Self {
         Self {
             store_path: store_path.into(),
             catalog_path: Arc::new(RwLock::new(catalog_path.into())),
+            catalog_registry_root: None,
+            catalog_registry_paths: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 
@@ -99,10 +106,46 @@ impl EncounterHistoryService {
     }
 
     pub fn set_catalog_path(&self, catalog_path: impl Into<PathBuf>) {
+        let catalog_path = catalog_path.into();
+        self.register_catalog_path(catalog_path.clone());
         *self
             .catalog_path
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = catalog_path.into();
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = catalog_path;
+    }
+
+    /// Historical registries are shared by every service clone. Registration does
+    /// not replace the main Live catalog or change any selected generation.
+    pub fn register_catalog_path(&self, path: PathBuf) {
+        let Some(registry) = crate::catalog_update::CatalogUpdateService::for_catalog_path(&path)
+        else {
+            return;
+        };
+        let Ok(root) = fs::canonicalize(registry.roots().root()) else {
+            return;
+        };
+        if self
+            .catalog_registry_paths
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&root)
+            == Some(&path)
+        {
+            return;
+        }
+        let Some(directory) = path.parent() else {
+            return;
+        };
+        if crate::catalog_pipeline::inspect_candidate(directory).is_err() {
+            return;
+        }
+        let mut paths = self
+            .catalog_registry_paths
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if paths.contains_key(&root) || paths.len() < 16 {
+            paths.insert(root, path);
+        }
     }
 
     pub fn snapshot(&self) -> Result<Vec<EncounterSummary>, HistoryDiagnostic> {
@@ -284,18 +327,66 @@ impl EncounterHistoryService {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-        let catalog = CatalogAccess::open_or_empty(catalog_path);
+        let mut catalog = CatalogAccess::open_or_empty(&catalog_path);
+        let matches_version = catalog.release().ok().flatten().is_some_and(|release| {
+            release.channel == capture.channel
+                && release.api_version == capture.source.api_version
+                && release.game_version == capture.source.game_version
+        });
+        if !matches_version {
+            let mut registries =
+                crate::catalog_update::CatalogUpdateService::for_catalog_path(&catalog_path)
+                    .into_iter()
+                    .collect::<Vec<_>>();
+            let paths = self
+                .catalog_registry_paths
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .values()
+                .cloned()
+                .collect::<Vec<_>>();
+            registries.extend(paths.iter().filter_map(|path| {
+                crate::catalog_update::CatalogUpdateService::for_catalog_path(path)
+            }));
+            if let Some(root) = &self.catalog_registry_root {
+                registries.push(
+                    crate::catalog_update::CatalogUpdateService::new_for_channel(
+                        root,
+                        &catalog_path,
+                        capture.channel,
+                    ),
+                );
+            }
+            let resolution = registries
+                .iter()
+                .find_map(|registry| {
+                    registry.resolve_catalog_for_version(
+                        capture.channel,
+                        capture.source.api_version,
+                        &capture.source.game_version,
+                    )
+                })
+                .or_else(|| {
+                    registries.iter().find_map(|registry| {
+                        registry
+                            .resolve_catalog_for_api(capture.channel, capture.source.api_version)
+                    })
+                });
+            if let Some(resolution) = resolution {
+                catalog = resolution.access;
+            }
+        }
         if let Some(diagnostic) = catalog.diagnostic() {
             let (kind, message) = match diagnostic.kind {
                 CatalogDiagnosticKind::Missing | CatalogDiagnosticKind::Unavailable => (
                     HistoryDiagnosticKind::CatalogUnavailable,
-                    "Game-data definitions are unavailable, so encounter metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog when one is available.",
+                    "Game-data definitions are unavailable, so encounter metrics cannot be calculated. Your imported recordings remain stored.",
                 ),
                 CatalogDiagnosticKind::Corrupt
                 | CatalogDiagnosticKind::Incompatible
                 | CatalogDiagnosticKind::Checksum => (
                     HistoryDiagnosticKind::CatalogInvalid,
-                    "The catalog of game-data definitions is damaged or unsupported, so metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog or roll back to a previous verified one.",
+                    "The catalog of game-data definitions is damaged or unsupported, so metrics cannot be calculated. Your imported recordings remain stored.",
                 ),
             };
             return Err(HistoryDiagnostic::new(kind, message));
@@ -305,7 +396,7 @@ impl EncounterHistoryService {
             .map_err(|_| {
                 HistoryDiagnostic::new(
                     HistoryDiagnosticKind::CatalogInvalid,
-                    "The catalog's game-data identity could not be checked, so metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog or roll back to a previous verified one.",
+                    "The catalog's game-data identity could not be checked, so metrics cannot be calculated. Your imported recordings remain stored.",
                 )
             })?
             .ok_or_else(|| {
@@ -317,7 +408,7 @@ impl EncounterHistoryService {
         if release.channel != capture.channel || release.api_version != capture.source.api_version {
             return Err(HistoryDiagnostic::new(
                 HistoryDiagnosticKind::VersionMismatch,
-                "The catalog's Live or PTS environment or game API version differs from this recording, so metrics cannot be calculated. Your imported recording remains stored. It needs matching game-data definitions; Catalog Update currently installs Live catalogs only, so PTS metrics may remain unavailable.",
+                "Matching definitions for this recording's environment and game API version are unavailable, so metrics cannot be calculated. Your imported recording remains stored.",
             ));
         }
 

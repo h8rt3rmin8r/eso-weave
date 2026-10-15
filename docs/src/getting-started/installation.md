@@ -96,7 +96,16 @@ state directory is available, otherwise the platform configuration root.
 
 Windows packages use `cargo-wix` and support installation, removal,
 upgrade-in-place, and Start Menu and optional desktop shortcuts. The MSI does not write
-to ESO or Documents directories. PixelBeacon installation is a separate action inside ESO Weave.
+to ESO or Documents directories. The ordinary PixelBeacon installation action
+inside ESO Weave supplies the complete single companion package, including
+automatic Catalog collection. Recognized managed legacy PixelBeacon and ESO
+Weave Data packages migrate automatically when their actual Live or PTS context
+is discovered. Existing SavedVariables and desktop history remain intact; no
+second addon installation is required. Current PixelBeacon.txt saves use
+SavedVariables/PixelBeacon.lua. The retained legacy EsoWeaveData.lua is read
+separately by desktop Catalog and encounter compatibility paths, not loaded by
+the new addon or copied into its current save. New Lua and startup preferences take
+effect at the next natural addon load or game session.
 
 Linux releases include a `.deb`, AppImage, and tarball. Release assets include a
 combined `SHA256SUMS` file. Release binaries are produced by CI from tagged

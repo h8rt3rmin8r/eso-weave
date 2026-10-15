@@ -208,7 +208,7 @@ fn help_menu_exposes_the_offline_documentation_action() {
 }
 
 #[test]
-fn file_menu_opens_the_accessible_catalog_update_modal() {
+fn file_menu_retires_manual_catalog_update_and_keeps_other_navigation() {
     let mut harness = harness_at(egui::vec2(760.0, 1000.0));
     for _ in 0..SETTLE {
         harness.step();
@@ -217,33 +217,68 @@ fn file_menu_opens_the_accessible_catalog_update_modal() {
         .get_by_role_and_label(egui::accesskit::Role::Button, "File")
         .click_accesskit();
     harness.step();
-    harness
-        .get_by_role_and_label(
-            egui::accesskit::Role::Button,
-            eso_weave::app::strings::MENU_CATALOG_UPDATE,
-        )
-        .click_accesskit();
-    harness.step();
-    harness.get_by_label("Catalog Update");
-    harness.get_by_label(
-            "A catalog contains game-data definitions used to identify recorded abilities and effects. Updating it does not start encounter recording or delete history. You choose when to install a reviewed update; file checks detect changes but do not identify its supplier.",
-    );
-    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Refresh candidates");
     assert!(harness
         .query_by_role_and_label(
-            egui::accesskit::Role::CheckBox,
-            "I trust this catalog's source",
+            egui::accesskit::Role::Button,
+            eso_weave::app::strings::MENU_CATALOG_UPDATE
         )
         .is_none());
-    assert!(harness
-        .query_by_role_and_label(egui::accesskit::Role::Button, "Install/update data addon",)
-        .is_none());
-    assert!(harness
-        .query_by_role_and_label(egui::accesskit::Role::Button, "Uninstall data addon")
-        .is_none());
-    harness.key_press(egui::Key::Escape);
-    harness.step();
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Settings");
+    harness.get_by_role_and_label(
+        egui::accesskit::Role::Button,
+        eso_weave::app::strings::MENU_ENCOUNTER_HISTORY,
+    );
     assert!(!harness.state().catalog_update_open());
+    assert!(harness.query_by_label("Review").is_none());
+    assert!(harness.query_by_label("Dismiss").is_none());
+}
+
+#[test]
+fn data_optouts_are_direct_accessible_and_inactive_without_a_combined_package() {
+    for theme in [Theme::Dark, Theme::Light] {
+        for available in [false, true] {
+            for keyboard in [false, true] {
+                let settings = Settings {
+                    ui: eso_weave::app::settings_form::ui_to_value(&UiPrefs {
+                        theme,
+                        ..UiPrefs::default()
+                    }),
+                    ..Settings::default()
+                };
+                let mut app = test_app_with_settings(settings);
+                let control = app.data_maintenance_control();
+                control.set_presence(available);
+                app.set_settings_open(true);
+                let mut harness = harness_for_app(app, egui::vec2(1200.0, 2200.0));
+                for _ in 0..SETTLE {
+                    harness.step();
+                }
+                for label in [
+                    "Disable Catalog maintenance",
+                    "Disable native encounter log processing",
+                ] {
+                    let node =
+                        harness.get_by_role_and_label(egui::accesskit::Role::CheckBox, label);
+                    assert_eq!(node.accesskit_node().is_disabled(), !available);
+                    if keyboard {
+                        node.focus();
+                        harness.key_press(egui::Key::Space);
+                        harness.step();
+                    } else if available {
+                        node.click_accesskit();
+                        harness.step();
+                    }
+                }
+                assert_eq!(control.preferences().catalog_disabled, available);
+                assert_eq!(control.preferences().native_processing_disabled, available);
+                assert!(harness
+                    .query_by_role_and_label(egui::accesskit::Role::Button, "Apply")
+                    .is_none());
+                assert!(harness.query_by_label("Review").is_none());
+                assert!(harness.query_by_label("Dismiss").is_none());
+            }
+        }
+    }
 }
 
 struct FailingDocumentationOpener;
@@ -583,9 +618,12 @@ fn lifecycle_action_matrix_keeps_one_column_and_dispatches_install() {
         .is_file());
 
     let current_root = tempfile::tempdir().unwrap();
-    let current_addon = current_root.path().join("PixelBeacon");
-    std::fs::create_dir_all(&current_addon).unwrap();
-    std::fs::write(current_addon.join("PixelBeacon.txt"), MANIFEST).unwrap();
+    beacon::install(
+        current_root.path(),
+        beacon::RunningState::NotRunning,
+        beacon::DEFAULT_API_VERSION,
+    )
+    .unwrap();
     let mut current = harness_for_app(
         test_app_with_settings(beacon_settings(current_root.path())),
         egui::vec2(1200.0, 1000.0),
@@ -608,7 +646,7 @@ fn lifecycle_action_matrix_keeps_one_column_and_dispatches_install() {
 }
 
 #[test]
-fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
+fn s129_combined_addon_has_one_lifecycle_and_no_separate_data_actions() {
     for width in [760.0, 1200.0] {
         let root = tempfile::tempdir().unwrap();
         let settings = Settings {
@@ -623,76 +661,137 @@ fn s093_data_addon_row_follows_pixelbeacon_and_exposes_unique_actions() {
         for _ in 0..SETTLE {
             harness.step();
         }
-
         let beacon = harness.get_by_label("PixelBeacon Status").rect();
-        let data = harness.get_by_label("ESO Weave Data").rect();
         let signal = harness.get_by_label("PixelBeacon Signal").rect();
-        assert!(beacon.top() < data.top());
-        assert!(data.top() < signal.top());
-
+        assert!(beacon.top() < signal.top());
+        for label in [
+            "ESO Weave Data",
+            "Addon Next Step",
+            "Install Data",
+            "Update Data",
+            "Repair Data",
+            "Uninstall Data",
+            "Data Details",
+        ] {
+            assert!(
+                harness.query_by_label(label).is_none(),
+                "obsolete separate lifecycle: {label}"
+            );
+        }
         harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, "Install Data")
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Install")
             .click_accesskit();
         for _ in 0..SETTLE {
             harness.step();
         }
-        assert!(root
-            .path()
-            .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
-            .join(eso_weave::data_addon::MANIFEST_FILE)
-            .is_file());
-        harness.get_by_label("Addon Next Step");
-        harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, "Data Details")
-            .click_accesskit();
-        for _ in 0..2 {
-            harness.step();
-        }
-        harness.get_by_label("ESO Weave Data Details");
-        harness.get_by_label("Install for Live or PTS, enable ESO Weave Data in ESO's Add-Ons menu, then /reloadui if ESO is open. Files on disk cannot confirm enablement or current recording.");
-        for label in [
-            "Addon Management",
-            "Addon Package Version",
-            "Enabled in ESO",
-            "Loaded in ESO",
-            "Reload Reminder",
-            "ESO Client",
-            "Catalog Collection",
-            "Encounter Recording",
-        ] {
-            harness.get_by_label(label);
-        }
-        harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, "Close Data Details")
-            .click_accesskit();
-        for _ in 0..2 {
-            harness.step();
-        }
-        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Repair Data");
-        harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall Data")
-            .click_accesskit();
-        for _ in 0..2 {
-            harness.step();
-        }
-        harness.get_by_label("Remove the managed ESO Weave Data addon files? ESO's saved recordings and collected catalog data, imported encounter history, and PixelBeacon are kept. Reload ESO if it is open.");
-        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Data Uninstall");
+        assert!(beacon::inspect_presence(root.path()).unwrap().eligible());
+        assert!(!root.path().join("EsoWeaveData").exists());
+        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall");
+        assert!(harness
+            .query_by_role_and_label(egui::accesskit::Role::Button, "Install")
+            .is_none());
     }
 }
 
 #[test]
-fn s093_outdated_data_addon_offers_update_repair_and_uninstall() {
+fn s129_combined_uninstall_confirmation_is_truthful_and_shared_by_legacy_requests() {
+    const CONFIRMATION: &str = "Remove the combined PixelBeacon addon files (beacon, Catalog collection, startup configuration, and bootstrap)? SavedVariables, imported encounter history, and neighboring addons are kept. Already-loaded Lua remains active until the next natural addon load or game session.";
+    for legacy_request in [false, true] {
+        let tree = tempfile::tempdir().unwrap();
+        let root = tree.path().join("live/AddOns");
+        std::fs::create_dir_all(&root).unwrap();
+        beacon::install(
+            &root,
+            beacon::RunningState::NotRunning,
+            beacon::DEFAULT_API_VERSION,
+        )
+        .unwrap();
+        let saved = tree.path().join("live/SavedVariables/EsoWeaveData.lua");
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
+        std::fs::write(&saved, b"retained catalog and encounter SavedVariables").unwrap();
+        let history = tree.path().join("desktop/history.sqlite");
+        std::fs::create_dir_all(history.parent().unwrap()).unwrap();
+        std::fs::write(&history, b"retained imported history").unwrap();
+        let neighbor = root.join("OtherAddon/keep.lua");
+        std::fs::create_dir_all(neighbor.parent().unwrap()).unwrap();
+        std::fs::write(&neighbor, b"retained neighboring addon").unwrap();
+        let settings = Settings {
+            beacon: beacon::prefs_to_value(&BeaconPrefs {
+                path_override: Some(root.clone()),
+                environment: Environment::Live,
+            }),
+            ..Settings::default()
+        };
+        let mut harness =
+            harness_for_app(test_app_with_settings(settings), egui::vec2(1200.0, 1200.0));
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        if legacy_request {
+            harness.state_mut().set_confirm_data_uninstall(true);
+        } else {
+            harness.state_mut().set_confirm_uninstall(true);
+        }
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        harness.get_by_label(CONFIRMATION);
+        harness.get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Uninstall");
+        for obsolete in ["Confirm Data Uninstall", "Cancel Data Uninstall"] {
+            assert!(
+                harness.query_by_label(obsolete).is_none(),
+                "second lifecycle confirmation: {obsolete}"
+            );
+        }
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Cancel")
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert!(harness.query_by_label(CONFIRMATION).is_none());
+        assert!(root.join("PixelBeacon/PixelBeacon.txt").is_file());
+        // Both request aliases must coalesce into the same confirmation state.
+        harness.state_mut().set_confirm_uninstall(true);
+        harness.state_mut().set_confirm_data_uninstall(true);
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert_eq!(harness.query_all_by_label(CONFIRMATION).count(), 1);
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Confirm Uninstall")
+            .click_accesskit();
+        for _ in 0..SETTLE {
+            harness.step();
+        }
+        assert!(!root.join("PixelBeacon").exists());
+        assert!(harness.query_by_label(CONFIRMATION).is_none());
+        assert_eq!(
+            std::fs::read(&saved).unwrap(),
+            b"retained catalog and encounter SavedVariables"
+        );
+        assert_eq!(
+            std::fs::read(&history).unwrap(),
+            b"retained imported history"
+        );
+        assert_eq!(
+            std::fs::read(&neighbor).unwrap(),
+            b"retained neighboring addon"
+        );
+    }
+}
+
+#[test]
+fn s129_managed_drift_uses_the_combined_update_and_uninstall_actions() {
     let root = tempfile::tempdir().unwrap();
-    eso_weave::data_addon::install(
+    beacon::install(
         root.path(),
-        eso_weave::data_addon::RunningState::NotRunning,
+        beacon::RunningState::NotRunning,
         beacon::DEFAULT_API_VERSION,
     )
     .unwrap();
     std::fs::write(
-        root.path()
-            .join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER)
-            .join(eso_weave::data_addon::CATALOG_FILE),
+        root.path().join("PixelBeacon").join(beacon::CATALOG_FILE),
         "-- managed drift\n",
     )
     .unwrap();
@@ -707,8 +806,15 @@ fn s093_outdated_data_addon_offers_update_repair_and_uninstall() {
     for _ in 0..SETTLE {
         harness.step();
     }
-    for label in ["Update Data", "Repair Data", "Uninstall Data"] {
-        harness.get_by_role_and_label(egui::accesskit::Role::Button, label);
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Update");
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Uninstall");
+    for label in [
+        "Update Data",
+        "Repair Data",
+        "Uninstall Data",
+        "Data Details",
+    ] {
+        assert!(harness.query_by_label(label).is_none());
     }
 }
 
@@ -853,31 +959,12 @@ impl AddonSurfaceState {
         Self::RemediationRequired,
     ];
 
-    fn system_label(self) -> &'static str {
-        match self {
-            Self::Missing => "Not installed",
-            Self::Installed => "Installed",
-            Self::Outdated => "API unknown; open Data Details | Installed (outdated)",
-            Self::Incompatible | Self::RemediationRequired => "Installed",
-        }
-    }
-
     fn modal_label(self) -> &'static str {
         match self {
             Self::Missing => "Not installed",
             Self::Installed | Self::Outdated => "Current",
             Self::Incompatible => "Update available",
             Self::RemediationRequired => "Unmanaged",
-        }
-    }
-
-    fn expected_action(self) -> &'static str {
-        match self {
-            Self::Missing => "Install Data",
-            Self::Installed => "Repair Data",
-            Self::Outdated => "Update",
-            Self::Incompatible => "Update Data",
-            Self::RemediationRequired => "Data Details",
         }
     }
 }
@@ -954,7 +1041,7 @@ fn expanded_system_state_surface_rejects_painted_text_overlap() {
         for text_scale in [1.0, 1.25] {
             for width in [760.0, DASHBOARD_WIDE_MIN, 900.0, 1200.0] {
                 for state in AddonSurfaceState::ALL {
-                    let (_root, settings) = addon_surface_settings(theme, state);
+                    let (root, settings) = addon_surface_settings(theme, state);
                     let mut harness = harness_for_app(
                         test_app_with_settings(settings),
                         egui::vec2(width, 1200.0),
@@ -969,14 +1056,23 @@ fn expanded_system_state_surface_rejects_painted_text_overlap() {
                     for _ in 0..SETTLE {
                         harness.step();
                     }
-                    assert!(
-                        harness.query_all_by_label(state.system_label()).count() >= 1,
-                        "missing full-surface state label for {state:?}"
-                    );
-                    harness.get_by_role_and_label(
-                        egui::accesskit::Role::Button,
-                        state.expected_action(),
-                    );
+                    harness.get_by_label("PixelBeacon Status");
+                    let action = match beacon::status(root.path()) {
+                        beacon::BeaconStatus::NotInstalled => Some("Install"),
+                        beacon::BeaconStatus::ManagedUpToDate => Some("Uninstall"),
+                        beacon::BeaconStatus::ManagedVersionMismatch => Some("Update"),
+                        beacon::BeaconStatus::Unmanaged => None,
+                    };
+                    if let Some(action) = action {
+                        harness.get_by_role_and_label(egui::accesskit::Role::Button, action);
+                    } else {
+                        for action in ["Install", "Update", "Uninstall"] {
+                            assert!(harness
+                                .query_by_role_and_label(egui::accesskit::Role::Button, action)
+                                .is_none());
+                        }
+                    }
+                    assert!(harness.query_by_label("ESO Weave Data").is_none());
                     let (_, system) = harness
                         .state()
                         .dashboard_rects()

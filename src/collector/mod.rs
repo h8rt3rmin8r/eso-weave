@@ -15,6 +15,9 @@ pub use import::{import_capture, ImportReceipt};
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 1;
 pub const COLLECTOR_VERSION: u32 = 1;
+// The prior managed v1 package remains an accepted source of retained captures.
+const LEGACY_COLLECTOR_CHECKSUM: &str =
+    "0981ad6bb2497b789d3cbc09e3c5eba3d99987d309515ec57a50cb65998d3af4";
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_CAPTURE_RECORDS: usize = 500_000;
 pub const MAX_CAPTURE_STRING_BYTES: usize = 64 * 1024;
@@ -24,7 +27,14 @@ pub const MAX_PARSE_DEPTH: usize = 16;
 pub const MAX_PARSE_TOKENS: usize = crate::data_addon::MAX_SAVED_VARIABLES_TOKENS;
 pub const MAX_TABLE_ENTRIES: usize = crate::data_addon::MAX_SAVED_VARIABLES_ENTRIES;
 
-pub const CATEGORIES: [&str; 5] = [
+pub const CATEGORIES: [&str; 12] = [
+    "ability-metadata",
+    "effects-and-status",
+    "items-and-gear",
+    "consumables",
+    "mundus-effects",
+    "combat-statistics",
+    "constants",
     "player-skills",
     "crafted-abilities",
     "item-sets",
@@ -97,6 +107,8 @@ pub struct CollectorRecord {
     pub source_key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<RecordParent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parents: Vec<RecordParent>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attributes: BTreeMap<String, serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -241,7 +253,9 @@ fn validate_envelope(envelope: &mut CollectorEnvelope) -> Result<(), CollectorEr
             envelope.collector_version
         ));
     }
-    if envelope.collector_checksum != embedded_checksum() {
+    if envelope.collector_checksum != embedded_checksum()
+        && envelope.collector_checksum != LEGACY_COLLECTOR_CHECKSUM
+    {
         return invalid("collector checksum does not match the embedded managed version");
     }
     if envelope.status != CaptureStatus::Complete {
@@ -264,7 +278,7 @@ fn validate_envelope(envelope: &mut CollectorEnvelope) -> Result<(), CollectorEr
     if envelope.selected_categories.is_empty()
         || envelope.selected_categories.len() > CATEGORIES.len()
     {
-        return invalid("capture must select between one and five categories");
+        return invalid("capture must select between one and twelve categories");
     }
     let selected: BTreeSet<_> = envelope.selected_categories.iter().cloned().collect();
     if selected.len() != envelope.selected_categories.len()
@@ -334,7 +348,7 @@ fn validate_envelope(envelope: &mut CollectorEnvelope) -> Result<(), CollectorEr
         }
     }
     for record in &records {
-        if let Some(parent) = &record.parent {
+        for parent in record.parent.iter().chain(&record.parents) {
             if !identities.contains(&(parent.kind, parent.stable_id)) {
                 return invalid(format!(
                     "record {} references a missing parent",
@@ -349,13 +363,15 @@ fn validate_envelope(envelope: &mut CollectorEnvelope) -> Result<(), CollectorEr
     }
     let mut covered = BTreeSet::new();
     for coverage in &envelope.coverage {
-        if coverage.completeness != "bounded"
-            || !selected.contains(&coverage.category)
+        if !matches!(
+            coverage.completeness.as_str(),
+            "bounded" | "opportunistic" | "unknown"
+        ) || !selected.contains(&coverage.category)
             || !covered.insert(coverage.category.clone())
             || coverage.scope.is_empty()
             || coverage.limitations.is_empty()
         {
-            return invalid("coverage is duplicate, unsupported, or not bounded");
+            return invalid("coverage is duplicate or unsupported");
         }
         let actual = records
             .iter()
@@ -391,7 +407,7 @@ fn validate_record(
             record.source_key
         ));
     }
-    if let Some(parent) = &record.parent {
+    for parent in record.parent.iter().chain(&record.parents) {
         if parent.stable_id <= 0 || parent.relation.is_empty() {
             return invalid(format!(
                 "record {} has an invalid parent",
@@ -423,7 +439,7 @@ fn validate_record(
 fn validate_record_strings(record: &CollectorRecord) -> Result<(), CollectorError> {
     validate_capture_string(&record.category)?;
     validate_capture_string(&record.source_key)?;
-    if let Some(parent) = &record.parent {
+    for parent in record.parent.iter().chain(&record.parents) {
         validate_capture_string(&parent.relation)?;
     }
     for (name, value) in &record.attributes {
@@ -457,6 +473,22 @@ fn validate_capture_string(value: &str) -> Result<(), CollectorError> {
 fn kind_allowed(category: &str, kind: EntityKind) -> bool {
     use EntityKind::*;
     match category {
+        "ability-metadata" => matches!(kind, Ability),
+        "effects-and-status" => matches!(kind, Effect),
+        "items-and-gear" => matches!(
+            kind,
+            Item | ItemVariant
+                | EquipmentType
+                | ArmorType
+                | WeaponType
+                | Quality
+                | Trait
+                | Enchantment
+        ),
+        "consumables" => matches!(kind, FoodDrink | Potion | Poison),
+        "mundus-effects" => matches!(kind, Mundus),
+        "combat-statistics" => matches!(kind, CombatStat),
+        "constants" => matches!(kind, Constant),
         "player-skills" => matches!(
             kind,
             SkillType | SkillLine | Ability | AbilityProgression | AbilityRank | AbilityMorph

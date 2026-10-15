@@ -1,107 +1,113 @@
-# Bounded Discovery Collector
+# Automatic Catalog Collection
 
-The [catalog evidence lifecycle](catalog-candidate-pipeline.md#evidence-lifecycle-and-runtime-selection)
-places this collector's local-only evidence alongside pinned source snapshots
-without treating collection or candidate review as runtime selection.
+PixelBeacon combines the existing screen-signal publisher with a bounded local
+Catalog collector. After the player and game APIs initialize, enabled Catalog
+maintenance collects definition evidence during ordinary play. It works whether
+native encounter logging is off or on, and whether native processing is disabled.
 
-ESO Weave includes an optional catalog module in the marker-managed
-`EsoWeaveData` addon for collecting
-public ESO API results on the user's own system. It is a deliberate maintainer
-workflow, not part of normal application startup. It does not capture combat,
-send network requests, generate input, modify gameplay, upload data, or package
-game-owned image bytes.
+The collector starts and resumes automatically. Normal load, progress,
+completion, deferral and recovery produce no chat announcements, dialogs or
+player commands. The application exposes the independently persisted **Disable
+Catalog maintenance** preference. Desktop consumption stops immediately when
+disabled. The already-loaded Lua collector receives the package-owned preference
+at its next natural addon load. There is no immediate desktop-to-Lua command
+channel and no requested or forced reload.
 
-**Catalog collection** gathers game-data definitions for a later reviewed catalog
-build. It does not record fights. For player encounter recording, use
-[Encounter Capture](../features/encounter-capture.md). PixelBeacon is the other
-addon and supplies current screen readings; it does not collect catalog data.
+## Identity and source coverage
 
-The first collector version covers five bounded views: player skills, crafted
-abilities, item sets, champion skills, and companions, races, and classes.
-Coverage is truthful only for the recorded character, account unlocks, locale,
-channel, and API version. Iterator positions are retained only as
-version-scoped ordering facts. Stable API IDs remain catalog identity.
+The installed package contains exactly five files: PixelBeacon.txt,
+StartupConfig.lua, EsoWeaveData.lua, PixelBeacon.lua and Catalog.lua. The generated
+startup configuration supplies the Catalog optout and Live/PTS identity from the
+actual installation context. Game version, API version, locale, platform,
+megaserver and character scope come from public game APIs. Settings selection
+does not relabel a capture. Live and PTS evidence cannot be mixed.
 
-## Manage and collect
+The collector now supplies twelve source groups: player skills, crafted
+abilities, ability metadata, effects/status, items/gear, item sets, champion
+skills, consumables, Mundus effects, companions/races/classes, combat statistics
+and constants. Names/descriptions and virtual icon references remain attached to
+actual source IDs. Skill progressions, known ranks and base/morph variants have
+separate typed identities and relationships. Shared script and classification
+entities retain every supported parent relationship.
 
-Normal users manage the exact four-file `EsoWeaveData` package from the
-first-class **ESO Weave Data** row in System and State. It never shares
-PixelBeacon ownership or files. Maintainers can inspect or install against an
-exact Live or PTS `AddOns` directory with the CLI:
+These views are bounded or opportunistic, with unknown coverage when a public
+API view is unavailable. Current inventory, player buffs, active Mundus, current
+race and active companion do not imply global game coverage. The S129 source audit records the exact API paths and remaining gaps. Localized text stays local
+user-generated evidence; virtual icon paths do not supply binary image assets.
 
-```bash
-cargo run --locked --bin catalog-compiler -- collector-status --addons ADDONS
-cargo run --locked --bin catalog-compiler -- collector-install --addons ADDONS --api-version 101050
-```
+## Work, interruption and completion
 
-An existing target without the collector's managed marker is reported as
-`unmanaged` and is never changed. Linked, reparse, and non-regular targets are
-also refused. If ESO is running or its state is uncertain, the result sets
-`reload_required` so the user knows to run `/reloadui` or relog.
+Collection keeps the previous completed Catalog snapshot intact while the next
+generation runs. In-progress records, adapter cursors, duplicate/relationship
+tracking, merge-sort buffers and serialization state exist only in memory.
+Saved maintenance metadata reports an attempt, phase and checkpoint; it is not a
+claim that an incomplete payload can be imported.
 
-In ESO, start an explicit bounded run:
+Combat and player deactivation defer work. A supported reactivation resumes the
+same in-memory generation when its identity is unchanged. Character, locale or
+version changes restart the bounded scan with the new identity. A natural addon
+reload starts a new bounded scan automatically, preserving the last completed
+snapshot loaded from the current manifest's file throughout. Relevant source changes coalesce; repeated known-item
+stack/durability and known-effect duration/stack events do not continuously
+rescan unchanged definitions.
 
-```text
-/ewcollect start live
-/ewcollect status
-```
+Each update issues at most 64 bounded steps and stops issuing work after its
+4 ms budget or 4,096 serialized-byte budget. Final sorting is an incremental
+merge sort. JSON escaping and Adler-32 checksums advance across update ticks;
+individual concatenations are bounded by the 64 KiB record/chunk limit. The
+collector never performs a whole-generation sort, serialization or checksum in
+one callback. It also limits records to 500,000, source/payload bytes to 64 MiB,
+strings/chunks to 64 KiB, chunks to 1,024, distinct parents per entity to 4,096,
+and saved completed generations to one. A bounded in-memory generation and
+identity index are additional temporary state.
 
-The addon performs limited work per update tick. Entering combat pauses the run;
-leave combat and run `/ewcollect resume` to continue. Use `/ewcollect status`
-inside ESO for the current run. `/ewcollect cancel` stops the run and retains an
-incomplete snapshot, which cannot be used for a catalog build. It does not erase
-the collected data. Starting a new run after a completed, cancelled or failed
-run replaces that previous catalog collection, while preserving encounter data.
+Only a complete generation replaces the completed snapshot, in one table
+assignment. Identical payload and provenance/coverage semantics preserve its
+identity. Scan, encoding or resource failure preserves prior completed data and
+retries after 30 seconds. Unsupported saved roots or Catalog schema versions are
+preserved without rewriting them; bounded internal diagnostics describe their
+unavailable state. These details are available to application diagnostics, not
+new player-facing maintenance controls.
 
-Run `/ewcollect start pts` for the Public Test Server, and import with the
-matching channel. A reload does not reconstruct an active collection runtime;
-check status and begin a fresh explicit run if it was interrupted. A completed
-collection still reaches disk only when ESO saves its addon data: run
-`/reloadui`, log out, or exit before importing it. Save or export any completed
-collection you want to retain before starting another.
+## Game-managed save and desktop handoff
 
-## Stage and compile
+The PixelBeacon.txt manifest retains the global table EsoWeaveDataSaved and its
+root schema. ESO names the current disk file SavedVariables/PixelBeacon.lua after
+the manifest, independently of that global name. This follows the
+[addon developer's filename explanation](https://www.esoui.com/forums/showthread.php?page=2&t=8411)
+and [SavedVariables guide](https://esoui.com/forums/showthread.php?p=49082).
 
-The SavedVariables file is `SavedVariables/EsoWeaveData.lua` beside the
-selected environment's `AddOns` directory. Stage it to normalized JSON first:
+The legacy SavedVariables/EsoWeaveData.lua stays on disk and remains readable by
+the desktop Catalog and encounter importers. The new addon does not load that
+other manifest's file or its Encounter.lua recorder. When no current save exists,
+Lua starts a new bounded generation. Desktop accumulation separately reconciles
+compatible old and current facts and keeps previously verified data. It never
+copies, rewrites, or merges the game's SavedVariables files.
 
-```bash
-cargo run --locked --bin catalog-compiler -- import-collector --input SAVED.lua --output STAGED.json --channel live --catalog-version VERSION
-```
+A changed completed generation can request priority through the documented
+AddOnManager:RequestAddOnSavedVariablesPrioritySave API. Requests are coalesced
+and attempted at most once per 30 seconds. A request changes save-queue priority;
+it does not acknowledge a disk write or promise a flush latency. ESO controls
+when SavedVariables become available on disk. Natural save opportunities feed
+the [background Catalog service](catalog-updates.md), which detects
+stable completed content, assembles compatible evidence, verifies an immutable
+SQLite generation and activates it automatically.
 
-Import is intentionally separate from SQLite publication. Review the redacted
-receipt and staged coverage, then use the ordinary
-[catalog compiler](catalog-compiler.md) build command. Live and PTS inputs remain
-separate and a channel mismatch fails before output changes.
+## Import contract and retained data
 
-The importer never evaluates Lua. Its receipt hashes the pseudonymous scope key
-instead of printing it. It accepts one fixed SavedVariables table
-grammar, requires a complete envelope, verifies the embedded collector SHA-256,
-contiguous JSON-line chunks, Adler-32 metadata, category identities, and parent
-relationships, then validates the result through the S070 catalog model. Limits
-are checked before or during parsing: a 128 MiB shared-file envelope, 500,000
-catalog records, 64 KiB
-strings and chunks, 1,024 chunks, bounded nesting, tokens, and table entries.
-Malformed, partial, oversized, aliased, or unsupported input leaves existing
-staged output unchanged.
+The importer never executes Lua. It projects the Catalog subtree from the shared
+SavedVariables grammar, requires a complete envelope, checks a recognized
+collector checksum, validates contiguous JSON-line chunks and Adler-32 metadata,
+checks typed source IDs and every parent, and validates the normalized Catalog
+model. The shared-file parser additionally bounds input to 128 MiB, strings,
+nesting, tokens and table entries. Invalid, partial, oversized, aliased or
+unsupported source leaves existing staged and active data intact.
 
-Localized names and descriptions in staged output remain user-generated local
-records. Icon values are reference-only virtual paths. Neither becomes a
-redistributable ESO Weave asset.
+Recognized legacy version-1 captures remain readable. The legacy single-parent
+field remains accepted; new captures include the complete distinct parents
+array. No player collection, build, import, review, retry or clear action is
+required. Uninstalling the managed package preserves SavedVariables, immutable
+Catalogs, source evidence and retained encounter history.
 
-## Remove
-
-Normal users choose **Uninstall Data** in System and State and accept the
-data-specific confirmation. Maintainers can remove only a managed package with:
-
-```bash
-cargo run --locked --bin catalog-compiler -- collector-remove --addons ADDONS
-```
-
-Removal never deletes SavedVariables, staged JSON, catalogs, or an unmanaged
-addon directory. Use `/ewcollect clear confirm` in ESO to clear only the catalog
-subtree while preserving encounter data.
-Clear also preserves imported desktop encounter history, both addon packages
-and the active catalog. Save in ESO to write the cleared state to disk. An
-unsupported saved-data version remains preserved and cannot be cleared by the
-current module; update to a compatible release instead of editing its version.
+Repository Lua doubles and stable-file tests verify these contracts. They do not
+prove exhaustive ESO visibility, installed game behavior or game save timing.

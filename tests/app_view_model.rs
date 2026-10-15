@@ -69,6 +69,64 @@ fn ultimate_view_selects_exact_active_bar_cost_and_readiness() {
 }
 
 #[test]
+fn data_optouts_persist_immediately_and_absence_rejects_stale_form_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let mut harness = retention_harness(root.path(), 120);
+    let control = harness.model.data_maintenance_control();
+    control.set_presence(true);
+    let mut form = harness.model.settings_form();
+    form.data_maintenance.catalog_disabled = true;
+    harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+    assert!(
+        eso_weave::config::load(root.path())
+            .settings
+            .data_maintenance
+            .catalog_disabled
+    );
+    assert!(!control.preferences().native_processing_disabled);
+    control.set_presence(false);
+    let mut stale = harness.model.settings_form();
+    stale.data_maintenance.catalog_disabled = false;
+    stale.data_maintenance.native_processing_disabled = true;
+    harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(stale)));
+    assert!(control.preferences().catalog_disabled);
+    assert!(!control.preferences().native_processing_disabled);
+}
+
+#[test]
+fn data_optout_failed_disable_remains_stopped_and_failed_enable_cannot_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let mut harness = retention_harness(root.path(), 120);
+    let control = harness.model.data_maintenance_control();
+    control.set_presence(true);
+    std::fs::create_dir(root.path().join("config.json")).unwrap();
+    let mut form = harness.model.settings_form();
+    form.data_maintenance.catalog_disabled = true;
+    harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(form)));
+    assert!(control.preferences().catalog_disabled);
+    assert!(!control.persisted());
+    let mut enable = harness.model.settings_form();
+    enable.data_maintenance.catalog_disabled = false;
+    harness
+        .model
+        .apply_intent(UiIntent::ApplySettings(Box::new(enable)));
+    assert!(control.preferences().catalog_disabled);
+    assert!(
+        harness
+            .model
+            .settings_form()
+            .data_maintenance
+            .catalog_disabled
+    );
+}
+
+#[test]
 fn ultimate_view_treats_zero_current_as_observed_and_zero_max_as_unavailable() {
     let observed = ultimate_view(
         UltimateTelemetry {
@@ -1915,6 +1973,12 @@ fn install_and_uninstall_beacon_intents() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());
     assert_eq!(model.view().beacon_condition, BeaconCondition::NotInstalled);
+    assert!(model
+        .view()
+        .beacon_line
+        .state_text
+        .starts_with("Not installed"));
+    assert!(!model.view().beacon_line.state_text.contains("Data Details"));
     let canonical = model.player_state_publisher().current().document(1);
     assert_eq!(
         canonical["application"]["addons"]["data"]["value"]["ownership"],
@@ -1931,10 +1995,28 @@ fn install_and_uninstall_beacon_intents() {
         BeaconCondition::InstalledCurrent
     );
     assert!(model.view().uninstall_enabled);
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Installed"
+    );
+    let installed = model.player_state_publisher().current().document(1);
+    assert_eq!(
+        installed["application"]["addons"]["data"]["value"]["ownership"],
+        "eso_weave"
+    );
 
     model.apply_intent(UiIntent::UninstallBeacon);
     assert_eq!(model.view().beacon_condition, BeaconCondition::NotInstalled);
     assert!(!model.view().uninstall_enabled);
+    assert_eq!(
+        model.view().data_addon.lifecycle_line.state_text,
+        "Not installed"
+    );
+    let removed = model.player_state_publisher().current().document(1);
+    assert_eq!(
+        removed["application"]["addons"]["data"]["value"]["ownership"],
+        "none"
+    );
 }
 
 #[test]
@@ -2047,7 +2129,10 @@ fn s093_data_addon_intents_use_managed_lifecycle_authority() {
         model.view().data_addon.lifecycle_line.state_text,
         "Installed"
     );
-    assert_eq!(model.view().data_addon.reload_line.state_text, "Required");
+    assert_eq!(
+        model.view().data_addon.reload_line.state_text,
+        "Not required"
+    );
 
     std::fs::write(
         root.path()
@@ -2075,7 +2160,7 @@ fn s093_data_addon_intents_use_managed_lifecycle_authority() {
 }
 
 #[test]
-fn s093_stopped_runtime_clears_reload_reminder_across_restart() {
+fn s129_legacy_lifecycle_waits_for_natural_load_without_reload_reminders() {
     use eso_weave::game::{FocusObservation, Presence, ProcessObservation};
 
     let root = tempfile::tempdir().unwrap();
@@ -2090,7 +2175,10 @@ fn s093_stopped_runtime_clears_reload_reminder_across_restart() {
         0,
     );
     model.apply_intent(UiIntent::InstallDataAddon);
-    assert_eq!(model.view().data_addon.reload_line.state_text, "Required");
+    assert_eq!(
+        model.view().data_addon.reload_line.state_text,
+        "Not required"
+    );
 
     game.update_processes(
         ProcessObservation {
@@ -2148,7 +2236,7 @@ fn s093_resolution_failure_retains_last_known_data_addon_state() {
 }
 
 #[test]
-fn s093_stale_uninstall_reports_an_already_absent_target() {
+fn s129_stale_uninstall_is_idempotent_for_an_already_absent_target() {
     let root = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(root.path());
     model.apply_intent(UiIntent::InstallDataAddon);
@@ -2161,11 +2249,7 @@ fn s093_stale_uninstall_reports_an_already_absent_target() {
     model.apply_intent(UiIntent::UninstallDataAddon);
     let view = model.view();
     assert_eq!(view.data_addon.lifecycle_line.state_text, "Not installed");
-    assert!(view
-        .data_addon
-        .operation_error
-        .as_deref()
-        .is_some_and(|message| message.contains("already absent")));
+    assert!(view.data_addon.operation_error.is_none());
 }
 
 #[test]
@@ -2204,7 +2288,7 @@ fn s093_unmanaged_data_addon_rejects_stale_mutation_intents() {
 }
 
 #[test]
-fn update_beacon_intent_refreshes_managed_content_in_place() {
+fn s129_beacon_update_refuses_unexpected_inventory_and_preserves_exact_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let mut model = model_with_beacon_root(dir.path());
 
@@ -2216,13 +2300,20 @@ fn update_beacon_intent_refreshes_managed_content_in_place() {
     let retained = dir.path().join(beacon::SUBFOLDER).join("retained.txt");
     std::fs::write(&retained, "user data").unwrap();
 
-    // Update refreshes the managed embedded files without deleting the target.
+    let manifest_path = dir
+        .path()
+        .join(beacon::SUBFOLDER)
+        .join(beacon::MANIFEST_FILE);
+    let lua_path = dir.path().join(beacon::SUBFOLDER).join(beacon::LUA_FILE);
+    let before_manifest = std::fs::read(&manifest_path).unwrap();
+    let before_lua = std::fs::read(&lua_path).unwrap();
+
+    // A marker cannot authorize modification of an unexpected package inventory.
     model.apply_intent(UiIntent::UpdateBeacon);
-    assert_eq!(
-        model.view().beacon_condition,
-        BeaconCondition::InstalledCurrent
-    );
-    assert!(model.view().uninstall_enabled);
+    assert_eq!(model.view().beacon_condition, BeaconCondition::Unmanaged);
+    assert!(!model.view().uninstall_enabled);
+    assert_eq!(std::fs::read(manifest_path).unwrap(), before_manifest);
+    assert_eq!(std::fs::read(lua_path).unwrap(), before_lua);
     assert_eq!(std::fs::read_to_string(retained).unwrap(), "user data");
 }
 

@@ -254,7 +254,11 @@ fn collector_capture_mode_builds_a_catalog_but_never_copies_the_capture() {
         env!("CARGO_PKG_VERSION"),
         json!(["en"]),
     );
-    request["sources"][0]["revision"] = json!(eso_weave::collector::embedded_checksum());
+    request["sources"][0]["revision"] = json!(
+        eso_weave::collector::parse_capture(&capture)
+            .unwrap()
+            .collector_checksum
+    );
     request["sources"][0]["uri"] = json!("user-local-savedvariables");
     request["sources"][0]["locale"] = json!("en");
     request["sources"][0]["license_scope"] = json!("user-generated-local-only");

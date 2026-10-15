@@ -51,16 +51,14 @@ an unchanged form does not interrupt a session.
 
 ## Addons and Game Readings
 
-**Game Environment** selects the released **Live** game or **PTS** (Public Test
-Server) for addon installation and saved-data import. **AddOns Folder Override**
-points to that environment's existing AddOns directory when automatic discovery
-cannot locate it. These settings do not enable or load an addon inside ESO.
-PixelBeacon supplies current screen readings; ESO Weave Data separately records
-encounters and collects catalog definitions. Enable the needed package in ESO's
-Add-Ons menu and reload after file changes.
+**Game Environment** selects Live or PTS for ordinary PixelBeacon lifecycle actions. **AddOns Folder Override** supplies an existing root when needed. Automatic data work discovers actual installed contexts independently; changing lifecycle selection does not relabel queued work or change the two application-wide preferences. One PixelBeacon package supplies beacon signals and automatic Catalog collection. File changes take effect at the next natural addon load. They do not turn on encounter recording.
+
+The two direct controls below persist immediately, without Apply or confirmation. They remain visible but gray/inactive when no compatible combined package is available, retaining saved choices. Neither changes weaving, Fishing, Auto Potion or ESO's native logger. Native processing's preference/eligibility contract is available before its subsequent automatic watcher implementation.
 
 | Setting | Choices and default | Effect |
 | --- | --- | --- |
+| Disable Catalog maintenance | Unchecked by default | Stops desktop consumption/build/activation immediately; loaded Catalog Lua applies the persisted choice at its next natural load |
+| Disable native encounter log processing | Unchecked by default | Independently requests stopping native desktop processing; retains history and progress |
 | AddOns Folder Override | Blank by default; existing directory | Takes precedence over automatic AddOns discovery |
 | Game Environment | Live (default), PTS | Selects the ESO environment directory |
 | Block Size (px) | 2, 4, 8, 16 (default), 32 | Changes each overlay square and capture geometry |
@@ -68,8 +66,7 @@ Add-Ons menu and reload after file changes.
 | Fast Sample Interval (ms) | 100; 1 through 60000 | Polling while Fishing or interception is active; safety-authoritative interception caps it at 375 ms |
 | Sample Interval While Idle (ms) | 1000; 1 through 60000 | Polling while no fast condition applies |
 
-Changing Block Size redeploys only a managed addon. Run `/reloadui` or relog and
-restart ESO Weave. An unmanaged PixelBeacon target has no lifecycle buttons, and
+Changing Block Size redeploys only an exactly managed combined package while preserving its data preference. Updated Lua applies the size at its next natural addon load; the reader uses the configured geometry on its next start. An unmanaged PixelBeacon target has no lifecycle buttons, and
 the redeploy writer refuses it without changing its contents. Color Tolerance
 and both sample intervals apply to the running reader. A tolerance change closes
 cached safety evidence until a fresh sample is decoded.
@@ -150,7 +147,7 @@ telemetry safety gates.
 | Fishing timing | Yes | Applied live; a changed configuration safely turns Fishing off |
 | Detected Interact and Quickslot bindings | No | Read-only current ESO evidence; updates with PixelBeacon observations |
 | Color Tolerance or sample intervals | Yes | Applied live at the next reader-worker iteration |
-| Block Size | Yes | Managed addon redeploy is attempted; reload ESO and restart ESO Weave |
+| Block Size | Yes | Managed addon redeploy is attempted; Lua uses it at the next natural addon load and the desktop reader at its next start |
 | Window, disclosure, and log height | Yes | Applied immediately as layout state |
 
 A **Settings saved** toast confirms persistence. It does not claim that staged

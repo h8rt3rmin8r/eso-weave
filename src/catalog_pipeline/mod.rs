@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::bounded_file::{is_link_like, is_same_or_nested, read_bounded_stable, StableReadError};
+use crate::catalog::accumulate::{accumulate, read_bundle, same_domain};
 use crate::catalog::compiler::{
     build_catalog, diff_catalogs, verify_catalog, BuildRequest, CatalogDiff,
 };
@@ -172,7 +173,7 @@ where
         workspace.join(&run.request)
     };
     let request_bytes = read(&workspace, &request_path, REQUEST_LIMIT)?;
-    let request: PipelineRequest = serde_json::from_slice(&request_bytes)?;
+    let mut request: PipelineRequest = serde_json::from_slice(&request_bytes)?;
     validate_request(&request, &workspace)?;
     validate_channel_output(&run.candidates, request.version.channel)?;
     validate_input_output_separation(&request, &request_path, run, &workspace)?;
@@ -220,9 +221,20 @@ where
 
     let bundle_bytes = fs::read(&normalized)?;
     let bundle: CatalogBundle = serde_json::from_slice(&bundle_bytes)?;
-    let bundle = bundle.normalize_and_validate()?;
+    let mut bundle = bundle.normalize_and_validate()?;
     validate_version(&request, &bundle)?;
     validate_bundle_sources(&bundle, &acquired)?;
+    if matches!(request.mode, PipelineMode::UserCapture) {
+        if let Some(relative) = &request.baseline {
+            let baseline_path = resolve_relative(&workspace, relative, false)?;
+            let baseline = read_bundle(&baseline_path)?;
+            if same_domain(&baseline, &bundle) {
+                bundle = accumulate(baseline, bundle)?;
+                request.version.locales = bundle.release.locales.clone();
+                write_json(&normalized, &bundle)?;
+            }
+        }
+    }
     check_cancelled(&mut cancelled)?;
 
     let catalog = staging.path().join("catalog.sqlite");
@@ -253,6 +265,8 @@ where
         .filter(|reference| reference.availability != "placeholder")
         .filter(|reference| reference.virtual_path.starts_with('/'))
         .map(|reference| reference.virtual_path.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
         .collect::<Vec<_>>();
     let staged_icon_cache = staging.path().join("icon-cache");
     let icon_receipt = build_generation(&IconCacheRequest::new(
@@ -619,8 +633,9 @@ fn validate_request(request: &PipelineRequest, workspace: &Path) -> Result<(), P
     {
         return validation("network refresh and stale-cache flags are inconsistent");
     }
-    if parse_commit_message_version(&request.version.game_version)
-        .is_none_or(|version| version.to_string() != request.version.game_version)
+    if !matches!(request.mode, PipelineMode::UserCapture)
+        && parse_commit_message_version(&request.version.game_version)
+            .is_none_or(|version| version.to_string() != request.version.game_version)
     {
         return validation("game version must be a canonical dotted numeric version");
     }
@@ -828,6 +843,12 @@ fn baseline_diff(
     let report = verify_catalog(&baseline)?;
     if report.channel != request.version.channel {
         return validation("baseline channel does not match the candidate channel");
+    }
+    if matches!(request.mode, PipelineMode::UserCapture)
+        && (report.api_version != request.version.api_version
+            || report.game_version != request.version.game_version)
+    {
+        return Ok((CatalogDiff::default(), Some(report.semantic_sha256)));
     }
     Ok((
         diff_catalogs(&baseline, catalog)?,

@@ -32,6 +32,7 @@ pub const SCHEMA_VERSION: &str = "1.1.0";
 pub const PUBLIC_PATHS: &[&str] = &[
     "application.lifecycle",
     "application.version",
+    "application.data_maintenance",
     "application.catalog",
     "application.addons.data",
     "game.installation",
@@ -343,6 +344,7 @@ pub fn bootstrap_content() -> SnapshotContent {
             "lifecycle": observed(json!("running"), "application"),
             "version": observed(json!(env!("CARGO_PKG_VERSION")), "build_metadata"),
             "catalog": unavailable("catalog"),
+            "data_maintenance": unknown("data_maintenance"),
             "addons": {"data": unavailable("data_addon")},
         }),
         game: json!({
@@ -499,6 +501,7 @@ pub fn project(input: ProjectionInput) -> SnapshotContent {
             "lifecycle": observed(json!(if input.suspended { "suspended" } else { "running" }), "application"),
             "version": observed(json!(env!("CARGO_PKG_VERSION")), "build_metadata"),
             "catalog": input.catalog,
+            "data_maintenance": unknown("data_maintenance"),
             "addons": {"data": input.data_addon},
         }),
         game: json!({

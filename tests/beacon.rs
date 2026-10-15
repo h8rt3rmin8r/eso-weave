@@ -30,12 +30,27 @@ fn beacon_dir(root: &Path) -> std::path::PathBuf {
     root.join(SUBFOLDER)
 }
 
-/// Writes a `PixelBeacon` folder with the given manifest text (and a Lua stub).
+/// Writes a legacy or complete package fixture with the given manifest.
 fn write_beacon(root: &Path, manifest: &str) {
     let dir = beacon_dir(root);
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(MANIFEST_FILE), manifest).unwrap();
-    fs::write(dir.join(LUA_FILE), "-- stub").unwrap();
+    fs::write(dir.join(LUA_FILE), beacon::LUA).unwrap();
+    if manifest
+        .lines()
+        .any(|line| line.trim() == beacon::PACKAGE_IDENTITY)
+    {
+        fs::write(dir.join(beacon::BOOTSTRAP_FILE), beacon::BOOTSTRAP).unwrap();
+        fs::write(dir.join(beacon::CATALOG_FILE), beacon::CATALOG).unwrap();
+        fs::write(
+            dir.join(beacon::STARTUP_CONFIG_FILE),
+            beacon::render_startup_config(beacon::StartupConfig {
+                catalog_disabled: false,
+                environment: Environment::Live,
+            }),
+        )
+        .unwrap();
+    }
 }
 
 // T003: manifest parsing and the pure rules.
@@ -67,16 +82,16 @@ fn embedded_manifest_is_managed_and_versioned() {
 }
 
 #[test]
-fn embedded_manifest_version_is_twenty_three() {
-    // S100 appends eleven native binding evidence blocks.
-    assert_eq!(embedded_version(), 23);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(23));
+fn embedded_manifest_version_is_twenty_four() {
+    // S129 consolidates modules while preserving the complete pixel protocol.
+    assert_eq!(embedded_version(), 24);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(24));
 }
 
 #[test]
 fn negotiated_geometry_advances_manifest_and_declares_shared_header() {
-    assert_eq!(embedded_version(), 23);
-    assert_eq!(parse_manifest_version(MANIFEST), Some(23));
+    assert_eq!(embedded_version(), 24);
+    assert_eq!(parse_manifest_version(MANIFEST), Some(24));
     for (name, expected) in [
         (
             "LAYOUT_PROTOCOL_VERSION",
@@ -450,10 +465,10 @@ fn uninstall_never_touches_siblings() {
 // T011: reminder is wired into both operations across running states.
 
 #[test]
-fn lifecycle_reload_required_tracks_running_state() {
+fn lifecycle_waits_for_natural_load_without_reload_reminders() {
     for (state, expected) in [
-        (RunningState::Running, true),
-        (RunningState::Unknown, true),
+        (RunningState::Running, false),
+        (RunningState::Unknown, false),
         (RunningState::NotRunning, false),
     ] {
         let root = tmp();
@@ -744,7 +759,7 @@ fn redeploy_refuses_unmanaged_folder() {
     // Nothing was written or removed: the stub Lua and unmanaged status survive.
     assert_eq!(
         fs::read_to_string(beacon_dir(root.path()).join(LUA_FILE)).unwrap(),
-        "-- stub"
+        beacon::LUA
     );
     assert_eq!(beacon::status(root.path()), BeaconStatus::Unmanaged);
 }
@@ -785,52 +800,93 @@ fn parse_lua_constant_does_not_match_a_longer_name() {
 }
 
 #[test]
+fn decoder_constants_read_legacy_locals_and_private_signal_tables_identically() {
+    for (name, value) in [
+        ("COMBAT_MARKER", 0x2D),
+        ("ROLL_DODGE_MARKER", 0xF9),
+        ("LIFE_MARKER", 0x89),
+    ] {
+        let current = beacon::parse_lua_constant(beacon::LUA, name).unwrap();
+        let legacy = format!("local {name} = {current}\n");
+        assert_eq!(beacon::parse_lua_constant(&legacy, name), Some(current));
+        assert_eq!(current, value);
+    }
+    assert_eq!(
+        beacon::parse_lua_constant(
+            "SIGNALS.MARKER_EXTRA = 1\nSIGNALS.MARKER = 0x2D\n",
+            "MARKER"
+        ),
+        Some(0x2D)
+    );
+}
+
+#[test]
 fn addon_and_companion_agree_on_the_pixel_bus_contract() {
     use eso_weave::pixelbus::NUM_BLOCKS;
 
-    let lua = beacon::LUA;
     assert_eq!(
-        beacon::parse_lua_constant(lua, "NUM_BLOCKS"),
+        beacon::parse_lua_constant(beacon::LUA, "NUM_BLOCKS"),
         Some(NUM_BLOCKS),
         "the addon and the companion disagree on the block count"
     );
     assert_eq!(NUM_BLOCKS, 40, "S100 appends eleven native binding blocks");
     // Slice 045 leaves slice 035's count only as the explicit legacy layout.
     assert_eq!(
-        beacon::parse_lua_constant(lua, "LEGACY_COLUMNS"),
+        beacon::parse_lua_constant(beacon::LUA, "LEGACY_COLUMNS"),
         Some(eso_weave::pixelbus::LEGACY_COLUMNS),
         "the addon and the companion disagree on legacy columns"
     );
     // The combat block colors, shared byte for byte. The companion keeps these
     // private, so the expected values are the contract in
     // specs/031-combat-state-block/contracts/pixel-bus-b4.md.
-    assert_eq!(beacon::parse_lua_constant(lua, "COMBAT_MARKER"), Some(0x2D));
-    assert_eq!(beacon::parse_lua_constant(lua, "COMBAT_IN_RED"), Some(0xE0));
     assert_eq!(
-        beacon::parse_lua_constant(lua, "COMBAT_OUT_RED"),
+        beacon::parse_lua_constant(beacon::LUA, "COMBAT_MARKER"),
+        Some(0x2D)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "COMBAT_IN_RED"),
+        Some(0xE0)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "COMBAT_OUT_RED"),
         Some(0x20)
     );
-    assert_eq!(beacon::parse_lua_constant(lua, "WEAPON_MARKER"), Some(0x5A));
-    // Slice 032: the menu block's constants.
-    assert_eq!(beacon::parse_lua_constant(lua, "MENU_MARKER"), Some(0xD2));
-    assert_eq!(beacon::parse_lua_constant(lua, "MENU_CODE_STEP"), Some(24));
-    assert_eq!(beacon::parse_lua_constant(lua, "MENU_CODE_MAX"), Some(10));
-    // Slice 033: the three resource markers and the unavailable payload.
-    assert_eq!(beacon::parse_lua_constant(lua, "HEALTH_MARKER"), Some(0x16));
     assert_eq!(
-        beacon::parse_lua_constant(lua, "STAMINA_MARKER"),
+        beacon::parse_lua_constant(beacon::LUA, "WEAPON_MARKER"),
+        Some(0x5A)
+    );
+    // Slice 032: the menu block's constants.
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "MENU_MARKER"),
+        Some(0xD2)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "MENU_CODE_STEP"),
+        Some(24)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "MENU_CODE_MAX"),
+        Some(10)
+    );
+    // Slice 033: the three resource markers and the unavailable payload.
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "HEALTH_MARKER"),
+        Some(0x16)
+    );
+    assert_eq!(
+        beacon::parse_lua_constant(beacon::LUA, "STAMINA_MARKER"),
         Some(0x6D)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "MAGICKA_MARKER"),
+        beacon::parse_lua_constant(beacon::LUA, "MAGICKA_MARKER"),
         Some(0xBB)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "RESOURCE_UNAVAILABLE"),
+        beacon::parse_lua_constant(beacon::LUA, "RESOURCE_UNAVAILABLE"),
         Some(u32::from(eso_weave::pixelbus::RESOURCE_UNAVAILABLE))
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "RESOURCE_MAX_PERCENT"),
+        beacon::parse_lua_constant(beacon::LUA, "RESOURCE_MAX_PERCENT"),
         Some(100)
     );
     for (name, expected) in [
@@ -844,30 +900,30 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("ULTIMATE_BACK_HIGH_MARKER", 0x3D),
     ] {
         assert_eq!(
-            beacon::parse_lua_constant(lua, name),
+            beacon::parse_lua_constant(beacon::LUA, name),
             Some(expected),
             "{name}"
         );
     }
     assert_eq!(
-        beacon::parse_lua_constant(lua, "ULTIMATE_UNAVAILABLE"),
+        beacon::parse_lua_constant(beacon::LUA, "ULTIMATE_UNAVAILABLE"),
         Some(511)
     );
     // Slice 052: B9 adds bounded on-foot sprint while mounted sprint remains reserved.
     assert_eq!(
-        beacon::parse_lua_constant(lua, "MOVEMENT_MARKER"),
+        beacon::parse_lua_constant(beacon::LUA, "MOVEMENT_MARKER"),
         Some(0x43)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "MOVEMENT_ON_FOOT_RED"),
+        beacon::parse_lua_constant(beacon::LUA, "MOVEMENT_ON_FOOT_RED"),
         Some(0x20)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "MOVEMENT_MOUNTED_RED"),
+        beacon::parse_lua_constant(beacon::LUA, "MOVEMENT_MOUNTED_RED"),
         Some(0x60)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "MOVEMENT_SPRINT_ON_FOOT_RED"),
+        beacon::parse_lua_constant(beacon::LUA, "MOVEMENT_SPRINT_ON_FOOT_RED"),
         Some(0xA0)
     );
     // Slice 037: the six cooldown marks and the quantization contract. The marks
@@ -883,21 +939,21 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("COOLDOWN_ULTIMATE_MARKER", 0xE8),
     ] {
         assert_eq!(
-            beacon::parse_lua_constant(lua, name),
+            beacon::parse_lua_constant(beacon::LUA, name),
             Some(expected),
             "the addon and the companion disagree on {name}"
         );
     }
     assert_eq!(
-        beacon::parse_lua_constant(lua, "COOLDOWN_STEP_MS"),
+        beacon::parse_lua_constant(beacon::LUA, "COOLDOWN_STEP_MS"),
         Some(50)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "COOLDOWN_MAX_STEPS"),
+        beacon::parse_lua_constant(beacon::LUA, "COOLDOWN_MAX_STEPS"),
         Some(254)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "COOLDOWN_UNAVAILABLE"),
+        beacon::parse_lua_constant(beacon::LUA, "COOLDOWN_UNAVAILABLE"),
         Some(255)
     );
     // Slice 038: the four quickslot marks. The expected values are the contract
@@ -928,7 +984,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("QUICKSLOT_POTION_USABLE", 0xD0),
     ] {
         assert_eq!(
-            beacon::parse_lua_constant(lua, name),
+            beacon::parse_lua_constant(beacon::LUA, name),
             Some(expected),
             "the addon and the companion disagree on {name}"
         );
@@ -942,7 +998,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("LIFE_RECOVERING_GHOST_RED", 0xE0),
     ] {
         assert_eq!(
-            beacon::parse_lua_constant(lua, name),
+            beacon::parse_lua_constant(beacon::LUA, name),
             Some(expected),
             "the addon and companion disagree on {name}"
         );
@@ -954,7 +1010,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("WORLD_ACTIVE_RED", 0xE0),
     ] {
         assert_eq!(
-            beacon::parse_lua_constant(lua, name),
+            beacon::parse_lua_constant(beacon::LUA, name),
             Some(expected),
             "the addon and companion disagree on {name}"
         );
@@ -968,7 +1024,7 @@ fn addon_and_companion_agree_on_the_pixel_bus_contract() {
         ("ROLL_DODGE_WATCHDOG_MS", 1500),
     ] {
         assert_eq!(
-            beacon::parse_lua_constant(lua, name),
+            beacon::parse_lua_constant(beacon::LUA, name),
             Some(expected),
             "the addon and companion disagree on {name}"
         );
@@ -1002,6 +1058,7 @@ fn binding_authority_violations(lua: &str, manifest: &str, files: &[&str]) -> Ve
         line.trim_start()
             .to_ascii_lowercase()
             .starts_with("## savedvariables")
+            && line.trim() != "## SavedVariables: EsoWeaveDataSaved"
     }) {
         violations.push("SavedVariables declaration".to_owned());
     }
@@ -1300,7 +1357,8 @@ fn native_binding_discovery_executes_under_lua_51_semantics() {
 
 #[test]
 fn addon_ultimate_pipeline_is_exact_bar_aware_and_lifecycle_complete() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "GetUnitPower(\"player\", COMBAT_MECHANIC_FLAGS_ULTIMATE)",
         "GetSlotAbilityCost(slot, COMBAT_MECHANIC_FLAGS_ULTIMATE, hotbarCategory)",
@@ -1334,7 +1392,8 @@ fn addon_ultimate_pipeline_is_exact_bar_aware_and_lifecycle_complete() {
 
 #[test]
 fn addon_ultimate_polling_preserves_weapon_authority_and_bounds_cost_queries() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     let weapon = lua
         .split("local function computeWeaponBar()")
         .nth(1)
@@ -1368,7 +1427,8 @@ fn addon_ultimate_polling_preserves_weapon_authority_and_bounds_cost_queries() {
 
 #[test]
 fn addon_ultimate_is_invalidated_during_world_transition() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     let deactivation = lua
         .split("local function onPlayerDeactivated()")
         .nth(1)
@@ -1385,7 +1445,8 @@ fn addon_ultimate_is_invalidated_during_world_transition() {
 
 #[test]
 fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "IsUnitDead(\"player\")",
         "IsUnitReincarnating(\"player\")",
@@ -1408,7 +1469,8 @@ fn addon_life_state_uses_authoritative_queries_events_and_rebaseline() {
 
 #[test]
 fn alive_event_cannot_publish_alive_without_a_later_coherent_baseline() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     let alive_handler = lua
         .split("local function onPlayerAlive()")
         .nth(1)
@@ -1428,7 +1490,8 @@ fn alive_event_cannot_publish_alive_without_a_later_coherent_baseline() {
 
 #[test]
 fn coherent_life_recovery_restores_roll_and_travel_before_alive() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     let completion = lua
         .split("local function completeLifeRecovery()")
         .nth(1)
@@ -1470,7 +1533,8 @@ fn coherent_life_recovery_restores_roll_and_travel_before_alive() {
 
 #[test]
 fn addon_world_state_uses_authoritative_events_and_a_complete_activation_baseline() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "EVENT_PLAYER_DEACTIVATED",
         "EVENT_PLAYER_ACTIVATED",
@@ -1524,7 +1588,8 @@ fn addon_world_state_uses_authoritative_events_and_a_complete_activation_baselin
 
 #[test]
 fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalidation() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "EVENT_COMBAT_EVENT",
         "REGISTER_FILTER_TARGET_COMBAT_UNIT_TYPE",
@@ -1560,12 +1625,13 @@ fn addon_roll_dodge_uses_filtered_events_bounded_recovery_and_lifecycle_invalida
         invalidation < late_event_guard,
         "lifecycle invalidation must be established before late combat events are handled"
     );
-    assert_eq!(beacon::embedded_version(), 23);
+    assert_eq!(beacon::embedded_version(), 24);
 }
 
 #[test]
 fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "GetRecallCooldown()",
         "TRAVEL_RECALL_EDGE_MS",
@@ -1596,12 +1662,13 @@ fn addon_travel_detector_is_bounded_lifecycle_scoped_and_event_complete() {
         baseline < active,
         "recall must be rebaselined before world activation"
     );
-    assert_eq!(beacon::embedded_version(), 23);
+    assert_eq!(beacon::embedded_version(), 24);
 }
 
 #[test]
 fn quickslot_diagnostics_are_opt_in_bounded_and_event_complete() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "SLASH_COMMANDS[\"/pbquickslot\"]",
         "quickslotWatch",
@@ -1635,7 +1702,8 @@ fn quickslot_diagnostics_are_opt_in_bounded_and_event_complete() {
 
 #[test]
 fn quickslot_classification_requires_a_stable_double_read() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     let first_bound = lua
         .find("facts.boundId = GetSlotBoundId")
         .expect("quickslot sampling must read the initial bound id");
@@ -1686,7 +1754,8 @@ fn the_manifest_retains_the_reconstructed_quickslot_contract() {
 
 #[test]
 fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
-    let lua = beacon::LUA;
+    let source = beacon::LUA.replace("SIGNALS.", "");
+    let lua = source.as_str();
     for required in [
         "MOVEMENT_SPRINT_ON_FOOT_RED",
         "SPRINT_ENTER_DEBOUNCE_MS",
@@ -1711,26 +1780,26 @@ fn addon_sprint_detector_is_bounded_keyboard_only_and_event_driven() {
         );
     }
     assert_eq!(
-        beacon::parse_lua_constant(lua, "SPRINT_ENTER_DEBOUNCE_MS"),
+        beacon::parse_lua_constant(beacon::LUA, "SPRINT_ENTER_DEBOUNCE_MS"),
         Some(200)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "SPRINT_EXIT_DEBOUNCE_MS"),
+        beacon::parse_lua_constant(beacon::LUA, "SPRINT_EXIT_DEBOUNCE_MS"),
         Some(200)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "SPRINT_WATCHDOG_MS"),
+        beacon::parse_lua_constant(beacon::LUA, "SPRINT_WATCHDOG_MS"),
         Some(1500)
     );
     assert_eq!(
-        beacon::parse_lua_constant(lua, "MOVEMENT_SPRINT_MOUNTED_RED"),
+        beacon::parse_lua_constant(beacon::LUA, "MOVEMENT_SPRINT_MOUNTED_RED"),
         None
     );
     assert!(
         !lua.contains("IsUnitSprinting") && !lua.contains("EVENT_SPRINT"),
         "the addon references a sprint API that does not exist"
     );
-    assert_eq!(beacon::embedded_version(), 23);
+    assert_eq!(beacon::embedded_version(), 24);
 
     let detector = lua
         .split("local function allActiveSlotsHaveNonCostFailure()")
@@ -1803,4 +1872,155 @@ fn user_settings_path_creates_nothing() {
     assert!(!addons.parent().unwrap().exists());
     let after = fs::read_dir(dir.path()).unwrap().count();
     assert_eq!(before, after);
+}
+
+fn whole_beacon_fixture(failed_registration: &str, failed_callback: &str) -> Lua {
+    let lua = Lua::new();
+    lua.load(r#"
+        __controls = {}
+        __errors = {}
+        local methods = {}
+        function methods:SetCenterColor(r,g,b,a) self.color={r,g,b,a} end
+        function methods:SetHidden(value) self.hidden=value end
+        function methods:IsHidden() return self.hidden or false end
+        function methods:GetWidth() return 1920 end
+        local controlMeta={__index=function(_,name) return methods[name] or function() end end}
+        local function control(name)
+            local result=setmetatable({},controlMeta)
+            __controls[name]=result
+            return result
+        end
+        WINDOW_MANAGER={}
+        function WINDOW_MANAGER:CreateTopLevelWindow(name) return control(name) end
+        function WINDOW_MANAGER:CreateControl(name) return control(name) end
+        GuiRoot=control('GuiRoot')
+        SLASH_COMMANDS={}
+        EVENT_MANAGER={events={},updates={}}
+        function EVENT_MANAGER:RegisterForEvent(namespace,event,callback)
+            if namespace==__fail_register then error('injected registration failure') end
+            self.events[event]=self.events[event] or {}
+            self.events[event][namespace]=callback
+        end
+        function EVENT_MANAGER:UnregisterForEvent(namespace,event)
+            if namespace==__fail_callback then error('injected callback failure') end
+            if self.events[event] then self.events[event][namespace]=nil end
+        end
+        function EVENT_MANAGER:RegisterForUpdate(namespace,_,callback) self.updates[namespace]=callback end
+        function EVENT_MANAGER:UnregisterForUpdate(namespace) self.updates[namespace]=nil end
+        function EVENT_MANAGER:AddFilterForEvent() end
+        function __fire(event,...)
+            local callbacks={}
+            for namespace,callback in pairs(EVENT_MANAGER.events[event] or {}) do callbacks[#callbacks+1]={namespace,callback} end
+            table.sort(callbacks,function(a,b) return a[1]<b[1] end)
+            for _,entry in ipairs(callbacks) do
+                local ok,message=pcall(entry[2],event,...)
+                if not ok then __errors[#__errors+1]=message end
+            end
+        end
+        function __tick_beacon()
+            EVENT_MANAGER.updates.PixelBeaconLatency()
+            EVENT_MANAGER.updates.PixelBeaconFast()
+        end
+        function GetUIGlobalScale() return 1 end
+        function GetUnitPower() return 80,100 end
+        function GetLatency() return 64 end
+        function GetGameTimeMilliseconds() return 1000 end
+        function GetInteractionType() return INTERACTION_FISH end
+        function GetSlotItemLink() return '' end
+        function GetActionIndicesFromName() return nil,nil,nil end
+        function GetActiveHotbarCategory() return HOTBAR_CATEGORY_PRIMARY end
+        function GetActiveWeaponPairInfo() return ACTIVE_WEAPON_PAIR_MAIN,false end
+        function GetItemWeaponType() return WEAPONTYPE_NONE end
+        function GetAPIVersion() return 101051 end
+        function GetGameVersion() return '12.1.5.0' end
+        function GetCVar() return 'en' end
+        function GetWorldName() return 'NA Megaserver' end
+        function GetTimeStamp() return 1792022400 end
+        function zo_floor(value) return math.floor(value) end
+        zo_strlower=string.lower
+        local nextConstant=10000
+        setmetatable(_G,{__index=function(self,key)
+            if string.match(key,'^[A-Z][A-Z0-9_]*$') then
+                nextConstant=nextConstant+1
+                rawset(self,key,nextConstant)
+                return nextConstant
+            end
+            if string.match(key,'^Get') then
+                local getter=function() return 0,0,0,0 end
+                rawset(self,key,getter)
+                return getter
+            end
+            if string.match(key,'^Is') then
+                local getter=function() return false end
+                rawset(self,key,getter)
+                return getter
+            end
+        end})
+    "#).exec().unwrap();
+    lua.globals()
+        .set("__fail_register", failed_registration)
+        .unwrap();
+    lua.globals()
+        .set("__fail_callback", failed_callback)
+        .unwrap();
+    // The canonical manifest puts the independent beacon before optional modules.
+    lua.load(beacon::LUA).exec().unwrap();
+    lua.load(beacon::render_startup_config(beacon::StartupConfig {
+        catalog_disabled: true,
+        environment: Environment::Live,
+    }))
+    .exec()
+    .unwrap();
+    let bootstrap = lua.load(beacon::BOOTSTRAP).exec();
+    let catalog = lua.load(beacon::CATALOG).exec();
+    if failed_registration == "PixelBeaconDataBootstrap" {
+        assert!(bootstrap.is_err());
+    } else {
+        bootstrap.unwrap();
+    }
+    if failed_registration == "PixelBeaconCatalog" {
+        assert!(catalog.is_err());
+    } else {
+        catalog.unwrap();
+    }
+    lua.load("__fire(EVENT_ADD_ON_LOADED,'PixelBeacon'); __fire(EVENT_PLAYER_ACTIVATED); __tick_beacon()")
+        .exec().unwrap();
+    lua
+}
+
+#[test]
+fn actual_beacon_initializes_every_cell_despite_optional_module_load_or_callback_failures() {
+    let capture = |lua: &Lua| -> String {
+        lua.load(r#"
+            assert(__controls.PixelBeaconStatus.color[1]==1 and __controls.PixelBeaconStatus.color[3]==1)
+            assert(__controls.PixelBeaconFishing.hidden==false)
+            assert(EVENT_MANAGER.updates.PixelBeaconFast and EVENT_MANAGER.updates.PixelBeaconLatency)
+            assert(SLASH_COMMANDS['/ewcollect']==nil and SLASH_COMMANDS['/ewencounter']==nil)
+            local names={}
+            for name in pairs(__controls) do if string.sub(name,1,11)=='PixelBeacon' then names[#names+1]=name end end
+            table.sort(names)
+            assert(#names==44, 'root plus all 43 negotiated layout/payload cells must initialize')
+            local output={}
+            for _,name in ipairs(names) do
+                local entry=__controls[name]
+                local color=rawget(entry,'color') or {}
+                output[#output+1]=name..':'..tostring(rawget(entry,'hidden'))..':'..table.concat(color,',')
+            end
+            return table.concat(output,'\n')
+        "#).eval().unwrap()
+    };
+    let baseline = capture(&whole_beacon_fixture("", ""));
+    for (registration, callback) in [
+        ("PixelBeaconDataBootstrap", ""),
+        ("PixelBeaconCatalog", ""),
+        ("", "PixelBeaconDataBootstrap"),
+        ("", "PixelBeaconCatalog"),
+    ] {
+        let fixture = whole_beacon_fixture(registration, callback);
+        assert_eq!(
+            capture(&fixture),
+            baseline,
+            "registration={registration}, callback={callback}"
+        );
+    }
 }
