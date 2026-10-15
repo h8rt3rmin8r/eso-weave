@@ -26,13 +26,22 @@ Local candidate gates passed on that identity:
 - Formatting and locked all-target/all-feature Clippy with warnings denied.
 - All 1,207 Rust tests across 54 suite results, zero failures or ignored tests.
 - Release-profile Windows binary with the complete generated documentation site.
+- All ten release-profile embedded documentation contract tests.
 - All 184 documentation/render/brand/trust policy tests; trust and brand scans.
 - Spelling, mdBook examples/build, generated-site policy and headless rendered diagram, layout, syntax, figure and table checks.
 - Release-note generator contracts, four-bullet release excerpt and Debian validator contracts. Real dpkg package cases require Linux and remain covered by hosted Linux CI.
 
 An independent metadata audit confirms v0.19.0 / 2026-10-15 across all named identity surfaces, exactly the three intended dependency updates, no other lockfile churn, unchanged release history from v0.18.0 onward, unchanged addon/runtime/pipeline content and clean UTF-8/no-BOM/LF text across all 25 changed files. The local and remote target tag are absent; remote main remains the baseline.
 
-Logs and generated audit output are ignored under target. Final PR head, hosted checks and review dispositions remain pending and will be recorded when observed.
+Logs and generated audit output are ignored under target.
+
+## Pull Request and Review
+
+Official [PR #303](https://github.com/h8rt3rmin8r/eso-weave/pull/303) opened on reviewed candidate 8adc718ee73835ef1e30c530d7c0f944f60bc306. Its automatic [Codex round 1](https://github.com/h8rt3rmin8r/eso-weave/pull/303#issuecomment-6199514253) completed at 18:38:46 UTC without findings. The bot's positive reaction, empty review submissions and empty inline-thread list confirm the clean disposition. One of two authorized rounds was used; no second round is needed for delivery-record-only changes.
+
+All nine hosted checks pass on the reviewed candidate: Windows/Linux checks and dependency review ([CI](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38787105447)), [documentation/browser validation](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38787110060), [protected trust policy](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38787105328), [issue linkage and proposed-policy tests](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38787105392), and [CodeQL](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38787105577). Deployment is correctly skipped for the PR.
+
+The final delivery commit updates only this slice's status/task/evidence records and Plan058. Package identity, dependency graph, runtime, tests, policies and published-guide source remain identical to the reviewed candidate. Its exact head and successful checks are recorded in the PR conversation before owner handoff. Final metadata/text policy is revalidated; no additional review round is needed for these records.
 
 ## Boundary
 

@@ -34,14 +34,14 @@ Independent criterion: release guidance describes the implemented package/profil
 Independent criterion: official open PR, successful final-head checks and no unresolved findings, with publication deferred.
 
 - [x] T011 [US3] Run required local candidate gates and record actual evidence in `specs/132-v0190-release/verification.md` (FR-006).
-- [ ] T012 [US3] Push `codex/s132-v0190-release`, publish and attach the official PR closing #302, relating to #301/#284 (FR-007).
-- [ ] T013 [US3] Complete up to two Codex reviews, correct findings, answer and resolve all completed threads on the PR; record dispositions in `verification.md` (FR-007).
-- [ ] T014 [US3] Confirm required successful checks on the final PR head and owner merge/publication boundaries in `verification.md` (FR-007/FR-008).
+- [x] T012 [US3] Push `codex/s132-v0190-release`, publish and attach the official PR closing #302, relating to #301/#284 (FR-007).
+- [x] T013 [US3] Complete up to two Codex reviews, correct findings, answer and resolve all completed threads on the PR; record dispositions in `verification.md` (FR-007).
+- [x] T014 [US3] Confirm required successful checks on the final PR head and owner merge/publication boundaries in `verification.md` (FR-007/FR-008).
 
 ## Phase 6: Polish
 
-- [ ] T015 Audit changed text for UTF-8/no BOM/LF, punctuation, broken references and `git diff --check`; update `spec.md` and this task receipt to delivered-for-review state (FR-005/FR-006).
-- [ ] T016 Synchronize #302/#301 acceptance progress and Project stage, and deliver the open PR for owner review, preserving later #284 retirement and publication work (FR-007/FR-008).
+- [x] T015 Audit changed text for UTF-8/no BOM/LF, punctuation, broken references and `git diff --check`; update `spec.md` and this task receipt to delivered-for-review state (FR-005/FR-006).
+- [x] T016 Synchronize #302/#301 acceptance progress and Project stage, and deliver the open PR for owner review, preserving later #284 retirement and publication work (FR-007/FR-008).
 
 ## Dependencies and Execution Order
 
