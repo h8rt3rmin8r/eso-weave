@@ -11,11 +11,11 @@
   </div>
   <div>
     <dt>Applies to</dt>
-    <dd>v0.18.0</dd>
+    <dd>v0.19.0</dd>
   </div>
   <div>
     <dt>Released</dt>
-    <dd><time datetime="2026-10-13">2026-10-13</time></dd>
+    <dd><time datetime="2026-10-15">2026-10-15</time></dd>
   </div>
   <div>
     <dt>Repository</dt>

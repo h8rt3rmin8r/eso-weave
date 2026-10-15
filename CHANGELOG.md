@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-15
+
+### Highlights
+
+- Use one combined PixelBeacon package with automatic Catalog maintenance and
+  managed migration from the former separate addons.
+- Process native v15 encounter logs automatically across normal/verbose and
+  separate/inline profiles, with catchup, restart checkpoints and preserved history.
+- Control Catalog maintenance and native processing independently from persistent
+  disable preferences; manual Catalog/Data workflows and Encounter History are retired.
+- Benefit from encounter-storage, log-rotation and Windows documentation reliability
+  fixes, plus updated local-service and JSON dependencies.
+
 ### Added
 
 - S129: One combined PixelBeacon package with automatic managed migration, bounded automatic Catalog collection, useful accumulated definitions, and verified background Catalog activation/recovery (issues #285-#288).
@@ -24,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and retry one failed launch with a fresh profile (issue #282).
 - Archive completed v0.18.0 Plan054 and synchronize planning indexes, ledger
   and final release evidence; no build plan remains active (issue #280).
+- S132: Incorporate dependency PR #284: serde_json 1.0.152, rmcp 3.5.1 and
+  tokio-util 0.7.20. Prepare the reviewed v0.19.0 identity and current release
+  guidance under Plan058 (issue #302); tag/publication remain separate in #301.
 
 ### Fixed
 
@@ -46,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2026-10-13: Post-release housekeeping records the completed owner merge and
   separately authorized publication without creating another active plan or
   changing the published v0.18.0 tag, package identity or assets.
+- 2026-10-15: S132 includes #284's exact three dependency updates in the release
+  candidate and corrects the pinned `docs/project/releasing.md` package wording
+  to the implemented combined PixelBeacon model, alongside its canonical release
+  page. Retain the existing package matrix, independent addon contract versions
+  and configured local no-tag/no-push/no-publish rollover. Establish Plan058;
+  candidate #302 closes only on owner merge, while #301 tracks later separately
+  authorized tag/publication and artifact-integrity evidence. No runtime source,
+  workflow, release configuration or field-testing requirement changes.
 
 ## [0.18.0] - 2026-10-13
 

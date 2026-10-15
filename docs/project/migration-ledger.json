@@ -1763,7 +1763,15 @@
       "lifecycle": "Archived",
       "destination": "docs/archive/build-plans/plan-057.md",
       "specs": ["specs/131-native-v15-format-coverage"],
-      "evidence": "S131 completed issue #296 and issue #297 when the owner squash-merged PR #299 on 2026-10-15 at b28d34e686933297e2aaf4f4dadac88ace979370. Pinned producer grammar preceded implementation; all four v15 profiles are supported. Both issues are closed and Done, milestone 21 is complete, and no active issue or next feature slice remains."
+      "evidence": "S131 completed issue #296 and issue #297 when the owner squash-merged PR #299 on 2026-10-15 at b28d34e686933297e2aaf4f4dadac88ace979370. Pinned producer grammar preceded implementation; all four v15 profiles are supported. Both issues are closed and Done, milestone 21 is complete."
+    },
+    {
+      "id": "058",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-058.md",
+      "specs": ["specs/132-v0190-release"],
+      "evidence": "Owner-authorized S132 prepares the reviewed v0.19.0 candidate for issue #302 under release coordinator #301, including #284's three dependency updates. Final owner merge and later authorized tag/publication remain separate."
     }
   ],
   "safetyCrosswalk": [
