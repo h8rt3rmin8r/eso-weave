@@ -13,7 +13,7 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| None | No active plan | S131 completed in owner-merged PR #299; no open GitHub issue remains |
+| [058](plan-058.md) | Active | S132 / #302 prepares v0.19.0 including #284; #301 tracks later publication |
 
 The latest completed plan is
 [057](../../archive/build-plans/plan-057.md), covering S131 native v15 inline and verbose format support in owner-merged PR #299.
@@ -30,7 +30,7 @@ workflow issues in PR #274 on 2026-10-12. Plan052 completed S126/#273 retained
 sessions in owner-merged PR #275 on 2026-10-13. Plan053 completed S127/#272 native import in owner-merged PR #276 on 2026-10-13.
 Plan054 completed S128/#279 in owner-merged PR #278 on 2026-10-13.
 Separately authorized v0.18.0 publication completed #277 that day. The next
-build plan is not assigned. Plan055 completed S129 in PR #295, Plan056 completed
+build plan is Plan058 for the owner-authorized S132 release candidate. Plan055 completed S129 in PR #295, Plan056 completed
 S130 in PR #298, and Plan057 completed S131 in PR #299 on 2026-10-15.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
@@ -38,5 +38,6 @@ under the owner's no-field-verification direction. Their closure is not evidence
 of installed behavior or live parity. Completed native-file import was delivered in S127 / issue #272; live tailing
 is implemented in S130 for normal/separate v15. S131/#296/#297 adds the remaining
 profiles after pinned producer-grammar research in owner-merged PR #299. The
-current issue backlog is empty. Dependabot PR #284 remains a separate maintenance
-review and does not establish another feature slice.
+current work is S132 / #302 under release coordinator #301. Dependabot PR #284's
+three dependency updates are incorporated into that candidate; its PR retirement
+follows owner merge and content confirmation on main.

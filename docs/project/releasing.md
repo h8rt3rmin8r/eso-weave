@@ -110,9 +110,11 @@ the machine's job, and steps 1 through 3 catch the common omissions before any a
 
 Current decision (2026-09-13): Windows x64 MSI; Linux x86_64 `.deb`, AppImage, and tarball; a
 combined `SHA256SUMS` file. No container images (this is a desktop application). macOS is out of
-scope per the specification. Linux aarch64 is deferred until an end user needs it. PixelBeacon
-and the exact four-file ESO Weave Data addon are not separate release assets: both ship embedded
-inside the application binary and are installed from the application UI. Change this shape only
+scope per the specification. Linux aarch64 is deferred until an end user needs it. The combined
+PixelBeacon package embeds independent beacon and automatic Catalog modules inside the
+application binary and is managed from the application UI; it is not a separate release asset.
+Native processing supports normal/verbose and separate/inline v15 logs independently of
+Catalog maintenance. Addon contract versions remain independent of the application version. Change this shape only
 with a dated decision recorded in `CHANGELOG.md`.
 
 ## Supporting scripts

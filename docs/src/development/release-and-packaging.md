@@ -43,9 +43,12 @@ changelog rather than being copied into the release page.
 | Linux x86_64 | Versioned AppImage | Release binary assembled from `packaging/appimage/AppDir` | SHA-256 entry in `SHA256SUMS` |
 | Linux x86_64 | Versioned `.tar.gz` | Release binary, README, and license archive | SHA-256 entry in `SHA256SUMS` |
 
-PixelBeacon and the exact four-file ESO Weave Data addon are embedded in the
-application binary and installed from the application interface. Neither is a
-separate release asset. Container images, macOS packages, and Linux aarch64
+One combined PixelBeacon package embeds independent beacon and automatic Catalog
+modules in the application binary and is managed from the application interface.
+It is not a separate release asset. Native processing supports all four v15
+normal/verbose and separate/inline profiles independently of Catalog maintenance.
+Addon contract versions remain independent of the application version.
+Container images, macOS packages, and Linux aarch64
 packages are outside the current artifact contract.
 
 The searchable documentation site is also embedded directly in every executable.
