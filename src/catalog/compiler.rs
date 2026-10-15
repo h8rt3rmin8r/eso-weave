@@ -810,20 +810,7 @@ pub fn diff_catalogs(
                 7,
             )?,
         ),
-        coverage: compare_surfaces(
-            surface(
-                &old,
-                "SELECT category, snapshot_id, locale, scope, completeness, limits_text
-                 FROM coverage ORDER BY category, snapshot_id, locale, scope",
-                4,
-            )?,
-            surface(
-                &new,
-                "SELECT category, snapshot_id, locale, scope, completeness, limits_text
-                 FROM coverage ORDER BY category, snapshot_id, locale, scope",
-                4,
-            )?,
-        ),
+        coverage: compare_surfaces(coverage_completeness(&old)?, coverage_completeness(&new)?),
         coverage_regressions,
         icon_references: compare_surfaces(
             surface(
@@ -898,23 +885,32 @@ fn coverage_completeness(
     connection: &Connection,
 ) -> Result<BTreeMap<String, String>, CatalogError> {
     let mut statement = connection.prepare(
-        "SELECT category, snapshot_id, locale, scope, completeness
-         FROM coverage ORDER BY category, snapshot_id, locale, scope",
+        "SELECT category, locale, scope, completeness
+         FROM coverage ORDER BY category, locale, scope",
     )?;
     let rows = statement.query_map([], |row| {
         Ok((
             format!(
-                "{}|{}|{}|{}",
+                "{}|{}|{}",
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?
+                row.get::<_, String>(2)?
             ),
-            row.get::<_, String>(4)?,
+            row.get::<_, String>(3)?,
         ))
     })?;
-    rows.collect::<Result<BTreeMap<_, _>, _>>()
-        .map_err(CatalogError::from)
+    let mut result = BTreeMap::<String, String>::new();
+    for row in rows {
+        let (key, value) = row?;
+        let replace = match result.get(&key) {
+            Some(old) => completeness_rank(&value)? > completeness_rank(old)?,
+            None => true,
+        };
+        if replace {
+            result.insert(key, value);
+        }
+    }
+    Ok(result)
 }
 
 fn completeness_rank(value: &str) -> Result<u8, CatalogError> {

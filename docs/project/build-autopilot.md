@@ -177,10 +177,7 @@ These hold regardless of the decision policy:
   - Beacon-manager safety: uninstall deletes a `PixelBeacon` folder only when
     the managed-marker line is verified present in its manifest, and discovery
     never writes outside the resolved AddOns directory.
-  - Data-addon safety: install, update, and uninstall require the exact managed
-    marker and four-file inventory, reject links and foreign entries, preserve
-    PixelBeacon and neighboring addons, and rollback the prior managed bytes on
-    failed update.
+  - Combined-addon safety: migration, install, update and removal validate the exact managed inventory and ownership, reject links/races and foreign entries, preserve SavedVariables and neighboring addons, recover interrupted transactions and distinguish postcommit cleanup from failed commit.
   - Shared-data safety: catalog and encounter commands mutate only their owned
     `EsoWeaveDataSaved` subtrees, and the desktop never deletes the shared
     SavedVariables file while ESO owns its in-memory state.

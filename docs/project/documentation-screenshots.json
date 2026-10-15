@@ -26,12 +26,12 @@
       "destination": "docs/src/assets/screenshots/first-launch.png",
       "pages": ["docs/src/getting-started/first-launch.md"],
       "reader_question": "What should the initial application look like?",
-      "alt": "ESO Weave at first launch with ESO inactive and separate Install actions for both managed addons",
-      "caption": "Deterministic first-launch state: ESO is inactive, ESO Weave is active, and each absent managed addon has its own Install action.",
+      "alt": "ESO Weave at first launch with ESO inactive and one PixelBeacon Install action",
+      "caption": "Deterministic first-launch state: ESO is inactive, ESO Weave is active, and the single absent PixelBeacon package has one Install action.",
       "width": 1280,
       "height": 640,
-      "bytes": 104403,
-      "sha256": "dfadc5a0530875a9f8ec9182340e9af21f7a247d2fd616f5d021f5e73f1b60ed",
+      "bytes": 88327,
+      "sha256": "2de03790058ca14dad921504a13c4f46ea07ac43de056f24fe5e2f0bc545ffa5",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "first-launch",
@@ -40,7 +40,7 @@
         "file": "first-launch--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "037e03fcdc4b2fae9acfadcdeee6804ced3661fd694073b40549238db506c97e",
+        "sha256": "2b6f7de3c109f3867285e95ec55ed372925d3c4660e68fb080bd9987a38d995d",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Main layout, first-launch status, or lifecycle controls change"
@@ -51,12 +51,12 @@
       "destination": "docs/src/assets/screenshots/healthy-system-state.png",
       "pages": ["docs/src/getting-started/first-launch.md", "docs/src/features/pixelbeacon.md"],
       "reader_question": "What does a healthy observed baseline look like?",
-      "alt": "ESO Weave showing a healthy running game, managed data addon, and detected PixelBeacon signal",
-      "caption": "Deterministic healthy baseline: the game and world are active, both managed addons are current, and PixelBeacon Signal is detected while data-addon session facts remain separate.",
+      "alt": "ESO Weave showing an active game, one installed PixelBeacon package, and a detected signal",
+      "caption": "Deterministic healthy baseline: the game and world are active, the combined PixelBeacon package is installed, and PixelBeacon Signal is detected.",
       "width": 1280,
       "height": 640,
-      "bytes": 100820,
-      "sha256": "df261eaa159eb8bcc74d9b9a54306333c705a4ebc2a906844108e6c747046664",
+      "bytes": 85537,
+      "sha256": "1a8cf309d6a9c60e657339eef08c089a2cd445657fa3a601d7189f1a073861f2",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "healthy-system-state",
@@ -65,7 +65,7 @@
         "file": "healthy-system-state--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "453a129963b2108f8fe2a7fd96d6f010895cbf546b09b934eaf3d5fa538945b3",
+        "sha256": "280e643275d531bf5408d679e9b8a7895235e8262b571b4d00672cf1e6235d84",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "System and State labels or healthy signal contract changes"
@@ -76,12 +76,12 @@
       "destination": "docs/src/assets/screenshots/pixelbeacon-signal-lost.png",
       "pages": ["docs/src/getting-started/first-launch.md"],
       "reader_question": "How is a lost signal distinct from an uninstalled addon?",
-      "alt": "ESO Weave showing PixelBeacon installed with a lost signal and stale retained HUD values",
-      "caption": "Deterministic lost-signal state: PixelBeacon remains installed, current input authority is unavailable, and the last coherent HUD is visibly marked stale until recovery or expiry.",
+      "alt": "ESO Weave showing PixelBeacon installed, a lost signal, and retained HUD observations",
+      "caption": "Deterministic lost-signal state: PixelBeacon remains installed, current input authority is unavailable, and retained HUD observations remain visible until recovery or expiry.",
       "width": 1280,
       "height": 640,
-      "bytes": 104089,
-      "sha256": "98660ff0b12d9923001a975ce5358f2b59c2a9fc6f26eadb799ec0d6fda39254",
+      "bytes": 85139,
+      "sha256": "092af7582a3385010577109542ee12d0e2293be75106eabf811651f13fcf5469",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "pixelbeacon-lost",
@@ -90,7 +90,7 @@
         "file": "pixelbeacon-lost--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "f8de1afba2970d7b39c73521c58734daf45da17345a6d3b8faa750d959d41f84",
+        "sha256": "864f57aa3094778c8c6c61623651f89d2860b6d41139b4208992c2e6bb938475",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Signal-loss label or recovery guidance changes"
@@ -105,8 +105,8 @@
       "caption": "Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.",
       "width": 1280,
       "height": 640,
-      "bytes": 106056,
-      "sha256": "0325d830d564c414d1f8e54f42f9c1b1dd48f8be5cecdacba6e902538bfae5a9",
+      "bytes": 88038,
+      "sha256": "b9bf574fe1b8f2a8aff248723e571e9c56aaba9a4b2d78814ed47bb7ab5c40a1",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "pixelbeacon-unmanaged",
@@ -115,7 +115,7 @@
         "file": "pixelbeacon-unmanaged--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "7d26ea31ab71d3dd264af2bb0f435a5236382c51da2c8eb209df9fc4829358a5",
+        "sha256": "65aba723840ea8e7a5c2f2c1f2184570033a10a2129b3969aa55e67f06f8b1fb",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Ownership classification or available actions change"
@@ -130,8 +130,8 @@
       "caption": "Deterministic configuration example: each Skills row shows whether it is enabled, its weave type, override state, effective delay, and observed cooldown.",
       "width": 1280,
       "height": 640,
-      "bytes": 100454,
-      "sha256": "1e1782c08ea2bcf516922fc3a746497b0c21a53c6144ba5d5dbd3addeb9a7e55",
+      "bytes": 85343,
+      "sha256": "8b83b57cf3798cc626e12c2cab1eda1a081e03f785fb7c877b4eedfaf649ad98",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "weaving-configuration",
@@ -140,7 +140,7 @@
         "file": "weaving-configuration--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "e45967b0273a05202f95b8e624ae9712f94433ce89a677406e4a5b0758a4a584",
+        "sha256": "210d0e8d3a2b5d8a110f988aa8a2f7c07054b6cb06e60de895fb4c1771c97b33",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Weaving settings layout or delay presentation changes"
@@ -155,8 +155,8 @@
       "caption": "Deterministic settings example: Health and Magicka watches are enabled with independent thresholds, Stamina and Ultimate are disabled, and the detected Quickslot binding is read-only.",
       "width": 1280,
       "height": 900,
-      "bytes": 222905,
-      "sha256": "772a7106abc2fa5f1b8d9f1a4c7912acc1f4ae46f240a851f1f0819b595e4722",
+      "bytes": 139546,
+      "sha256": "8308e951f90b5c8a9f8cffef7c422b2db2979e6d4d35c2c79a35e2056c9b1509",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-ready",
@@ -165,7 +165,7 @@
         "file": "auto-potion-ready--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "772a7106abc2fa5f1b8d9f1a4c7912acc1f4ae46f240a851f1f0819b595e4722",
+        "sha256": "972529aa8087b182859c2d248d3cfcf1d32bbc1f4221a0b56ac70286712ea454",
         "crop": [0, 0, 1280, 900]
       },
       "update_trigger": "Resource-watch, threshold, or ready-state UI changes"
@@ -180,8 +180,8 @@
       "caption": "Deterministic recovery example: the request is retained, but Auto Potion is blocked and sends no input while PixelBeacon Signal is lost.",
       "width": 1280,
       "height": 640,
-      "bytes": 105536,
-      "sha256": "3100fc860e12851f4f145f1f7edd80621936148ab36d85e0642884f0d8ff5282",
+      "bytes": 86660,
+      "sha256": "0486ebf3ec5eab2bbebc30244bc53f7c3d89e23645ca2a62e35cb27f5cd37b95",
       "source": {
         "generator": "S083 deterministic screenshot sandbox",
         "scene": "auto-potion-blocked",
@@ -190,7 +190,7 @@
         "file": "auto-potion-blocked--dark--wide.png",
         "width": 1280,
         "height": 900,
-        "sha256": "25dc57a8c47c159d84ebeb1d1fcc2f877ae46ff88eed978f77e0296b8e96316f",
+        "sha256": "b537d9e6c16f73f60f5972eb2285c6b33e648eabdfeb01fcf256c5a7acb795e3",
         "crop": [0, 0, 1280, 640]
       },
       "update_trigger": "Block-reason vocabulary or recovery UI changes"

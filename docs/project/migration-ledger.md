@@ -44,7 +44,7 @@ manifest, so changing a count cannot hide an omission or substitution.
   Plan 053 completed S127 native import / issue #272 in owner-merged PR #276
   on 2026-10-13. Plan 054 completed S128 candidate preparation / issue #279 in owner-merged
   PR #278 on 2026-10-13. Separately authorized v0.18.0 publication completed
-  #277 that day. Plan 054 is archived; no active build plan remains.
+  #277 that day. Plan 054 is archived. Plan 055 is Active for owner-authorized S129, issues #285-#288 and #291, beginning 2026-10-15.
   Independent release verification does not reactivate a completed plan. The
   policy requires the matching plan file and index row for
   every state and rejects simultaneous current and archive copies.

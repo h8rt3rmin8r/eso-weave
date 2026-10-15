@@ -22,7 +22,7 @@ test seams. Platform modules contain operating-system calls.
 | Local Extension Service | One opt-in authenticated loopback listener, discovery ownership, immutable player-state projection, bounded read-only database queries, HTTP and MCP adapter parity, and bounded shutdown | Remote clients, writes, agent orchestration, prompts, telemetry, or gameplay actions |
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
 | Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active selection, authenticated origin, releases, or source redistribution |
-| Catalog Update Worker | Background Live status and candidate discovery, collector handshake, staged verification, immutable user-data installation, atomic Live selection, rollback, recovery, and redacted receipts | Silent download, automatic installation, PTS promotion, capture execution or upload, or modification of package data |
+| Catalog Maintenance | Actual-root eligibility and independent optouts, stable complete input, compatible accumulation, verified immutable automatic activation, recovery and bounded retries | Source execution, arbitrary-file activation, PTS relabeling, game input or package-data mutation |
 | Data Addon Manager | Exact marker-owned deployment of the `EsoWeaveData` manifest, bootstrap, catalog module, and encounter module | PixelBeacon files, user SavedVariables deletion, parsing, or capture policy |
 | Discovery Collector | Explicit bounded public-API enumeration, deterministic `EsoWeaveDataSaved.catalog` records, and restricted staging | Package lifecycle, encounter state, PixelBeacon, input generation, network transfer, direct SQLite publication, or distributable game art |
 | Encounter Capture Module | Explicit in-game control of exactly single and continuous modes, a bounded ordered spool in `EsoWeaveDataSaved.encounter`, source-exact callbacks and API reads, linked compatibility projections, interruptions, and declared loss | Desktop command ingress, package lifecycle, catalog state, Pixel Bus transport, upload, telemetry, input generation, or gameplay mutation |
@@ -124,14 +124,11 @@ Maintainer candidate generation precedes package publication:
 
 `pinned request -> bounded verified sources -> normalize/import -> build/verify/diff -> local icon receipt -> immutable review candidate`
 
-Candidate generation cannot update the package path. The user-initiated update
-worker verifies an imported candidate again, publishes it immutably in user data,
-opens it read-only, and only then atomically selects it. Invalid selections visibly
-degrade to the packaged fallback.
+Candidate generation cannot update the package path. Automatic maintenance verifies a completed compatible local source, accumulates accepted facts, publishes an immutable user-data generation, opens it read-only, then atomically selects it. A separate bounded coordinator owns eligibility/cancellation while one worker serializes builds. Invalid selection first resolves a retained verified generation, then a compatible packaged fallback. See [Automatic Catalog Maintenance](catalog-updates.md).
 
 User-local API discovery precedes that path when explicitly requested:
 
-`explicit addon install -> explicit in-game capture -> SavedVariables save -> restricted importer -> reviewed normalized JSON`
+`one combined PixelBeacon -> bounded automatic Catalog collection -> natural game save -> restricted importer -> compatible accumulated definitions`
 
 Encounter observation and import follow the isolated encounter-module path:
 
@@ -204,26 +201,9 @@ manifest is the explicit virtual-path-to-object authority, and every unavailable
 source maps to the project placeholder. No icon path performs discovery,
 download, archive extraction, upload, or application activation.
 
-ESO Weave Data is one lifecycle boundary separate from PixelBeacon. Its catalog
-module does limited work per update tick, pauses in combat, and emits bounded
-deterministic JSON-line chunks under `EsoWeaveDataSaved.catalog`. Its encounter
-module remains dormant until an explicit in-game toggle enables either `single`
-or `continuous` for an explicitly selected Live or PTS channel. Single records
-one combat period and stops. Continuous retains one session identity and
-contiguous encounter ordinals across combat gaps until explicit disablement or a
-declared hard failure. Selected callback values can include source-exact names
-and identifiers, remain local, and are bounded with explicit loss. Neither
-module uses Pixel Bus for bulk data or authorizes gameplay actions.
+One managed PixelBeacon package owns independent beacon and automatic Catalog modules. Transactional migration validates exact owned inventory and preserves neighboring addons, SavedVariables and retained history. Capability recognition remains separate from mutation ownership. Its startup configuration carries the Catalog optout and actual installation channel; loaded Lua applies changes at the next natural load, without a live inbound command.
 
-Detailed encounter handlers exist only while capturing. The small combat-state
-and deactivation boundary handlers transition between stopped, waiting,
-capturing, interrupted, and failed. Mid-combat activation begins from an exact
-`IsUnitInCombat("player")` API observation and declares the unknown prefix rather
-than fabricating callback values. Reload or relog recovery trusts only the last
-durably flushed request, marks an interruption, resumes only valid continuous
-authority, and never retries a failed session automatically. Native encounter-log
-qualification remains separate and provisional; historical issue #190 records
-its contract without proving platform behavior.
+Catalog work and finalization yield within bounded ticks, automatically defer/resume around unsuitable game states and retain the last completed snapshot during failures. Both desktop data preferences persist independently, and both services are dormant without recognized compatible combined presence. Native processing consumes the preference contract in its separately scoped implementation. Legacy addon encounter capture is not loaded or automatically resumed; its historical readers, exact evidence and loss semantics remain supported. Completed native-file import remains available until the subsequent automatic native watcher and interface retirement slice.
 
 Both importers parse the shared outer root through one crate-private restricted
 table grammar, validate its schema and addon version, and then select only their

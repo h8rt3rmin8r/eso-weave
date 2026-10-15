@@ -56,25 +56,27 @@ local FAST_UPDATE_MS = 100
 local BITE_SAFETY_TIMEOUT_MS = 5000
 
 -- Weapon-class codes, shared byte-for-byte with the ESO Weave pixel-bus reader.
-local CLASS_NONE = 0
-local CLASS_DUAL_WIELD = 1
-local CLASS_TWO_HANDED = 2
-local CLASS_SWORD_AND_SHIELD = 3
-local CLASS_BOW = 4
-local CLASS_DESTRUCTION_STAFF = 5
-local CLASS_RESTORATION_STAFF = 6
+-- Keep protocol constants private without consuming Lua 5.1 chunk locals.
+local SIGNALS = {}
+SIGNALS.CLASS_NONE = 0
+SIGNALS.CLASS_DUAL_WIELD = 1
+SIGNALS.CLASS_TWO_HANDED = 2
+SIGNALS.CLASS_SWORD_AND_SHIELD = 3
+SIGNALS.CLASS_BOW = 4
+SIGNALS.CLASS_DESTRUCTION_STAFF = 5
+SIGNALS.CLASS_RESTORATION_STAFF = 6
 
 -- The weapon-bar block marker (green channel), distinct from the latency marker.
-local WEAPON_MARKER = 0x5A
+SIGNALS.WEAPON_MARKER = 0x5A
 
 -- The combat block marker (green channel) and its two state codes (red channel),
 -- shared byte for byte with the companion decoder. Blue carries the complement
 -- checksum, 255 minus red, so an unrelated color behind an absent block cannot
 -- pass validation. The marker is at least 45 away from every other green on the
 -- strip, and the two state codes are 192 apart.
-local COMBAT_MARKER = 0x2D
-local COMBAT_IN_RED = 0xE0
-local COMBAT_OUT_RED = 0x20
+SIGNALS.COMBAT_MARKER = 0x2D
+SIGNALS.COMBAT_IN_RED = 0xE0
+SIGNALS.COMBAT_OUT_RED = 0x20
 
 -- The last rendered combat state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
@@ -89,13 +91,13 @@ local inCombat = nil
 -- The code is two bits: bit 0 is mounted and bit 1 is sprint. Sprint is a bounded
 -- keyboard-mode inference, not an authoritative ESO state. Mounted sprint remains
 -- reserved because there is no defensible signal for it.
-local MOVEMENT_MARKER = 0x43
-local MOVEMENT_ON_FOOT_RED = 0x20
-local MOVEMENT_MOUNTED_RED = 0x60
-local MOVEMENT_SPRINT_ON_FOOT_RED = 0xA0
-local SPRINT_ENTER_DEBOUNCE_MS = 200
-local SPRINT_EXIT_DEBOUNCE_MS = 200
-local SPRINT_WATCHDOG_MS = 1500
+SIGNALS.MOVEMENT_MARKER = 0x43
+SIGNALS.MOVEMENT_ON_FOOT_RED = 0x20
+SIGNALS.MOVEMENT_MOUNTED_RED = 0x60
+SIGNALS.MOVEMENT_SPRINT_ON_FOOT_RED = 0xA0
+SIGNALS.SPRINT_ENTER_DEBOUNCE_MS = 200
+SIGNALS.SPRINT_EXIT_DEBOUNCE_MS = 200
+SIGNALS.SPRINT_WATCHDOG_MS = 1500
 
 -- The last rendered mounted state, held so the block is redrawn only on a real
 -- transition. nil until the first render.
@@ -108,12 +110,12 @@ local sprintLastQualified = nil
 -- The authoritative player life state. Red carries one of five discrete states,
 -- green identifies B21, and blue is the complement checksum. The marker is the
 -- midpoint of the widest remaining gap in the companion's marker registry.
-local LIFE_MARKER = 0x89
-local LIFE_ALIVE_RED = 0x20
-local LIFE_RECOVERING_NO_LOAD_RED = 0x50
-local LIFE_DEAD_RED = 0x80
-local LIFE_RECOVERING_WORLD_RED = 0xB0
-local LIFE_RECOVERING_GHOST_RED = 0xE0
+SIGNALS.LIFE_MARKER = 0x89
+SIGNALS.LIFE_ALIVE_RED = 0x20
+SIGNALS.LIFE_RECOVERING_NO_LOAD_RED = 0x50
+SIGNALS.LIFE_DEAD_RED = 0x80
+SIGNALS.LIFE_RECOVERING_WORLD_RED = 0xB0
+SIGNALS.LIFE_RECOVERING_GHOST_RED = 0xE0
 
 -- Last rendered state, nil until the first render.
 local lifeState = nil
@@ -131,22 +133,22 @@ local restoreRecoveredLifecycle
 -- The world lifecycle. Unknown is published from addon construction until the
 -- first complete player-activation baseline. Deactivation enters Transitioning,
 -- and only the activation callback may enter Active.
-local WORLD_MARKER = 0xCC
-local WORLD_UNKNOWN_RED = 0x20
-local WORLD_TRANSITIONING_RED = 0x80
-local WORLD_ACTIVE_RED = 0xE0
-local worldState = WORLD_UNKNOWN_RED
+SIGNALS.WORLD_MARKER = 0xCC
+SIGNALS.WORLD_UNKNOWN_RED = 0x20
+SIGNALS.WORLD_TRANSITIONING_RED = 0x80
+SIGNALS.WORLD_ACTIVE_RED = 0xE0
+local worldState = SIGNALS.WORLD_UNKNOWN_RED
 
 -- The bounded roll-dodge action. Ability 28549 emits effect gained at entry and
 -- effect faded at normal completion. A sprint-rejected attempt can omit faded,
 -- so the existing fast tick expires Active after a conservative fixed deadline.
-local ROLL_DODGE_MARKER = 0xF9
-local ROLL_DODGE_UNKNOWN_RED = 0x20
-local ROLL_DODGE_INACTIVE_RED = 0x80
-local ROLL_DODGE_ACTIVE_RED = 0xE0
-local ROLL_DODGE_ABILITY_ID = 28549
-local ROLL_DODGE_WATCHDOG_MS = 1500
-local rollDodgeState = ROLL_DODGE_UNKNOWN_RED
+SIGNALS.ROLL_DODGE_MARKER = 0xF9
+SIGNALS.ROLL_DODGE_UNKNOWN_RED = 0x20
+SIGNALS.ROLL_DODGE_INACTIVE_RED = 0x80
+SIGNALS.ROLL_DODGE_ACTIVE_RED = 0xE0
+SIGNALS.ROLL_DODGE_ABILITY_ID = 28549
+SIGNALS.ROLL_DODGE_WATCHDOG_MS = 1500
+local rollDodgeState = SIGNALS.ROLL_DODGE_UNKNOWN_RED
 local rollDodgeDeadline = nil
 -- Combat events can arrive after death or player deactivation. Keep an explicit
 -- lifecycle guard so those late events cannot replace the fail-closed Unknown
@@ -156,14 +158,14 @@ local rollDodgeLifecycleValid = false
 -- B24 travel state. Recall initiation is observed as a material upward edge in
 -- the documented recall cooldown. Jump-style travel is reinforced by the
 -- prepare and failure events. Every attempt is bounded and lifecycle-scoped.
-local TRAVEL_MARKER = 0x13
-local TRAVEL_UNKNOWN_RED = 0x20
-local TRAVEL_INACTIVE_RED = 0x80
-local TRAVEL_PENDING_RED = 0xE0
-local TRAVEL_RECALL_EDGE_MS = 500
-local TRAVEL_CANCEL_GRACE_MS = 250
-local TRAVEL_WATCHDOG_MS = 15000
-local travelState = TRAVEL_UNKNOWN_RED
+SIGNALS.TRAVEL_MARKER = 0x13
+SIGNALS.TRAVEL_UNKNOWN_RED = 0x20
+SIGNALS.TRAVEL_INACTIVE_RED = 0x80
+SIGNALS.TRAVEL_PENDING_RED = 0xE0
+SIGNALS.TRAVEL_RECALL_EDGE_MS = 500
+SIGNALS.TRAVEL_CANCEL_GRACE_MS = 250
+SIGNALS.TRAVEL_WATCHDOG_MS = 15000
+local travelState = SIGNALS.TRAVEL_UNKNOWN_RED
 local travelSource = nil
 local travelStartedAt = nil
 local travelDeadline = nil
@@ -171,7 +173,7 @@ local lastRecallRemaining = nil
 local travelLifecycleValid = false
 
 -- The six cooldown block markers (green channel), shared byte for byte with the
--- companion decoder. Red carries the remaining time in COOLDOWN_STEP_MS steps,
+-- companion decoder. Red carries the remaining time in SIGNALS.COOLDOWN_STEP_MS steps,
 -- blue carries the 255 minus red complement checksum.
 --
 -- The marks are the midpoints of the six widest gaps left in the companion's
@@ -180,18 +182,18 @@ local travelLifecycleValid = false
 -- distinct marks rather than one shared mark, because six adjacent squares
 -- carrying the same kind of value are exactly where an off-by-one geometry error
 -- would otherwise decode a neighbour's cooldown as this slot's.
-local COOLDOWN_SKILL1_MARKER = 0x0B
-local COOLDOWN_SKILL2_MARKER = 0x21
-local COOLDOWN_SKILL3_MARKER = 0x4E
-local COOLDOWN_SKILL4_MARKER = 0x92
-local COOLDOWN_SKILL5_MARKER = 0xC6
-local COOLDOWN_ULTIMATE_MARKER = 0xE8
+SIGNALS.COOLDOWN_SKILL1_MARKER = 0x0B
+SIGNALS.COOLDOWN_SKILL2_MARKER = 0x21
+SIGNALS.COOLDOWN_SKILL3_MARKER = 0x4E
+SIGNALS.COOLDOWN_SKILL4_MARKER = 0x92
+SIGNALS.COOLDOWN_SKILL5_MARKER = 0xC6
+SIGNALS.COOLDOWN_ULTIMATE_MARKER = 0xE8
 -- Milliseconds per encoded step, the largest encodable step count, and the value
 -- meaning "empty, or the game reports no cooldown". A longer cooldown saturates
 -- at the maximum rather than wrapping, so it reads as "at least this long".
-local COOLDOWN_STEP_MS = 50
-local COOLDOWN_MAX_STEPS = 254
-local COOLDOWN_UNAVAILABLE = 255
+SIGNALS.COOLDOWN_STEP_MS = 50
+SIGNALS.COOLDOWN_MAX_STEPS = 254
+SIGNALS.COOLDOWN_UNAVAILABLE = 255
 
 -- The last rendered step count per slot, held so a block is redrawn only when its
 -- value actually changes. Empty until the first render.
@@ -200,7 +202,7 @@ local cooldownSteps = {}
 -- The quickslot block markers (green channel), shared byte for byte with the
 -- companion decoder.
 --
--- B16 carries the remaining quickslot cooldown using the COOLDOWN_STEP_MS scheme
+-- B16 carries the remaining quickslot cooldown using the SIGNALS.COOLDOWN_STEP_MS scheme
 -- above, reusing those three constants rather than defining quickslot-named
 -- copies: a second name for the same number is how two numbers eventually become
 -- different. This is an attached fact only; B20 classifies the selected entry.
@@ -216,27 +218,27 @@ local cooldownSteps = {}
 -- The original four marks follow slice 038. B20 takes the midpoint of the widest
 -- remaining gap and stays more than four times the default capture tolerance from
 -- its nearest neighbor.
-local QUICKSLOT_MARKER = 0x38
-local QUICKSLOT_ID_HI_MARKER = 0xB0
-local QUICKSLOT_ID_MID_MARKER = 0xDD
-local QUICKSLOT_ID_LO_MARKER = 0xF3
-local QUICKSLOT_STATE_MARKER = 0x76
+SIGNALS.QUICKSLOT_MARKER = 0x38
+SIGNALS.QUICKSLOT_ID_HI_MARKER = 0xB0
+SIGNALS.QUICKSLOT_ID_MID_MARKER = 0xDD
+SIGNALS.QUICKSLOT_ID_LO_MARKER = 0xF3
+SIGNALS.QUICKSLOT_STATE_MARKER = 0x76
 
 -- B20 state codes. Classification is independent from cooldown and identity so
 -- neither attached fact can turn an ambiguous slot into a potion.
-local QUICKSLOT_UNAVAILABLE_API = 0x10
-local QUICKSLOT_INVALID_SELECTION = 0x20
-local QUICKSLOT_INCONSISTENT = 0x30
-local QUICKSLOT_EMPTY = 0x40
-local QUICKSLOT_NON_POTION_ITEM = 0x50
-local QUICKSLOT_NON_POTION_COLLECTIBLE = 0x60
-local QUICKSLOT_NON_POTION_QUEST_ITEM = 0x70
-local QUICKSLOT_NON_POTION_EMOTE = 0x80
-local QUICKSLOT_NON_POTION_QUICK_CHAT = 0x90
-local QUICKSLOT_NON_POTION_OTHER = 0xA0
-local QUICKSLOT_POTION_DEPLETED = 0xB0
-local QUICKSLOT_POTION_BLOCKED = 0xC0
-local QUICKSLOT_POTION_USABLE = 0xD0
+SIGNALS.QUICKSLOT_UNAVAILABLE_API = 0x10
+SIGNALS.QUICKSLOT_INVALID_SELECTION = 0x20
+SIGNALS.QUICKSLOT_INCONSISTENT = 0x30
+SIGNALS.QUICKSLOT_EMPTY = 0x40
+SIGNALS.QUICKSLOT_NON_POTION_ITEM = 0x50
+SIGNALS.QUICKSLOT_NON_POTION_COLLECTIBLE = 0x60
+SIGNALS.QUICKSLOT_NON_POTION_QUEST_ITEM = 0x70
+SIGNALS.QUICKSLOT_NON_POTION_EMOTE = 0x80
+SIGNALS.QUICKSLOT_NON_POTION_QUICK_CHAT = 0x90
+SIGNALS.QUICKSLOT_NON_POTION_OTHER = 0xA0
+SIGNALS.QUICKSLOT_POTION_DEPLETED = 0xB0
+SIGNALS.QUICKSLOT_POTION_BLOCKED = 0xC0
+SIGNALS.QUICKSLOT_POTION_USABLE = 0xD0
 
 -- The last rendered quickslot payloads, held so the blocks are redrawn only when
 -- a value actually changes. nil until the first render.
@@ -247,43 +249,43 @@ local quickslotWatch = false
 local quickslotDiagnosticKey = nil
 
 -- The menu block marker (green channel) and its surface code spacing, shared byte
--- for byte with the companion decoder. Red carries code * MENU_CODE_STEP, blue
+-- for byte with the companion decoder. Red carries code * SIGNALS.MENU_CODE_STEP, blue
 -- carries the 255 minus red complement checksum. Codes are 24 apart, twelve times
 -- the reader's default tolerance.
-local MENU_MARKER = 0xD2
-local MENU_CODE_STEP = 24
-local MENU_CODE_MAX = 10
+SIGNALS.MENU_MARKER = 0xD2
+SIGNALS.MENU_CODE_STEP = 24
+SIGNALS.MENU_CODE_MAX = 10
 
 -- Surface codes, shared byte for byte with the companion.
-local MENU_NONE = 0
-local MENU_SYSTEM = 1
-local MENU_MAP = 2
-local MENU_INVENTORY = 3
-local MENU_MAIL = 4
-local MENU_CHARACTER = 5
-local MENU_GUILD_STORE = 6
-local MENU_CROWN_STORE = 7
-local MENU_JOURNAL = 8
-local MENU_CHAT_ENTRY = 9
-local MENU_OTHER = 10
+SIGNALS.MENU_NONE = 0
+SIGNALS.MENU_SYSTEM = 1
+SIGNALS.MENU_MAP = 2
+SIGNALS.MENU_INVENTORY = 3
+SIGNALS.MENU_MAIL = 4
+SIGNALS.MENU_CHARACTER = 5
+SIGNALS.MENU_GUILD_STORE = 6
+SIGNALS.MENU_CROWN_STORE = 7
+SIGNALS.MENU_JOURNAL = 8
+SIGNALS.MENU_CHAT_ENTRY = 9
+SIGNALS.MENU_OTHER = 10
 
 -- Scene name to surface code. A name missing from this table is NOT a problem:
 -- the active/inactive decision is made from the game's UI mode before this table
--- is consulted, so an unlisted or renamed scene falls back to MENU_OTHER and
+-- is consulted, so an unlisted or renamed scene falls back to SIGNALS.MENU_OTHER and
 -- still gates. The table only improves what the companion displays.
-local SCENE_CODES = {
-    gameMenuInGame = MENU_SYSTEM,
-    worldMap = MENU_MAP,
-    inventory = MENU_INVENTORY,
-    mailInbox = MENU_MAIL,
-    mailSend = MENU_MAIL,
-    mailManager = MENU_MAIL,
-    stats = MENU_CHARACTER,
-    skills = MENU_CHARACTER,
-    championPerks = MENU_CHARACTER,
-    tradinghouse = MENU_GUILD_STORE,
-    market = MENU_CROWN_STORE,
-    journal = MENU_JOURNAL,
+SIGNALS.SCENE_CODES = {
+    gameMenuInGame = SIGNALS.MENU_SYSTEM,
+    worldMap = SIGNALS.MENU_MAP,
+    inventory = SIGNALS.MENU_INVENTORY,
+    mailInbox = SIGNALS.MENU_MAIL,
+    mailSend = SIGNALS.MENU_MAIL,
+    mailManager = SIGNALS.MENU_MAIL,
+    stats = SIGNALS.MENU_CHARACTER,
+    skills = SIGNALS.MENU_CHARACTER,
+    championPerks = SIGNALS.MENU_CHARACTER,
+    tradinghouse = SIGNALS.MENU_GUILD_STORE,
+    market = SIGNALS.MENU_CROWN_STORE,
+    journal = SIGNALS.MENU_JOURNAL,
 }
 
 -- The last rendered surface code, held so the block is redrawn only on a real
@@ -295,15 +297,15 @@ local menuCode = nil
 -- table: a capture that shifts red by one then reads one percent off, where a
 -- table would land on whichever entry is nearest in color space and could be wrong
 -- by any amount. Blue carries the 255 minus red complement checksum.
-local HEALTH_MARKER = 0x16
-local STAMINA_MARKER = 0x6D
-local MAGICKA_MARKER = 0xBB
+SIGNALS.HEALTH_MARKER = 0x16
+SIGNALS.STAMINA_MARKER = 0x6D
+SIGNALS.MAGICKA_MARKER = 0xBB
 
 -- Published when a resource maximum is zero or unreadable. It passes the marker
 -- and checksum checks and fails the range check, so the companion needs no special
 -- case for it and it can never be read as a percentage.
-local RESOURCE_UNAVAILABLE = 0xFF
-local RESOURCE_MAX_PERCENT = 100
+SIGNALS.RESOURCE_UNAVAILABLE = 0xFF
+SIGNALS.RESOURCE_MAX_PERCENT = 100
 
 -- The last rendered percentages, held so each block is redrawn only on a real
 -- change. nil until the first render.
@@ -311,21 +313,21 @@ local resourcePercents = { health = nil, stamina = nil, magicka = nil }
 
 -- B25 to B28 exact Ultimate values. Red carries the low byte, green selects the
 -- field and ninth bit, and blue remains the red complement checksum.
-local ULTIMATE_CURRENT_LOW_MARKER = 0x05
-local ULTIMATE_CURRENT_HIGH_MARKER = 0x7B
-local ULTIMATE_MAX_LOW_MARKER = 0x1B
-local ULTIMATE_MAX_HIGH_MARKER = 0x5F
-local ULTIMATE_FRONT_LOW_MARKER = 0x27
-local ULTIMATE_FRONT_HIGH_MARKER = 0x48
-local ULTIMATE_BACK_LOW_MARKER = 0x32
-local ULTIMATE_BACK_HIGH_MARKER = 0x3D
-local ULTIMATE_UNAVAILABLE = 0x1FF
-local ULTIMATE_MAX_VALUE = 0x1FE
+SIGNALS.ULTIMATE_CURRENT_LOW_MARKER = 0x05
+SIGNALS.ULTIMATE_CURRENT_HIGH_MARKER = 0x7B
+SIGNALS.ULTIMATE_MAX_LOW_MARKER = 0x1B
+SIGNALS.ULTIMATE_MAX_HIGH_MARKER = 0x5F
+SIGNALS.ULTIMATE_FRONT_LOW_MARKER = 0x27
+SIGNALS.ULTIMATE_FRONT_HIGH_MARKER = 0x48
+SIGNALS.ULTIMATE_BACK_LOW_MARKER = 0x32
+SIGNALS.ULTIMATE_BACK_HIGH_MARKER = 0x3D
+SIGNALS.ULTIMATE_UNAVAILABLE = 0x1FF
+SIGNALS.ULTIMATE_MAX_VALUE = 0x1FE
 local ultimateValues = { current = nil, maximum = nil, front = nil, back = nil }
 
 -- The decoded weapon-bar state: active bar code (0 unknown, 1 front, 2 back) and
 -- each bar's class code. Special and indeterminate hotbars publish unknown.
-local weaponBar = { bar = 0, front = CLASS_NONE, back = CLASS_NONE }
+local weaponBar = { bar = 0, front = SIGNALS.CLASS_NONE, back = SIGNALS.CLASS_NONE }
 
 local wm = WINDOW_MANAGER
 local em = EVENT_MANAGER
@@ -703,25 +705,25 @@ end
 -- game enum integers.
 local function classifyWeaponPair(mainType, offType)
     if mainType == WEAPONTYPE_NONE then
-        return CLASS_NONE
+        return SIGNALS.CLASS_NONE
     elseif mainType == WEAPONTYPE_TWO_HANDED_SWORD
         or mainType == WEAPONTYPE_TWO_HANDED_AXE
         or mainType == WEAPONTYPE_TWO_HANDED_HAMMER then
-        return CLASS_TWO_HANDED
+        return SIGNALS.CLASS_TWO_HANDED
     elseif mainType == WEAPONTYPE_BOW then
-        return CLASS_BOW
+        return SIGNALS.CLASS_BOW
     elseif mainType == WEAPONTYPE_FIRE_STAFF
         or mainType == WEAPONTYPE_FROST_STAFF
         or mainType == WEAPONTYPE_LIGHTNING_STAFF then
-        return CLASS_DESTRUCTION_STAFF
+        return SIGNALS.CLASS_DESTRUCTION_STAFF
     elseif mainType == WEAPONTYPE_HEALING_STAFF then
-        return CLASS_RESTORATION_STAFF
+        return SIGNALS.CLASS_RESTORATION_STAFF
     elseif offType == WEAPONTYPE_SHIELD then
-        return CLASS_SWORD_AND_SHIELD
+        return SIGNALS.CLASS_SWORD_AND_SHIELD
     else
         -- A one-handed melee weapon with another weapon (or nothing) in the off
         -- hand is treated as dual wield for timing purposes.
-        return CLASS_DUAL_WIELD
+        return SIGNALS.CLASS_DUAL_WIELD
     end
 end
 
@@ -766,7 +768,7 @@ local function renderWeapon()
         return
     end
     local red = weaponBar.front * 16 + weaponBar.back
-    blocks.weapon:SetCenterColor(channel(red), channel(WEAPON_MARKER), channel(weaponBar.bar), 1)
+    blocks.weapon:SetCenterColor(channel(red), channel(SIGNALS.WEAPON_MARKER), channel(weaponBar.bar), 1)
     blocks.weapon:SetHidden(false)
 end
 
@@ -781,8 +783,8 @@ local function renderCombat()
         blocks.combat:SetHidden(true)
         return
     end
-    local red = inCombat and COMBAT_IN_RED or COMBAT_OUT_RED
-    blocks.combat:SetCenterColor(channel(red), channel(COMBAT_MARKER), channel(255 - red), 1)
+    local red = inCombat and SIGNALS.COMBAT_IN_RED or SIGNALS.COMBAT_OUT_RED
+    blocks.combat:SetCenterColor(channel(red), channel(SIGNALS.COMBAT_MARKER), channel(255 - red), 1)
     blocks.combat:SetHidden(false)
 end
 
@@ -818,13 +820,13 @@ local function renderMovement()
     end
     local red
     if isMounted then
-        red = MOVEMENT_MOUNTED_RED
+        red = SIGNALS.MOVEMENT_MOUNTED_RED
     elseif isSprinting then
-        red = MOVEMENT_SPRINT_ON_FOOT_RED
+        red = SIGNALS.MOVEMENT_SPRINT_ON_FOOT_RED
     else
-        red = MOVEMENT_ON_FOOT_RED
+        red = SIGNALS.MOVEMENT_ON_FOOT_RED
     end
-    blocks.movement:SetCenterColor(channel(red), channel(MOVEMENT_MARKER), channel(255 - red), 1)
+    blocks.movement:SetCenterColor(channel(red), channel(SIGNALS.MOVEMENT_MARKER), channel(255 - red), 1)
     blocks.movement:SetHidden(false)
 end
 
@@ -864,7 +866,7 @@ local function resetDeathEpisode()
 end
 
 local function beginDeathEpisode()
-    if not deathEpisodeActive or lifeState ~= LIFE_DEAD_RED then
+    if not deathEpisodeActive or lifeState ~= SIGNALS.LIFE_DEAD_RED then
         deathEpisodeActive = true
         lifeRecoveryPath = nil
         recoveryReadyGeneration = nil
@@ -874,16 +876,16 @@ local function beginDeathEpisode()
         lifeSawActivated = false
         ghostClearBaselines = 0
     end
-    return setLifeState(LIFE_DEAD_RED)
+    return setLifeState(SIGNALS.LIFE_DEAD_RED)
 end
 
 local function recoveryState(path)
     if path == "ghost" then
-        return LIFE_RECOVERING_GHOST_RED
+        return SIGNALS.LIFE_RECOVERING_GHOST_RED
     elseif path == "world" then
-        return LIFE_RECOVERING_WORLD_RED
+        return SIGNALS.LIFE_RECOVERING_WORLD_RED
     end
-    return LIFE_RECOVERING_NO_LOAD_RED
+    return SIGNALS.LIFE_RECOVERING_NO_LOAD_RED
 end
 
 local function beginLifeRecovery(path)
@@ -914,15 +916,15 @@ local function completeLifeRecovery()
     end
     if IsUnitReincarnating("player") then
         lifeRecoveryPath = "ghost"
-        return setLifeState(LIFE_RECOVERING_GHOST_RED)
+        return setLifeState(SIGNALS.LIFE_RECOVERING_GHOST_RED)
     end
-    if worldState ~= WORLD_ACTIVE_RED then
+    if worldState ~= SIGNALS.WORLD_ACTIVE_RED then
         return false
     end
     if lifeRecoveryPath == "ghost" and not lifeSawReincarnated then
         return false
     end
-    if lifeRecoveryPath == "world" and (not lifeSawActivated or worldState ~= WORLD_ACTIVE_RED) then
+    if lifeRecoveryPath == "world" and (not lifeSawActivated or worldState ~= SIGNALS.WORLD_ACTIVE_RED) then
         return false
     end
     if lifeRecoveryPath == "no-load" and not lifeSawAlive then
@@ -932,7 +934,7 @@ local function completeLifeRecovery()
         return false
     end
     restoreRecoveredLifecycle()
-    local changed = setLifeState(LIFE_ALIVE_RED)
+    local changed = setLifeState(SIGNALS.LIFE_ALIVE_RED)
     resetDeathEpisode()
     return changed
 end
@@ -944,13 +946,13 @@ local function observeLifeState(allowCompletion)
         end
         lifeRecoveryPath = "ghost"
         ghostClearBaselines = 0
-        return setLifeState(LIFE_RECOVERING_GHOST_RED)
+        return setLifeState(SIGNALS.LIFE_RECOVERING_GHOST_RED)
     end
     if IsUnitDead("player") then
         return beginDeathEpisode()
     end
     if not deathEpisodeActive then
-        return setLifeState(LIFE_ALIVE_RED)
+        return setLifeState(SIGNALS.LIFE_ALIVE_RED)
     end
 
     if lifeRecoveryPath == "ghost" and not lifeSawReincarnated then
@@ -961,7 +963,7 @@ local function observeLifeState(allowCompletion)
                 recoveryReadyGeneration = lifeBaselineGeneration + 1
             end
         end
-        setLifeState(LIFE_RECOVERING_GHOST_RED)
+        setLifeState(SIGNALS.LIFE_RECOVERING_GHOST_RED)
     end
     if allowCompletion then
         return completeLifeRecovery()
@@ -974,7 +976,7 @@ local function renderLifeState()
         blocks.life:SetHidden(true)
         return
     end
-    blocks.life:SetCenterColor(channel(lifeState), channel(LIFE_MARKER), channel(255 - lifeState), 1)
+    blocks.life:SetCenterColor(channel(lifeState), channel(SIGNALS.LIFE_MARKER), channel(255 - lifeState), 1)
     blocks.life:SetHidden(false)
 end
 
@@ -985,7 +987,7 @@ local function renderWorldState()
         blocks.world:SetHidden(true)
         return
     end
-    blocks.world:SetCenterColor(channel(worldState), channel(WORLD_MARKER), channel(255 - worldState), 1)
+    blocks.world:SetCenterColor(channel(worldState), channel(SIGNALS.WORLD_MARKER), channel(255 - worldState), 1)
     blocks.world:SetHidden(false)
 end
 
@@ -1007,7 +1009,7 @@ local function renderRollDodgeState()
     end
     blocks.rollDodge:SetCenterColor(
         channel(rollDodgeState),
-        channel(ROLL_DODGE_MARKER),
+        channel(SIGNALS.ROLL_DODGE_MARKER),
         channel(255 - rollDodgeState),
         1
     )
@@ -1026,21 +1028,21 @@ end
 local function invalidateRollDodgeState()
     rollDodgeLifecycleValid = false
     rollDodgeDeadline = nil
-    setRollDodgeState(ROLL_DODGE_UNKNOWN_RED)
+    setRollDodgeState(SIGNALS.ROLL_DODGE_UNKNOWN_RED)
 end
 
 local function onRollDodgeCombatEvent(_, result)
     if not rollDodgeLifecycleValid
-        or worldState ~= WORLD_ACTIVE_RED
-        or lifeState ~= LIFE_ALIVE_RED then
+        or worldState ~= SIGNALS.WORLD_ACTIVE_RED
+        or lifeState ~= SIGNALS.LIFE_ALIVE_RED then
         return
     end
     if result == ACTION_RESULT_EFFECT_GAINED then
-        rollDodgeDeadline = GetGameTimeMilliseconds() + ROLL_DODGE_WATCHDOG_MS
-        setRollDodgeState(ROLL_DODGE_ACTIVE_RED)
+        rollDodgeDeadline = GetGameTimeMilliseconds() + SIGNALS.ROLL_DODGE_WATCHDOG_MS
+        setRollDodgeState(SIGNALS.ROLL_DODGE_ACTIVE_RED)
     elseif result == ACTION_RESULT_EFFECT_FADED then
         rollDodgeDeadline = nil
-        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+        setRollDodgeState(SIGNALS.ROLL_DODGE_INACTIVE_RED)
     end
 end
 
@@ -1052,7 +1054,7 @@ local function renderTravelState()
         return
     end
     blocks.travel:SetCenterColor(
-        channel(travelState), channel(TRAVEL_MARKER), channel(255 - travelState), 1
+        channel(travelState), channel(SIGNALS.TRAVEL_MARKER), channel(255 - travelState), 1
     )
     blocks.travel:SetHidden(false)
 end
@@ -1072,20 +1074,20 @@ local function invalidateTravelState()
     travelStartedAt = nil
     travelDeadline = nil
     lastRecallRemaining = nil
-    setTravelState(TRAVEL_UNKNOWN_RED)
+    setTravelState(SIGNALS.TRAVEL_UNKNOWN_RED)
 end
 
 local function beginTravel(source)
     if not travelLifecycleValid
-        or worldState ~= WORLD_ACTIVE_RED
-        or lifeState ~= LIFE_ALIVE_RED then
+        or worldState ~= SIGNALS.WORLD_ACTIVE_RED
+        or lifeState ~= SIGNALS.LIFE_ALIVE_RED then
         return
     end
     local now = GetGameTimeMilliseconds()
     travelSource = source
     travelStartedAt = now
-    travelDeadline = now + TRAVEL_WATCHDOG_MS
-    setTravelState(TRAVEL_PENDING_RED)
+    travelDeadline = now + SIGNALS.TRAVEL_WATCHDOG_MS
+    setTravelState(SIGNALS.TRAVEL_PENDING_RED)
 end
 
 local function clearTravelState()
@@ -1093,11 +1095,11 @@ local function clearTravelState()
     travelStartedAt = nil
     travelDeadline = nil
     if travelLifecycleValid
-        and worldState == WORLD_ACTIVE_RED
-        and lifeState == LIFE_ALIVE_RED then
-        setTravelState(TRAVEL_INACTIVE_RED)
+        and worldState == SIGNALS.WORLD_ACTIVE_RED
+        and lifeState == SIGNALS.LIFE_ALIVE_RED then
+        setTravelState(SIGNALS.TRAVEL_INACTIVE_RED)
     else
-        setTravelState(TRAVEL_UNKNOWN_RED)
+        setTravelState(SIGNALS.TRAVEL_UNKNOWN_RED)
     end
 end
 
@@ -1108,18 +1110,18 @@ local function updateTravelState()
     local now = GetGameTimeMilliseconds()
     local recallRemaining = GetRecallCooldown()
     if lastRecallRemaining ~= nil
-        and recallRemaining >= lastRecallRemaining + TRAVEL_RECALL_EDGE_MS then
+        and recallRemaining >= lastRecallRemaining + SIGNALS.TRAVEL_RECALL_EDGE_MS then
         beginTravel("recall")
     end
     lastRecallRemaining = recallRemaining
-    if travelState ~= TRAVEL_PENDING_RED then
+    if travelState ~= SIGNALS.TRAVEL_PENDING_RED then
         return
     end
     if travelDeadline ~= nil and now >= travelDeadline then
         clearTravelState()
     elseif travelSource == "recall"
         and travelStartedAt ~= nil
-        and now >= travelStartedAt + TRAVEL_CANCEL_GRACE_MS
+        and now >= travelStartedAt + SIGNALS.TRAVEL_CANCEL_GRACE_MS
         and (IsPlayerMoving() or IsPlayerTryingToMove()) then
         clearTravelState()
     end
@@ -1130,7 +1132,7 @@ local function onPrepareForJump()
 end
 
 local function onJumpFailed()
-    if travelState == TRAVEL_PENDING_RED and travelSource == "jump" then
+    if travelState == SIGNALS.TRAVEL_PENDING_RED and travelSource == "jump" then
         clearTravelState()
     end
 end
@@ -1153,8 +1155,8 @@ local function allActiveSlotsHaveNonCostFailure()
 end
 
 local function sprintIsHardExcluded()
-    return worldState ~= WORLD_ACTIVE_RED
-        or lifeState ~= LIFE_ALIVE_RED
+    return worldState ~= SIGNALS.WORLD_ACTIVE_RED
+        or lifeState ~= SIGNALS.LIFE_ALIVE_RED
         or IsInGamepadPreferredMode()
         or IsMounted()
         or not IsPlayerMoving()
@@ -1162,7 +1164,7 @@ local function sprintIsHardExcluded()
         or IsUnitSwimming("player")
         or IsUnitFalling("player")
         or IsUnitDeadOrReincarnating("player")
-        or rollDodgeState ~= ROLL_DODGE_INACTIVE_RED
+        or rollDodgeState ~= SIGNALS.ROLL_DODGE_INACTIVE_RED
 end
 
 local function setSprintState(nextState)
@@ -1196,7 +1198,7 @@ local function updateSprintState()
     end
 
     if isSprinting and (sprintLastQualified == nil
-        or now - sprintLastQualified >= SPRINT_WATCHDOG_MS) then
+        or now - sprintLastQualified >= SIGNALS.SPRINT_WATCHDOG_MS) then
         setSprintState(false)
     end
 
@@ -1211,7 +1213,7 @@ local function updateSprintState()
         return
     end
 
-    local debounce = qualified and SPRINT_ENTER_DEBOUNCE_MS or SPRINT_EXIT_DEBOUNCE_MS
+    local debounce = qualified and SIGNALS.SPRINT_ENTER_DEBOUNCE_MS or SIGNALS.SPRINT_EXIT_DEBOUNCE_MS
     if sprintCandidateSince ~= nil and now - sprintCandidateSince >= debounce then
         setSprintState(qualified)
     end
@@ -1236,7 +1238,7 @@ end
 -- constants rather than hardcoded integers, so a change to the bar layout cannot
 -- silently misalign the blocks against the slots. Synergy is absent because it is
 -- a contextual prompt rather than an action slot, so there is nothing to read.
-local COOLDOWN_SLOTS = {
+SIGNALS.COOLDOWN_SLOTS = {
     ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 1,
     ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 2,
     ACTION_BAR_FIRST_NORMAL_SLOT_INDEX + 3,
@@ -1245,16 +1247,16 @@ local COOLDOWN_SLOTS = {
     ACTION_BAR_ULTIMATE_SLOT_INDEX + 1,
 }
 
-local COOLDOWN_MARKERS = {
-    COOLDOWN_SKILL1_MARKER,
-    COOLDOWN_SKILL2_MARKER,
-    COOLDOWN_SKILL3_MARKER,
-    COOLDOWN_SKILL4_MARKER,
-    COOLDOWN_SKILL5_MARKER,
-    COOLDOWN_ULTIMATE_MARKER,
+SIGNALS.COOLDOWN_MARKERS = {
+    SIGNALS.COOLDOWN_SKILL1_MARKER,
+    SIGNALS.COOLDOWN_SKILL2_MARKER,
+    SIGNALS.COOLDOWN_SKILL3_MARKER,
+    SIGNALS.COOLDOWN_SKILL4_MARKER,
+    SIGNALS.COOLDOWN_SKILL5_MARKER,
+    SIGNALS.COOLDOWN_ULTIMATE_MARKER,
 }
 
-local COOLDOWN_BLOCK_KEYS = {
+SIGNALS.COOLDOWN_BLOCK_KEYS = {
     "cooldown1",
     "cooldown2",
     "cooldown3",
@@ -1268,16 +1270,16 @@ local COOLDOWN_BLOCK_KEYS = {
 local function cooldownStepsFor(slotIndex)
     local remaining = GetSlotCooldownInfo(slotIndex)
     if remaining == nil then
-        return COOLDOWN_UNAVAILABLE
+        return SIGNALS.COOLDOWN_UNAVAILABLE
     end
     if remaining <= 0 then
         return 0
     end
-    local steps = zo_floor(remaining / COOLDOWN_STEP_MS + 0.5)
+    local steps = zo_floor(remaining / SIGNALS.COOLDOWN_STEP_MS + 0.5)
     if steps < 1 then
         steps = 1
-    elseif steps > COOLDOWN_MAX_STEPS then
-        steps = COOLDOWN_MAX_STEPS
+    elseif steps > SIGNALS.COOLDOWN_MAX_STEPS then
+        steps = SIGNALS.COOLDOWN_MAX_STEPS
     end
     return steps
 end
@@ -1285,8 +1287,8 @@ end
 -- Recomputes all six, returning true when any changed.
 local function updateCooldowns()
     local changed = false
-    for i = 1, #COOLDOWN_SLOTS do
-        local steps = cooldownStepsFor(COOLDOWN_SLOTS[i])
+    for i = 1, #SIGNALS.COOLDOWN_SLOTS do
+        local steps = cooldownStepsFor(SIGNALS.COOLDOWN_SLOTS[i])
         if steps ~= cooldownSteps[i] then
             cooldownSteps[i] = steps
             changed = true
@@ -1296,13 +1298,13 @@ local function updateCooldowns()
 end
 
 local function renderCooldowns()
-    for i = 1, #COOLDOWN_BLOCK_KEYS do
-        local block = blocks[COOLDOWN_BLOCK_KEYS[i]]
+    for i = 1, #SIGNALS.COOLDOWN_BLOCK_KEYS do
+        local block = blocks[SIGNALS.COOLDOWN_BLOCK_KEYS[i]]
         if blocks.status:IsHidden() then
             block:SetHidden(true)
         else
-            local steps = cooldownSteps[i] or COOLDOWN_UNAVAILABLE
-            block:SetCenterColor(channel(steps), channel(COOLDOWN_MARKERS[i]), channel(255 - steps), 1)
+            local steps = cooldownSteps[i] or SIGNALS.COOLDOWN_UNAVAILABLE
+            block:SetCenterColor(channel(steps), channel(SIGNALS.COOLDOWN_MARKERS[i]), channel(255 - steps), 1)
             block:SetHidden(false)
         end
     end
@@ -1310,29 +1312,29 @@ end
 
 -- B16 to B20 Quickslot ---------------------------------------------------------
 
-local QUICKSLOT_ID_BLOCK_KEYS = {
+SIGNALS.QUICKSLOT_ID_BLOCK_KEYS = {
     "quickslotIdHi",
     "quickslotIdMid",
     "quickslotIdLo",
 }
 
-local QUICKSLOT_ID_MARKERS = {
-    QUICKSLOT_ID_HI_MARKER,
-    QUICKSLOT_ID_MID_MARKER,
-    QUICKSLOT_ID_LO_MARKER,
+SIGNALS.QUICKSLOT_ID_MARKERS = {
+    SIGNALS.QUICKSLOT_ID_HI_MARKER,
+    SIGNALS.QUICKSLOT_ID_MID_MARKER,
+    SIGNALS.QUICKSLOT_ID_LO_MARKER,
 }
 
 local function quickslotCooldownSteps(remaining)
     if remaining == nil then
-        return COOLDOWN_UNAVAILABLE
+        return SIGNALS.COOLDOWN_UNAVAILABLE
     elseif remaining <= 0 then
         return 0
     end
-    local steps = zo_floor(remaining / COOLDOWN_STEP_MS + 0.5)
+    local steps = zo_floor(remaining / SIGNALS.COOLDOWN_STEP_MS + 0.5)
     if steps < 1 then
         return 1
-    elseif steps > COOLDOWN_MAX_STEPS then
-        return COOLDOWN_MAX_STEPS
+    elseif steps > SIGNALS.COOLDOWN_MAX_STEPS then
+        return SIGNALS.COOLDOWN_MAX_STEPS
     end
     return steps
 end
@@ -1353,20 +1355,20 @@ local function computeQuickslot()
     }
     if not facts.hotbarAvailable or not facts.apiAvailable then
         facts.oldFail = "api"
-        facts.state = QUICKSLOT_UNAVAILABLE_API
-        facts.steps = COOLDOWN_UNAVAILABLE
+        facts.state = SIGNALS.QUICKSLOT_UNAVAILABLE_API
+        facts.steps = SIGNALS.COOLDOWN_UNAVAILABLE
         facts.id = 0
-        return COOLDOWN_UNAVAILABLE, 0, facts.state, facts
+        return SIGNALS.COOLDOWN_UNAVAILABLE, 0, facts.state, facts
     end
 
     local hotbar = HOTBAR_CATEGORY_QUICKSLOT_WHEEL
     facts.slot = GetCurrentQuickslot()
     if facts.slot == nil or facts.slot <= 0 then
         facts.oldFail = "slot"
-        facts.state = QUICKSLOT_INVALID_SELECTION
-        facts.steps = COOLDOWN_UNAVAILABLE
+        facts.state = SIGNALS.QUICKSLOT_INVALID_SELECTION
+        facts.steps = SIGNALS.COOLDOWN_UNAVAILABLE
         facts.id = 0
-        return COOLDOWN_UNAVAILABLE, 0, facts.state, facts
+        return SIGNALS.COOLDOWN_UNAVAILABLE, 0, facts.state, facts
     end
 
     facts.slotType = GetSlotType(facts.slot, hotbar)
@@ -1418,36 +1420,36 @@ local function computeQuickslot()
 
     local state
     if not facts.snapshotStable then
-        state = QUICKSLOT_INCONSISTENT
+        state = SIGNALS.QUICKSLOT_INCONSISTENT
     elseif facts.slotType == nil then
-        state = QUICKSLOT_INCONSISTENT
+        state = SIGNALS.QUICKSLOT_INCONSISTENT
     elseif facts.slotType == ACTION_TYPE_NOTHING then
-        state = QUICKSLOT_EMPTY
+        state = SIGNALS.QUICKSLOT_EMPTY
     elseif facts.slotType == ACTION_TYPE_COLLECTIBLE then
-        state = QUICKSLOT_NON_POTION_COLLECTIBLE
+        state = SIGNALS.QUICKSLOT_NON_POTION_COLLECTIBLE
     elseif facts.slotType == ACTION_TYPE_QUEST_ITEM then
-        state = QUICKSLOT_NON_POTION_QUEST_ITEM
+        state = SIGNALS.QUICKSLOT_NON_POTION_QUEST_ITEM
     elseif facts.slotType == ACTION_TYPE_EMOTE then
-        state = QUICKSLOT_NON_POTION_EMOTE
+        state = SIGNALS.QUICKSLOT_NON_POTION_EMOTE
     elseif facts.slotType == ACTION_TYPE_QUICK_CHAT then
-        state = QUICKSLOT_NON_POTION_QUICK_CHAT
+        state = SIGNALS.QUICKSLOT_NON_POTION_QUICK_CHAT
     elseif facts.slotType ~= ACTION_TYPE_ITEM then
-        state = QUICKSLOT_NON_POTION_OTHER
+        state = SIGNALS.QUICKSLOT_NON_POTION_OTHER
     elseif not facts.linkPresent or facts.itemType == nil or facts.count == nil then
-        state = QUICKSLOT_INCONSISTENT
+        state = SIGNALS.QUICKSLOT_INCONSISTENT
     elseif facts.itemType ~= ITEMTYPE_POTION then
-        state = QUICKSLOT_NON_POTION_ITEM
+        state = SIGNALS.QUICKSLOT_NON_POTION_ITEM
     elseif facts.count <= 0 then
-        state = QUICKSLOT_POTION_DEPLETED
+        state = SIGNALS.QUICKSLOT_POTION_DEPLETED
     elseif not facts.usable then
-        state = QUICKSLOT_POTION_BLOCKED
+        state = SIGNALS.QUICKSLOT_POTION_BLOCKED
     else
-        state = QUICKSLOT_POTION_USABLE
+        state = SIGNALS.QUICKSLOT_POTION_USABLE
     end
 
     local id = 0
-    if state == QUICKSLOT_POTION_DEPLETED or state == QUICKSLOT_POTION_BLOCKED
-        or state == QUICKSLOT_POTION_USABLE then
+    if state == SIGNALS.QUICKSLOT_POTION_DEPLETED or state == SIGNALS.QUICKSLOT_POTION_BLOCKED
+        or state == SIGNALS.QUICKSLOT_POTION_USABLE then
         id = (GetItemLinkItemId(facts.link) or 0) % 0x1000000
     end
     facts.state = state
@@ -1475,7 +1477,7 @@ local function quickslotDiagnostic(facts)
         diagnosticValue(facts.hasAbility), diagnosticValue(facts.usable),
         diagnosticValue(facts.remaining), diagnosticValue(facts.duration),
         diagnosticValue(facts.global), diagnosticValue(facts.globalSlotType),
-        facts.state or QUICKSLOT_INCONSISTENT,
+        facts.state or SIGNALS.QUICKSLOT_INCONSISTENT,
         diagnosticValue(facts.steps), diagnosticValue(facts.id)
     )
 end
@@ -1510,16 +1512,16 @@ end
 
 local function renderQuickslot()
     local hidden = blocks.status:IsHidden()
-    local steps = quickslotSteps or COOLDOWN_UNAVAILABLE
+    local steps = quickslotSteps or SIGNALS.COOLDOWN_UNAVAILABLE
     local id = quickslotId or 0
-    local state = quickslotState or QUICKSLOT_UNAVAILABLE_API
+    local state = quickslotState or SIGNALS.QUICKSLOT_UNAVAILABLE_API
 
     if hidden then
         blocks.quickslot:SetHidden(true)
     else
         blocks.quickslot:SetCenterColor(
             channel(steps),
-            channel(QUICKSLOT_MARKER),
+            channel(SIGNALS.QUICKSLOT_MARKER),
             channel(255 - steps),
             1
         )
@@ -1534,15 +1536,15 @@ local function renderQuickslot()
         zo_floor(id / 0x100) % 0x100,
         id % 0x100,
     }
-    for i = 1, #QUICKSLOT_ID_BLOCK_KEYS do
-        local block = blocks[QUICKSLOT_ID_BLOCK_KEYS[i]]
+    for i = 1, #SIGNALS.QUICKSLOT_ID_BLOCK_KEYS do
+        local block = blocks[SIGNALS.QUICKSLOT_ID_BLOCK_KEYS[i]]
         if hidden then
             block:SetHidden(true)
         else
             local byte = bytes[i]
             block:SetCenterColor(
                 channel(byte),
-                channel(QUICKSLOT_ID_MARKERS[i]),
+                channel(SIGNALS.QUICKSLOT_ID_MARKERS[i]),
                 channel(255 - byte),
                 1
             )
@@ -1555,7 +1557,7 @@ local function renderQuickslot()
     else
         blocks.quickslotState:SetCenterColor(
             channel(state),
-            channel(QUICKSLOT_STATE_MARKER),
+            channel(SIGNALS.QUICKSLOT_STATE_MARKER),
             channel(255 - state),
             1
         )
@@ -1613,14 +1615,14 @@ end
 -- Computes the surface code: the boolean first, the label second.
 local function computeMenuCode()
     if not isSurfaceActive() then
-        return MENU_NONE
+        return SIGNALS.MENU_NONE
     end
     if isChatEntryOpen() then
-        return MENU_CHAT_ENTRY
+        return SIGNALS.MENU_CHAT_ENTRY
     end
     local scene = SCENE_MANAGER and SCENE_MANAGER:GetCurrentScene()
     local name = scene and scene.GetName and scene:GetName()
-    return (name and SCENE_CODES[name]) or MENU_OTHER
+    return (name and SIGNALS.SCENE_CODES[name]) or SIGNALS.MENU_OTHER
 end
 
 -- Renders B5: the menu marker in green, the surface code in red, and the
@@ -1631,8 +1633,8 @@ local function renderMenu()
         blocks.menu:SetHidden(true)
         return
     end
-    local red = (menuCode or MENU_NONE) * MENU_CODE_STEP
-    blocks.menu:SetCenterColor(channel(red), channel(MENU_MARKER), channel(255 - red), 1)
+    local red = (menuCode or SIGNALS.MENU_NONE) * SIGNALS.MENU_CODE_STEP
+    blocks.menu:SetCenterColor(channel(red), channel(SIGNALS.MENU_MARKER), channel(255 - red), 1)
     blocks.menu:SetHidden(false)
 end
 
@@ -1654,13 +1656,13 @@ end
 local function resourcePercent(mechanic)
     local current, maximum = GetUnitPower("player", mechanic)
     if current == nil or maximum == nil or maximum <= 0 then
-        return RESOURCE_UNAVAILABLE
+        return SIGNALS.RESOURCE_UNAVAILABLE
     end
-    local percent = zo_floor((current / maximum) * RESOURCE_MAX_PERCENT + 0.5)
+    local percent = zo_floor((current / maximum) * SIGNALS.RESOURCE_MAX_PERCENT + 0.5)
     if percent < 0 then
         percent = 0
-    elseif percent > RESOURCE_MAX_PERCENT then
-        percent = RESOURCE_MAX_PERCENT
+    elseif percent > SIGNALS.RESOURCE_MAX_PERCENT then
+        percent = SIGNALS.RESOURCE_MAX_PERCENT
     end
     return percent
 end
@@ -1691,20 +1693,20 @@ local function updateResources()
 end
 
 local function renderResources()
-    renderResource(blocks.health, HEALTH_MARKER, resourcePercents.health or RESOURCE_UNAVAILABLE)
-    renderResource(blocks.stamina, STAMINA_MARKER, resourcePercents.stamina or RESOURCE_UNAVAILABLE)
-    renderResource(blocks.magicka, MAGICKA_MARKER, resourcePercents.magicka or RESOURCE_UNAVAILABLE)
+    renderResource(blocks.health, SIGNALS.HEALTH_MARKER, resourcePercents.health or SIGNALS.RESOURCE_UNAVAILABLE)
+    renderResource(blocks.stamina, SIGNALS.STAMINA_MARKER, resourcePercents.stamina or SIGNALS.RESOURCE_UNAVAILABLE)
+    renderResource(blocks.magicka, SIGNALS.MAGICKA_MARKER, resourcePercents.magicka or SIGNALS.RESOURCE_UNAVAILABLE)
 end
 
 -- B25 to B28 Ultimate --------------------------------------------------------
 
 local function boundedUltimate(value, zeroUnavailable)
-    if value == nil or value < 0 or value > ULTIMATE_MAX_VALUE then
-        return ULTIMATE_UNAVAILABLE
+    if value == nil or value < 0 or value > SIGNALS.ULTIMATE_MAX_VALUE then
+        return SIGNALS.ULTIMATE_UNAVAILABLE
     end
     value = zo_floor(value + 0.5)
     if zeroUnavailable and value == 0 then
-        return ULTIMATE_UNAVAILABLE
+        return SIGNALS.ULTIMATE_UNAVAILABLE
     end
     return value
 end
@@ -1712,7 +1714,7 @@ end
 local function ultimateCost(hotbarCategory)
     local slot = ACTION_BAR_ULTIMATE_SLOT_INDEX + 1
     if not IsSlotUsed(slot, hotbarCategory) then
-        return ULTIMATE_UNAVAILABLE
+        return SIGNALS.ULTIMATE_UNAVAILABLE
     end
     return boundedUltimate(
         GetSlotAbilityCost(slot, COMBAT_MECHANIC_FLAGS_ULTIMATE, hotbarCategory),
@@ -1723,8 +1725,8 @@ end
 local function updateUltimatePool()
     local current, maximum = GetUnitPower("player", COMBAT_MECHANIC_FLAGS_ULTIMATE)
     maximum = boundedUltimate(maximum, true)
-    if maximum == ULTIMATE_UNAVAILABLE then
-        current = ULTIMATE_UNAVAILABLE
+    if maximum == SIGNALS.ULTIMATE_UNAVAILABLE then
+        current = SIGNALS.ULTIMATE_UNAVAILABLE
     else
         current = boundedUltimate(current, false)
     end
@@ -1739,8 +1741,8 @@ end
 
 local function updateUltimateCosts()
     local category = GetActiveHotbarCategory()
-    local front = ULTIMATE_UNAVAILABLE
-    local back = ULTIMATE_UNAVAILABLE
+    local front = SIGNALS.ULTIMATE_UNAVAILABLE
+    local back = SIGNALS.ULTIMATE_UNAVAILABLE
     if category == HOTBAR_CATEGORY_PRIMARY or category == HOTBAR_CATEGORY_BACKUP then
         front = ultimateCost(HOTBAR_CATEGORY_PRIMARY)
         back = ultimateCost(HOTBAR_CATEGORY_BACKUP)
@@ -1773,35 +1775,35 @@ end
 local function renderUltimate()
     renderUltimateValue(
         blocks.ultimateCurrent,
-        ULTIMATE_CURRENT_LOW_MARKER,
-        ULTIMATE_CURRENT_HIGH_MARKER,
-        ultimateValues.current or ULTIMATE_UNAVAILABLE
+        SIGNALS.ULTIMATE_CURRENT_LOW_MARKER,
+        SIGNALS.ULTIMATE_CURRENT_HIGH_MARKER,
+        ultimateValues.current or SIGNALS.ULTIMATE_UNAVAILABLE
     )
     renderUltimateValue(
         blocks.ultimateMax,
-        ULTIMATE_MAX_LOW_MARKER,
-        ULTIMATE_MAX_HIGH_MARKER,
-        ultimateValues.maximum or ULTIMATE_UNAVAILABLE
+        SIGNALS.ULTIMATE_MAX_LOW_MARKER,
+        SIGNALS.ULTIMATE_MAX_HIGH_MARKER,
+        ultimateValues.maximum or SIGNALS.ULTIMATE_UNAVAILABLE
     )
     renderUltimateValue(
         blocks.ultimateFrontCost,
-        ULTIMATE_FRONT_LOW_MARKER,
-        ULTIMATE_FRONT_HIGH_MARKER,
-        ultimateValues.front or ULTIMATE_UNAVAILABLE
+        SIGNALS.ULTIMATE_FRONT_LOW_MARKER,
+        SIGNALS.ULTIMATE_FRONT_HIGH_MARKER,
+        ultimateValues.front or SIGNALS.ULTIMATE_UNAVAILABLE
     )
     renderUltimateValue(
         blocks.ultimateBackCost,
-        ULTIMATE_BACK_LOW_MARKER,
-        ULTIMATE_BACK_HIGH_MARKER,
-        ultimateValues.back or ULTIMATE_UNAVAILABLE
+        SIGNALS.ULTIMATE_BACK_LOW_MARKER,
+        SIGNALS.ULTIMATE_BACK_HIGH_MARKER,
+        ultimateValues.back or SIGNALS.ULTIMATE_UNAVAILABLE
     )
 end
 
 local function invalidateUltimate()
-    ultimateValues.current = ULTIMATE_UNAVAILABLE
-    ultimateValues.maximum = ULTIMATE_UNAVAILABLE
-    ultimateValues.front = ULTIMATE_UNAVAILABLE
-    ultimateValues.back = ULTIMATE_UNAVAILABLE
+    ultimateValues.current = SIGNALS.ULTIMATE_UNAVAILABLE
+    ultimateValues.maximum = SIGNALS.ULTIMATE_UNAVAILABLE
+    ultimateValues.front = SIGNALS.ULTIMATE_UNAVAILABLE
+    ultimateValues.back = SIGNALS.ULTIMATE_UNAVAILABLE
     renderUltimate()
 end
 
@@ -1903,7 +1905,7 @@ end
 local function onFastTick()
     if rollDodgeDeadline ~= nil and GetGameTimeMilliseconds() >= rollDodgeDeadline then
         rollDodgeDeadline = nil
-        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+        setRollDodgeState(SIGNALS.ROLL_DODGE_INACTIVE_RED)
     end
     updateSprintState()
     updateTravelState()
@@ -1927,13 +1929,13 @@ end
 restoreRecoveredLifecycle = function()
     rollDodgeLifecycleValid = true
     rollDodgeDeadline = nil
-    setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+    setRollDodgeState(SIGNALS.ROLL_DODGE_INACTIVE_RED)
     travelLifecycleValid = true
     lastRecallRemaining = GetRecallCooldown()
     travelSource = nil
     travelStartedAt = nil
     travelDeadline = nil
-    setTravelState(TRAVEL_INACTIVE_RED)
+    setTravelState(SIGNALS.TRAVEL_INACTIVE_RED)
 end
 
 -- Recompute and render every player-derived payload before the world block can
@@ -1959,20 +1961,20 @@ local function rebaselinePlayerState()
     renderQuickslot()
     observeLifeState(false)
     renderLifeState()
-    if lifeState == LIFE_ALIVE_RED then
+    if lifeState == SIGNALS.LIFE_ALIVE_RED then
         rollDodgeLifecycleValid = true
         rollDodgeDeadline = nil
-        setRollDodgeState(ROLL_DODGE_INACTIVE_RED)
+        setRollDodgeState(SIGNALS.ROLL_DODGE_INACTIVE_RED)
     else
         invalidateRollDodgeState()
     end
-    if lifeState == LIFE_ALIVE_RED then
+    if lifeState == SIGNALS.LIFE_ALIVE_RED then
         travelLifecycleValid = true
         lastRecallRemaining = GetRecallCooldown()
         travelSource = nil
         travelStartedAt = nil
         travelDeadline = nil
-        setTravelState(TRAVEL_INACTIVE_RED)
+        setTravelState(SIGNALS.TRAVEL_INACTIVE_RED)
     else
         invalidateTravelState()
     end
@@ -1994,13 +1996,13 @@ local function onPlayerDeactivated()
     invalidateTravelState()
     invalidateRollDodgeState()
     invalidateUltimate()
-    setWorldState(WORLD_TRANSITIONING_RED)
+    setWorldState(SIGNALS.WORLD_TRANSITIONING_RED)
 end
 
 local function onPlayerActivated()
     local completingDeathEpisode = deathEpisodeActive
     rebaselinePlayerState()
-    setWorldState(WORLD_ACTIVE_RED)
+    setWorldState(SIGNALS.WORLD_ACTIVE_RED)
     if completingDeathEpisode and deathEpisodeActive then
         if not lifeSawActivated then
             recoveryReadyGeneration = nil
@@ -2349,7 +2351,7 @@ local function onAddOnLoaded(_, name)
         REGISTER_FILTER_TARGET_COMBAT_UNIT_TYPE,
         COMBAT_UNIT_TYPE_PLAYER,
         REGISTER_FILTER_ABILITY_ID,
-        ROLL_DODGE_ABILITY_ID
+        SIGNALS.ROLL_DODGE_ABILITY_ID
     )
     SLASH_COMMANDS["/pbquickslot"] = onQuickslotCommand
 

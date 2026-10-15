@@ -14,6 +14,7 @@ The table maps every current external fact represented by `GameObservations`, `P
 | --- | --- | --- |
 | `application.lifecycle` | enum `running`, `suspended` | application model |
 | `application.version` | semantic version string | build metadata |
+| `application.data_maintenance` | independent optouts, application preference persistence, on-disk startup-config match, combined-package eligibility and natural-load Lua boundary; loaded Lua remains unknown | shared data-maintenance model (S129 additive observation) |
 | `application.catalog` | availability and immutable catalog release identity | catalog model |
 | `application.addons.data` | managed lifecycle, ownership, compatibility, configured enablement, loaded/reload state, catalog activity, encounter activity, and safe remediation | data-addon lifecycle model |
 | `game.installation` | availability, provider, install classification; no path | game observations |

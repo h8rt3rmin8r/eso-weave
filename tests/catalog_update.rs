@@ -437,19 +437,19 @@ fn cancellation_boundaries_never_leave_an_ambiguous_selection() {
 
     let at_commit = CancellationToken::new();
     let request_cancel = at_commit.clone();
-    let installed = sandbox
+    let cancelled = sandbox
         .service
         .install(&candidate, true, &at_commit, |progress| {
             if progress.stage == UpdateStage::Committing {
                 request_cancel.cancel();
             }
         })
-        .unwrap();
-    assert_eq!(installed.selection.generation, 1);
-    assert!(matches!(
-        installed.selection.active,
-        CatalogTarget::User { .. }
-    ));
+        .unwrap_err();
+    assert!(matches!(cancelled, UpdateError::Cancelled));
+    assert_eq!(
+        sandbox.service.load_selection().unwrap().active,
+        CatalogTarget::Bundled
+    );
 }
 
 #[test]

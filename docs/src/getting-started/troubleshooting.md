@@ -142,115 +142,85 @@ If Fishing or Auto Potion reports a binding unavailable state, inspect the
 read-only detected row in Settings, repair the action in ESO, and reload the UI.
 Do not add the obsolete gameplay key back to `config.json` because it is ignored.
 
-## ESO Weave Data is missing, outdated, unmanaged, or awaiting reload
+## Automatic data services are dormant or deferred
 
-- **Not installed**: choose **Install Data**, then obey any reload guidance.
-- Addon Package Version **Update available**: choose **Update Data** or **Repair Data**;
-  both stage and verify replacement before commit.
-- Addon Management **Unmanaged**: move or remove only the exact `EsoWeaveData` target
-  manually. No lifecycle action is offered.
-- **AddOns folder not found**: select the correct Live or PTS environment or
-  configure its existing `AddOns` directory.
-- Reload Reminder **Required**: run `/reloadui` or relog before relying on the change.
-- Lifecycle operation failed: keep the prior package, check AddOns permissions,
-  and retry the named operation. Do not delete first.
+Catalog maintenance and native encounter-log processing use the single combined
+PixelBeacon package. There is no separate Data installation or repair action.
+Check the PixelBeacon lifecycle state above and the selected Live or PTS AddOns
+root. A compatible manual combined package is recognized; an unknown or partial
+package does not start data work. Do not edit ownership markers to make it eligible.
 
-Installed files, enablement, loading, the game process, catalog collection and
-encounter recording answer different questions. **Unknown (check inside ESO)**
-does not mean disabled. Enable ESO Weave Data in ESO's Add-Ons menu, reload after
-changes and run `/ewcollect status` or `/ewencounter status` inside the game for
-current activity. The saved addon file shows only what ESO wrote at its last
-save, not what the addon is doing now.
+In Settings, check **Disable Catalog maintenance** and **Disable native encounter
+log processing** independently. Both preferences persist globally. An absent or
+unrecognized combined addon leaves these services dormant. Desktop Catalog work
+stops immediately when disabled; the addon preference applies at the **next natural
+addon load**. No Catalog command, reload, or save action is required to apply the
+desktop preference. Enablement, loaded state, current activity, and the last saved
+file are different observations; a disk file does not prove runtime activity.
 
-If a newer game API is unsupported, update ESO Weave to a release that declares
-support. An unknown or failed API check cannot prove compatibility; the desktop
-keeps remembered unsupported-version guidance visible. Live and PTS have
-separate API evidence and addon locations.
+If a newer game API is unsupported, use an ESO Weave release that declares support.
+An unknown or failed API check cannot prove compatibility. Live and PTS keep
+separate API evidence, package roots, and Catalog generations.
 
-## Encounter capture is waiting, interrupted, or failed
+## Retained encounter capture or import fails
 
-Run `/ewencounter status` inside ESO for current activity. Desktop
-**Last saved source** is a read-only inspection of the selected environment's
-disk file, available before import. Check its path, last-save timestamp, saved
-state and finished/partial counts. **Refresh Saved Source** rereads it; changing
-the environment or folder rejects older pending results. The file cannot prove
-current enablement, loading or activity. Start with the complete
-[setup sequence](../features/encounter-capture.md#install-and-choose-a-mode).
+The current combined addon does not load or resume the historical encounter
+recorder. Its old commands and controller states are described in
+[Historical addon recorder setup](../features/encounter-capture.md#historical-addon-recorder-setup).
+Those procedures explain retained files; they are not current setup instructions.
 
-- **Recording off**: select the next mode/environment and start another session;
-  earlier recordings stay retained. Use `/ewencounter resume` only for the
-  latest stopped continuous session in its original environment. No clear or
-  desktop import is required to start again.
-- **Waiting for combat**: the selected mode is on, but no fight is being recorded;
-  detailed capture handlers are
-  dormant until combat starts. Use `/ewencounter stop` to disable it.
-- **Recording combat**: the current encounter is recording. Explicit stop finalizes it
-  as a user-stopped partial record.
-- **Recording interrupted**: reload or relog created an explicit gap. Single stops;
-  continuous resumes only from valid durably saved authority and retains the
-  interruption fact.
-- **Stopped after a failure**: callback, clock, recovered-state, marker, or storage pressure made
-  continued capture unsafe. Retained evidence remains in place and the failed
-  request does not retry automatically. Save and import usable recordings if
-  you want a desktop copy. Start can retain a valid failed session when capacity
-  permits; failed sessions cannot resume.
+Desktop **Last saved source** is a read-only inspection of the selected
+environment's retained disk file, available before import. Check its path,
+last-save timestamp, saved state, and finished/partial counts. **Refresh Saved
+Source** rereads it; changing the environment or folder rejects older pending
+results. The file cannot prove current enablement, loading, or activity.
 
-A malformed same-version controller is never normalized by guessing. The addon
-preserves it unchanged, keeps it inactive, and reports `state-invalid` through
-`/ewencounter status`; use `clear confirm` only when you intentionally accept
-discarding that unimportable state.
-An unsupported saved-data version is different: the module preserves it and
-refuses clear as well as recording. Update to a compatible release; do not
-change version fields to bypass that refusal.
+Historical waiting, recording, interrupted, or failed states retain their original
+meaning. A malformed same-version controller is preserved and inactive rather than
+normalized by guessing. An unsupported saved-data version is also preserved; do not
+change version fields to bypass validation. Historical single mode started during
+combat marks the unseen prefix as partial. Continuous encounters share one session
+identity with distinct contiguous ordinals, raw sequences, and replay outcomes.
 
-Single mode enabled during combat truthfully marks the unseen prefix and is
-partial even when the next combat exit is observed. Continuous encounters share
-one session identity but have separate contiguous ordinals, raw sequences, and
-replay outcomes. A missing ordinal, changed prior member, malformed spool, or
-identity collision rejects the complete desktop import batch without changing
-existing history.
+No retained encounter is automatically removed for storage pressure. A missing
+ordinal, changed earlier member, malformed spool, or identity collision rejects
+the complete import batch without changing existing history. An ESO or operating-
+system crash before a historical flush cannot be reconstructed from the disk file.
 
-Use `/ewencounter sessions` for chronological IDs, counts and capacity.
-While recording is off, `/ewencounter discard SESSION_ID confirm` deletes
-exactly one addon session. Other recordings, catalog data and desktop history
-remain. Use clear confirm only for deliberate deletion of all addon recordings.
-
-No old encounter is automatically removed when saved recording storage reaches its 32-session, record,
-marker, or 32 MiB estimated-data limit. The controller preserves terminal and
-failure evidence and stops. Run `/reloadui`, relog, or exit ESO to flush data,
-then use **Import Saved Capture** in Encounter History. An ESO or operating-system
-crash before a flush can lose unflushed control and encounter state; the product
-does not invent a recovery marker for facts that never reached disk.
-
-If command replies are absent while chat starts, wait for queued system-chat
-guidance. Recording remains OFF if its warning could not be delivered; repeat
-the start command after chat is ready. Debug logging addons need no changes.
+For **Native Encounter Log**, inspect a stable completed normal/separate version 15
+file before importing it. Choose the intended Live or PTS provenance explicitly.
+A changed file needs a fresh inspection. Unknown records remain declared; unfinished
+combats are not imported as complete fights. See
+[Encounter Ingestion](../development/encounter-ingestion.md#completed-native-files).
 
 For desktop history, distinguish these outcomes:
 
-- **Recording OFF with no retained session**: the addon initialized but no
-  recording was saved. Start a fight inside ESO, finish it and save.
+- **Recording OFF with no retained session**: the historical addon initialized but
+  no recording was saved. Repeated import cannot create a fight. Use a supported
+  completed native file when no retained addon capture exists.
 - **Saved Source Inaccessible**: check the selected folder and read permissions.
 - **Saved Source Version Unsupported**: keep the file unchanged and use a
   compatible ESO Weave version.
 - **Saved Source Environment Differs**: select the saved file's Live or PTS
   environment, then refresh the saved source.
-- **Saved Source Invalid**: preserve it for troubleshooting, finish or stop,
-  save again, then refresh.
+- **Saved Source Invalid**: preserve the retained source for troubleshooting; do
+  not edit it to defeat validation. Refresh after selecting a valid saved file.
 - **Local History Unavailable**: the imported-history store is damaged or
   inaccessible; this is distinct from a saved-source failure.
 
-- **No imported encounters**: save a recorded fight in ESO, then choose **Import
-  Saved Capture**. **Refresh Imported History** rereads desktop history only.
-- Import unavailable: check the selected Live or PTS environment and AddOns
-  folder. Enable and load ESO Weave Data, record a fight, then save in ESO.
+- **No imported encounters**: choose **Import Saved Capture** for retained addon
+  recordings, or inspect and import a completed native file. **Refresh Imported
+  History** rereads desktop history only.
+- Import unavailable: check the selected Live or PTS environment, AddOns folder,
+  supported source type, and file readability. The current addon does not create
+  new recordings through the former ESO Weave Data recorder.
 - An operation is in progress: wait for import, refresh, detail calculation or
   deletion to finish before requesting another operation.
-- No new fights or duplicates: exact repeated recordings are skipped. Save later
-  completed fights and import again. A currently active fight is not a completed
-  member and may be omitted from a growing saved session.
-- Missing, unstable, invalid or incompatible saved data: save again, check the
-  correct environment and supported package version, then retry. A malformed
+- No new fights or duplicates: exact repeated recordings are skipped. A currently active fight
+  in historical saved evidence is not a completed member and may be omitted from
+  a growing saved session. Import a stable file with new completed fights.
+- Missing, unstable, invalid or incompatible saved data: check the correct
+  environment, stable source file, and supported format, then retry. A malformed
   member, changed earlier record or identity conflict rejects the whole batch
   and preserves existing history. Preserve the source for diagnosis; do not
   edit it to defeat validation.
@@ -265,26 +235,25 @@ For desktop history, distinguish these outcomes:
   action. **Delete Encounter** and **Delete All** preserve ESO's saved file, so
   importing that unchanged file can restore deleted fights.
 
-## Discovery collector capture or import fails
+## Automatic Catalog collection is deferred or fails
 
-The catalog module is separate from PixelBeacon but shares the managed ESO Weave
-Data package with encounter capture. Use the first-class System and State row for
-package lifecycle. Maintainers may also run `collector-status` against the exact
-Live or PTS `AddOns` directory. An `unmanaged` result is intentionally not
-repaired or removed automatically.
+Catalog collection starts and resumes automatically after valid addon and player
+readiness, outside combat and unsafe lifecycle states. Combat, loading, or a
+temporary source failure defers work. There is no manual start or resume command.
+Check the combined PixelBeacon package, the selected Live or PTS context, the
+Catalog preference, and controlled Application Log diagnostics.
 
-In ESO, `/ewcollect status` reports current catalog collection, not fight recording. Combat pauses a
-run and requires `/ewcollect resume`. After completion, run `/reloadui`, log
-out, or exit so ESO writes SavedVariables. Import the matching Live or PTS file;
-channel, checksum, chunk, status, size, or schema errors are fail-closed and do
-not overwrite the previous staged JSON. Do not edit the capture to bypass an
-error. Preserve it for diagnosis and begin a fresh explicit run.
+A failed scan or finalization retains the previous completed Catalog snapshot.
+Unknown saved roots are preserved and are not rewritten as a guessed schema.
+ESO controls SavedVariables disk writes; a priority-save request does not prove
+that a file was flushed. Automatic desktop observation waits for a stable, complete
+file and retries transient failures with backoff. No reload, observe-save, import,
+or build action is required for Catalog maintenance.
 
-`/ewcollect cancel` retains an incomplete, unimportable collection; it does not
-erase it. Starting a new run after a finished, cancelled or failed one replaces
-the previous catalog collection. A reload does not reconstruct the running
-collector. Preserve a completed collection before starting another, and check
-status after interruptions.
+Channel, API, checksum, chunk, status, size, and schema failures leave prior usable
+evidence in place. Preserve the source for diagnosis and use compatible package
+and application versions; do not edit hashes or version fields to bypass checks.
+See [Automatic Catalog Collection](../development/discovery-collector.md).
 
 ## A local ability icon uses the placeholder
 
@@ -309,28 +278,21 @@ hash to bypass verification. A failed source refresh uses cached bytes only when
 the request explicitly permits stale fallback, and the resulting source report
 labels that choice. Existing immutable candidates remain unchanged.
 
-## A user catalog update or rollback fails
+## Automatic Catalog activation or recovery fails
 
-Open **File > Catalog Update...** and read the named failing stage. A malformed,
-linked, incomplete, wrong-channel, unsupported-schema, older, checksum-invalid,
-or policy-invalid candidate is intentionally unavailable for Live installation.
-Replace the complete hash directory in `catalog/import/live` from the trusted
-review source, then choose **Refresh candidates**. Do not edit manifests or
-checksums to bypass verification.
+Automatic maintenance accumulates compatible evidence by exact Live or PTS
+context and API identity, builds an immutable generation, verifies it, and changes
+the active selection atomically. A stable unchanged capture is a no-op. Missing,
+unstable, malformed, wrong-channel, unsupported, checksum-invalid, or policy-invalid
+data leaves the last-known-good Catalog active. Read the controlled Application
+Log stage and reason; do not edit manifests or checksums to bypass verification.
 
-Cancellation before selection preserves the preceding target. During the short
-Selecting catalog stage, allow the atomic operation to finish. On restart, the
-worker removes only abandoned `.update-*` staging and never accepted versions.
-If a user selection is invalid, the status visibly identifies the bundled
-fallback. A receipt warning means the selection itself succeeded but redacted
-receipt storage failed, commonly because the application-data volume is full.
-
-For a collector-assisted build, manage ESO Weave Data from System and State,
-then choose **Watch for saved catalog data** before the ESO save
-boundary. Then run `/reloadui`, log out, or exit and choose **Build from flushed
-capture**. Unchanged, unstable, incomplete, PTS, or coverage-reducing captures
-remain unaccepted. Module-local clear guidance never removes the shared package,
-shared SavedVariables, or PixelBeacon.
+Transient observation and build failures retry with backoff. Disabling Catalog
+maintenance or losing compatible addon availability stops pending activation.
+Restart recovery discards abandoned staging while preserving verified generations;
+an invalid persisted selection falls back to usable verified data or the packaged
+baseline. Live and PTS remain independent, including when no usable generation is
+available for one context. See [Automatic Catalog Maintenance](../development/catalog-updates.md).
 
 ## A skill passes through or a weave is dropped
 

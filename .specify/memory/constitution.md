@@ -1,5 +1,6 @@
 <!--
 Sync Impact Report
+- S129 owner-selected #285-#288/#291: 5.0.1 -> 5.1.0 on 2026-10-15. One combined PixelBeacon package, automatic bounded Catalog collection and independent optouts supersede two-package/manual authority; ownership, data integrity and historical evidence remain mandatory.
 - S120 wording amendment: 5.0.0 -> 5.0.1 on 2026-10-05. Principle V
   reconciles established S100-S102 native-control/player-state evidence with
   the existing PixelBeacon surface. No new in-game feature or transport.
@@ -64,14 +65,12 @@ skipped, or made conditional:
 - PixelBeacon uninstall deletes a folder only after verifying the managed-marker
   line in its manifest; an unmanaged folder is never deleted.
 - AddOns discovery never writes outside the resolved AddOns directory.
-- ESO Weave Data install, update, and removal stay inside its separately named
-  subtree; removal and replacement require its own verified managed marker, and
-  no data-addon lifecycle action mutates PixelBeacon or a neighboring addon.
-- ESO Weave Data catalog and encounter state use separate namespaced subtrees.
+- Combined PixelBeacon migration, replacement and removal validate exact managed inventory, links/races and ownership; legacy Data retirement preserves SavedVariables and neighboring addons, with rollback before commit and explicit cleanup state afterward.
+- Combined-package catalog and retained legacy encounter state use separate namespaced subtrees.
   Clearing one module preserves the other and never deletes or rewrites the
   shared SavedVariables file from the desktop while ESO may own its in-memory
   contents.
-- The ESO Weave Data encounter module remains dormant until the user explicitly
+- Any retained legacy encounter module remains dormant until the user explicitly
   enables single-encounter or continuous-until-disabled capture. These are its
   only modes. It retains selected callback values exactly, bounds each encounter
   and the aggregate session spool, declares every loss, interruption, and hard
@@ -110,57 +109,17 @@ no cargo gate to run, but still obey the text hygiene rules below.
 Rationale: local parity with CI keeps `main` continuously releasable and
 prevents the misdiagnosed hangs that backgrounded test runs have caused.
 
-### V. Bounded Scope: Desktop With Two Managed Addon Packages
+### V. Bounded Scope: Desktop With One Combined PixelBeacon Package
 
-The ESO Weave desktop application runs outside the game. It MUST NOT read or
-write game process memory, intercept network or packet traffic, orchestrate
-multiple accounts. Weave sequencing and input synthesis remain in the desktop;
-the existing native-control and player-state evidence comes from PixelBeacon.
-Its only allowed
-addon surfaces are:
+The desktop runs outside the game. It MUST NOT read or write game process memory, intercept network or packet traffic, or orchestrate multiple accounts. Input sequencing remains in the desktop. One managed PixelBeacon package contains independent beacon and automatic Catalog modules. Beacon retains its bounded outbound screen-signal contract and cannot receive commands or synthesize input.
 
-- PixelBeacon, which publishes the existing bounded local screen-signal contract
-  for native action bindings, player-state display and input gates, fishing, and
-  auto-potion observations. It cannot receive commands or synthesize input.
-- ESO Weave Data, which contains independently activated catalog-discovery and
-  encounter-capture modules behind one managed package boundary. The catalog
-  module reads documented public addon API values into bounded local
-  SavedVariables for later hostile-data parsing. The encounter module records
-  an explicitly enabled, bounded single encounter or continuous session of
-  selectively subscribed public combat API observations for the same restricted
-  local parsing boundary. Once a source is selected, its scalar callback values
-  are retained exactly unless a declared hard limit or unsupported runtime type
-  omits the whole observation.
+Catalog collection begins automatically at supported game-data readiness unless the persisted Catalog preference disables it. Work pauses during combat or unsuitable transitions and resumes automatically. Scan, finalization, memory, retained generations and retry are bounded. Game-managed save requests do not establish disk durability. No forced reload, synthetic command or inbound live SavedVariables write may apply preferences. Loaded Lua observes startup configuration at its next natural load.
 
-The data addon MUST remain separately managed from PixelBeacon and MUST preserve
-independent module activation, state, event ownership, limits, and clearing. It
-is read-only with respect to gameplay, independent of action automation, and
-free of uploads, synthesized input, equipment changes, item consumption, or
-automatic navigation. Partial or corrupt captures never become active data.
+Catalog maintenance and native encounter processing have independent persisted optouts and per-root eligibility; both are dormant without a recognized compatible combined package. Presence/capabilities never grant overwrite ownership. Catalog and legacy encounter SavedVariables retain independent namespaces. Last-completed data survives interrupted collection. Stable completed input is parsed as hostile data without executing Lua, merged with compatible accepted facts and verified before immutable atomic selection. Logs/public evidence do not reproduce raw private payloads.
 
-The catalog module MUST remain prohibited during combat and dormant without an
-explicit user request.
+Legacy addon encounter history remains readable with exact source/identity/loss facts. Consolidation MUST NOT automatically enable or mirror the old addon recorder. Native logging remains the player's game-owned action; automatic processing does not change game logging, serialization or anonymity. Existing authenticated local data reads remain independent of collection eligibility.
 
-The encounter module MUST remain dormant without explicit user authority for one
-of exactly two modes: single encounter or continuous until manually disabled or
-a declared hard failure. It MUST bound each encounter and the aggregate session
-spool in observations, records, and estimated bytes; preserve authoritative
-encounter order; declare interruption and storage-pressure facts; and never
-silently evict retained evidence. It remains independent of action automation
-and free of uploads, telemetry, synthesized input, equipment changes, item
-consumption, or automatic navigation. Selected encounter sources may retain
-names, identifiers, chat, guild, location, and other values exactly as ESO
-supplies them. It MUST warn the user before enablement, keep raw data local and
-user-owned, declare every capture loss, and MUST NOT present partial or
-interrupted observations as complete. Logs, diagnostics, receipts, public
-fixtures, and default UI summaries MUST NOT reproduce raw payload values.
-
-Rationale: these two managed packages preserve three narrow local surfaces,
-PixelBeacon output, catalog discovery, and encounter capture, while making the
-product topology maintainable. Exact local capture supports later analysis
-without authorizing disclosure or gameplay action. Any additional in-game
-feature or transport changes what the software is and requires a future
-constitution amendment.
+All package replacement/removal requires verified exact inventory/ownership, confinement, link/race checks and recovery preserving unrelated data and SavedVariables. One module cannot clear another's state. Additional game ingress or automation authority requires an explicit future decision.
 
 ## Platform, Configuration, and Text Hygiene Constraints
 
@@ -226,4 +185,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 5.0.1 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-10-05
+**Version**: 5.1.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-10-15

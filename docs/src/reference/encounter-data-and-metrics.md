@@ -2,8 +2,12 @@
 
 Encounter History contains **imported copies of saved-addon fights and completed native recordings** on this computer. It first shows observed results, then separately
 qualified review questions. It does not display a live fight or start recording.
-For setup, mode selection, saving, import and clearing, follow
-[Encounter Capture](../features/encounter-capture.md#install-and-choose-a-mode).
+For retained-addon import and deletion, follow
+[Encounter Capture](../features/encounter-capture.md#import-retained-addon-captures).
+Its [historical addon recorder setup](../features/encounter-capture.md#historical-addon-recorder-setup)
+explains earlier modes and saved authority; the current combined PixelBeacon
+package does not load that recorder. For completed native files, follow
+[Encounter Ingestion](../development/encounter-ingestion.md#completed-native-files).
 
 **Catalog** means game-data definitions for recorded IDs, such as abilities and
 effects. A catalog is separate from your fight recordings. **SavedVariables**
@@ -21,8 +25,8 @@ Completed native files have a separate supported profile and source-specific met
 
 ### Encounter lineage text equivalent
 
-1. **Ordered addon observations** begin after an explicit in-game recording
-   request. Single mode records one fight; continuous mode records ordered fights
+1. **Ordered addon observations** in retained historical captures began after an
+   explicit in-game recording request. Single mode records one fight; continuous mode records ordered fights
    in one bounded session. The session's encounter ordinal orders fights, and
    source sequence orders observations within each fight. Selected callback
    values are retained exactly and locally, including names and identifiers when
@@ -141,15 +145,15 @@ planes distinct:
 
 | Plane | Content | Lifecycle |
 | --- | --- | --- |
-| Catalog | Shipped ability, effect, item, and reference facts | Replaced by a reviewed catalog build |
+| Catalog | Packaged and verified local ability, effect, item, and reference facts | Automatic compatible generations retain prior usable data |
 | Raw observations | Encounter envelopes and source events | User-owned and append-only |
 | Derived analysis | Catalog receipts, build snapshots, and metrics | User-owned, versioned, and rebuildable |
 
 Raw and derived rows do not belong in the bundled `catalog.sqlite`. The current
 Pixel Bus remains a small safety and action-observation channel and is not a bulk
-encounter transport. The [ESO Weave Data encounter module](../features/encounter-capture.md)
-writes a bounded SavedVariables session spool under its isolated subtree after
-the user explicitly enables `single` or `continuous` inside ESO. The importer
+encounter transport. The [historical ESO Weave Data encounter module](../features/encounter-capture.md#historical-addon-recorder-setup)
+wrote a bounded SavedVariables session spool under its isolated subtree after
+the user explicitly enabled `single` or `continuous` inside ESO. The importer
 reads one explicitly selected file through a stable no-follow handle, accepts
 only the fixed data-only table grammar, validates the controller and every
 terminal member, and never executes Lua.

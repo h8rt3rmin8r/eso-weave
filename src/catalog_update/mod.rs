@@ -4,11 +4,12 @@ mod availability;
 mod contract;
 mod worker;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -25,8 +26,10 @@ pub use worker::{CatalogUpdateWorker, WorkerEvent, WorkerFailure};
 use crate::bounded_file::{
     is_link_like, is_same_or_nested, open_bounded_stable, read_bounded_stable, StableReadError,
 };
+use crate::catalog::accumulate::{
+    accumulate, content_sha256, latest_observation, read_bundle, same_domain,
+};
 use crate::catalog::schema::SCHEMA_VERSION;
-use crate::catalog::version::parse_commit_message_version;
 use crate::catalog::{CatalogAccess, Channel};
 use crate::catalog_pipeline::{build_candidate_with_cancel, PipelineRun};
 use crate::catalog_pipeline::{
@@ -59,7 +62,13 @@ pub enum UpdateError {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct CancellationToken(Arc<AtomicBool>);
+pub struct CancellationToken(Arc<CancellationState>);
+
+#[derive(Debug, Default)]
+struct CancellationState {
+    cancelled: AtomicBool,
+    commit: Mutex<()>,
+}
 
 impl CancellationToken {
     pub fn new() -> Self {
@@ -67,11 +76,16 @@ impl CancellationToken {
     }
 
     pub fn cancel(&self) {
-        self.0.store(true, Ordering::Release);
+        let _guard = self
+            .0
+            .commit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.0.cancelled.store(true, Ordering::Release);
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Acquire)
+        self.0.cancelled.load(Ordering::Acquire)
     }
 
     fn check(&self) -> Result<(), UpdateError> {
@@ -86,12 +100,18 @@ impl CancellationToken {
 #[derive(Debug, Clone)]
 pub struct UpdateRoots {
     root: PathBuf,
+    channel: Channel,
 }
 
 impl UpdateRoots {
-    fn new(config: &Path) -> Self {
+    fn new(config: &Path, channel: Channel) -> Self {
         Self {
-            root: config.join("catalog"),
+            root: if channel == Channel::Live {
+                config.join("catalog")
+            } else {
+                config.join("catalog").join("pts")
+            },
+            channel,
         }
     }
 
@@ -112,7 +132,7 @@ impl UpdateRoots {
     }
 
     fn live_versions(&self) -> PathBuf {
-        self.root.join("versions").join("live")
+        self.root.join("versions").join(self.channel.as_str())
     }
 
     fn staging(&self) -> PathBuf {
@@ -168,6 +188,12 @@ pub struct InstallOutcome {
 }
 
 #[derive(Debug, Clone)]
+pub enum AutomaticCatalogOutcome {
+    Activated(Box<InstallOutcome>),
+    Unchanged(CatalogSelection),
+}
+
+#[derive(Debug, Clone)]
 pub struct RollbackOutcome {
     pub selection: CatalogSelection,
     pub receipt_warning: Option<String>,
@@ -188,14 +214,127 @@ pub struct CatalogUpdateService {
 
 impl CatalogUpdateService {
     pub fn new(config: impl AsRef<Path>, bundled_catalog: impl AsRef<Path>) -> Self {
+        Self::new_for_channel(config, bundled_catalog, Channel::Live)
+    }
+
+    pub fn new_for_channel(
+        config: impl AsRef<Path>,
+        bundled_catalog: impl AsRef<Path>,
+        channel: Channel,
+    ) -> Self {
         Self {
-            roots: UpdateRoots::new(config.as_ref()),
+            roots: UpdateRoots::new(config.as_ref(), channel),
             bundled_catalog: bundled_catalog.as_ref().to_path_buf(),
         }
     }
 
     pub fn roots(&self) -> UpdateRoots {
         self.roots.clone()
+    }
+
+    /// Locates the registry that owns a published immutable Catalog path.
+    pub fn for_catalog_path(path: &Path) -> Option<Self> {
+        let identity = path.parent()?;
+        let channel_directory = identity.parent()?;
+        let channel = match channel_directory.file_name()?.to_str()? {
+            "live" => Channel::Live,
+            "pts" => Channel::Pts,
+            _ => return None,
+        };
+        let versions = channel_directory.parent()?;
+        if versions.file_name()?.to_str()? != "versions" {
+            return None;
+        }
+        Some(Self {
+            roots: UpdateRoots {
+                root: versions.parent()?.to_path_buf(),
+                channel,
+            },
+            bundled_catalog: path.to_path_buf(),
+        })
+    }
+
+    /// Resolves an exact historical version domain without changing selection.
+    pub fn resolve_catalog_for_version(
+        &self,
+        channel: Channel,
+        api_version: u32,
+        game_version: &str,
+    ) -> Option<CatalogResolution> {
+        self.resolve_catalog_version(channel, api_version, Some(game_version))
+    }
+
+    /// Preserves the existing same-API patch compatibility of encounter metrics.
+    pub fn resolve_catalog_for_api(
+        &self,
+        channel: Channel,
+        api_version: u32,
+    ) -> Option<CatalogResolution> {
+        self.resolve_catalog_version(channel, api_version, None)
+    }
+
+    fn resolve_catalog_version(
+        &self,
+        channel: Channel,
+        api_version: u32,
+        game_version: Option<&str>,
+    ) -> Option<CatalogResolution> {
+        if channel != self.roots.channel {
+            return None;
+        }
+        let current = self.resolve_catalog();
+        if current
+            .access
+            .release()
+            .ok()
+            .flatten()
+            .is_some_and(|release| {
+                release.channel == channel
+                    && release.api_version == api_version
+                    && game_version.is_none_or(|game| release.game_version == game)
+            })
+        {
+            return Some(current);
+        }
+        let mut best = None;
+        for target in self.accepted_targets().unwrap_or_default() {
+            let CatalogTarget::User { candidate_sha256 } = target else {
+                continue;
+            };
+            let directory = self.roots.live_versions().join(candidate_sha256);
+            let Ok(summary) = inspect_candidate(&directory) else {
+                continue;
+            };
+            if summary.channel != channel
+                || summary.api_version != api_version
+                || game_version.is_some_and(|game| summary.game_version != game)
+            {
+                continue;
+            }
+            let path = directory.join("catalog.sqlite");
+            let Ok(bundle) = read_bundle(&path) else {
+                continue;
+            };
+            let order = (
+                latest_observation(&bundle),
+                summary.candidate_sha256.clone(),
+            );
+            if best.as_ref().is_none_or(|(previous, _)| &order > previous) {
+                let target = CatalogTarget::User {
+                    candidate_sha256: summary.candidate_sha256,
+                };
+                best = Some((
+                    order,
+                    CatalogResolution {
+                        access: CatalogAccess::open_or_empty(&path),
+                        path,
+                        target,
+                        warning: None,
+                    },
+                ));
+            }
+        }
+        best.map(|(_, resolution)| resolution)
     }
 
     pub fn prepare(&self) -> Result<(), UpdateError> {
@@ -247,16 +386,31 @@ impl CatalogUpdateService {
         self.prepare()?;
         let _lock = OperationLock::acquire(&self.roots.operation_lock())?;
         let mut recovered = 0;
-        for entry in fs::read_dir(self.roots.staging())?.take(256) {
-            let entry = entry?;
-            let name = entry.file_name();
-            if !name.to_string_lossy().starts_with(".update-") {
-                continue;
-            }
-            let metadata = fs::symlink_metadata(entry.path())?;
-            if metadata.is_dir() && !is_link_like(&metadata) {
-                fs::remove_dir_all(entry.path())?;
-                recovered += 1;
+        for (directory, prefixes) in [
+            (
+                self.roots.staging(),
+                &[".update-", ".collector-build-", ".collector-input-"][..],
+            ),
+            (self.roots.root(), &[".catalog-pipeline-"][..]),
+        ] {
+            let canonical_parent = fs::canonicalize(&directory)?;
+            for entry in fs::read_dir(&directory)?.take(256) {
+                let entry = entry?;
+                let name = entry.file_name();
+                if !prefixes
+                    .iter()
+                    .any(|prefix| name.to_string_lossy().starts_with(prefix))
+                {
+                    continue;
+                }
+                let metadata = fs::symlink_metadata(entry.path())?;
+                if metadata.is_dir() && !is_link_like(&metadata) {
+                    let target = fs::canonicalize(entry.path())?;
+                    if target.parent() == Some(canonical_parent.as_path()) {
+                        fs::remove_dir_all(target)?;
+                        recovered += 1;
+                    }
+                }
             }
         }
         Ok(recovered)
@@ -294,44 +448,62 @@ impl CatalogUpdateService {
     where
         F: FnMut(UpdateProgress),
     {
+        self.build_collector_candidate_inner(
+            capture_path.as_ref(),
+            Some(waiting_fingerprint),
+            cancel,
+            &mut progress,
+        )
+    }
+
+    fn build_collector_candidate_inner<F>(
+        &self,
+        capture_path: &Path,
+        waiting_fingerprint: Option<&CaptureFingerprint>,
+        cancel: &CancellationToken,
+        mut progress: F,
+    ) -> Result<CandidateSummary, UpdateError>
+    where
+        F: FnMut(UpdateProgress),
+    {
         cancel.check()?;
         self.prepare()?;
-        progress(UpdateProgress::new(
-            UpdateStage::WaitingForCapture,
-            0,
-            0,
-            "Checking whether ESO saved new catalog data since observation began",
-        ));
-        let first = fingerprint_capture(capture_path.as_ref())?;
-        if first.sha256 == waiting_fingerprint.sha256 {
-            return Err(UpdateError::Validation(
+        if let Some(waiting) = waiting_fingerprint {
+            progress(UpdateProgress::new(
+                UpdateStage::WaitingForCapture,
+                0,
+                0,
+                "Checking whether ESO saved new catalog data since observation began",
+            ));
+            let first = fingerprint_capture(capture_path)?;
+            if first.sha256 == waiting.sha256 {
+                return Err(UpdateError::Validation(
                 "The saved addon data has not changed. Finish /ewcollect catalog collection in ESO, then /reloadui, log out, or exit to save it before building.".into(),
             ));
-        }
-        let second = fingerprint_capture(capture_path.as_ref())?;
-        if first != second {
-            return Err(UpdateError::Validation(
+            }
+            let second = fingerprint_capture(capture_path)?;
+            if first != second {
+                return Err(UpdateError::Validation(
                 "ESO's saved addon data is still changing. Wait for the file save to finish, then try building again.".into(),
             ));
+            }
         }
         let canonical_parent = fs::canonicalize(
             capture_path
-                .as_ref()
                 .parent()
                 .ok_or_else(|| UpdateError::Validation("capture has no parent".into()))?,
         )?;
-        let shared_bytes =
-            read_bounded_stable(&canonical_parent, capture_path.as_ref(), MAX_CAPTURE_BYTES)
-                .map_err(stable_capture_error)?;
+        let shared_bytes = read_bounded_stable(&canonical_parent, capture_path, MAX_CAPTURE_BYTES)
+            .map_err(stable_capture_error)?;
         let envelope = parse_capture(&shared_bytes).map_err(PipelineError::Collector)?;
         let capture_bytes = canonical_catalog_capture(&shared_bytes)
             .map_err(PipelineError::Collector)?
             .ok_or_else(|| {
                 UpdateError::Validation("ESO's saved addon data contains no catalog collection. In ESO, use /ewcollect help and complete collection, then /reloadui, logout, or exit to save it.".into())
             })?;
-        if envelope.channel != Channel::Live {
+        if envelope.channel != self.roots.channel {
             return Err(UpdateError::Validation(
-                "Only a complete Live catalog collection can build a catalog for desktop selection. PTS collection is separate and cannot be installed here.".into(),
+                format!("The completed capture does not match this {} context; environments remain separate.",self.roots.channel),
             ));
         }
         cancel.check()?;
@@ -343,7 +515,13 @@ impl CatalogUpdateService {
         fs::write(workspace.path().join(capture_name), &capture_bytes)?;
         let baseline = workspace.path().join("baseline.sqlite");
         let baseline_source = self.active_catalog_path();
-        fs::copy(&baseline_source, &baseline)?;
+        let baseline_report = crate::catalog::compiler::verify_catalog(&baseline_source).ok();
+        let matching_baseline = baseline_report
+            .as_ref()
+            .is_some_and(|report| report.channel == envelope.channel);
+        if matching_baseline {
+            fs::copy(&baseline_source, &baseline)?;
+        }
         let capture_hash = sha256_bytes(&capture_bytes);
         let catalog_version = format!(
             "local-collector-{}-{}",
@@ -354,7 +532,7 @@ impl CatalogUpdateService {
             "schema_version": 1,
             "mode": "user-capture",
             "version": {
-                "channel": "live",
+                "channel": envelope.channel,
                 "game_version": envelope.game_version,
                 "api_version": envelope.api_version,
                 "catalog_version": catalog_version,
@@ -367,7 +545,7 @@ impl CatalogUpdateService {
             "sources": [{
                 "id": "collector-capture",
                 "role": "collector-capture",
-                "channel": "live",
+                "channel": envelope.channel,
                 "game_version": envelope.game_version,
                 "api_version": envelope.api_version,
                 "locale": envelope.locale,
@@ -380,7 +558,7 @@ impl CatalogUpdateService {
                 "redistribution": "user-generated-only"
             }],
             "network": { "enabled": false, "refresh": false, "allow_stale_cache": false },
-            "baseline": "baseline.sqlite",
+            "baseline": if matching_baseline { Some("baseline.sqlite") } else { None },
             "icon_source": null,
             "thresholds": {
                 "entities_removed": 0,
@@ -430,6 +608,341 @@ impl CatalogUpdateService {
         inspect_candidate(self.roots.import_root().join(receipt.relative_path)).map_err(Into::into)
     }
 
+    /// Reconciles naturally saved complete data, including on the first desktop
+    /// startup. The lock covers the baseline, build and short selection boundary.
+    pub fn maintain_collector_capture<F>(
+        &self,
+        capture_path: impl AsRef<Path>,
+        cancel: &CancellationToken,
+        mut progress: F,
+    ) -> Result<AutomaticCatalogOutcome, UpdateError>
+    where
+        F: FnMut(UpdateProgress),
+    {
+        cancel.check()?;
+        self.prepare()?;
+        let _lock = OperationLock::acquire(&self.roots.operation_lock())?;
+        let path = capture_path.as_ref();
+        let parent = fs::canonicalize(
+            path.parent()
+                .ok_or_else(|| UpdateError::Validation("capture has no parent".into()))?,
+        )?;
+        let bytes =
+            read_bounded_stable(&parent, path, MAX_CAPTURE_BYTES).map_err(stable_capture_error)?;
+        let envelope = parse_capture(&bytes).map_err(PipelineError::Collector)?;
+        if envelope.channel != self.roots.channel {
+            return Err(UpdateError::Validation(
+                "PTS captures remain in their separate version domain".into(),
+            ));
+        }
+        let canonical = canonical_catalog_capture(&bytes)
+            .map_err(PipelineError::Collector)?
+            .ok_or_else(|| UpdateError::Validation("saved data has no completed catalog".into()))?;
+        let capture_hash = sha256_bytes(&canonical);
+        let incoming = crate::collector::import::bundle_from_capture(
+            &envelope,
+            &capture_hash,
+            "automatic-preview",
+        )
+        .map_err(PipelineError::Collector)?
+        .normalize_and_validate()
+        .map_err(PipelineError::Catalog)?;
+        let resolution = self.resolve_catalog();
+        let saved_selection = self.load_selection().unwrap_or_default();
+        if saved_selection.active != resolution.target {
+            let _commit = cancel
+                .0
+                .commit
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            cancel.check()?;
+            self.write_selection(&CatalogSelection {
+                active: resolution.target.clone(),
+                previous: Some(CatalogTarget::Bundled),
+                generation: saved_selection.generation.saturating_add(1),
+                last_receipt: None,
+                ..CatalogSelection::default()
+            })?;
+            drop(_commit);
+        }
+        let baseline = read_bundle(&resolution.path)
+            .ok()
+            .filter(|baseline| baseline.release.channel == self.roots.channel);
+        if let Some(baseline) = baseline.filter(|baseline| same_domain(baseline, &incoming)) {
+            let merged = accumulate(baseline.clone(), incoming).map_err(PipelineError::Catalog)?;
+            if content_sha256(&baseline).map_err(PipelineError::Catalog)?
+                == content_sha256(&merged).map_err(PipelineError::Catalog)?
+            {
+                cancel.check()?;
+                let selection = self.load_selection()?;
+                self.register_accepted(&selection)?;
+                self.prune_automatic_history(&selection)?;
+                return Ok(AutomaticCatalogOutcome::Unchanged(selection));
+            }
+        }
+        cancel.check()?;
+        // Build from the stable snapshot rather than reopening a game-owned file.
+        let snapshot = tempfile::Builder::new()
+            .prefix(".collector-input-")
+            .tempdir_in(self.roots.staging())?;
+        let captured = snapshot.path().join("capture.lua");
+        fs::write(&captured, canonical)?;
+        let candidate =
+            self.build_collector_candidate_inner(&captured, None, cancel, &mut progress)?;
+        let candidate_path = self
+            .roots
+            .import_root()
+            .join(self.roots.channel.as_str())
+            .join(&candidate.candidate_sha256);
+        let mut outcome = match self.install_inner(&candidate_path, cancel, &mut progress) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                if let Ok(selection) = self.load_selection() {
+                    let _ = self.prune_automatic_history(&selection);
+                }
+                return Err(error);
+            }
+        };
+        if outcome.receipt_warning.is_none() {
+            if let Err(error) = self.prune_automatic_history(&outcome.selection) {
+                let warning = format!(
+                    "Catalog selection succeeded, but old generation cleanup is deferred: {error}"
+                );
+                outcome.receipt_warning = Some(match outcome.receipt_warning {
+                    Some(previous) => format!("{previous} {warning}"),
+                    None => warning,
+                });
+            }
+        }
+        Ok(AutomaticCatalogOutcome::Activated(Box::new(outcome)))
+    }
+
+    fn prune_automatic_history(&self, selection: &CatalogSelection) -> Result<(), UpdateError> {
+        let mut keep: BTreeSet<_> = std::iter::once(&selection.active)
+            .chain(selection.previous.iter())
+            .filter_map(|target| match target {
+                CatalogTarget::User { candidate_sha256 } => Some(candidate_sha256.clone()),
+                _ => None,
+            })
+            .collect();
+        keep.extend(
+            self.accepted_targets()?
+                .into_iter()
+                .filter_map(|target| match target {
+                    CatalogTarget::User { candidate_sha256 } => Some(candidate_sha256),
+                    _ => None,
+                }),
+        );
+        let mut obsolete_sources = BTreeSet::new();
+        let mut retained_sources = BTreeSet::new();
+        let mut obsolete_icons = BTreeSet::new();
+        let mut retained_icons = BTreeSet::new();
+        for directory in [
+            self.roots.live_versions(),
+            self.roots.import_root().join(self.roots.channel.as_str()),
+        ] {
+            let canonical = fs::canonicalize(&directory)?;
+            for entry in fs::read_dir(&canonical)?.take(256) {
+                let entry = entry?;
+                let metadata = fs::symlink_metadata(entry.path())?;
+                if !metadata.is_dir() || is_link_like(&metadata) {
+                    continue;
+                }
+                let Ok(candidate) = inspect_candidate(entry.path()) else {
+                    continue;
+                };
+                if !candidate.catalog_version.starts_with("local-collector-") {
+                    continue;
+                }
+                let sources: serde_json::Value = serde_json::from_slice(
+                    &read_bounded_stable(
+                        &canonical,
+                        &entry.path().join("sources.json"),
+                        64 * 1024 * 1024,
+                    )
+                    .map_err(stable_read_error)?,
+                )?;
+                let hashes = sources
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|source| source["sha256"].as_str())
+                    .map(str::to_owned);
+                let icons: serde_json::Value = serde_json::from_slice(
+                    &read_bounded_stable(
+                        &canonical,
+                        &entry.path().join("icons.json"),
+                        64 * 1024 * 1024,
+                    )
+                    .map_err(stable_read_error)?,
+                )?;
+                let icon = icons["generation_sha256"].as_str().map(str::to_owned);
+                if keep.contains(&candidate.candidate_sha256) {
+                    retained_sources.extend(hashes);
+                    retained_icons.extend(icon);
+                    continue;
+                }
+                obsolete_sources.extend(hashes);
+                obsolete_icons.extend(icon);
+                // Only exact hash-named, verified local generations are owned here.
+                let resolved = fs::canonicalize(entry.path())?;
+                if resolved.parent() == Some(canonical.as_path()) {
+                    fs::remove_dir_all(resolved)?;
+                }
+            }
+        }
+        let icons_root = self.roots.icon_cache();
+        if let Ok(generations) = fs::canonicalize(icons_root.join("generations")) {
+            for identity in obsolete_icons.difference(&retained_icons) {
+                if crate::icon_cache::open_generation(&icons_root, identity).is_ok() {
+                    let path = fs::canonicalize(generations.join(identity))?;
+                    if path.parent() == Some(generations.as_path()) {
+                        fs::remove_dir_all(path)?;
+                    }
+                }
+            }
+        }
+        let source_root = fs::canonicalize(self.roots.source_cache())?;
+        for digest in obsolete_sources.difference(&retained_sources) {
+            let path = source_root.join(format!("{digest}.bin"));
+            if let Ok(metadata) = fs::symlink_metadata(&path) {
+                if metadata.is_file() && !is_link_like(&metadata) {
+                    fs::remove_file(path)?;
+                }
+            }
+        }
+        let mut receipts = fs::read_dir(self.roots.receipts())?
+            .take(10_000)
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let sequence = name
+                    .strip_suffix(".json")?
+                    .strip_prefix("event-")
+                    .unwrap_or(name.strip_suffix(".json")?)
+                    .parse::<u64>()
+                    .ok()?;
+                Some((sequence, name, entry.path()))
+            })
+            .collect::<Vec<_>>();
+        receipts.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+        let mut complete_count = 0;
+        let mut event_count = 0;
+        for (_, name, path) in receipts {
+            let count = if name.starts_with("event-") {
+                &mut event_count
+            } else {
+                &mut complete_count
+            };
+            *count += 1;
+            if *count > 16 {
+                let metadata = fs::symlink_metadata(&path)?;
+                if metadata.is_file() && !is_link_like(&metadata) {
+                    fs::remove_file(path)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_retention_capacity(&self, candidate: &CandidateSummary) -> Result<(), UpdateError> {
+        // This bounds publication, never evicts support for historical domains.
+        const MAX_DOMAINS: usize = 256;
+        const MAX_RETAINED_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+        let entries = fs::read_dir(self.roots.live_versions())?
+            .take(1025)
+            .collect::<Result<Vec<_>, _>>()?;
+        if entries.len() > 1024 {
+            return Err(UpdateError::Validation("catalog storage pressure: too many retained generations; existing data was preserved".into()));
+        }
+        let mut domains = BTreeMap::new();
+        domains.insert(
+            (
+                candidate.channel,
+                candidate.api_version,
+                candidate.game_version.clone(),
+            ),
+            candidate.total_bytes,
+        );
+        for entry in entries {
+            let Ok(summary) = inspect_candidate(entry.path()) else {
+                continue;
+            };
+            let key = (summary.channel, summary.api_version, summary.game_version);
+            domains
+                .entry(key)
+                .and_modify(|size: &mut u64| *size = (*size).max(summary.total_bytes))
+                .or_insert(summary.total_bytes);
+        }
+        let total = domains
+            .values()
+            .try_fold(0_u64, |sum, size| sum.checked_add(*size));
+        if domains.len() > MAX_DOMAINS || total.is_none_or(|total| total > MAX_RETAINED_BYTES) {
+            return Err(UpdateError::Validation("catalog storage pressure: publication paused to preserve historical version support".into()));
+        }
+        Ok(())
+    }
+
+    fn accepted_targets(&self) -> Result<Vec<CatalogTarget>, UpdateError> {
+        let path = self.roots.root().join("accepted-domains.json");
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let canonical = fs::canonicalize(self.roots.root())?;
+        let bytes = read_bounded_stable(&canonical, &path, 64 * 1024).map_err(stable_read_error)?;
+        let targets: Vec<CatalogTarget> = serde_json::from_slice(&bytes)?;
+        if targets.len() > 256 {
+            return Err(UpdateError::InvalidSelection(
+                "accepted version domain index exceeds its bound".into(),
+            ));
+        }
+        for target in &targets {
+            target.validate()?;
+        }
+        Ok(targets)
+    }
+
+    fn register_accepted(&self, selection: &CatalogSelection) -> Result<(), UpdateError> {
+        let mut targets = self.accepted_targets()?;
+        targets.push(selection.active.clone());
+        targets.extend(selection.previous.clone());
+        let mut domains = BTreeMap::new();
+        for target in targets {
+            let CatalogTarget::User {
+                ref candidate_sha256,
+            } = target
+            else {
+                continue;
+            };
+            let directory = self.roots.live_versions().join(candidate_sha256);
+            let Ok(summary) = self.validate_installed_candidate(&directory, candidate_sha256)
+            else {
+                continue;
+            };
+            let Ok(bundle) = read_bundle(&directory.join("catalog.sqlite")) else {
+                continue;
+            };
+            let key = (summary.channel, summary.api_version, summary.game_version);
+            let order = (latest_observation(&bundle), summary.candidate_sha256);
+            if domains
+                .get(&key)
+                .is_none_or(|(previous, _)| &order > previous)
+            {
+                domains.insert(key, (order, target));
+            }
+        }
+        let targets = domains
+            .into_values()
+            .map(|(_, target)| target)
+            .collect::<Vec<_>>();
+        let path = self.roots.root().join("accepted-domains.json");
+        let bytes = canonical_json(&targets)?;
+        if fs::read(&path).ok().as_deref() == Some(bytes.as_slice()) {
+            return Ok(());
+        }
+        write_atomic(&path, &bytes)
+    }
+
     pub fn load_selection(&self) -> Result<CatalogSelection, UpdateError> {
         if !self.roots.selection().exists() {
             return Ok(CatalogSelection::default());
@@ -448,12 +961,20 @@ impl CatalogUpdateService {
     }
 
     pub fn resolve_catalog(&self) -> CatalogResolution {
+        if !self.roots.selection().exists()
+            && self
+                .accepted_targets()
+                .is_ok_and(|targets| !targets.is_empty())
+        {
+            return self.retained_resolution(None, "The catalog selection is missing.".into());
+        }
         let selection = match self.load_selection() {
             Ok(selection) => selection,
             Err(error) => {
-                return self.bundled_resolution(Some(format!(
-                    "User catalog selection was ignored: {error}"
-                )))
+                return self.retained_resolution(
+                    None,
+                    format!("User catalog selection was ignored: {error}"),
+                )
             }
         };
         match &selection.active {
@@ -472,18 +993,85 @@ impl CatalogUpdateService {
                                 warning: None,
                             }
                         } else {
-                            self.bundled_resolution(Some(
-                                "The selected user catalog could not be opened; using the bundled catalog."
-                                    .into(),
-                            ))
+                            self.retained_resolution(
+                                selection.previous.as_ref(),
+                                "The selected catalog could not be opened.".into(),
+                            )
                         }
                     }
-                    Err(error) => self.bundled_resolution(Some(format!(
-                        "The selected user catalog failed verification; using the bundled catalog: {error}"
-                    ))),
+                    Err(error) => self.retained_resolution(
+                        selection.previous.as_ref(),
+                        format!("The selected catalog failed verification: {error}"),
+                    ),
                 }
             }
         }
+    }
+
+    fn retained_resolution(
+        &self,
+        preferred: Option<&CatalogTarget>,
+        warning: String,
+    ) -> CatalogResolution {
+        let mut targets = preferred.cloned().into_iter().collect::<Vec<_>>();
+        if let Ok(entries) = fs::read_dir(self.roots.receipts()) {
+            let mut receipts = entries
+                .take(256)
+                .filter_map(Result::ok)
+                .filter_map(|entry| {
+                    let number = entry
+                        .file_name()
+                        .to_string_lossy()
+                        .strip_suffix(".json")?
+                        .parse::<u64>()
+                        .ok()?;
+                    Some((number, entry.path()))
+                })
+                .collect::<Vec<_>>();
+            receipts.sort_by_key(|value| std::cmp::Reverse(value.0));
+            if let Ok(root) = fs::canonicalize(self.roots.receipts()) {
+                for (_, path) in receipts {
+                    if let Ok(bytes) = read_bounded_stable(&root, &path, SELECTION_LIMIT) {
+                        if let Ok(receipt) = serde_json::from_slice::<UpdateReceipt>(&bytes) {
+                            targets.extend(receipt.new_target);
+                            targets.push(receipt.old_target);
+                        }
+                    }
+                }
+            }
+        }
+        targets.extend(self.accepted_targets().unwrap_or_default());
+        let mut checked = BTreeSet::new();
+        for target in targets {
+            let CatalogTarget::User {
+                ref candidate_sha256,
+            } = target
+            else {
+                continue;
+            };
+            if !checked.insert(candidate_sha256.clone()) {
+                continue;
+            }
+            let candidate = self.roots.live_versions().join(candidate_sha256);
+            if self
+                .validate_installed_candidate(&candidate, candidate_sha256)
+                .is_ok()
+            {
+                let path = candidate.join("catalog.sqlite");
+                let access = CatalogAccess::open_or_empty(&path);
+                if access.is_available() {
+                    return CatalogResolution {
+                        access,
+                        path,
+                        target,
+                        warning: Some(format!(
+                            "{warning} Recovered the last verified retained catalog."
+                        )),
+                    };
+                }
+            }
+        }
+        self.bundled_resolution(Some(warning))
     }
 
     pub fn install<F>(
@@ -508,6 +1096,18 @@ impl CatalogUpdateService {
             "Waiting for exclusive access to catalog files; another operation may be using them",
         ));
         let _lock = OperationLock::acquire(&self.roots.operation_lock())?;
+        self.install_inner(candidate_path.as_ref(), cancel, progress)
+    }
+
+    fn install_inner<F>(
+        &self,
+        candidate_path: &Path,
+        cancel: &CancellationToken,
+        mut progress: F,
+    ) -> Result<InstallOutcome, UpdateError>
+    where
+        F: FnMut(UpdateProgress),
+    {
         cancel.check()?;
         let previous_resolution = self.resolve_catalog();
         let previous_target = previous_resolution.target;
@@ -515,7 +1115,7 @@ impl CatalogUpdateService {
             .access
             .release()
             .map_err(|error| UpdateError::Validation(error.to_string()))?;
-        let source = fs::canonicalize(candidate_path.as_ref())?;
+        let source = fs::canonicalize(candidate_path)?;
         let import_root = fs::canonicalize(self.roots.import_root())?;
         if !is_same_or_nested(&source, &import_root) {
             return Err(UpdateError::Validation(
@@ -529,7 +1129,28 @@ impl CatalogUpdateService {
             "Verifying reviewed catalog candidate",
         ));
         let candidate = inspect_candidate(&source)?;
-        candidate_compatibility(&candidate, active_release.as_ref())?;
+        self.ensure_retention_capacity(&candidate)?;
+        if candidate.channel != self.roots.channel || candidate.catalog_schema != SCHEMA_VERSION {
+            return Err(UpdateError::Validation(
+                "catalog candidate does not match this context channel or schema".into(),
+            ));
+        }
+        if self.roots.channel == Channel::Live {
+            candidate_compatibility(&candidate, active_release.as_ref())?;
+        } else if let Some(active) =
+            active_release.filter(|active| active.channel == candidate.channel)
+        {
+            if candidate.api_version < active.api_version
+                || (candidate.api_version == active.api_version
+                    && client_version_components(&candidate.game_version)
+                        .zip(client_version_components(&active.game_version))
+                        .is_some_and(|(candidate, active)| candidate < active))
+            {
+                return Err(UpdateError::Validation(
+                    "catalog is older than the selected context version".into(),
+                ));
+            }
+        }
         cancel.check()?;
 
         let temporary = tempfile::Builder::new()
@@ -537,7 +1158,7 @@ impl CatalogUpdateService {
             .tempdir_in(self.roots.staging())?;
         let staged = temporary
             .path()
-            .join("live")
+            .join(self.roots.channel.as_str())
             .join(&candidate.candidate_sha256);
         fs::create_dir_all(&staged)?;
         let mut copied = 0;
@@ -572,7 +1193,7 @@ impl CatalogUpdateService {
             candidate.total_bytes,
             "Opening installed catalog read-only",
         ));
-        validate_catalog_access(&destination.join("catalog.sqlite"))?;
+        validate_catalog_access(&destination.join("catalog.sqlite"), self.roots.channel)?;
         cancel.check()?;
 
         // Selection replacement is intentionally a short noninterruptible boundary.
@@ -582,6 +1203,12 @@ impl CatalogUpdateService {
             candidate.total_bytes,
             "Selecting installed catalog",
         ));
+        let _commit = cancel
+            .0
+            .commit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cancel.check()?;
         let previous = self.load_selection()?;
         let sequence = previous.generation.saturating_add(1);
         let selection = CatalogSelection {
@@ -594,7 +1221,8 @@ impl CatalogUpdateService {
             last_receipt: Some(sequence),
         };
         self.write_selection(&selection)?;
-        let receipt_warning = self
+        drop(_commit);
+        let mut receipt_warning = self
             .write_receipt(
                 UpdateOperation::Install,
                 &selection,
@@ -605,6 +1233,13 @@ impl CatalogUpdateService {
             .map(|error| {
                 format!("Catalog selection succeeded, but its receipt could not be saved: {error}")
             });
+        if let Err(error) = self.register_accepted(&selection) {
+            let warning = format!("Catalog selection succeeded, but its historical domain index could not be saved: {error}");
+            receipt_warning = Some(match receipt_warning {
+                Some(previous) => format!("{previous} {warning}"),
+                None => warning,
+            });
+        }
         progress(UpdateProgress::new(
             UpdateStage::Complete,
             candidate.total_bytes,
@@ -656,6 +1291,12 @@ impl CatalogUpdateService {
             0,
             "Selecting rollback catalog",
         ));
+        let _commit = cancel
+            .0
+            .commit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cancel.check()?;
         let sequence = current.generation.saturating_add(1);
         let selection = CatalogSelection {
             schema_version: contract::SELECTION_SCHEMA_VERSION,
@@ -665,6 +1306,7 @@ impl CatalogUpdateService {
             last_receipt: Some(sequence),
         };
         self.write_selection(&selection)?;
+        drop(_commit);
         let receipt_warning = self
             .write_receipt(UpdateOperation::Rollback, &selection, None, Vec::new())
             .err()
@@ -684,8 +1326,17 @@ impl CatalogUpdateService {
     }
 
     fn bundled_resolution(&self, warning: Option<String>) -> CatalogResolution {
+        let mut access = CatalogAccess::open_or_empty(&self.bundled_catalog);
+        if access
+            .release()
+            .ok()
+            .flatten()
+            .is_some_and(|release| release.channel != self.roots.channel)
+        {
+            access = CatalogAccess::empty(crate::catalog::CatalogDiagnosticKind::Unavailable,"No packaged catalog exists for this environment; naturally saved data will populate its separate registry.");
+        }
         CatalogResolution {
-            access: CatalogAccess::open_or_empty(&self.bundled_catalog),
+            access,
             path: self.bundled_catalog.clone(),
             target: CatalogTarget::Bundled,
             warning,
@@ -694,11 +1345,13 @@ impl CatalogUpdateService {
 
     fn validate_target(&self, target: &CatalogTarget) -> Result<(), UpdateError> {
         match target {
-            CatalogTarget::Bundled => validate_catalog_access(&self.bundled_catalog),
+            CatalogTarget::Bundled => {
+                validate_catalog_access(&self.bundled_catalog, self.roots.channel)
+            }
             CatalogTarget::User { candidate_sha256 } => {
                 let path = self.roots.live_versions().join(candidate_sha256);
                 self.validate_installed_candidate(&path, candidate_sha256)?;
-                validate_catalog_access(&path.join("catalog.sqlite"))
+                validate_catalog_access(&path.join("catalog.sqlite"), self.roots.channel)
             }
         }
     }
@@ -709,7 +1362,11 @@ impl CatalogUpdateService {
         expected_hash: &str,
     ) -> Result<CandidateSummary, UpdateError> {
         let summary = inspect_candidate(path)?;
-        validate_live_candidate(&summary)?;
+        if summary.channel != self.roots.channel || summary.catalog_schema != SCHEMA_VERSION {
+            return Err(UpdateError::Validation(
+                "installed catalog does not match this channel or schema".into(),
+            ));
+        }
         if summary.candidate_sha256 != expected_hash {
             return Err(UpdateError::Validation(
                 "installed directory does not match its candidate identity".into(),
@@ -739,14 +1396,7 @@ impl CatalogUpdateService {
     }
 
     fn active_catalog_path(&self) -> PathBuf {
-        match self.load_selection().map(|selection| selection.active) {
-            Ok(CatalogTarget::User { candidate_sha256 }) => self
-                .roots
-                .live_versions()
-                .join(candidate_sha256)
-                .join("catalog.sqlite"),
-            _ => self.bundled_catalog.clone(),
-        }
+        self.resolve_catalog().path
     }
 
     fn write_selection(&self, selection: &CatalogSelection) -> Result<(), UpdateError> {
@@ -851,8 +1501,9 @@ pub(crate) fn candidate_compatibility(
     };
     let older = candidate.api_version < active.api_version
         || (candidate.api_version == active.api_version
-            && parse_commit_message_version(&candidate.game_version)
-                < parse_commit_message_version(&active.game_version));
+            && client_version_components(&candidate.game_version)
+                .zip(client_version_components(&active.game_version))
+                .is_some_and(|(candidate, active)| candidate < active));
     if older {
         return Err(UpdateError::Validation(
             "This proposed catalog is older than the selected Live catalog. Choose a current update; use Roll back to restore an available previous selection.".into(),
@@ -861,7 +1512,24 @@ pub(crate) fn candidate_compatibility(
     Ok(())
 }
 
-fn validate_catalog_access(path: &Path) -> Result<(), UpdateError> {
+fn client_version_components(value: &str) -> Option<Vec<u64>> {
+    let token = value.split_whitespace().next()?;
+    let token = token
+        .strip_prefix("eso.live.")
+        .or_else(|| token.strip_prefix("eso.pts."))
+        .unwrap_or(token);
+    let mut components = token
+        .split('.')
+        .map(str::parse)
+        .collect::<Result<Vec<u64>, _>>()
+        .ok()?;
+    while components.len() > 2 && components.last() == Some(&0) {
+        components.pop();
+    }
+    (!components.is_empty()).then_some(components)
+}
+
+fn validate_catalog_access(path: &Path, channel: Channel) -> Result<(), UpdateError> {
     let access = CatalogAccess::open_or_empty(path);
     let release = access
         .release()
@@ -872,9 +1540,9 @@ fn validate_catalog_access(path: &Path) -> Result<(), UpdateError> {
                 |value| value.message.clone(),
             ))
         })?;
-    if release.channel != Channel::Live || release.schema_version != SCHEMA_VERSION {
+    if release.channel != channel || release.schema_version != SCHEMA_VERSION {
         return Err(UpdateError::Validation(
-            "selected catalog is not a supported Live catalog".into(),
+            "selected catalog does not match the context channel or schema".into(),
         ));
     }
     Ok(())

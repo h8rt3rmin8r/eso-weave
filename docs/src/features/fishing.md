@@ -13,7 +13,7 @@ before starting the routine.
 - Select bait in ESO. Without bait, the cast is not confirmed and fishing stops
   after the arm timeout.
 - Install the current PixelBeacon from System and State and enable it in ESO.
-- If ESO marks the addon out of date, update it and use `/reloadui` or relog.
+- If ESO marks the addon out of date, update the managed package; new code takes effect at the next natural addon load.
 - Keep the PixelBeacon overlay visible and the ESO window focused.
 - Face a fishing hole until the interact prompt appears.
 

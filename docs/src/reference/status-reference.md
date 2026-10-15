@@ -31,69 +31,77 @@ Observed numeric zero is different from all four states.
 | World State: **Transitioning** or **Not detected** | Loading or no complete baseline | Generated input is blocked; wait for Active |
 | ESO Weave: **Active** | Application is not suspended | Features may still have other blockers |
 | ESO Weave: **Suspended** | New weave interception and Auto Potion input stop; queued or running weave is invalidated; Fishing deadlines cancel while its request is retained | Resume with `F1` or Running toggle; Fishing then requires a fresh manual cast or off-on recovery |
-| PixelBeacon Status: **Not installed** | The PixelBeacon target does not exist | Install the bundled addon |
+| PixelBeacon Status: **Not installed** | Neither a PixelBeacon target nor a recognized managed legacy Data package exists | The ordinary PixelBeacon lifecycle installs the complete package |
 | PixelBeacon Status: **Unmanaged (not modified)** | A target exists but ownership cannot be proven | No lifecycle action is offered; move or remove only that exact target manually |
-| PixelBeacon Status: **Installed (current)** | Managed version matches | No action |
-| PixelBeacon Status: **Installed (outdated)** | The managed marker exists but the embedded version differs | Update the managed copy in place |
+| PixelBeacon Status: **Installed (current)** | Complete managed inventory, version, configured geometry, and startup configuration match | No action |
+| PixelBeacon Status: **Installed (outdated)** | A recognized managed package needs update, completion, or migration | Automatic legacy migration or the ordinary Update lifecycle stages a complete replacement |
 | PixelBeacon Status: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
-| ESO Weave Data: **Not installed** | The data-addon package is absent | Choose **Install Data** when catalog or encounter workflows are needed |
-| ESO Weave Data: **Installed** with Addon Management **Managed** and Addon Package Version **Current** | Files match the bundled package; enablement and loading are separate | No package change needed; check ESO's Add-Ons menu and use in-game commands for recording |
-| ESO Weave Data: **Installed** with Addon Package Version **Update available** | ESO Weave can manage the files, but their content differs | Choose **Update Data** or **Repair Data**, then reload ESO |
-| ESO Weave Data: Addon Management **Unmanaged** | A folder exists, but ESO Weave cannot establish ownership or its expected file layout | No package change is offered; preserve any wanted files and move or remove only `EsoWeaveData` manually |
-| ESO Weave Data: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
-| Enabled in ESO or Loaded in ESO: **Unconfirmed** | The desktop cannot read current in-game enablement or loading | Check ESO's Add-Ons menu, enable ESO Weave Data and reload after changes |
-| Reload Reminder: **Required** | A lifecycle change occurred while ESO was running or runtime was uncertain | Run `/reloadui` or relog before relying on the change |
-| ESO Client: **Available**, **Unavailable**, or **Unknown** | ESO process evidence only | Never treat this value as addon load or collection evidence |
-| Catalog Collection: **Unknown (check inside ESO)** | The desktop cannot read current catalog collection | Run `/ewcollect status`; any file on disk describes the last ESO save |
-| Encounter Recording: **Unknown (check inside ESO)** | The desktop cannot observe current recording activity, even when a saved recording state exists | Run `/ewencounter status` inside ESO; inspect Last saved source separately in Data Details or Encounter History |
-| Addon Next Step | Current lifecycle and inspection evidence | Follow the named safe action; unavailable or unmanaged evidence never enables automatic mutation |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
 | PixelBeacon Signal: **Not detected** | Active game, no heartbeat seen | Enable/reload addon and expose overlay |
 | Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
 | Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
+Completed Catalog snapshots enter desktop maintenance after ESO naturally saves
+them. Background work verifies, opens, and atomically selects a compatible
+Catalog. Unchanged semantic content retains the current generation. Readers
+receive a coherent selection; an interrupted build cannot replace the last
+usable Catalog.
+
+Startup recovery checks retained verified selections before the separately
+verified packaged fallback. Live and PTS retain independent selections. Disabling
+Catalog maintenance retains existing usable data and prevents stale work from
+activating a candidate; re-enabling resumes automatically when eligible. The
+current Catalog row reports the selected data. No source-selection, review,
+import-ready notice, or refresh action is part of this automatic path.
+
+The historical Data lifecycle API is a compatibility alias for the complete
+PixelBeacon package. It never creates a separate ESO Weave Data installation.
+
+| Lifecycle API value | Meaning |
+| --- | --- |
+| `not-installed` | The combined package and recognized managed legacy targets are absent |
+| `managed-up-to-date` | The complete current managed inventory matches |
+| `managed-version-mismatch` | An owned package needs update, completion, or legacy migration |
+| `unmanaged` | Ownership, exact inventory, regular files, or stable reads cannot be established |
+
+These values describe disk management, not whether Lua is loaded. Compatible
+combined presence is evaluated separately for background eligibility; manually
+maintained packages can be eligible without granting overwrite or removal
+permission. Actual Live and PTS roots are independent.
+
+Both persistent disable preferences are retained through absence. No compatible
+combined installation makes both background services dormant and both controls
+inactive. Desktop Catalog disable stops reads and activation immediately; the
+package startup preference applies to Lua at the next natural addon load. An
+unavailable inspection does not reset preferences or fabricate package presence.
+
+## Legacy encounter observations
+
+The following states describe retained legacy encounter data exposed by existing
+readers and desktop history. The combined PixelBeacon package does not ship or
+automatically resume the old addon recorder. Previously saved states do not
+provide authority to begin a recording.
+
+The following source/history observations concern retained legacy data. They
+do not describe current Catalog collection or new addon recording.
+
 **Last saved source** inspects the selected environment's file before import,
 showing path, timestamp, saved state and counts. **Refresh Saved Source** rereads
 that file; **Refresh Imported History** rereads desktop copies. Successful and
 failed import attempts clear and refresh the source summary. Environment/folder
 changes reject stale results. These facts do not establish current game activity.
-An **empty session** stopped before combat has no encounters to import. Start
-again without clearing, or resume the latest stopped continuous session.
+An **empty session** stopped before combat has no encounters to import.
 Last saved source also reports matching session provenance and whole-file
 retained capacity; import before deliberate discard only if you want a desktop copy.
-`/ewencounter discard SESSION_ID confirm` deletes one inactive addon session.
-`/ewencounter clear confirm` deliberately deletes all addon recordings while
-recording is off. Both preserve catalog data and desktop history.
+Historical `/ewencounter discard SESSION_ID confirm` and `/ewencounter clear
+confirm` operations removed inactive or all addon sessions while preserving
+Catalog data and desktop history. These commands are not supplied by the
+combined package.
 
-Maintainer review candidates have no application status row. Candidate generation
-cannot authenticate its origin. A user-approved candidate appears here only after
-the Catalog Update worker verifies, installs, opens, and atomically selects it.
-Invalid user selections visibly fall back to the separately verified package
-catalog.
-
-The Catalog Update notice distinguishes Catalog current, New Live data
-available, Update ready to import, Collector capture required, Offline or stale
-check, Unsupported schema, and catalog unavailable. PTS previews are labeled
-separately and never participate in Live selection.
-
-The shared ESO Weave Data addon has separate package lifecycle values:
-
-| Lifecycle API value | Meaning | Recovery or effect |
-| --- | --- | --- |
-| `not-installed` | The shared data-addon package is absent | Install it explicitly when local catalog or encounter capture is needed |
-| `managed-up-to-date` | Marker, version, and embedded checksum match | Capture may be started in ESO after any required reload |
-| `managed-version-mismatch` | Ownership is proven but content differs | Use the main interface Update or Repair action, or the maintainer CLI |
-| `unmanaged` | Ownership, file type, or link safety could not be proven | No change is made; inspect only that exact target manually |
-
-These API values back the first-class lifecycle row. They do not describe
-PixelBeacon, configured enablement, addon loading, collection, or automation
-state.
-
-The encounter controller exposes exactly two selected modes. `single` records
+The historical encounter controller exposed two selected modes. `single` records
 one combat period and stops; `continuous` retains one bounded session across
-combat gaps until explicit disablement or hard failure. Live authority belongs
-only to user commands inside ESO:
+combat gaps until explicit disablement or hard failure. Existing saved states retain their original meaning:
 
 - `stopped` means no capture request is effective. Mode/channel changes select
   the next session and preserve earlier provenance. Start creates a new retained
@@ -135,12 +143,12 @@ the application.
 ## Game Context and player state
 
 The existing PixelBeacon status summarizes API support, uncertainty, or an
-application-update action for both companion packages. Data Details reports the
+application-update action for the combined companion package. Data Details reports the
 numeric API and client evidence separately from installed package compatibility.
 
 | Field and text | Meaning | Automation impact or next action |
 | --- | --- | --- |
-| Game API: **Bundled addons support API...** | Published selected-channel evidence matches reviewed PixelBeacon and ESO Weave Data declarations | Installed package state and input gates remain separate |
+| Game API: **Bundled addons support API...** | Published selected-channel evidence matches reviewed PixelBeacon declarations | Installed package state and input gates remain separate |
 | Game API: **API... is not supported** | The observed numeric API is outside reviewed declarations | Update ESO Weave; a saved observation does not dismiss this warning |
 | Game API: **Unknown...** | Check pending, unavailable, stale, malformed, or for another environment | Check connection and restart; remembered unsupported API guidance remains visible |
 | Game Context: **Gameplay** | Active, focused game with fresh no-menu observation | Can authorize input with the other gates |

@@ -25,29 +25,31 @@ accordance with the Apache License, Version 2.0 under which it is distributed.
 ## Supported boundary
 
 ESO Weave supports Windows 10 and 11 x64 and Linux x64. macOS, multi-account or
-multi-client orchestration, game memory access, packet manipulation, and in-game
-features beyond the three named local addon surfaces are outside project scope.
+multi-client orchestration, game memory access, and packet manipulation are
+outside project scope.
 
 PixelBeacon ships only inside ESO Weave. It is not published to addon indexes.
-The separately managed ESO Weave Data addon contains catalog and encounter
-modules with isolated state and activation rules. Catalog capture runs only
-after an explicit user command and reads documented public addon APIs outside
-combat. Encounter capture remains dormant until the user explicitly enables
-`single` or `continuous` inside ESO for a selected Live or PTS channel. It warns
-that exact local values can include names and identifiers, records bounded
-observations from deliberately selected sources, and declares capture loss,
-interruptions, and hard failure. Single stops after one combat period;
-continuous keeps one bounded session across combat gaps until the user disables
-it or a reported hard failure stops it. Neither module uploads data, drives
-gameplay, or uses Pixel Bus for bulk records.
+The single managed PixelBeacon package publishes the existing color-block signals
+and collects bounded Catalog definitions automatically through documented public
+addon APIs outside combat. Eligible collection starts and resumes without a chat
+command. The desktop verifies compatible saved evidence before activating an
+accumulated Catalog generation. Collection and maintenance stay local and do not
+drive gameplay or use Pixel Bus for bulk records.
 
-The desktop cannot enable, disable, or change encounter mode. It has no custom
-binding, generated-input, clipboard, Pixel Bus, or live SavedVariables command
-path. **Last saved source** inspects the selected environment's saved file
+Settings provides independent **Disable Catalog maintenance** and **Disable native
+encounter log processing** preferences. Data services are dormant when a compatible
+combined addon is absent. Disabling Catalog maintenance stops desktop work at once;
+the staged addon preference applies at the next natural addon load. The desktop
+has no live SavedVariables, clipboard, generated-input, or Pixel Bus command path.
+
+The combined package does not load or resume the former ESO Weave Data encounter
+recorder. Its retained SavedVariables recordings remain importable, and completed
+supported native encounter-log files have a separate inspection and import path.
+**Last saved source** inspects the selected environment's retained addon file
 without importing or writing it. Changing the selected folder or environment
-discards older pending results. The disk file can lag current activity and does
-not prove the addon is enabled or loaded. Use `/ewencounter status` inside ESO
-for current capture activity; desktop Copy actions copy instructions only.
+discards older pending results. A disk file can lag current activity and does not
+prove addon enablement, loading, or recording. Historical recorder procedures are
+identified in [Encounter Capture](../features/encounter-capture.md).
 
 ## Privacy and network behavior
 
@@ -57,15 +59,15 @@ ESO addon API values and renders them as local color blocks. The project does no
 read game process memory, inspect packet contents, send gameplay telemetry, or
 require an online account service.
 
-The optional collector records versioned, bounded catalog observations in the
-user's local SavedVariables. The desktop treats that file as hostile data, never
+The automatic Catalog collector records versioned, bounded observations in the
+user's local SavedVariables unless Catalog maintenance is disabled. The desktop treats that file as hostile data, never
 executes it, never uploads it, and keeps user-collected localized text local.
 
-The optional encounter module records a bounded local session of one or more
-fights in the game's saved addon data (SavedVariables).
-Every scalar value delivered by a selected callback is retained exactly unless
-a hard bound or unsupported runtime value causes declared whole-observation
-loss. The current desktop importer treats the shared file as hostile data,
+Historical encounter recordings contain bounded sessions of one or more fights
+in the game's saved addon data (SavedVariables). Every scalar value delivered by
+a selected recorder callback was retained exactly unless a hard bound or
+unsupported runtime value caused declared whole-observation loss. The current
+desktop importer treats the retained shared file as hostile data,
 verifies the outer and encounter schemas plus loss declarations, and keeps
 accepted raw history in a user-owned store separate from the shipped catalog.
 It never uploads the capture, and logs, receipts, public fixtures, and default UI
@@ -73,7 +75,7 @@ summaries do not reproduce raw payload values.
 
 The desktop performs a best-effort background startup check against the official
 `esoui/esoui` client/API sources for the selected Live or PTS environment. It
-compares the observed API with each bundled addon's reviewed support declaration;
+compares the observed API with the combined addon's reviewed support declaration;
 it does not claim compatibility by stamping a newer number into installed files.
 Failure never blocks startup, current support stays unknown, and remembered
 unsupported-version guidance remains visible. Package download

@@ -35,8 +35,8 @@ page that owns the complete explanation.
 
 The ESO addon interface revision declared by an addon and reported by the game.
 ESO Weave compares selected Live or PTS API evidence with the reviewed support
-declarations for PixelBeacon and ESO Weave Data. A newer number alone does not
-prove that either bundled addon supports it.
+declaration for the single combined PixelBeacon addon. A newer number alone does
+not prove that the package supports it.
 
 **Related:** [PixelBeacon lifecycle and compatibility](../features/pixelbeacon.md)
 
@@ -119,10 +119,11 @@ Runtime observations and session-only state do not belong in this settings data.
 
 The local desktop companion that coordinates configured weaving, fishing, and
 resource-watch features while enforcing focus and observed game-state safety.
-Its single ESO Weave Data package keeps catalog and encounter modules isolated
-under one managed addon identity and one shared SavedVariables root.
+Its single managed PixelBeacon package publishes screen signals and collects
+Catalog definitions automatically. The former ESO Weave Data name remains useful
+for retained encounter evidence and the preserved SavedVariables identity.
 
-**Related:** [ESO Weave documentation home](../), [companion addon commands](../development/companion-addon-commands.md)
+**Related:** [ESO Weave documentation home](../), [companion addon configuration](../development/companion-addon-commands.md)
 
 ## F
 
@@ -317,8 +318,9 @@ carry minimal local game observations through on-screen colors.
 
 **Aliases:** addon, pixel addon, telemetry overlay, color blocks
 
-The separately managed ESO addon that publishes a minimal set of game observations
-as on-screen color blocks for local sampling by the desktop companion.
+The single managed companion addon that publishes game observations as on-screen
+color blocks and collects bounded Catalog definitions automatically. It preserves
+the existing SavedVariables identity without loading the former encounter recorder.
 
 **Related:** [PixelBeacon feature guide](../features/pixelbeacon.md)
 

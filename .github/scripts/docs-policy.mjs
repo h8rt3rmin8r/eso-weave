@@ -108,7 +108,8 @@ const NON_PUBLISHED_SEARCH_SENTINELS = [
   "Current Build Plans",
   "Archived Build Plans",
 ];
-const PRESERVATION_MANIFEST_SHA256 = "5067105e76147adced7e4a94b3afc5e57bad7dc013059c44eb5663e397a0542e";
+// S129 updates four current excerpts; all 20 units and six safety invariants remain pinned.
+const PRESERVATION_MANIFEST_SHA256 = "a8cc66d5ab7cc920da440bf5e816dd34d1365e1cbebd6c94b51839a56b550089";
 const DELIVERY_EVIDENCE = /(?:\bPR #\d+\b|\bcommit [0-9a-f]{7,40}\b|\bv\d+\.\d+\.\d+ release\b|\bissue #\d+ closed\b)/iu;
 const CONTENT_COVERAGE_BASELINE = "bc2b8356f3bec7b5349be5dbe616e1a10c93f244";
 const CONTENT_OBLIGATION_IDS = new Set([
@@ -121,7 +122,8 @@ const CONTENT_OBLIGATION_IDS = new Set([
 const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006", "DIA-007", "DIA-008", "DIA-009"]);
-const CONTENT_CONTRACT_SHA256 = "821b3ff67357f6ce600d304b3842f154ee49ef0fecbf6175c7f55a0a0be78ed3";
+// S129 updates two lifecycle test references, LOG-024, DEF-004 and DIA-008 only.
+const CONTENT_CONTRACT_SHA256 = "9548b967c7ae6d8bdeef24c1c44f2e9368a008f0c027b7ea1f341b4facd46c9f";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -380,10 +382,8 @@ function markdownContainerContent(line) {
 }
 
 const DOCUMENTATION_FENCE_LANGUAGES = new Set(["bash", "json", "powershell", "text"]);
-const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 13], ["json", 1], ["powershell", 4], ["text", 8]]);
+const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 10], ["json", 1], ["powershell", 4], ["text", 6]]);
 const PLAIN_CODE_BLOCKS = [
-  { page: "development/catalog-updates.md", sha256: "394477b8bebb95ddb31e3dbf93c78908468e2f69d91e6992f84b27d916886883", rationale: "A path layout, not an executable command." },
-  { page: "development/discovery-collector.md", sha256: "26982824fe45ffb5c1224ed89d9f04d0585059214f5431d5bd2b2065b25bbad3", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
   { page: "development/repository-conventions.md", sha256: "ba72b7779b972c573ded96d80a6d6d21e9416720419c1ddc287adbe3bab0e227", rationale: "A repository directory map, not executable syntax." },
   { page: "features/encounter-capture.md", sha256: "7670ddaeb06a92493c7156e32a8eb3bf286fb146597d34530d28b7486ec1eb94", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
   { page: "features/weaving.md", sha256: "74576ddc34a330808aa09f8bbc76348f573f3686a2eec2555060dc5651c3bee5", rationale: "A mathematical formula, not executable syntax." },
@@ -479,7 +479,8 @@ export function validateDocumentationCodeFences(pages, options = {}) {
     seenPlain.add(`${exception.page}\0${exception.sha256}`);
   }
   if (complete) {
-    if (fences.length !== 26) errors.push(`S087 documentation corpus requires exactly 26 fenced blocks, found ${fences.length}`);
+    const expectedFences = [...DOCUMENTATION_FENCE_COUNTS.values()].reduce((total, count) => total + count, 0);
+    if (fences.length !== expectedFences) errors.push(`S087 documentation corpus requires exactly ${expectedFences} fenced blocks, found ${fences.length}`);
     for (const [language, count] of DOCUMENTATION_FENCE_COUNTS) {
       const actual = fences.filter((fence) => fence.language === language).length;
       if (actual !== count) errors.push(`S087 documentation corpus requires ${count} ${language} blocks, found ${actual}`);
@@ -1522,10 +1523,10 @@ const DOCUMENTATION_DIAGRAMS = [
     id: "S122-D01", label: "catalog evidence lifecycle",
     page: "development/catalog-candidate-pipeline.md", outputPage: "development/catalog-candidate-pipeline.html",
     asset: "catalog-evidence-lifecycle.svg", width: 400, height: 3092,
-    alt: "Catalog evidence flows from pinned sources or bounded collector captures through review to explicit Live selection and rollback, while PTS remains preview only",
+    alt: "Automatic Catalog evidence flows through compatible accumulation and verification to atomic activation, with independent Live and PTS contexts and retained recovery",
     heading: "Catalog lifecycle text equivalent",
-    anchors: ["Alternative evidence inputs", "Normalized bundle", "Verified review candidate", "Explicit install decision", "Atomic Live selection", "Explicit rollback", "PTS review preview only", "Reports are redacted", "Collector values remain local-only"],
-    svgAnchors: ["Pinned sources", "Collector evidence", "Normalized bundle", "Verified review candidate", "Explicit install", "Origin acknowledged", "Atomic Live selection", "Explicit rollback", "PTS preview only", "Local-only values", "Independent Live / PTS"],
+    anchors: ["Alternative evidence inputs", "Compatible accumulation", "Verified generation", "Automatic activation", "Atomic selection", "Retry and recovery", "Independent Live / PTS", "Reports are redacted", "Collector values remain local-only"],
+    svgAnchors: ["Packaged baseline", "Automatic collection", "Compatible accumulation", "Verified generation", "Automatic activation", "No player acknowledgement", "Atomic selection", "Retry and recovery", "Independent PTS work", "Local-only values", "Independent Live / PTS"],
   },
   {
     id: "S122-D02", label: "local extension authority map",
@@ -1632,7 +1633,7 @@ const DOCUMENTATION_DIAGRAMS = [
       "Game discovery and runtime",
       "PixelBeacon Signal is missing or lost",
       "Native binding evidence is unavailable",
-      "Encounter capture is waiting, interrupted, or failed",
+      "Retained encounter capture or import fails",
       "Startup failure",
       "Use the Application Log",
     ],
@@ -1657,18 +1658,24 @@ export function validateEncounterWorkflowDocs(pages) {
   if (!(pages instanceof Map)) return ["S121 encounter workflow requires a page map"];
   const required = new Map([
     ["features/encounter-capture.md", [
-      "Install Data", "ESO's Add-Ons menu", "/ewencounter mode single", "/ewencounter channel live",
+      "single managed PixelBeacon", "does not load or resume", "Historical addon recorder setup",
+      "normal/separate log version 15", "Inspect Native File", "Import Native File",
+      "/ewencounter mode single", "/ewencounter channel live",
       "/ewencounter toggle", "/ewencounter status", "continuous", "Public Test Server",
       "SavedVariables", "Import Saved Capture", "Refresh Saved Source", "Refresh Imported History", "desktop history",
       "/ewencounter clear confirm", "Delete Encounter", "Delete All", "/ewcollect clear confirm",
-      "unsupported saved-data version", "Importing the unchanged ESO file", "Uninstall Data",
+      "unsupported saved-data version", "Importing the unchanged ESO file", "preserving the shared saved file",
     ]],
     ["reference/logging.md", ["Application Log", "File Logging", "native", "completed-file import", "Neither records fights", "Application Logging"]],
-    ["features/interface.md", ["Addon Management", "Addon Package Version", "Unconfirmed", "Unknown (check inside ESO)", "Last saved source", "before import", "last-save timestamp", "saved state and importable counts", "Refresh Saved Source", "Refresh Imported History", "Environment/folder changes discard older pending results", "Observed Metrics", "Provisional Recommendations"]],
-    ["getting-started/troubleshooting.md", ["current activity", "unsupported saved-data version", "same-version", "Incomplete observations", "duplicates", "currently active fight", "whole batch", "Delete All"]],
-    ["development/discovery-collector.md", ["Catalog collection", "/ewcollect resume", "/ewcollect cancel", "incomplete snapshot", "replaces that previous catalog collection", "unsupported saved-data version"]],
+    ["features/interface.md", ["single PixelBeacon lifecycle", "Separate Data installation/remediation rows are retired", "Catalog maintenance runs automatically", "Disable Catalog maintenance", "Disable native encounter log processing", "gray/inactive", "next natural addon load", "Import Saved Capture", "Refresh Imported History", "Observed Metrics", "Provisional Recommendations", "Delete confirmations"]],
+    ["getting-started/troubleshooting.md", ["current activity", "unsupported saved-data version", "same-version", "Incomplete observations", "duplicates", "currently active fight", "whole batch", "Delete All", "single combined PixelBeacon package", "Disable Catalog maintenance", "next natural addon load", "previous completed Catalog snapshot", "last-known-good Catalog active", "Historical addon recorder setup", "stable completed normal/separate version 15"]],
+    ["development/discovery-collector.md", ["starts and resumes automatically", "Disable Catalog maintenance", "next natural addon load", "previous completed Catalog snapshot", "incremental merge sort", "4,096 serialized-byte budget", "not acknowledge a disk write", "Unsupported saved roots"]],
     ["reference/status-reference.md", ["Last saved source", "before import", "Refresh Saved Source", "Refresh Imported History", "empty session", "/ewencounter clear confirm"]],
-    ["reference/encounter-data-and-metrics.md", ["Last saved source", "before import", "successful and failed import", "stale results", "empty stopped session"]],
+    ["reference/encounter-data-and-metrics.md", ["Last saved source", "before import", "successful and failed import", "stale results", "empty stopped session", "historical addon recorder setup", "does not load that recorder", "completed native files"]],
+    ["getting-started/responsible-use.md", ["single managed PixelBeacon package", "starts and resumes without a chat command", "next natural addon load", "does not load or resume", "never uploads it", "hostile data"]],
+    ["reference/glossary.md", ["single combined PixelBeacon addon", "single managed companion addon", "collects bounded Catalog definitions automatically", "without loading the former encounter recorder"]],
+    ["SUMMARY.md", ["Catalog Evidence and Candidate Pipeline", "Automatic Catalog Maintenance", "Automatic Catalog Collection", "Companion-to-Addon Configuration"]],
+    ["development/README.md", ["Catalog Evidence and Candidate Pipeline", "Automatic Catalog Maintenance", "Automatic Catalog Collection"]],
     ["reference/settings.md", ["Addons and Game Readings", "Game Environment", "Live", "PTS", "Application Logging", "Write Log to File", "They do not turn on encounter recording"]],
   ]);
   const errors = [];

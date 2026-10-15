@@ -2016,6 +2016,7 @@ pub struct AppModel {
     player_state: SnapshotPublisher,
     database_queries: DatabaseQueryService,
     local_service: Option<LocalServiceController>,
+    data_maintenance: crate::data_maintenance::MaintenanceControl,
 }
 
 impl AppModel {
@@ -2154,6 +2155,9 @@ impl AppModel {
         let mut reader_notices = Vec::new();
         let runtime_reader_config =
             crate::pixelbus::load_reader_config(&settings.pixelbus, &mut reader_notices);
+        let data_maintenance =
+            crate::data_maintenance::MaintenanceControl::new(settings.data_maintenance);
+        data_maintenance.set_roots(beacon_prefs.clone());
         let model = Self {
             input,
             weave,
@@ -2188,6 +2192,7 @@ impl AppModel {
             player_state,
             database_queries,
             local_service,
+            data_maintenance,
         };
         model.publish_player_state();
         if local_prefs.enabled {
@@ -2222,6 +2227,11 @@ impl AppModel {
     /// A fresh settings form seeded from the current configuration.
     pub fn settings_form(&self) -> SettingsForm {
         SettingsForm::load(&self.settings).0
+    }
+
+    /// Shared direct cancellation/eligibility authority for automatic services.
+    pub fn data_maintenance_control(&self) -> crate::data_maintenance::MaintenanceControl {
+        self.data_maintenance.clone()
     }
 
     /// Current local HTTP and MCP lifecycle status for settings presentation.
@@ -2411,7 +2421,7 @@ impl AppModel {
             BeaconCondition::AddonsNotFound => unavailable_observation("pixel_beacon"),
         };
 
-        let content = project_player_state(ProjectionInput {
+        let mut content = project_player_state(ProjectionInput {
             suspended: self.input.is_suspended(),
             catalog,
             data_addon,
@@ -2442,6 +2452,22 @@ impl AppModel {
             latency_config,
             reader_config: self.runtime_reader_config,
         });
+        let preferences = self.data_maintenance.preferences();
+        let eligible = self.data_maintenance.controls_enabled();
+        content.application["data_maintenance"] = observed(
+            serde_json::json!({
+                "preferences": preferences,
+                "preferences_persisted": self.data_maintenance.persisted(),
+                "startup_config_persisted": self.data_maintenance.startup_config_persisted(),
+                "controls_enabled": eligible,
+                "catalog_eligible": eligible && !preferences.catalog_disabled,
+                "native_processing_eligible": eligible && !preferences.native_processing_disabled,
+                "lua_preference_application": "next_natural_addon_load",
+                "loaded_lua_preference": "unknown",
+                "native_worker_implemented": false,
+            }),
+            "data_maintenance",
+        );
         self.player_state
             .publish(content, time::OffsetDateTime::now_utc());
         beacon_condition
@@ -2654,9 +2680,9 @@ impl AppModel {
                 "API supported"
             }
             Some(_) => "API unsupported; update ESO Weave",
-            None => "API unknown; open Data Details",
+            None => "API unknown",
         };
-        view.beacon_line.state_text = format!("{api_summary} | {}", view.beacon_line.state_text);
+        view.beacon_line.state_text = format!("{} | {api_summary}", view.beacon_line.state_text);
         if view.addon_api_line.role == StatusRole::Warning
             && view.beacon_line.role != StatusRole::Error
         {
@@ -3065,17 +3091,19 @@ impl AppModel {
         let api_version = self.effective_api_version();
         let block_px = self.configured_block_px();
         match beacon::resolve_addons_dir(&self.beacon_prefs) {
-            Ok(root) => match beacon::install_sized(
+            Ok(root) => match beacon::install_configured(
                 &root,
                 beacon::probe_game_running(),
                 api_version,
                 block_px,
+                self.settings.data_maintenance.catalog_disabled,
+                self.beacon_prefs.environment,
             ) {
                 Ok(outcome) => {
                     if outcome.reload_required {
                         tracing::info!(
                             target: "eso_weave::app",
-                            "PixelBeacon installed; run /reloadui or relog for it to take effect"
+                            "PixelBeacon installed; updated Lua takes effect at the next natural addon load"
                         );
                     } else {
                         tracing::info!(target: "eso_weave::app", "PixelBeacon installed");
@@ -3098,7 +3126,7 @@ impl AppModel {
                     if outcome.reload_required {
                         tracing::info!(
                             target: "eso_weave::app",
-                            "PixelBeacon removed; run /reloadui or relog for it to take effect"
+                            "PixelBeacon removed; currently loaded Lua ends with its normal game session"
                         );
                     } else {
                         tracing::info!(target: "eso_weave::app", "PixelBeacon removed");
@@ -3114,11 +3142,32 @@ impl AppModel {
         }
     }
 
-    fn apply_settings(&mut self, form: SettingsForm) -> Vec<Notice> {
+    fn apply_settings(&mut self, mut form: SettingsForm) -> Vec<Notice> {
+        if !self.data_maintenance.controls_enabled() {
+            form.data_maintenance = self.settings.data_maintenance;
+        }
+        let previous_data = self.settings.data_maintenance;
+        let mut previous_form = self.settings_form();
+        previous_form.data_maintenance = form.data_maintenance;
+        let only_data_changed = previous_form == form;
         let previous_block_px = self.configured_block_px();
         let previous_local = LocalServicePrefs::load(&self.settings.local_service);
         form.apply(&mut self.settings);
         let mut notices = self.reload_from_settings();
+        self.data_maintenance.set_roots(self.beacon_prefs.clone());
+        if self.settings.data_maintenance != previous_data {
+            let requested = self.settings.data_maintenance;
+            // Cancel before storage I/O; failed enable keeps the prior stop.
+            self.data_maintenance.apply(requested, false);
+            let persisted = self
+                .config_dir
+                .as_deref()
+                .is_some_and(|dir| config::save(dir, &self.settings).is_ok());
+            self.settings.data_maintenance = self.data_maintenance.apply(requested, persisted);
+            if !persisted {
+                tracing::warn!(target: "eso_weave::data_maintenance", "data preference persistence failed; current-run stop retained and unsaved enable refused");
+            }
+        }
         let mut current_local = LocalServicePrefs::load(&self.settings.local_service);
         if current_local.enabled != previous_local.enabled {
             if current_local.enabled {
@@ -3186,14 +3235,16 @@ impl AppModel {
         }
         // Persistence is coalesced: mark the config store dirty and let the
         // scheduler flush a single settle-write. There is no explicit save.
-        self.scheduler.mark_config(Instant::now());
+        if !only_data_changed {
+            self.scheduler.mark_config(Instant::now());
+        }
         notices
     }
 
     /// Drives a managed-only re-deploy after the block size changed. An unmanaged
     /// or absent install is never written; the outcome is surfaced in the live log
-    /// (the addon and reader adopt the new size after a `/reloadui` and an app
-    /// restart respectively).
+    /// (the addon uses the new size at its next natural load and the reader at
+    /// its next start).
     fn redeploy_for_block_size(&self, previous: u32, current: u32) {
         let api_version = self.effective_api_version();
         let root = match beacon::resolve_addons_dir(&self.beacon_prefs) {
@@ -3217,7 +3268,7 @@ impl AppModel {
                     target: "eso_weave::app",
                     previous,
                     current,
-                    "PixelBeacon re-deployed at the new block size; run /reloadui and restart ESO Weave for it to take effect"
+                    "PixelBeacon re-deployed at the new block size; Lua uses it at the next natural addon load and the reader at its next start"
                 );
             }
             Ok(beacon::RedeployOutcome::SkippedUnmanaged) => {

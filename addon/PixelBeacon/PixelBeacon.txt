@@ -1,9 +1,15 @@
 ## Title: PixelBeacon
 ## Author: ESO Weave
-## Version: 23
-## AddOnVersion: 23
+## Version: 24
+## AddOnVersion: 24
 ## APIVersion: 101051 101050
 ## X-ESO-Weave-Managed: true
-## Description: Minimal screen-signal beacon managed by ESO Weave. It renders small color blocks that encode load status, fishing state, server latency, the active weapon bar with each bar's weapon class, the player's combat, life, world-transition, roll-dodge, travel, mounted, and bounded keyboard-mode sprint states, which native game menu or text field is open, the player's health, stamina, and magicka as percentages, exact Ultimate charge and front/back costs, action-slot cooldowns, the active quickslot's explicit classification, usability, cooldown, and item identity, and read-only native keyboard and mouse binding evidence. It has no settings window and no saved variables. Use /pbquickslot for a bounded diagnostic snapshot. Do not edit or publish; it is installed and removed by the ESO Weave application.
+## X-ESO-Weave-Package: PixelBeacon/1
+## X-ESO-Weave-Capabilities: beacon catalog startup-config
+## SavedVariables: EsoWeaveDataSaved
+## Description: Companion beacon signals and automatic bounded local Catalog collection managed by ESO Weave. Beacon signals retain load/fishing state, latency, weapon bars/classes, combat/life/transition/movement/travel/menu state, resource percentages, exact Ultimate charge/costs, cooldowns, quickslot identity/classification/usability, and native keyboard/mouse binding evidence; /pbquickslot diagnostics remain available. Catalog work uses public game data, preserves completed data through interruption, and follows the persisted startup preference at the next natural addon load. Game-managed saves control disk availability.
 
 PixelBeacon.lua
+StartupConfig.lua
+EsoWeaveData.lua
+Catalog.lua

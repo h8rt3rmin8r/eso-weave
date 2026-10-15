@@ -1,7 +1,7 @@
 # Encounter Ingestion
 
-Use [Encounter Capture](../features/encounter-capture.md) for saved-addon recording
-and import. Desktop Encounter History also supports **Native Encounter Log** for
+Use [Encounter Capture](../features/encounter-capture.md#import-retained-addon-captures)
+for retained saved-addon import and historical recorder semantics. Desktop Encounter History also supports **Native Encounter Log** for
 completed local files in the **normal/separate native log version 15** profile.
 These sources keep their own provenance and metric capabilities. Neither is the
 desktop Application Log or File Logging setting. Bulk records never use Pixel Bus.

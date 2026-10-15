@@ -8,6 +8,13 @@
 //! running-game probe sit behind thin per-platform backends.
 
 pub mod api_check;
+mod package;
+pub use package::{
+    inspect, inspect_presence, install_configured, installed_block_px, migrate_legacy_if_needed,
+    recover, render_startup_config, write_startup_config, PackagePresence, StartupConfig,
+    BOOTSTRAP, BOOTSTRAP_FILE, CAPABILITIES, CATALOG, CATALOG_FILE, INVENTORY,
+    LEGACY_DATA_SUBFOLDER, PACKAGE_IDENTITY, STARTUP_CONFIG_FILE,
+};
 mod version_source;
 pub use crate::game::steam;
 #[cfg(target_os = "linux")]
@@ -149,6 +156,21 @@ pub enum LifecycleError {
     /// Mutation refused because the target is not proven to be ESO Weave managed.
     #[error("refusing to modify an unmanaged PixelBeacon target")]
     Unmanaged,
+    /// A package changed across a transaction boundary.
+    #[error("PixelBeacon package integrity check failed: {0}")]
+    Integrity(String),
+    /// Prior installation bytes could not be restored without replacing a conflict.
+    #[error("PixelBeacon recovery pending at {recovery}: {message}")]
+    RecoveryPending { recovery: PathBuf, message: String },
+    /// The replacement/removal committed, but exact cleanup needs a retry.
+    #[error(
+        "PixelBeacon transaction committed ({status:?}); cleanup pending at {recovery}: {message}"
+    )]
+    CleanupPending {
+        status: BeaconStatus,
+        recovery: PathBuf,
+        message: String,
+    },
     /// A filesystem operation failed.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -171,7 +193,7 @@ pub fn parse_manifest_version(manifest: &str) -> Option<u32> {
     None
 }
 
-/// Parses the value of the first `local <name> = <n>` line of Lua source as a
+/// Parses the first local or private `SIGNALS.<name>` numeric assignment as a
 /// `u32`, accepting a decimal or `0x` hexadecimal literal, or `None` when the
 /// name is absent or the value is unparsable.
 ///
@@ -181,9 +203,14 @@ pub fn parse_manifest_version(manifest: &str) -> Option<u32> {
 /// necessarily stated once in Lua and once in Rust; without this the "shared byte
 /// for byte" discipline would rest on review alone.
 pub fn parse_lua_constant(source: &str, name: &str) -> Option<u32> {
-    let prefix = format!("local {name}");
+    let local_prefix = format!("local {name}");
+    let table_prefix = format!("SIGNALS.{name}");
     for line in source.lines() {
-        let Some(rest) = line.trim().strip_prefix(&prefix) else {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed
+            .strip_prefix(&local_prefix)
+            .or_else(|| trimmed.strip_prefix(&table_prefix))
+        else {
             continue;
         };
         // Guard against a prefix match on a longer name (`local NUM_BLOCKS_EXTRA`).
@@ -346,53 +373,7 @@ pub fn user_settings_path(addons_root: &Path) -> Option<PathBuf> {
 
 /// Classifies the installed beacon status under `addons_root`. Reads only.
 pub fn status(addons_root: &Path) -> BeaconStatus {
-    let dir = addons_root.join(SUBFOLDER);
-    let dir_metadata = match std::fs::symlink_metadata(&dir) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return BeaconStatus::NotInstalled;
-        }
-        Err(_) => return BeaconStatus::Unmanaged,
-    };
-    if metadata_is_link(&dir_metadata) || !dir_metadata.is_dir() {
-        return BeaconStatus::Unmanaged;
-    }
-
-    let manifest_path = dir.join(MANIFEST_FILE);
-    let manifest_metadata = match std::fs::symlink_metadata(&manifest_path) {
-        Ok(metadata) => metadata,
-        Err(_) => return BeaconStatus::Unmanaged,
-    };
-    if metadata_is_link(&manifest_metadata) || !manifest_metadata.is_file() {
-        return BeaconStatus::Unmanaged;
-    }
-    let manifest = match std::fs::read_to_string(&manifest_path) {
-        Ok(text) => text,
-        Err(_) => return BeaconStatus::Unmanaged,
-    };
-    if !has_managed_marker(&manifest) {
-        return BeaconStatus::Unmanaged;
-    }
-    match parse_manifest_version(&manifest) {
-        Some(version) if version == embedded_version() => BeaconStatus::ManagedUpToDate,
-        _ => BeaconStatus::ManagedVersionMismatch,
-    }
-}
-
-fn metadata_is_link(metadata: &std::fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            return true;
-        }
-    }
-    false
+    package::inspect(addons_root).unwrap_or(BeaconStatus::Unmanaged)
 }
 
 /// Installs (or safely updates) the embedded addon into `addons_root` at the
@@ -422,100 +403,7 @@ pub fn install_sized(
     api_version: u32,
     block_px: u32,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    if !addons_root.is_dir() {
-        tracing::warn!(
-            target: "beacon",
-            path = %addons_root.display(),
-            "install refused: AddOns directory does not exist"
-        );
-        return Err(LifecycleError::AddonsDirMissing);
-    }
-    let dir = addons_root.join(SUBFOLDER);
-    let existing_status = status(addons_root);
-    let fresh = existing_status == BeaconStatus::NotInstalled;
-    match existing_status {
-        BeaconStatus::NotInstalled => std::fs::create_dir(&dir)?,
-        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch => {}
-        BeaconStatus::Unmanaged => {
-            tracing::warn!(
-                target: "beacon",
-                path = %dir.display(),
-                "install refused: PixelBeacon target is unmanaged"
-            );
-            return Err(LifecycleError::Unmanaged);
-        }
-    }
-
-    let manifest_path = dir.join(MANIFEST_FILE);
-    let lua_path = dir.join(LUA_FILE);
-    match std::fs::symlink_metadata(&lua_path) {
-        Ok(metadata) if metadata_is_link(&metadata) || !metadata.is_file() => {
-            tracing::warn!(
-                target: "beacon",
-                path = %lua_path.display(),
-                "install refused: PixelBeacon Lua target is not a regular file"
-            );
-            return Err(LifecycleError::Unmanaged);
-        }
-        Ok(_) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => return Err(LifecycleError::Unmanaged),
-    }
-    let original_manifest = if fresh {
-        None
-    } else {
-        Some(std::fs::read(&manifest_path)?)
-    };
-    let original_lua = match std::fs::read(&lua_path) {
-        Ok(bytes) => Some(bytes),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
-        Err(err) => return Err(err.into()),
-    };
-
-    // Lua is prepared first and the manifest is the commit marker observed by
-    // status(). If either write fails, a fresh directory is removed or the
-    // previous managed bytes are restored best effort before returning the
-    // original error.
-    if let Err(err) = std::fs::write(&lua_path, render_lua(block_px)) {
-        if fresh {
-            let _ = std::fs::remove_dir_all(&dir);
-        } else {
-            restore_managed_file(&lua_path, original_lua.as_deref());
-        }
-        return Err(err.into());
-    }
-    if let Err(err) = std::fs::write(&manifest_path, render_manifest(api_version)) {
-        if fresh {
-            let _ = std::fs::remove_dir_all(&dir);
-        } else {
-            restore_managed_file(&lua_path, original_lua.as_deref());
-            restore_managed_file(&manifest_path, original_manifest.as_deref());
-        }
-        return Err(err.into());
-    }
-    tracing::info!(target: "beacon", path = %dir.display(), block_px, "installed PixelBeacon");
-    Ok(LifecycleOutcome {
-        status: BeaconStatus::ManagedUpToDate,
-        reload_required: reload_reminder(running),
-    })
-}
-
-fn restore_managed_file(path: &Path, original: Option<&[u8]>) {
-    let result = match original {
-        Some(bytes) => std::fs::write(path, bytes),
-        None => match std::fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err),
-        },
-    };
-    if let Err(err) = result {
-        tracing::warn!(
-            target: "beacon",
-            path = %path.display(),
-            "failed to restore managed PixelBeacon file after update error: {err}"
-        );
-    }
+    package::install_sized(addons_root, running, api_version, block_px)
 }
 
 /// Re-deploys the addon at `block_px`, but only when the install is managed. An
@@ -557,24 +445,7 @@ pub fn uninstall(
     addons_root: &Path,
     running: RunningState,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    let dir = addons_root.join(SUBFOLDER);
-    if !matches!(
-        status(addons_root),
-        BeaconStatus::ManagedUpToDate | BeaconStatus::ManagedVersionMismatch
-    ) {
-        tracing::warn!(
-            target: "beacon",
-            path = %dir.display(),
-            "uninstall refused: PixelBeacon target is unmanaged or absent"
-        );
-        return Err(LifecycleError::Unmanaged);
-    }
-    std::fs::remove_dir_all(&dir)?;
-    tracing::info!(target: "beacon", path = %dir.display(), "removed PixelBeacon");
-    Ok(LifecycleOutcome {
-        status: BeaconStatus::NotInstalled,
-        reload_required: reload_reminder(running),
-    })
+    package::uninstall(addons_root, running)
 }
 
 /// Resolves the AddOns directory for the given preferences.

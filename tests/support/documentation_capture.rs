@@ -825,7 +825,6 @@ fn build_scene(
     fixture_root: &Path,
 ) -> Result<SceneFixture, String> {
     prepare_beacon_fixture(scene, fixture_root)?;
-    prepare_data_addon_fixture(scene, fixture_root)?;
     let mut settings = Settings {
         beacon: beacon::prefs_to_value(&BeaconPrefs {
             path_override: Some(fixture_root.to_path_buf()),
@@ -939,14 +938,15 @@ fn prepare_beacon_fixture(scene: Scene, root: &Path) -> Result<(), String> {
     fs::create_dir_all(root)
         .map_err(|error| format!("could not create synthetic fixture root: {error}"))?;
     if scene.needs_managed_beacon() {
-        let addon = root.join(beacon::SUBFOLDER);
-        fs::create_dir_all(&addon)
-            .map_err(|error| format!("could not create managed status fixture: {error}"))?;
-        fs::write(
-            addon.join(beacon::MANIFEST_FILE),
-            beacon::MANIFEST.as_bytes(),
+        beacon::install_configured(
+            root,
+            beacon::RunningState::NotRunning,
+            beacon::DEFAULT_API_VERSION,
+            eso_weave::pixelbus::DEFAULT_BLOCK_PX,
+            false,
+            Environment::Live,
         )
-        .map_err(|error| format!("could not write managed status fixture: {error}"))?;
+        .map_err(|error| format!("could not create unified managed fixture: {error}"))?;
     } else if scene == Scene::PixelBeaconUnmanaged {
         let addon = root.join(beacon::SUBFOLDER);
         fs::create_dir_all(&addon)
@@ -956,38 +956,6 @@ fn prepare_beacon_fixture(scene: Scene, root: &Path) -> Result<(), String> {
             b"## Title: Community PixelBeacon\n## Version: 1\n",
         )
         .map_err(|error| format!("could not write unmanaged status fixture: {error}"))?;
-    }
-    Ok(())
-}
-
-fn prepare_data_addon_fixture(scene: Scene, root: &Path) -> Result<(), String> {
-    if scene == Scene::FirstLaunch {
-        return Ok(());
-    }
-    let addon = root.join(eso_weave::data_addon::DATA_ADDON_SUBFOLDER);
-    fs::create_dir_all(&addon)
-        .map_err(|error| format!("could not create managed data-addon fixture: {error}"))?;
-    let manifest = eso_weave::data_addon::MANIFEST.replace(
-        "## APIVersion: 101051 101050",
-        "## APIVersion: 101050 101051",
-    );
-    for (name, bytes) in [
-        (eso_weave::data_addon::MANIFEST_FILE, manifest.as_bytes()),
-        (
-            eso_weave::data_addon::BOOTSTRAP_FILE,
-            eso_weave::data_addon::BOOTSTRAP.as_bytes(),
-        ),
-        (
-            eso_weave::data_addon::CATALOG_FILE,
-            eso_weave::data_addon::CATALOG.as_bytes(),
-        ),
-        (
-            eso_weave::data_addon::ENCOUNTER_FILE,
-            eso_weave::data_addon::ENCOUNTER.as_bytes(),
-        ),
-    ] {
-        fs::write(addon.join(name), bytes)
-            .map_err(|error| format!("could not write managed data-addon fixture: {error}"))?;
     }
     Ok(())
 }

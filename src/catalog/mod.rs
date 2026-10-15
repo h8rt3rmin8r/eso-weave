@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+pub mod accumulate;
 pub mod compiler;
 pub mod model;
 pub mod schema;

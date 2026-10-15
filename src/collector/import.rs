@@ -100,7 +100,7 @@ pub fn import_capture(request: &ImportRequest) -> Result<ImportReceipt, Collecto
     })
 }
 
-fn bundle_from_capture(
+pub(crate) fn bundle_from_capture(
     envelope: &CollectorEnvelope,
     capture_sha256: &str,
     catalog_version: &str,
@@ -153,7 +153,7 @@ fn bundle_from_capture(
                 source_record: record_id.clone(),
             });
         }
-        if let Some(parent) = &record.parent {
+        for parent in record.parent.iter().chain(&record.parents) {
             relations.push(RelationInput {
                 kind: parent.relation.clone(),
                 from: EntityRef {
@@ -187,6 +187,8 @@ fn bundle_from_capture(
             });
         }
     }
+    relations.sort_by(|a, b| (&a.kind, &a.from, &a.to).cmp(&(&b.kind, &b.from, &b.to)));
+    relations.dedup_by(|a, b| a.kind == b.kind && a.from == b.from && a.to == b.to);
     let entities = entity_sources
         .into_iter()
         .map(|(entity, source_records)| EntityInput {
@@ -210,8 +212,22 @@ fn bundle_from_capture(
                     snapshot_id: snapshot_id.clone(),
                     locale: envelope.locale.clone(),
                     scope: declaration.scope.clone(),
-                    completeness: Completeness::Bounded,
+                    completeness: match declaration.completeness.as_str() {
+                        "bounded" => Completeness::Bounded,
+                        "opportunistic" => Completeness::Opportunistic,
+                        _ => Completeness::Unknown,
+                    },
                     limits: declaration.limitations.clone(),
+                }
+            } else if (category == "localized-text" && !localized_text.is_empty())
+                || (category == "icon-references" && !icon_references.is_empty()) {
+                CoverageInput {
+                    category: category.to_string(),
+                    snapshot_id: snapshot_id.clone(),
+                    locale: envelope.locale.clone(),
+                    scope: "derived-from-supported-observations".into(),
+                    completeness: if category == "localized-text" { Completeness::Bounded } else { Completeness::Opportunistic },
+                    limits: "Only text and icon references attached to collected definitions; no icon bytes or universal coverage are inferred.".into(),
                 }
             } else {
                 CoverageInput {

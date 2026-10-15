@@ -33,8 +33,8 @@ Ultimate is display-only. It does not affect weaving, Auto Potion, or any input
 gate. Protocol version 5 transports exact values; older protocol layouts remain
 bounded to their original payload lengths and report Ultimate unavailable.
 
-After installing or updating PixelBeacon, use `/reloadui` in ESO and restart ESO
-Weave so both sides negotiate the current protocol. Swapping weapon bars changes
+Installed or updated PixelBeacon code takes effect at its next natural addon load.
+The desktop negotiates the observed protocol. Swapping weapon bars changes
 the selected threshold to the cost already reported for that bar.
 
 No color is required to interpret the meter: exact current and maximum points,

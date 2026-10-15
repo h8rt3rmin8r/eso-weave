@@ -149,6 +149,9 @@ pub struct Settings {
     /// settings store.
     #[serde(default)]
     pub local_service: serde_json::Value,
+    /// Independent user optouts for automatic data work, never runtime state.
+    #[serde(default)]
+    pub data_maintenance: crate::data_maintenance::DataMaintenancePrefs,
 }
 
 impl std::fmt::Debug for Settings {
@@ -167,6 +170,7 @@ impl std::fmt::Debug for Settings {
             .field("pixelbus", &self.pixelbus)
             .field("ui", &self.ui)
             .field("local_service", &"<redacted>")
+            .field("data_maintenance", &self.data_maintenance)
             .finish()
     }
 }
@@ -186,6 +190,7 @@ impl Default for Settings {
             pixelbus: serde_json::Value::Null,
             ui: serde_json::Value::Null,
             local_service: serde_json::Value::Null,
+            data_maintenance: crate::data_maintenance::DataMaintenancePrefs::default(),
         }
     }
 }
@@ -260,6 +265,8 @@ struct RawSettings {
     ui: serde_json::Value,
     #[serde(default)]
     local_service: serde_json::Value,
+    #[serde(default)]
+    data_maintenance: serde_json::Value,
 }
 
 #[derive(Deserialize, Default)]
@@ -317,6 +324,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         "pixelbus",
         "ui",
         "local_service",
+        "data_maintenance",
     ]
     .into_iter()
     .collect();
@@ -345,6 +353,20 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         });
     }
 
+    let data_maintenance = if raw.data_maintenance.is_null() {
+        crate::data_maintenance::DataMaintenancePrefs::default()
+    } else {
+        serde_json::from_value(raw.data_maintenance.clone()).unwrap_or_else(|_| {
+            notices.push(Notice {
+                kind: NoticeKind::InvalidValue,
+                message: "invalid data maintenance preferences; retaining valid independent optouts and defaulting malformed fields".into(),
+            });
+            crate::data_maintenance::DataMaintenancePrefs {
+                catalog_disabled: raw.data_maintenance.get("catalog_disabled").and_then(serde_json::Value::as_bool).unwrap_or(false),
+                native_processing_disabled: raw.data_maintenance.get("native_processing_disabled").and_then(serde_json::Value::as_bool).unwrap_or(false),
+            }
+        })
+    };
     let mut settings = Settings {
         schema_version: raw.schema_version,
         logging: LoggingPrefs {
@@ -361,6 +383,7 @@ pub fn load(config_dir: &Path) -> LoadOutcome {
         pixelbus: raw.pixelbus,
         ui: raw.ui,
         local_service: raw.local_service,
+        data_maintenance,
     };
 
     if settings.schema_version < CURRENT_SCHEMA_VERSION {

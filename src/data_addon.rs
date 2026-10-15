@@ -1,44 +1,29 @@
-//! Managed lifecycle for the shared ESO Weave Data addon.
-
-use std::fs;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-
-use serde::Serialize;
-use sha2::{Digest, Sha256};
+//! Compatibility facade for the unified PixelBeacon companion package.
+//! SavedVariables and existing Catalog/encounter readers keep their identities.
 
 use crate::collector::CollectorError;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
-pub const DATA_ADDON_SUBFOLDER: &str = "EsoWeaveData";
-pub const MANIFEST_FILE: &str = "EsoWeaveData.txt";
-pub const BOOTSTRAP_FILE: &str = "EsoWeaveData.lua";
-pub const CATALOG_FILE: &str = "Catalog.lua";
-pub const ENCOUNTER_FILE: &str = "Encounter.lua";
+pub const DATA_ADDON_SUBFOLDER: &str = crate::beacon::SUBFOLDER;
+pub const MANIFEST_FILE: &str = crate::beacon::MANIFEST_FILE;
+pub const BOOTSTRAP_FILE: &str = crate::beacon::BOOTSTRAP_FILE;
+pub const CATALOG_FILE: &str = crate::beacon::CATALOG_FILE;
 pub const SAVED_VARIABLES_FILE: &str = "EsoWeaveData.lua";
 pub const MAX_SAVED_VARIABLES_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_SAVED_VARIABLES_TOKENS: usize = 4_000_000;
 pub const MAX_SAVED_VARIABLES_ENTRIES: usize = 2_600_000;
 pub const SAVED_VARIABLES_SCHEMA_VERSION: u64 = 1;
 pub const DATA_ADDON_VERSION: u64 = 1;
-pub const DATA_ADDON_PACKAGE_VERSION: u32 = 2;
-pub const MANAGED_MARKER: &str = "## X-ESO-Weave-Data-Managed: true";
-const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
+pub const MANAGED_MARKER: &str = crate::beacon::MANAGED_MARKER;
 const CHECKSUM_PREFIX: &str = "local COLLECTOR_CHECKSUM = \"";
-
-pub const MANIFEST: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.txt");
-pub const BOOTSTRAP: &str = include_str!("../addon/EsoWeaveData/EsoWeaveData.lua");
-pub const CATALOG: &str = include_str!("../addon/EsoWeaveData/Catalog.lua");
-pub const ENCOUNTER: &str = include_str!("../addon/EsoWeaveData/Encounter.lua");
+pub const MANIFEST: &str = crate::beacon::MANIFEST;
+pub const BOOTSTRAP: &str = crate::beacon::BOOTSTRAP;
+pub const CATALOG: &str = crate::beacon::CATALOG;
 
 pub fn supports_api(api: u32) -> bool {
-    MANIFEST
-        .lines()
-        .find_map(|line| line.strip_prefix("## APIVersion:"))
-        .is_some_and(|tokens| {
-            tokens
-                .split_whitespace()
-                .any(|token| token.parse::<u32>() == Ok(api))
-        })
+    crate::beacon::supports_api(api)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -61,6 +46,62 @@ pub enum RunningState {
 pub struct LifecycleOutcome {
     pub status: DataAddonStatus,
     pub reload_required: bool,
+}
+
+fn map_status(status: crate::beacon::BeaconStatus) -> DataAddonStatus {
+    match status {
+        crate::beacon::BeaconStatus::NotInstalled => DataAddonStatus::NotInstalled,
+        crate::beacon::BeaconStatus::ManagedUpToDate => DataAddonStatus::ManagedUpToDate,
+        crate::beacon::BeaconStatus::ManagedVersionMismatch => {
+            DataAddonStatus::ManagedVersionMismatch
+        }
+        crate::beacon::BeaconStatus::Unmanaged => DataAddonStatus::Unmanaged,
+    }
+}
+fn map_running(running: RunningState) -> crate::beacon::RunningState {
+    match running {
+        RunningState::Running => crate::beacon::RunningState::Running,
+        RunningState::NotRunning => crate::beacon::RunningState::NotRunning,
+        RunningState::Unknown => crate::beacon::RunningState::Unknown,
+    }
+}
+fn map_outcome(outcome: crate::beacon::LifecycleOutcome) -> LifecycleOutcome {
+    LifecycleOutcome {
+        status: map_status(outcome.status),
+        reload_required: outcome.reload_required,
+    }
+}
+fn map_error(error: crate::beacon::LifecycleError) -> CollectorError {
+    match error {
+        crate::beacon::LifecycleError::Io(error) => CollectorError::Io(error),
+        other => CollectorError::Validation(other.to_string()),
+    }
+}
+
+pub fn status(addons_root: &Path) -> DataAddonStatus {
+    map_status(crate::beacon::status(addons_root))
+}
+pub fn inspect(addons_root: &Path) -> std::io::Result<DataAddonStatus> {
+    crate::beacon::inspect(addons_root).map(map_status)
+}
+pub fn install(
+    addons_root: &Path,
+    running: RunningState,
+    api_version: u32,
+) -> Result<LifecycleOutcome, CollectorError> {
+    let block_px =
+        crate::beacon::installed_block_px(addons_root).unwrap_or(crate::pixelbus::DEFAULT_BLOCK_PX);
+    crate::beacon::install_sized(addons_root, map_running(running), api_version, block_px)
+        .map(map_outcome)
+        .map_err(map_error)
+}
+pub fn uninstall(
+    addons_root: &Path,
+    running: RunningState,
+) -> Result<LifecycleOutcome, CollectorError> {
+    crate::beacon::uninstall(addons_root, map_running(running))
+        .map(map_outcome)
+        .map_err(map_error)
 }
 
 pub fn embedded_checksum() -> String {
@@ -88,208 +129,6 @@ pub fn catalog_checksum_from_source(source: &str) -> Result<String, CollectorErr
     let mut normalized = source.as_bytes().to_vec();
     normalized[start..end].fill(b'0');
     Ok(sha256_bytes(&normalized))
-}
-
-pub fn status(addons_root: &Path) -> DataAddonStatus {
-    inspect(addons_root).unwrap_or(DataAddonStatus::Unmanaged)
-}
-
-/// Inspects lifecycle state while preserving genuine filesystem failures for
-/// callers that retain a last-known observation.
-pub fn inspect(addons_root: &Path) -> std::io::Result<DataAddonStatus> {
-    let root_metadata = match fs::symlink_metadata(addons_root) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(DataAddonStatus::NotInstalled);
-        }
-        Err(error) => return Err(error),
-    };
-    if metadata_is_link(&root_metadata) || !root_metadata.is_dir() {
-        return Ok(DataAddonStatus::Unmanaged);
-    }
-    inspect_directory(&addons_root.join(DATA_ADDON_SUBFOLDER))
-}
-
-fn status_directory(directory: &Path) -> DataAddonStatus {
-    inspect_directory(directory).unwrap_or(DataAddonStatus::Unmanaged)
-}
-
-fn inspect_directory(directory: &Path) -> std::io::Result<DataAddonStatus> {
-    let metadata = match fs::symlink_metadata(directory) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(DataAddonStatus::NotInstalled);
-        }
-        Err(error) => return Err(error),
-    };
-    if metadata_is_link(&metadata) || !metadata.is_dir() {
-        return Ok(DataAddonStatus::Unmanaged);
-    }
-    let manifest_path = directory.join(MANIFEST_FILE);
-    let manifest_metadata = match fs::symlink_metadata(&manifest_path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(DataAddonStatus::Unmanaged);
-        }
-        Err(error) => return Err(error),
-    };
-    if metadata_is_link(&manifest_metadata) || !manifest_metadata.is_file() {
-        return Ok(DataAddonStatus::Unmanaged);
-    }
-    let entries = fs::read_dir(directory)?;
-    let expected = [MANIFEST_FILE, BOOTSTRAP_FILE, CATALOG_FILE, ENCOUNTER_FILE];
-    let mut found = Vec::new();
-    for entry in entries {
-        let name = entry?.file_name();
-        if !expected.iter().any(|expected| name == *expected) {
-            return Ok(DataAddonStatus::Unmanaged);
-        }
-        found.push(name);
-    }
-    let Some(manifest_bytes) = read_bounded_result(&manifest_path, MAX_MANIFEST_BYTES)? else {
-        return Ok(DataAddonStatus::Unmanaged);
-    };
-    let Ok(manifest) = String::from_utf8(manifest_bytes) else {
-        return Ok(DataAddonStatus::Unmanaged);
-    };
-    if !manifest.lines().any(|line| line.trim() == MANAGED_MARKER) {
-        return Ok(DataAddonStatus::Unmanaged);
-    }
-    let version_matches = parse_addon_version(&manifest) == Some(DATA_ADDON_PACKAGE_VERSION);
-    let manifest_matches = parse_primary_api_version(&manifest)
-        .is_some_and(|api_version| manifest == render_manifest(api_version));
-    let mut files_match = true;
-    for (name, expected) in [
-        (BOOTSTRAP_FILE, BOOTSTRAP.as_bytes()),
-        (CATALOG_FILE, CATALOG.as_bytes()),
-        (ENCOUNTER_FILE, ENCOUNTER.as_bytes()),
-    ] {
-        let path = directory.join(name);
-        match fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata_is_link(&metadata) || !metadata.is_file() => {
-                return Ok(DataAddonStatus::Unmanaged);
-            }
-            Ok(metadata) => {
-                files_match &= metadata.len() == expected.len() as u64
-                    && read_bounded_result(&path, expected.len() as u64)?.as_deref()
-                        == Some(expected);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => files_match = false,
-            Err(error) => return Err(error),
-        }
-    }
-    if found.len() != expected.len() {
-        files_match = false;
-    }
-    if version_matches && manifest_matches && files_match {
-        Ok(DataAddonStatus::ManagedUpToDate)
-    } else {
-        Ok(DataAddonStatus::ManagedVersionMismatch)
-    }
-}
-
-fn read_bounded_result(path: &Path, max_bytes: u64) -> std::io::Result<Option<Vec<u8>>> {
-    let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024) as usize);
-    fs::File::open(path)?
-        .take(max_bytes.saturating_add(1))
-        .read_to_end(&mut bytes)?;
-    Ok((bytes.len() as u64 <= max_bytes).then_some(bytes))
-}
-
-fn read_bounded(path: &Path, max_bytes: u64) -> Option<Vec<u8>> {
-    read_bounded_result(path, max_bytes).ok().flatten()
-}
-
-pub fn install(
-    addons_root: &Path,
-    running: RunningState,
-    api_version: u32,
-) -> Result<LifecycleOutcome, CollectorError> {
-    let root_metadata = fs::symlink_metadata(addons_root)?;
-    if metadata_is_link(&root_metadata) || !root_metadata.is_dir() {
-        return rejected("resolved AddOns root does not exist");
-    }
-    let directory = addons_root.join(DATA_ADDON_SUBFOLDER);
-    let existing = status(addons_root);
-    match existing {
-        DataAddonStatus::NotInstalled => {
-            install_fresh_with(addons_root, &directory, api_version, || {})?;
-            return Ok(LifecycleOutcome {
-                status: DataAddonStatus::ManagedUpToDate,
-                reload_required: reload_reminder(running),
-            });
-        }
-        DataAddonStatus::ManagedUpToDate | DataAddonStatus::ManagedVersionMismatch => {}
-        DataAddonStatus::Unmanaged => {
-            return rejected("refusing to modify an unmanaged data addon")
-        }
-    }
-    let snapshot = snapshot_managed_package(&directory)?;
-    update_existing_with(
-        addons_root,
-        &directory,
-        api_version,
-        &snapshot,
-        || {},
-        |_, _| {},
-        rename_directory_no_replace,
-    )?;
-    Ok(LifecycleOutcome {
-        status: DataAddonStatus::ManagedUpToDate,
-        reload_required: reload_reminder(running),
-    })
-}
-
-fn update_existing_with(
-    addons_root: &Path,
-    directory: &Path,
-    api_version: u32,
-    expected: &ManagedPackageSnapshot,
-    before_move: impl FnOnce(),
-    after_move: impl FnOnce(&Path, &Path),
-    commit: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
-) -> Result<(), CollectorError> {
-    let transaction = tempfile::Builder::new()
-        .prefix(".eso-weave-data-update-")
-        .tempdir_in(addons_root)?;
-    let replacement = transaction.path().join("replacement");
-    write_package(&replacement, api_version)?;
-    let previous = transaction.path().join("previous");
-
-    before_move();
-    rename_directory_no_replace(directory, &previous)?;
-    after_move(&previous, directory);
-    if !matches!(
-        snapshot_managed_package(&previous),
-        Ok(ref actual) if actual == expected
-    ) {
-        if let Err(rollback) = restore_moved_directory(&previous, directory) {
-            let recovery = transaction.keep();
-            return rejected(format!(
-                "data addon changed before update; quarantined package remains at {} because restoration failed ({rollback})",
-                recovery.join("previous").display()
-            ));
-        }
-        return rejected("data addon changed before the atomic update commit");
-    }
-    if let Err(error) = commit(&replacement, directory) {
-        if let Err(rollback) = restore_moved_directory(&previous, directory) {
-            let recovery = transaction.keep();
-            return rejected(format!(
-                "data addon update failed ({error}); prior package remains at {} because rollback failed ({rollback})",
-                recovery.join("previous").display()
-            ));
-        }
-        return Err(error.into());
-    }
-    if let Err(error) = remove_package(&previous) {
-        let recovery = transaction.keep();
-        return rejected(format!(
-            "data addon updated, but prior-package cleanup failed ({error}); recovery artifact: {}",
-            recovery.display()
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn take_module(
@@ -321,286 +160,12 @@ pub(crate) fn take_optional_module(
     Ok(object.remove(module))
 }
 
-pub fn uninstall(
-    addons_root: &Path,
-    running: RunningState,
-) -> Result<LifecycleOutcome, CollectorError> {
-    let existing = status(addons_root);
-    if !matches!(
-        existing,
-        DataAddonStatus::ManagedUpToDate | DataAddonStatus::ManagedVersionMismatch
-    ) {
-        return rejected("refusing to remove an unmanaged or absent collector");
-    }
-    let directory = addons_root.join(DATA_ADDON_SUBFOLDER);
-    let snapshot = snapshot_managed_package(&directory)?;
-    uninstall_with(addons_root, &directory, &snapshot, || {}, |_, _| {})?;
-    Ok(LifecycleOutcome {
-        status: DataAddonStatus::NotInstalled,
-        reload_required: reload_reminder(running),
-    })
-}
-
-fn uninstall_with(
-    addons_root: &Path,
-    directory: &Path,
-    expected: &ManagedPackageSnapshot,
-    before_move: impl FnOnce(),
-    after_move: impl FnOnce(&Path, &Path),
-) -> Result<(), CollectorError> {
-    let transaction = tempfile::Builder::new()
-        .prefix(".eso-weave-data-remove-")
-        .tempdir_in(addons_root)?;
-    let removed = transaction.path().join("removed");
-    before_move();
-    rename_directory_no_replace(directory, &removed)?;
-    after_move(&removed, directory);
-    if !matches!(
-        snapshot_managed_package(&removed),
-        Ok(ref actual) if actual == expected
-    ) {
-        if let Err(rollback) = restore_moved_directory(&removed, directory) {
-            let recovery = transaction.keep();
-            return rejected(format!(
-                "data addon changed before uninstall; quarantined package remains at {} because restoration failed ({rollback})",
-                recovery.join("removed").display()
-            ));
-        }
-        return rejected("data addon changed before the atomic uninstall quarantine");
-    }
-    if let Err(error) = remove_package(&removed) {
-        let recovery = transaction.keep();
-        return rejected(format!(
-            "data addon was quarantined but cleanup failed ({error}); recovery artifact: {}",
-            recovery.display()
-        ));
-    }
-    Ok(())
-}
-
 pub fn saved_variables_path(addons_root: &Path) -> Option<PathBuf> {
     addons_root.parent().map(|environment| {
         environment
             .join("SavedVariables")
             .join(SAVED_VARIABLES_FILE)
     })
-}
-
-fn parse_addon_version(manifest: &str) -> Option<u32> {
-    manifest.lines().find_map(|line| {
-        line.trim()
-            .strip_prefix("## AddOnVersion:")
-            .and_then(|value| value.trim().parse().ok())
-    })
-}
-
-fn parse_primary_api_version(manifest: &str) -> Option<u32> {
-    manifest.lines().find_map(|line| {
-        line.trim()
-            .strip_prefix("## APIVersion:")
-            .and_then(|value| value.split_whitespace().next())
-            .and_then(|value| value.parse().ok())
-    })
-}
-
-fn render_manifest(observed_api: u32) -> String {
-    // Preserve a reviewed primary preference, never add an observed future API.
-    if !supports_api(observed_api) {
-        return MANIFEST.to_owned();
-    }
-    MANIFEST
-        .lines()
-        .map(|line| {
-            if let Some(tokens) = line.strip_prefix("## APIVersion:") {
-                let mut reviewed = vec![observed_api.to_string()];
-                reviewed.extend(
-                    tokens
-                        .split_whitespace()
-                        .filter(|token| token.parse::<u32>() != Ok(observed_api))
-                        .map(str::to_owned),
-                );
-                format!("## APIVersion: {}", reviewed.join(" "))
-            } else {
-                line.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n"
-}
-
-fn reload_reminder(running: RunningState) -> bool {
-    matches!(running, RunningState::Running | RunningState::Unknown)
-}
-
-fn metadata_is_link(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        if metadata.file_attributes() & 0x0400 != 0 {
-            return true;
-        }
-    }
-    false
-}
-
-fn install_fresh_with(
-    addons_root: &Path,
-    directory: &Path,
-    api_version: u32,
-    before_commit: impl FnOnce(),
-) -> Result<(), CollectorError> {
-    let staging = tempfile::Builder::new()
-        .prefix(".eso-weave-data-")
-        .tempdir_in(addons_root)?;
-    write_package(staging.path(), api_version)?;
-    let staging_path = staging.keep();
-    before_commit();
-    if let Err(error) = rename_directory_no_replace(&staging_path, directory) {
-        let _ = fs::remove_dir_all(staging_path);
-        return Err(error.into());
-    }
-    Ok(())
-}
-
-fn write_package(directory: &Path, api_version: u32) -> std::io::Result<()> {
-    fs::create_dir_all(directory)?;
-    for (name, bytes) in [
-        (BOOTSTRAP_FILE, BOOTSTRAP.as_bytes().to_vec()),
-        (CATALOG_FILE, CATALOG.as_bytes().to_vec()),
-        (ENCOUNTER_FILE, ENCOUNTER.as_bytes().to_vec()),
-        (MANIFEST_FILE, render_manifest(api_version).into_bytes()),
-    ] {
-        let path = directory.join(name);
-        let mut file = fs::File::create(path)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-    }
-    Ok(())
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ManagedPackageSnapshot(Vec<(String, Option<Vec<u8>>)>);
-
-fn snapshot_managed_package(directory: &Path) -> Result<ManagedPackageSnapshot, CollectorError> {
-    if !matches!(
-        status_directory(directory),
-        DataAddonStatus::ManagedUpToDate | DataAddonStatus::ManagedVersionMismatch
-    ) {
-        return rejected("data addon package is not safely managed");
-    }
-    let mut files = Vec::new();
-    for (name, max_bytes) in [
-        (MANIFEST_FILE, MAX_MANIFEST_BYTES),
-        (BOOTSTRAP_FILE, BOOTSTRAP.len() as u64),
-        (CATALOG_FILE, CATALOG.len() as u64),
-        (ENCOUNTER_FILE, ENCOUNTER.len() as u64),
-    ] {
-        let path = directory.join(name);
-        let bytes = match fs::symlink_metadata(&path) {
-            Ok(metadata)
-                if metadata_is_link(&metadata)
-                    || !metadata.is_file()
-                    || metadata.len() > max_bytes =>
-            {
-                return rejected(format!(
-                    "managed data addon file {name} exceeds its safe snapshot shape"
-                ));
-            }
-            Ok(_) => Some(read_bounded(&path, max_bytes).ok_or_else(|| {
-                CollectorError::Validation(format!(
-                    "managed data addon file {name} changed during bounded inspection"
-                ))
-            })?),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error.into()),
-        };
-        files.push((name.to_string(), bytes));
-    }
-    Ok(ManagedPackageSnapshot(files))
-}
-
-fn restore_moved_directory(moved: &Path, directory: &Path) -> std::io::Result<()> {
-    rename_directory_no_replace(moved, directory)
-}
-
-#[cfg(target_os = "linux")]
-fn rename_directory_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
-    use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
-
-    let source = CString::new(source.as_os_str().as_bytes())
-        .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-    let destination = CString::new(destination.as_os_str().as_bytes())
-        .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-    // SAFETY: both C strings are NUL-terminated and remain alive for the call.
-    let result = unsafe {
-        libc::renameat2(
-            libc::AT_FDCWD,
-            source.as_ptr(),
-            libc::AT_FDCWD,
-            destination.as_ptr(),
-            libc::RENAME_NOREPLACE,
-        )
-    };
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
-}
-
-#[cfg(windows)]
-fn rename_directory_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
-
-    let source = source
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let destination = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    // SAFETY: both owned buffers are NUL-terminated and remain alive for the call.
-    let result = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            destination.as_ptr(),
-            MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if result != 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
-}
-
-#[cfg(not(any(target_os = "linux", windows)))]
-fn rename_directory_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
-    if fs::symlink_metadata(destination).is_ok() {
-        return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
-    }
-    fs::rename(source, destination)
-}
-
-fn remove_package(directory: &Path) -> std::io::Result<()> {
-    for name in [BOOTSTRAP_FILE, CATALOG_FILE, ENCOUNTER_FILE] {
-        match fs::remove_file(directory.join(name)) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-        }
-    }
-    fs::remove_file(directory.join(MANIFEST_FILE))?;
-    fs::remove_dir(directory)
 }
 
 fn sha256_bytes(bytes: &[u8]) -> String {
@@ -611,195 +176,4 @@ fn sha256_bytes(bytes: &[u8]) -> String {
         write!(&mut result, "{byte:02x}").expect("write to String");
     }
     result
-}
-
-fn rejected<T>(message: impl Into<String>) -> Result<T, CollectorError> {
-    Err(CollectorError::Validation(message.into()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn failed_directory_commit_restores_every_prior_byte_and_neighbor() {
-        let root = tempfile::tempdir().unwrap();
-        let addons = root.path().join("AddOns");
-        fs::create_dir(&addons).unwrap();
-        install(&addons, RunningState::NotRunning, 101051).unwrap();
-        let directory = addons.join(DATA_ADDON_SUBFOLDER);
-        fs::write(directory.join(BOOTSTRAP_FILE), b"prior bootstrap\n").unwrap();
-        fs::write(directory.join(CATALOG_FILE), b"prior catalog\n").unwrap();
-        let neighbor = addons.join("PixelBeacon.txt");
-        fs::write(&neighbor, b"neighbor\n").unwrap();
-
-        let paths = [BOOTSTRAP_FILE, CATALOG_FILE, ENCOUNTER_FILE, MANIFEST_FILE];
-        let before = paths
-            .iter()
-            .map(|name| fs::read(directory.join(name)).unwrap())
-            .collect::<Vec<_>>();
-        let snapshot = snapshot_managed_package(&directory).unwrap();
-        let result = update_existing_with(
-            &addons,
-            &directory,
-            101050,
-            &snapshot,
-            || {},
-            |_, _| {},
-            |_, _| Err(std::io::Error::other("injected commit failure")),
-        );
-        assert!(result.is_err());
-        for (name, expected) in paths.iter().zip(before) {
-            assert_eq!(fs::read(directory.join(name)).unwrap(), expected);
-        }
-        assert_eq!(fs::read(neighbor).unwrap(), b"neighbor\n");
-    }
-
-    #[test]
-    fn update_stages_all_files_and_rejects_a_swapped_directory() {
-        let root = tempfile::tempdir().unwrap();
-        let addons = root.path().join("AddOns");
-        fs::create_dir(&addons).unwrap();
-        install(&addons, RunningState::NotRunning, 101051).unwrap();
-        let directory = addons.join(DATA_ADDON_SUBFOLDER);
-        let original = addons.join("original-away");
-        let snapshot = snapshot_managed_package(&directory).unwrap();
-
-        let result = update_existing_with(
-            &addons,
-            &directory,
-            101050,
-            &snapshot,
-            || {
-                fs::rename(&directory, &original).unwrap();
-                fs::create_dir(&directory).unwrap();
-                fs::write(directory.join("foreign.txt"), b"foreign\n").unwrap();
-            },
-            |_, _| {},
-            |replacement, destination| {
-                let names = fs::read_dir(replacement)?
-                    .map(|entry| entry.map(|entry| entry.file_name()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                assert_eq!(names.len(), 4);
-                fs::rename(replacement, destination)
-            },
-        );
-        assert!(result.is_err());
-        assert_eq!(
-            fs::read(directory.join("foreign.txt")).unwrap(),
-            b"foreign\n"
-        );
-        assert_eq!(snapshot_managed_package(&original).unwrap(), snapshot);
-    }
-
-    #[test]
-    fn uninstall_rejects_a_swapped_directory_before_deletion() {
-        let root = tempfile::tempdir().unwrap();
-        let addons = root.path().join("AddOns");
-        fs::create_dir(&addons).unwrap();
-        install(&addons, RunningState::NotRunning, 101051).unwrap();
-        let directory = addons.join(DATA_ADDON_SUBFOLDER);
-        let original = addons.join("original-away");
-        let snapshot = snapshot_managed_package(&directory).unwrap();
-
-        let result = uninstall_with(
-            &addons,
-            &directory,
-            &snapshot,
-            || {
-                fs::rename(&directory, &original).unwrap();
-                fs::create_dir(&directory).unwrap();
-                fs::write(directory.join("foreign.txt"), b"foreign\n").unwrap();
-            },
-            |_, _| {},
-        );
-        assert!(result.is_err());
-        assert_eq!(
-            fs::read(directory.join("foreign.txt")).unwrap(),
-            b"foreign\n"
-        );
-        assert_eq!(snapshot_managed_package(&original).unwrap(), snapshot);
-    }
-
-    #[test]
-    fn failed_update_rollback_retains_the_quarantined_package() {
-        let root = tempfile::tempdir().unwrap();
-        let addons = root.path().join("AddOns");
-        fs::create_dir(&addons).unwrap();
-        install(&addons, RunningState::NotRunning, 101051).unwrap();
-        let directory = addons.join(DATA_ADDON_SUBFOLDER);
-        let snapshot = snapshot_managed_package(&directory).unwrap();
-
-        let result = update_existing_with(
-            &addons,
-            &directory,
-            101050,
-            &snapshot,
-            || {},
-            |_, _| {},
-            |replacement, destination| {
-                fs::create_dir(destination)?;
-                rename_directory_no_replace(replacement, destination)
-            },
-        );
-        assert!(result.is_err());
-        let previous = recovery_child(&addons, ".eso-weave-data-update-", "previous");
-        assert_eq!(snapshot_managed_package(&previous).unwrap(), snapshot);
-        assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
-    }
-
-    #[test]
-    fn fresh_install_never_replaces_a_raced_in_empty_directory() {
-        let root = tempfile::tempdir().unwrap();
-        let addons = root.path().join("AddOns");
-        fs::create_dir(&addons).unwrap();
-        let directory = addons.join(DATA_ADDON_SUBFOLDER);
-
-        let result = install_fresh_with(&addons, &directory, 101051, || {
-            fs::create_dir(&directory).unwrap();
-        });
-        assert!(result.is_err());
-        assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
-        assert_eq!(status(&addons), DataAddonStatus::Unmanaged);
-    }
-
-    #[test]
-    fn failed_uninstall_restore_retains_the_quarantined_package() {
-        let root = tempfile::tempdir().unwrap();
-        let addons = root.path().join("AddOns");
-        fs::create_dir(&addons).unwrap();
-        install(&addons, RunningState::NotRunning, 101051).unwrap();
-        let directory = addons.join(DATA_ADDON_SUBFOLDER);
-        let snapshot = snapshot_managed_package(&directory).unwrap();
-        let mut wrong_snapshot = snapshot.clone();
-        wrong_snapshot.0[0].1 = Some(b"different manifest\n".to_vec());
-
-        let result = uninstall_with(
-            &addons,
-            &directory,
-            &wrong_snapshot,
-            || {},
-            |_, destination| {
-                fs::create_dir(destination).unwrap();
-                fs::write(destination.join("foreign.txt"), b"foreign\n").unwrap();
-            },
-        );
-        assert!(result.is_err());
-        let removed = recovery_child(&addons, ".eso-weave-data-remove-", "removed");
-        assert_eq!(snapshot_managed_package(&removed).unwrap(), snapshot);
-        assert_eq!(
-            fs::read(directory.join("foreign.txt")).unwrap(),
-            b"foreign\n"
-        );
-    }
-
-    fn recovery_child(addons: &Path, prefix: &str, child: &str) -> PathBuf {
-        fs::read_dir(addons)
-            .unwrap()
-            .map(|entry| entry.unwrap())
-            .find(|entry| entry.file_name().to_string_lossy().starts_with(prefix))
-            .expect("retained recovery transaction")
-            .path()
-            .join(child)
-    }
 }

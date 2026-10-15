@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- S129: One combined PixelBeacon package with automatic managed migration, bounded automatic Catalog collection, useful accumulated definitions, and verified background Catalog activation/recovery (issues #285-#288).
+- Independent persistent Catalog/native-processing disable preferences and accessible direct controls; absent combined addon leaves both dormant/inactive (issue #291).
+
 ### Changed
+
+- Scope PixelBeacon protocol constants privately so the complete addon stays within Lua 5.1 chunk-local limits, preserving wire values and all supported beacon observations.
 
 - Make the documentation render smoke test discover Chrome's debugging endpoint
   from its profile when startup emits no stderr, allow a bounded startup delay,
@@ -16,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and final release evidence; no build plan remains active (issue #280).
 
 ### Decisions
+
+- 2026-10-15: S129 consolidates managed modules under PixelBeacon and replaces manual Catalog authority with bounded automatic maintenance and two independent persisted optouts. Preserve verified ownership, all beacon contracts, saved/history data, immutable publication and local read access. Retire obsolete exact-two-package/manual-Catalog policy clauses; update affected pinned documentation checks for this scope. Native watcher and complete viewer retirement remain subsequent issues.
 
 - 2026-10-13: Keep the browser rendering gate for Pages builds while making
   headless Chrome startup tolerant of runner delays and silent stderr. A failed
