@@ -119,9 +119,11 @@ PR #298 was published from initial commit
 `e6ce912c1161b6b0a6169dd0239e368ddf2b53c7` and attached to the owner chat.
 All five delivery project items are in PR review. The manual Codex request is
 issue comment 6193435680; no review submission was present before requesting.
-Round accounting, final-head hosted checks and unresolved-thread state will be
-recorded here after completion. The agent stops before merge; no tag or release
-is authorized or created.
+The exact final pushed head and its hosted checks are recorded in the
+[final PR receipt](https://github.com/h8rt3rmin8r/eso-weave/pull/298#issuecomment-6194069486).
+Hosted acceptance is pending until that receipt records successful required
+checks on the final head. The agent stops before merge; no tag or release is
+authorized or created.
 
 Round 1 completed at 2026-10-15T13:43:28Z on `e6ce912` with one P1 finding,
 review `PRR_kwDOTU-tqc8AAAABSdt_HQ`, thread `PRRT_kwDOTU-tqc6szFLY`.
@@ -130,8 +132,12 @@ Round 2 completed at 2026-10-15T13:56:59Z on `4f354d1`, review
 `PRR_kwDOTU-tqc8AAAABSd7vSA`, with one P2 finding in thread
 `PRRT_kwDOTU-tqc6szeES`. The empty-store publication correction and failing-first
 evidence are recorded above. Both authorized rounds are complete; no third round
-is requested. Final thread closure and hosted head checks follow publication of
-that verified correction.
+is requested. P1 was fixed in `4f354d1` and replied to in comment 4283843015;
+P2 was fixed in `1f13626` and replied to in comment 4284016597. Both review threads
+were directly verified resolved after publication. No unresolved finding remains.
+The final documentation receipt commit does not change that verified product
+code. Its exact-head hosted checks must pass before owner handoff, with results
+updated in the linked PR receipt rather than introducing another product change.
 
 ## Limits
 

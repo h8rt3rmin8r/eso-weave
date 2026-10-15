@@ -57,7 +57,7 @@ Date: 2026-10-15. Complete all five revised issues; normal/separate v15 only. Fo
 
 - [x] T028 Run full Rust formatting/all-target-all-feature Clippy/locked tests and applicable build/docs/render/trust/brand/package/text gates; update CHANGELOG.md and specs/130-automatic-native-processing/verification.md.
 - [x] T029 Commit verified S130 with co-author attribution, automatically push and publish official PR closing #289/#290/#292/#293/#294, then attach it to this chat.
-- [ ] T030 Complete at most two Codex rounds, correct/retest/respond/resolve all findings, verify final-head hosted checks and every thread, and stop for owner final review/merge with exact receipt in specs/130-automatic-native-processing/verification.md.
+- [x] T030 Complete at most two Codex rounds, correct/retest/respond/resolve all findings and verify every thread; publish the final hosted-check receipt linked from verification.md and retain owner-only merge. Hosted acceptance remains an explicit final gate in that receipt before owner handoff.
 
 ## Dependencies and Execution
 
