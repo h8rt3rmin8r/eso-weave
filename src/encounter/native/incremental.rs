@@ -1,4 +1,4 @@
-//! Bounded source-independent normal/separate version-15 ingestion.
+//! Bounded source-independent native version-15 ingestion.
 use super::*;
 use std::io::Write;
 
@@ -345,8 +345,9 @@ impl IncrementalNativeParser {
         record: NativeRecord,
         work: &mut ContextWork,
     ) -> Result<Option<NativeCompletedFight>, NativeDiagnosticCode> {
-        let values =
-            fields(&record.line).map_err(|_| NativeDiagnosticCode::MalformedKnownRecord)?;
+        let decoded = grammar::decode(&record.line, NATIVE_INCREMENTAL_SCHEMA_VERSION)
+            .map_err(|_| NativeDiagnosticCode::MalformedKnownRecord)?;
+        let values = decoded.values();
         if self.recovery.is_some() && values.get(1) != Some(&"BEGIN_LOG") {
             return Ok(None);
         }
@@ -363,7 +364,7 @@ impl IncrementalNativeParser {
                     realm: quoted_value(values[4]).unwrap(),
                     language: quoted_value(values[5]).unwrap(),
                     game_version: quoted_value(values[6]).unwrap(),
-                    record,
+                    record: record.clone(),
                 };
                 self.run_count += 1;
                 self.current = Some(NativeRun {
@@ -909,7 +910,8 @@ fn restore_state(state: CheckpointState) -> Result<IncrementalNativeParser, Enco
         let mut previous: Option<&NativeRecord> = None;
         for (index, record) in pending.records.iter().enumerate() {
             validate_native_record(record, NATIVE_INCREMENTAL_SCHEMA_VERSION)?;
-            let values = fields(&record.line)?;
+            let decoded = grammar::decode(&record.line, NATIVE_INCREMENTAL_SCHEMA_VERSION)?;
+            let values = decoded.values();
             let known = validate_layout_for(&values, NATIVE_INCREMENTAL_SCHEMA_VERSION)?;
             if Some(record.ordinal) != pending.first.checked_add(index as u64)
                 || record.byte_offset < run.header.record.byte_offset
@@ -964,7 +966,8 @@ fn restore_context(
     let mut prior = run.header.record.ordinal;
     for record in records {
         validate_native_record(record, NATIVE_INCREMENTAL_SCHEMA_VERSION)?;
-        let values = fields(&record.line)?;
+        let decoded = grammar::decode(&record.line, NATIVE_INCREMENTAL_SCHEMA_VERSION)?;
+        let values = decoded.values();
         let known = validate_layout_for(&values, NATIVE_INCREMENTAL_SCHEMA_VERSION)?;
         if record.ordinal <= prior
             || record.ordinal > last_ordinal

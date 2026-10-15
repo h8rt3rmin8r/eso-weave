@@ -47,7 +47,8 @@ Logging contain diagnostic events and never enable game logging.
    remain unavailable. Background consumers own recomputation; stale generations
    cannot replace newer results. No derived output authorizes gameplay input.
 
-**Automatic native processing is supported** for normal/separate log version 15.
+**Automatic native processing is supported** for normal and verbose log version
+15 with separate or inline ability information.
 Completed fights can commit before the run ends; silence never completes a fight.
 The figure's native card distinguishes factual capabilities from historical
 addon replay and recommendations. Local API/MCP access remains independent of
@@ -55,8 +56,9 @@ collection eligibility.
 
 ## Native observations
 
-**Automatic native processing is supported** for normal/separate native log
-version 15. Completed catchup and growing files use the application-owned service.
+**Automatic native processing is supported** for all four native log version 15
+combinations of normal/verbose and separate/inline. Completed catchup and growing
+files use the application-owned service.
 The native header retains epoch, realm, language and game-version fields locally.
 Live/PTS follows the actual discovered source environment; neither game API nor addon
 version is invented from native log version. See [Encounter Ingestion](../development/encounter-ingestion.md).
@@ -69,7 +71,9 @@ observed local PLAYER relation is available. DAMAGE, CRITICAL_DAMAGE, DOT_TICK
 and DOT_TICK_CRITICAL contribute damage; HEAL, CRITICAL_HEAL, HOT_TICK and
 HOT_TICK_CRITICAL contribute healing. Other result amounts are not promoted into
 those totals. Hit and overflow remain separate. Totals cover interpreted
-observations and do not prove complete combat coverage.
+observations and do not prove complete combat coverage. Signed hit/overflow
+values remain signed observed sums; negative observations reduce quality and
+leave derived rates unavailable rather than being clamped or cast to unsigned.
 
 Unknown records/context and clock reversal reduce quality; zero duration or
 reduced quality makes rates unavailable. Missing/ambiguous local identity makes
@@ -80,10 +84,11 @@ when addon catalog definitions are missing or incompatible. Original ordered
 native lines remain exact in local immutable rows; default details omit raw
 names, identifiers and field arrays. Native processing never changes the game logger.
 
-Normal/inline support remains [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296);
-verbose layouts remain [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
-Unsupported layouts are preserved without inventing producer grammar or requiring
-a player format-fix task.
+Record-local decoding supports format switches within a run. Inline names and
+effect metadata retain source meaning and do not create addon or Catalog API
+authority. Unsupported layouts preserve prior history without requiring a player
+format-fix task. Static producer evidence and synthetic validation are described
+in [Encounter Ingestion](../development/encounter-ingestion.md#supported-profiles-and-evidence).
 
 ## Implementation history and detailed contracts
 

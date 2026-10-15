@@ -165,7 +165,8 @@ separate API evidence, package roots, and Catalog generations.
 ## Automatic native processing is waiting or unavailable
 
 Native processing discovers actual Live/PTS sources and follows supported
-normal/separate version 15 records automatically. An absent file, quiet logger,
+normal or verbose version 15 records with separate or inline ability information
+automatically. An absent file, quiet logger,
 incomplete line or unfinished fight can be an ordinary waiting state. A stale file
 does not prove current logging activity. ESO owns logging and serialization;
 the desktop does not toggle them.
@@ -177,8 +178,7 @@ format, checkpoint and store failures without exposing raw values. Existing
 completed fights remain readable through the local API/MCP regardless of service
 eligibility. No source inspection, manual import or replacement viewer is needed.
 
-Normal/inline remains [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296),
-and verbose remains [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+Format changes within a run do not require a restart or a different player workflow.
 Unsupported saved-data version, malformed same-version data, source identity
 conflicts and corrupt stores are preserved. Do not edit version fields or hashes
 to bypass validation. Missing compatible definitions leave qualified historical

@@ -25,6 +25,114 @@ const PLAYER_STATE_RESOURCE_URI: &str = "esoweave://player-state";
 const DATABASES_RESOURCE_URI: &str = "esoweave://databases";
 
 #[test]
+fn all_added_native_profiles_are_readable_through_authenticated_http_and_mcp_without_catalog() {
+    use eso_weave::catalog::Channel;
+    use eso_weave::encounter::{IncrementalNativeParser, NativeIngestBatch, NativeIngestWriter};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("encounters.sqlite");
+    let mut writer = NativeIngestWriter::open(&path).unwrap();
+    for (i, source) in [
+        include_str!("fixtures/native/normal-inline-v15.log"),
+        include_str!("fixtures/native/verbose-separate-v15.log"),
+        include_str!("fixtures/native/verbose-inline-v15.log"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let source = source.replace("1700000000000", &(1700000000000_u64 + i as u64).to_string());
+        let mut parser = IncrementalNativeParser::new(Channel::Live);
+        let output = parser.feed(source.as_bytes()).unwrap();
+        assert!(output.diagnostics.is_empty());
+        writer
+            .commit_batch(
+                NativeIngestBatch {
+                    source_key: format!("{i:064x}"),
+                    generation: "a".repeat(64),
+                    expected_revision: None,
+                    consumed_bytes: parser.position().accepted_bytes,
+                    checkpoint_bytes: parser.checkpoint().unwrap().as_bytes().to_vec(),
+                    completed: output.completed,
+                },
+                |c| c.commit(),
+            )
+            .unwrap();
+    }
+    drop(writer);
+    let controller = LocalServiceController::new_with_services(
+        LocalServiceConfig {
+            config_dir: Some(dir.path().to_owned()),
+            port: 0,
+            shutdown_timeout: Duration::from_millis(500),
+        },
+        SnapshotPublisher::default(),
+        DatabaseQueryService::new(dir.path().join("absent-catalog.sqlite"), Some(path)),
+    );
+    assert!(controller.start(TEST_CREDENTIAL));
+    let connection = wait_for(&controller, ServicePhase::Running)
+        .connection
+        .unwrap();
+    let authority = connection
+        .http_base_url
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/api/v1")
+        .unwrap();
+    let auth = format!("Bearer {TEST_CREDENTIAL}");
+    let query = serde_json::json!({"sql":"SELECT CAST(result_json AS TEXT) AS result FROM encounter_derivations WHERE source_kind='native-log' ORDER BY content_sha256", "row_limit":10});
+    let response = request(
+        authority,
+        "POST",
+        "/api/v1/databases/encounters/query",
+        &[
+            ("Authorization", &auth),
+            ("Content-Type", "application/json"),
+        ],
+        &query.to_string(),
+    );
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    let mut http: serde_json::Value = serde_json::from_str(response_body(&response)).unwrap();
+    assert_eq!(http["rows"].as_array().unwrap().len(), 3);
+    for row in http["rows"].as_array().unwrap() {
+        let result: serde_json::Value =
+            serde_json::from_str(row[0]["value"].as_str().unwrap()).unwrap();
+        assert_eq!(result["damage_hit"], 300);
+        assert_eq!(result["damage_overflow"], 7);
+        assert_eq!(result["local_damage_hit"], 300);
+        assert!(!result["unavailable"].as_array().unwrap().is_empty());
+    }
+    let encoded = http.to_string();
+    assert!(encoded.contains("damage_hit"));
+    assert!(encoded.contains("unavailable"));
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(connection.mcp_url.clone())
+                .auth_header(TEST_CREDENTIAL),
+        );
+        let client = ().serve(transport).await.unwrap();
+        let inventory = read_json_resource(&client, DATABASES_RESOURCE_URI).await;
+        assert_eq!(inventory["databases"][0]["available"], false);
+        assert_eq!(inventory["databases"][1]["available"], true);
+        let mut args = query.as_object().unwrap().clone();
+        args.insert("database_id".into(), serde_json::json!("encounters"));
+        let result = client
+            .call_tool(CallToolRequestParams::new("query_database").with_arguments(args))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        let mut mcp = result.structured_content.unwrap();
+        http["elapsed_ms"] = serde_json::json!(0);
+        mcp["elapsed_ms"] = serde_json::json!(0);
+        assert_eq!(mcp, http);
+        client.cancel().await.unwrap();
+    });
+    controller.stop();
+}
+
+#[test]
 fn preferences_default_off_and_create_one_stable_credential() {
     let mut prefs = LocalServicePrefs::default();
     assert!(!prefs.enabled);

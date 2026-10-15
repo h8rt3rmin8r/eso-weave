@@ -292,9 +292,9 @@ test("S130 requires automatic services, persistent disable controls and retired 
   assert.deepEqual(validateEncounterWorkflowDocs(pages), []);
   for (const [page, phrase] of [
     ["features/encounter-capture.md", "gray/inactive"],
-    ["features/encounter-capture.md", "Normal/separate log version 15"],
-    ["features/encounter-capture.md", "issue #296"],
-    ["features/encounter-capture.md", "issue #297"],
+    ["features/encounter-capture.md", "Normal and verbose log version 15"],
+    ["features/encounter-capture.md", "separate or inline ability information"],
+    ["features/encounter-capture.md", "Format changes within a run"],
     ["features/interface.md", "background services"],
     ["reference/status-reference.md", "actual service observations"],
     ["getting-started/responsible-use.md", "never uploads it"],
@@ -3197,13 +3197,13 @@ test("S127 native import policy preserves source, capabilities and atomic eviden
   }
 });
 
-test("S130 current data contract requires actual automatic ownership and honest deferred formats", async () => {
+test("S131 current data contract requires all four evidenced profiles and automatic ownership", async () => {
   const contract = JSON.parse(await readFile("docs/project/encounter-model.json", "utf8"));
   assert.deepEqual(validateAutomaticDataPolicy(contract), []);
-  for (const key of Object.keys(contract.native_processing_policy).filter((key) => key !== "issues")) {
+  for (const key of Object.keys(contract.native_processing_policy)) {
     const missing = structuredClone(contract);
     delete missing.native_processing_policy[key];
-    assert.match(validateAutomaticDataPolicy(missing).join("\n"), /S130 automatic data requires/);
+    assert.match(validateAutomaticDataPolicy(missing).join("\n"), /S131 automatic data requires/);
   }
   for (const key of ["current_package", "desktop_viewer", "legacy_addon_recorder", "owner_field_test_gate"]) {
     const missing = structuredClone(contract);

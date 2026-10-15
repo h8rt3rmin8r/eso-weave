@@ -350,18 +350,16 @@
     "owner_field_test_gate": false
   },
   "native_processing_policy": {
-    "slice": "S130",
+    "slice": "S131",
     "issues": [
-      289,
-      290,
-      292,
-      293,
-      294
+      296,
+      297
     ],
-    "profile": "normal-separate",
+    "profile": "record-local",
+    "profiles": ["normal-separate", "normal-inline", "verbose-separate", "verbose-inline"],
     "log_version": 15,
-    "normal_inline_followup": 296,
-    "verbose_followup": 297,
+    "grammar_evidence": "static-v15-producer-and-legacy-fixtures",
+    "producer_sha256": "208f83b53576bf1a04ecf35e6e4a99779cf157e9e89fbf4457361b0923953d84",
     "environment": "actual-source-context",
     "mode": "automatic-incremental-catchup-and-tail",
     "requires_viewer": false,

@@ -1,4 +1,5 @@
 //! Source-specific completed native log evidence.
+mod grammar;
 mod incremental;
 
 use crate::catalog::Channel;
@@ -115,7 +116,7 @@ const MAX_NATIVE_CONTEXT_WORK_RECORDS: usize = 20_000_000;
 const MAX_NATIVE_CONTEXT_WORK_BYTES: usize = 512 * 1024 * 1024;
 
 fn rejected<T>() -> Result<T, EncounterError> {
-    invalid("native record does not match the supported normal version15 profile")
+    invalid("native record does not match the supported version15 grammar")
 }
 
 fn fields(line: &str) -> Result<Vec<&str>, EncounterError> {
@@ -313,6 +314,24 @@ fn array(value: &str) -> Result<Vec<&str>, EncounterError> {
 }
 
 fn validate_layout(values: &[&str]) -> Result<bool, EncounterError> {
+    validate_layout_mode(values, false)
+}
+
+fn signed_quantity(value: &str) -> Result<i128, EncounterError> {
+    if let Some(digits) = value.strip_prefix('-') {
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return rejected();
+        }
+        value
+            .parse::<i32>()
+            .map(i128::from)
+            .map_err(|_| EncounterError::Validation("native signed integer is out of range".into()))
+    } else {
+        uint(value).map(i128::from)
+    }
+}
+
+fn validate_layout_mode(values: &[&str], signed: bool) -> Result<bool, EncounterError> {
     if values.len() < 2 {
         return rejected();
     }
@@ -341,10 +360,22 @@ fn validate_layout(values: &[&str]) -> Result<bool, EncounterError> {
             if n != 20 && n != 29 {
                 return rejected();
             }
-            for value in &values[2..5] {
+            for value in &values[2..4] {
                 word(value)?;
             }
-            for value in &values[5..9] {
+            if signed && values[4].starts_with('-') {
+                signed_quantity(values[4])?;
+            } else {
+                word(values[4])?;
+            }
+            for value in &values[5..7] {
+                if signed {
+                    signed_quantity(value)?;
+                } else {
+                    uint(value)?;
+                }
+            }
+            for value in &values[7..9] {
                 uint(value)?;
             }
             state(values, 9)?;
@@ -356,7 +387,11 @@ fn validate_layout(values: &[&str]) -> Result<bool, EncounterError> {
             if n != 17 && n != 26 {
                 return rejected();
             }
-            uint(values[2])?;
+            if signed {
+                signed_quantity(values[2])?;
+            } else {
+                uint(values[2])?;
+            }
             flag(values[3])?;
             uint(values[4])?;
             uint(values[5])?;
@@ -454,8 +489,10 @@ fn validate_layout(values: &[&str]) -> Result<bool, EncounterError> {
                 return rejected();
             }
             uint(values[2])?;
-            for value in &values[3..6] {
-                word(value)?;
+            if !(signed && values[3..6] == ["\"\"", "\"\"", "\"\""]) {
+                for value in &values[3..6] {
+                    word(value)?;
+                }
             }
             if n == 7 {
                 uint(values[6])?;
@@ -545,13 +582,13 @@ fn validate_layout_for(values: &[&str], schema: u32) -> Result<bool, EncounterEr
         && values.get(1) == Some(&"ABILITY_INFO")
         && values.len() == 10
     {
-        validate_layout(&values[..7])?;
+        validate_layout_mode(&values[..7], true)?;
         for value in &values[7..] {
             quoted_value(value)?;
         }
         return Ok(true);
     }
-    validate_layout(values)
+    validate_layout_mode(values, schema == NATIVE_INCREMENTAL_SCHEMA_VERSION)
 }
 
 fn run_id(header: &NativeHeader, ordinal: u64, channel: Channel) -> Result<String, EncounterError> {
@@ -845,7 +882,8 @@ impl Pending {
         let mut unknown_context_count = 0;
         let mut context_bytes = 0_usize;
         for record in self.context {
-            let values = fields(&record.line)?;
+            let decoded = grammar::decode(&record.line, run.schema_version)?;
+            let values = decoded.values();
             let known = validate_layout_for(&values, run.schema_version)?;
             let relevant = match values[1] {
                 "UNIT_ADDED" => self.units.contains(&uint(values[2])?) || values[4] == "T",
@@ -1135,7 +1173,8 @@ pub(crate) fn validate_native_run(run: &NativeRun) -> Result<(), EncounterError>
         return rejected();
     }
     validate_native_record(&run.header.record, run.schema_version)?;
-    let values = fields(&run.header.record.line)?;
+    let decoded = grammar::decode(&run.header.record.line, run.schema_version)?;
+    let values = decoded.values();
     validate_layout(&values)?;
     if values[1] != "BEGIN_LOG"
         || uint(values[2])? != run.header.epoch_ms
@@ -1163,7 +1202,8 @@ fn validate_native_record(record: &NativeRecord, schema: u32) -> Result<(), Enco
     {
         return rejected();
     }
-    validate_layout_for(&fields(&record.line)?, schema)?;
+    let decoded = grammar::decode(&record.line, schema)?;
+    validate_layout_for(&decoded.values(), schema)?;
     Ok(())
 }
 
@@ -1196,7 +1236,8 @@ pub fn validate_native_encounter(capture: &NativeEncounter) -> Result<(), Encoun
     let mut previous_offset = 0;
     for (i, record) in capture.records.iter().enumerate() {
         validate_native_record(record, capture.schema_version)?;
-        let values = fields(&record.line)?;
+        let decoded = grammar::decode(&record.line, capture.schema_version)?;
+        let values = decoded.values();
         let known = validate_layout_for(&values, capture.schema_version)?;
         if Some(record.ordinal) != capture.first_ordinal.checked_add(i as u64)
             || (i > 0 && record.byte_offset <= previous_offset)
@@ -1246,7 +1287,8 @@ pub fn validate_native_encounter(capture: &NativeEncounter) -> Result<(), Encoun
             return rejected();
         }
         prior = record.ordinal;
-        let values = fields(&record.line)?;
+        let decoded = grammar::decode(&record.line, capture.schema_version)?;
+        let values = decoded.values();
         let known = validate_layout_for(&values, capture.schema_version)?;
         if known
             && !matches!(
@@ -1347,12 +1389,12 @@ pub struct NativeProjection {
     pub cast_start_count: usize,
     pub effect_change_count: usize,
     pub unknown_record_count: usize,
-    pub damage_hit: u128,
-    pub damage_overflow: u128,
-    pub healing_hit: u128,
-    pub healing_overflow: u128,
-    pub local_damage_hit: Option<u128>,
-    pub local_healing_hit: Option<u128>,
+    pub damage_hit: i128,
+    pub damage_overflow: i128,
+    pub healing_hit: i128,
+    pub healing_overflow: i128,
+    pub local_damage_hit: Option<i128>,
+    pub local_healing_hit: Option<i128>,
     pub local_damage_per_second: Option<f64>,
     pub quality_reasons: Vec<String>,
     pub unavailable: Vec<String>,
@@ -1385,8 +1427,10 @@ pub fn project_native_encounter(
     };
     let mut local_units = BTreeSet::new();
     let mut local_known = true;
+    let mut signed_observation = false;
     for record in capture.context.iter().chain(&capture.records) {
-        let values = fields(&record.line)?;
+        let decoded = grammar::decode(&record.line, capture.schema_version)?;
+        let values = decoded.values();
         match values[1] {
             "UNIT_ADDED" => {
                 let id = uint(values[2])?;
@@ -1409,8 +1453,12 @@ pub fn project_native_encounter(
             "EFFECT_CHANGED" => projection.effect_change_count += 1,
             "COMBAT_EVENT" => {
                 projection.combat_event_count += 1;
-                let hit = uint(values[5])?;
-                let overflow = uint(values[6])?;
+                let hit = signed_quantity(values[5])?;
+                let overflow = signed_quantity(values[6])?;
+                if (hit < 0 || overflow < 0) && !signed_observation {
+                    signed_observation = true;
+                    projection.quality_reasons.push("Signed native observations are retained as observed sums; their sign does not establish a damage-rate interpretation.".into());
+                }
                 let damage = matches!(
                     values[2],
                     "DAMAGE" | "CRITICAL_DAMAGE" | "DOT_TICK" | "DOT_TICK_CRITICAL"
@@ -1478,8 +1526,8 @@ pub fn project_native_encounter(
     Ok(projection)
 }
 
-fn add_quantity(total: u128, value: u64) -> Result<u128, EncounterError> {
-    total.checked_add(u128::from(value)).ok_or_else(|| {
+fn add_quantity(total: i128, value: i128) -> Result<i128, EncounterError> {
+    total.checked_add(value).ok_or_else(|| {
         EncounterError::Validation("native observed quantity exceeds the supported total".into())
     })
 }

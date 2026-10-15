@@ -13,10 +13,10 @@ Two documents use the word "plan" and serve different purposes:
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [056](plan-056.md) | Active | S130 automatic normal/separate v15 processing and workflow retirement, #289/#290/#292-#294 |
+| [057](plan-057.md) | Active | S131 native v15 format coverage, normal/inline #296 and verbose #297, grammar first |
 
 The latest completed plan is
-[055](../../archive/build-plans/plan-055.md), covering S129 combined PixelBeacon and automatic Catalog maintenance in owner-merged PR #295.
+[056](../../archive/build-plans/plan-056.md), covering S130 automatic native processing and workflow retirement in owner-merged PR #298.
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -30,9 +30,10 @@ workflow issues in PR #274 on 2026-10-12. Plan052 completed S126/#273 retained
 sessions in owner-merged PR #275 on 2026-10-13. Plan053 completed S127/#272 native import in owner-merged PR #276 on 2026-10-13.
 Plan054 completed S128/#279 in owner-merged PR #278 on 2026-10-13.
 Separately authorized v0.18.0 publication completed #277 that day. The next
-build plan is Plan056 for owner-authorized S130. Plan055 completed S129 in PR #295 on 2026-10-15.
+build plan is Plan057 for owner-authorized S131. Plan055 completed S129 in PR #295 and Plan056 completed S130 in PR #298 on 2026-10-15.
 
 Field-verification issues #110, #129, #131 and #190 were closed as not planned
 under the owner's no-field-verification direction. Their closure is not evidence
 of installed behavior or live parity. Completed native-file import was delivered in S127 / issue #272; live tailing
-is implemented in S130; only normal/separate v15 is in scope, with #296/#297 tracking deferred formats.
+is implemented in S130 for normal/separate v15. S131/#296/#297 adds the remaining
+profiles after pinned producer-grammar research in PR #299, pending owner merge.

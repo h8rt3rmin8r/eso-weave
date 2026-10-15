@@ -1,0 +1,18 @@
+offsetMS: 0	lineType: BEGIN_LOG	timeSinceEpochMS: 1700000000000	logVersion: 15	realmName: "SyntheticRealm"	language: "zz"	gameVersion: "fixture.game"
+offsetMS: 1	lineType: UNIT_ADDED	unitId: 1	unitType: PLAYER	isLocalPlayer: T	playerPerSessionId: 0	monsterId: 0	isBoss: F	classId: 1	raceId: 1	name: "Fixture, Ω"	displayName: "@Synthetic"	characterId: 18446744073709551615	level: 50	championPoints: 3600	ownerUnitId: 0	reaction: PLAYER_ALLY	isGroupedWithLocalPlayer: F
+offsetMS: 2	lineType: ABILITY_INFO	abilityId: 100	name: "Synthetic ability"	iconPath: "/fixture.dds"	interruptible: F	blockable: T	primaryScript: ""	secondaryScript: "S"	tertiaryScript: ""
+offsetMS: 3	lineType: EFFECT_INFO	abilityId: 100	effectType: BUFF	statusEffectType: NONE	effectBarDisplayBehaviour: DEFAULT	grantsSyngeryAbilityId: 0
+offsetMS: 4	lineType: PLAYER_INFO	unitId: 1	longTermEffectAbilityIds: [100]	longTermEffectStackCounts: [1]	equipment: [[slot: HEAD	id: 1	isCP: F	level: 50	trait: NONE	quality: NORMAL	setId: 0	enchantType: INVALID	enchantCP: F	enchantLevel: 0	enchantQuality: NORMAL]]	primaryAbilities: [100	0]	backupAbilities: []
+offsetMS: 5	lineType: MAP_CHANGED	id: 1	name: "Map"	texturePath: "/map.dds"
+offsetMS: 6	lineType: ZONE_CHANGED	id: 1	name: "Zone"	dungeonDifficulty: NORMAL
+offsetMS: 7	lineType: TRIAL_INIT	id: 1	inProgress: T	completed: F	startTimeMS: 0	durationMS: 0	success: F	finalScore: 0
+offsetMS: 10	lineType: BEGIN_COMBAT
+offsetMS: 11	lineType: BEGIN_CAST	durationMS: 100	channeled: F	castTrackId: 10	abilityId: 100	name: "Synthetic, Ω\skill"	iconPath: "/fixture/ability.dds"	interruptible: F	blockable: T	unitId: 1	health: 100/100	magicka: 100/100	stamina: 100/100	ultimate: 0/100	werewolf: 0/0	shield: 0	mapNX: 0.2500	mapNY: 0.5000	heading: 0.0000	target: *
+offsetMS: 12	lineType: COMBAT_EVENT	actionResult: DAMAGE	damageType: PHYSICAL	powerType: 10	hitValue: 300	overflow: 7	castTrackId: 10	abilityId: 100	name: "Synthetic, Ω\skill"	iconPath: "/fixture/ability.dds"	interruptible: F	blockable: T	unitId: 1	health: 100/100	magicka: 100/100	stamina: 100/100	ultimate: 0/100	werewolf: 0/0	shield: 0	mapNX: 0.2500	mapNY: 0.5000	heading: 0.0000	unitId: 2	health: 100/100	magicka: 100/100	stamina: 100/100	ultimate: 0/100	werewolf: 0/0	shield: 0	mapNX: 0.2500	mapNY: 0.5000	heading: 0.0000
+offsetMS: 13	lineType: EFFECT_CHANGED	changeType: FADED	stackCount: 1	castTrackId: 10	abilityId: 100	name: "Synthetic, Ω\skill"	iconPath: "/fixture/ability.dds"	interruptible: F	blockable: T	effectType: BUFF	statusEffectType: NONE	effectBarDisplayBehaviour: DEFAULT	grantsSyngeryAbilityId: 0	unitId: 1	health: 100/100	magicka: 100/100	stamina: 100/100	ultimate: 0/100	werewolf: 0/0	shield: 0	mapNX: 0.2500	mapNY: 0.5000	heading: 0.0000	target: *	playerInitiatedRemoveCastTrackId: 99
+offsetMS: 14	lineType: END_CAST	endReason: INTERRUPTED	castTrackId: 10	abilityId: 100	name: "Synthetic, Ω\skill"	iconPath: "/fixture/ability.dds"	interruptible: F	blockable: T	interruptingAbilityId: 200	name: "Synthetic, Ω\skill"	iconPath: "/fixture/ability.dds"	interruptible: F	blockable: T	interruptingUnitId: 2
+offsetMS: 15	lineType: HEALTH_REGEN	effectiveRegen: 2	unitId: 1	health: 100/100	magicka: 100/100	stamina: 100/100	ultimate: 0/100	werewolf: 0/0	shield: 0	mapNX: 0.2500	mapNY: 0.5000	heading: 0.0000
+offsetMS: 16	lineType: ENDLESS_DUNGEON_BUFF_ADDED	id: 1	abilityId: 100
+offsetMS: 17	lineType: ENDLESS_DUNGEON_BUFF_REMOVED	id: 1	abilityId: 100
+offsetMS: 20	lineType: END_COMBAT
+offsetMS: 21	lineType: END_LOG

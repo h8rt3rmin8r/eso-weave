@@ -761,7 +761,7 @@ fn native_source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
         ),
         EncounterError::UnsupportedVersion=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceVersionUnsupported,
-            "This native recording version is unsupported. Processing supports normal/separate version15; inline and verbose layouts remain unsupported. The source and history were kept."
+            "This native recording version is unsupported. This completed-file compatibility reader accepts normal/separate version15. Automatic processing also supports inline and verbose version15. The source and history were kept."
         ),
         EncounterError::Io(ref error) if error.kind()==ErrorKind::NotFound=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceUnavailable,

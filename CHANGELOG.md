@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - S129: One combined PixelBeacon package with automatic managed migration, bounded automatic Catalog collection, useful accumulated definitions, and verified background Catalog activation/recovery (issues #285-#288).
 - Independent persistent Catalog/native-processing disable preferences and accessible direct controls; absent combined addon leaves both dormant/inactive (issue #291).
 - S130: Automatic incremental normal/separate v15 native-log processing with bounded discovery/catchup, durable checkpoints, preserved history and background consumer calculations (issues #289, #290 and #293).
+- S131: Native v15 normal/inline and both verbose profiles, using pinned producer grammar, exact retained lines, record-local format changes and the existing automatic pipeline (issues #296 and #297).
 
 ### Changed
 
@@ -32,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep accepted documentation connections in blocking mode under the existing read/write deadlines, preventing premature Windows failures before request bytes arrive.
 
 ### Decisions
+
+- 2026-10-15: S131 establishes grammar through passive official-uploader and static native-producer inspection before implementation. Preserve schema 1/2 evidence and schema7/checkpoint shapes; share semantic validation across ingestion, restart, storage and projection. Keep signed observed quantities exact and qualify derived rates. Update the pinned documentation policy and its negative tests to require all four evidenced profiles while preserving existing ownership and unavailable-capability constraints. Archive Plan056 and establish Plan057. No game execution, owner field-testing task, merge or release is included.
 
 - 2026-10-15: S129 consolidates managed modules under PixelBeacon and replaces manual Catalog authority with bounded automatic maintenance and two independent persisted optouts. Preserve verified ownership, all beacon contracts, saved/history data, immutable publication and local read access. ESO names the current saved file PixelBeacon.lua; read it alongside preserved legacy EsoWeaveData.lua without rewriting either file. Serialize package inspection, mutation and recovery per installation root. Retire obsolete exact-two-package/manual-Catalog policy clauses; update affected pinned documentation checks for this scope. Native watcher and complete viewer retirement remain subsequent issues.
 

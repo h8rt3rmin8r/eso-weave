@@ -6,6 +6,116 @@ fn native_run(epoch: u64) -> String {
     format!("0,BEGIN_LOG,{epoch},15,\"SyntheticRealm\",\"zz\",\"fixture.game\"\n10,BEGIN_COMBAT\n20,END_COMBAT\n")
 }
 
+#[test]
+fn added_profiles_resume_partial_live_evidence_after_restart_and_independent_disable() {
+    use eso_weave::beacon::Environment;
+    use eso_weave::data_maintenance::{Context, NativeMaintenanceRuntime};
+    use eso_weave::encounter::EncounterHistoryService;
+    use std::io::Write;
+    for source in [
+        include_str!("fixtures/native/normal-inline-v15.log"),
+        include_str!("fixtures/native/verbose-separate-v15.log"),
+        include_str!("fixtures/native/verbose-inline-v15.log"),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let addons = install_fixture(root.path(), Environment::Live);
+        let logs = addons.parent().unwrap().join("Logs");
+        std::fs::create_dir_all(&logs).unwrap();
+        let path = logs.join("Encounter.log");
+        let split = source
+            .find("Synthetic, Ω")
+            .unwrap_or_else(|| source.find("BEGIN_CAST").unwrap())
+            + 3;
+        std::fs::write(&path, &source.as_bytes()[..split]).unwrap();
+        let history = EncounterHistoryService::new(
+            root.path().join("application"),
+            root.path().join("absent-catalog.sqlite"),
+        );
+        let control = MaintenanceControl::new(DataMaintenancePrefs {
+            catalog_disabled: true,
+            native_processing_disabled: false,
+        });
+        control.set_presence(true);
+        let contexts = vec![Context {
+            addons_root: addons,
+            environment: Environment::Live,
+        }];
+        let runtime = NativeMaintenanceRuntime::spawn_with_contexts(
+            history.clone(),
+            control.clone(),
+            contexts.clone(),
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            let progress = rusqlite::Connection::open_with_flags(
+                history.store_path(),
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
+            .ok()
+            .and_then(|db| {
+                db.query_row(
+                    "SELECT max(consumed_bytes) FROM native_ingest_checkpoints",
+                    [],
+                    |r| r.get::<_, Option<i64>>(0),
+                )
+                .ok()
+                .flatten()
+            });
+            if progress == Some(split as i64) {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "partial progress not persisted"
+            );
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        drop(runtime);
+        control.apply(
+            DataMaintenancePrefs {
+                catalog_disabled: true,
+                native_processing_disabled: true,
+            },
+            true,
+        );
+        let runtime = NativeMaintenanceRuntime::spawn_with_contexts(
+            history.clone(),
+            control.clone(),
+            contexts,
+        );
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(&source.as_bytes()[split..])
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(150));
+        assert!(history.snapshot().unwrap().is_empty());
+        control.apply(
+            DataMaintenancePrefs {
+                catalog_disabled: true,
+                native_processing_disabled: false,
+            },
+            true,
+        );
+        wait_count(history.store_path(), 1);
+        assert_eq!(std::fs::read(&path).unwrap(), source.as_bytes());
+        let rows = history.snapshot().unwrap();
+        assert_eq!(rows.len(), 1);
+        drop(runtime);
+        let db = rusqlite::Connection::open(history.store_path()).unwrap();
+        assert_eq!(
+            db.query_row(
+                "SELECT count(*) FROM encounter_derivations WHERE source_kind='native-log'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+}
+
 fn wait_count(store: &std::path::Path, expected: usize) {
     let deadline = std::time::Instant::now() + Duration::from_secs(8);
     loop {

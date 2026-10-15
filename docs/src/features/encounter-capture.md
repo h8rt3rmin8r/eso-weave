@@ -11,15 +11,16 @@ neither requires the other to acquire data.
 
 ## Automatic native processing
 
-Normal/separate log version 15 is supported. The desktop discovers the actual
+Normal and verbose log version 15, with separate or inline ability information,
+are supported. The desktop discovers the actual
 Live or PTS environment, catches up completed fights, and follows appended
 records. A completed combat can be stored before the logging run ends. An
 unfinished line or fight waits for more evidence; silence does not end a fight.
 The desktop does not change ESO logging, anonymity, serialization or source files.
 An old file does not establish that logging is currently active.
 
-Normal/inline support is tracked in [issue #296](https://github.com/h8rt3rmin8r/eso-weave/issues/296).
-Verbose layouts are tracked in [issue #297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+Format changes within a run use the same automatic processing and preserve
+original records. The desktop does not require a particular serialization setting.
 Unsupported formats preserve existing history and source bytes. They do not
 create a player repair task or a requirement to change game serialization.
 

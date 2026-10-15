@@ -215,6 +215,14 @@ columns, declared SQLite types, nullability, and primary-key position. The
 catalog contains shipped or selected game-data reference material. Encounters
 contains user-owned retained addon and automatically ingested native encounter history, durable progress and rebuildable derived results when that store exists.
 
+Native v15 automatic processing supports normal and verbose serialization with
+separate or inline ability information. Exact raw lines remain local evidence;
+the shared semantic decoder supplies the same source-qualified observed metrics
+to both transports. Signed observations retain their values, while negative
+amounts, unknown coverage or invalid elapsed-time quality leave rates unavailable.
+Native metadata does not supply addon replay, effect uptime or a Catalog API
+version. These unavailable capabilities remain explicit in derived results.
+
 ## Query requests and results
 
 HTTP puts the database identifier in the route. MCP adds `database_id` to the

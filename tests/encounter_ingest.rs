@@ -6,6 +6,69 @@ use eso_weave::encounter::{
 
 const SOURCE: &str = "0,BEGIN_LOG,1700000000000,15,\"FixtureRealm\",\"zz\",\"fixture.game\"\n10,BEGIN_COMBAT\n30,END_COMBAT\n40,END_LOG\n";
 
+#[test]
+fn added_profiles_commit_atomically_retry_deduplicate_and_preserve_suppression() {
+    for source in [
+        include_str!("fixtures/native/normal-inline-v15.log"),
+        include_str!("fixtures/native/verbose-separate-v15.log"),
+        include_str!("fixtures/native/verbose-inline-v15.log"),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("history.sqlite");
+        let mut writer = NativeIngestWriter::open(&path).unwrap();
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection.execute_batch("CREATE TRIGGER fail_progress BEFORE INSERT ON native_ingest_checkpoints BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+        assert!(writer
+            .commit_batch(batch(source, 'a', None), |c| c.commit())
+            .is_err());
+        connection
+            .execute_batch("DROP TRIGGER fail_progress;")
+            .unwrap();
+        assert!(list_encounters(&path).unwrap().is_empty());
+        assert!(writer.checkpoint(&"a".repeat(64)).unwrap().is_none());
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM encounter_derivations", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert!(writer
+            .commit_batch(batch(source, 'a', None), |_| Ok(()))
+            .is_err());
+        assert_eq!(
+            writer
+                .commit_batch(batch(source, 'a', None), |c| c.commit())
+                .unwrap()
+                .imported_count,
+            1
+        );
+        let original = list_encounters(&path).unwrap();
+        assert_eq!(
+            writer
+                .commit_batch(batch(source, 'c', None), |c| c.commit())
+                .unwrap()
+                .already_present_count,
+            1
+        );
+        assert_eq!(list_encounters(&path).unwrap(), original);
+        let conflict = source.replace("300", "301");
+        assert!(writer
+            .commit_batch(batch(&conflict, 'd', None), |c| c.commit())
+            .is_err());
+        assert!(writer.checkpoint(&"d".repeat(64)).unwrap().is_none());
+        delete_encounter(&path, &original[0].session_id, &original[0].encounter_id).unwrap();
+        assert_eq!(
+            writer
+                .commit_batch(batch(source, 'e', None), |c| c.commit())
+                .unwrap()
+                .imported_count,
+            0
+        );
+        assert!(list_encounters(&path).unwrap().is_empty());
+    }
+}
+
 fn batch(source: &str, source_key: char, revision: Option<u64>) -> NativeIngestBatch {
     let mut parser = IncrementalNativeParser::new(Channel::Live);
     let feed = parser.feed(source.as_bytes()).unwrap();
