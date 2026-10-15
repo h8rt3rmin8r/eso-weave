@@ -20,6 +20,92 @@ fn batch(source: &str, source_key: char, revision: Option<u64>) -> NativeIngestB
 }
 
 #[test]
+fn empty_store_publication_requires_admission_and_is_immediately_readable() {
+    use eso_weave::data_maintenance::{DataMaintenancePrefs, MaintenanceControl};
+    use eso_weave::encounter::{load_encounter, load_native_encounter, EncounterHistoryService};
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("history.sqlite");
+    let root = temp.path().join("live/AddOns");
+    std::fs::create_dir_all(&root).unwrap();
+    let history = EncounterHistoryService::from_paths(&path, temp.path().join("no-catalog.sqlite"));
+    assert!(NativeIngestWriter::open_with_finalizer(
+        &path,
+        eso_weave::catalog_update::CancellationToken::new(),
+        |_| Ok(())
+    )
+    .is_err());
+    assert!(!path.exists());
+    let control = MaintenanceControl::new(DataMaintenancePrefs::default());
+    control.set_presence(true);
+    let token = control.register_native_job(&root);
+    let refused = NativeIngestWriter::open_with_finalizer(&path, token.clone(), |commit| {
+        assert!(!path.exists());
+        assert!(history.snapshot().unwrap().is_empty());
+        control.apply(
+            DataMaintenancePrefs {
+                catalog_disabled: false,
+                native_processing_disabled: true,
+            },
+            true,
+        );
+        control.with_native_commit(&root, &token, || commit.commit())
+    });
+    assert!(refused.is_err());
+    assert!(!path.exists());
+    assert!(history.snapshot().unwrap().is_empty());
+    assert!(std::fs::read_dir(temp.path()).unwrap().all(|entry| !entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".native-store-")));
+    control.apply(DataMaintenancePrefs::default(), true);
+    let token = control.register_native_job(&root);
+    let _writer = NativeIngestWriter::open_with_finalizer(&path, token.clone(), |commit| {
+        control.with_native_commit(&root, &token, || commit.commit())
+    })
+    .unwrap();
+    assert!(history.snapshot().unwrap().is_empty());
+    assert!(list_encounters(&path).unwrap().is_empty());
+    assert!(load_encounter(&path, "missing", "missing")
+        .unwrap()
+        .is_none());
+    assert!(load_native_encounter(&path, "missing", "missing")
+        .unwrap()
+        .is_none());
+    let backup = temp.path().join("empty-backup.sqlite");
+    backup_store(&path, &backup).unwrap();
+    assert!(list_encounters(&backup).unwrap().is_empty());
+}
+
+#[test]
+fn prepared_empty_store_never_replaces_existing_or_accepts_unrecognized_zero_schema() {
+    use eso_weave::catalog_update::CancellationToken;
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("history.sqlite");
+    let canary = b"preserved conflicting destination";
+    assert!(
+        NativeIngestWriter::open_with_finalizer(&path, CancellationToken::new(), |commit| {
+            assert!(!path.exists());
+            std::fs::write(&path, canary).unwrap();
+            commit.commit()
+        })
+        .is_err()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), canary);
+    let zero = temp.path().join("zero.sqlite");
+    std::fs::write(&zero, []).unwrap();
+    assert!(NativeIngestWriter::open(&zero).is_err());
+    assert!(std::fs::read(&zero).unwrap().is_empty());
+    let unrecognized = temp.path().join("unrecognized.sqlite");
+    let connection = rusqlite::Connection::open(&unrecognized).unwrap();
+    connection.execute_batch("CREATE TABLE foreign_record(value TEXT); INSERT INTO foreign_record VALUES ('preserve');").unwrap();
+    drop(connection);
+    let before = std::fs::read(&unrecognized).unwrap();
+    assert!(NativeIngestWriter::open(&unrecognized).is_err());
+    assert_eq!(std::fs::read(&unrecognized).unwrap(), before);
+}
+
+#[test]
 fn ingest_commit_and_progress_are_one_atomic_unit() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("history.sqlite");

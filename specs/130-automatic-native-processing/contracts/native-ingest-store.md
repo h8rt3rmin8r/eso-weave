@@ -89,6 +89,12 @@ validation for each appended prefix. It validates every new payload, checkpoint
 and identity association. Reopening/replacing the database requires validation
 again. Existing compatibility-reader and backup validation remains strict.
 
+New-store construction uses open_with_finalizer: prepare, commit and close a full
+empty schema7 database privately, sync it, then publish without replacement under
+the same NativeCommit admission gate. Public readers see absence or a valid store
+even for empty logs. Rejected/omitted admission discards only the private candidate;
+existing destinations and existing invalid databases are never overwritten or reset.
+
 `source_key` and `generation` are bounded lowercase SHA-256 identifiers generated
 by runtime from actual root/path and verified source-generation evidence. The
 runtime never derives them from a transient selected environment. Source/generation

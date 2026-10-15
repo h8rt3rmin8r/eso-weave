@@ -96,6 +96,19 @@ release-note generator and Debian-validator regressions also passed. Final
 review-fix release executable, 10 embedded guide tests and one accepted-connection
 test passed (`target/s130-round1-fix-{release,embedded-guide-full,embedded-connection}.log`).
 
+Round 2 reproduced invalid history after an empty source created a public
+uninitialized SQLite file. A complete empty schema7 database is now prepared,
+closed and synced privately, then published without replacement under the same
+root/token commit gate. Omitted/rejected admission leaves the public path absent;
+preexisting zero/foreign schemas and publication races preserve existing files.
+The real runtime empty-source, disable/absence/read/append journey passed, as did
+94 focused tests and final aggregate formatting, all-feature Clippy and
+**1195 locked Rust tests, zero failed/ignored**
+(`target/s130-final-{fmt,clippy,full}.log`). Final pinned documentation, generated
+site and all five browser sentinels passed again. The final release executable,
+10 embedded guide tests and one connection regression passed as well
+(`target/s130-final-*.log`).
+
 The primary pre-publication text audit covered 104 changed/new text files with
 zero UTF-8, BOM, CRLF or mojibake errors. Final modified files use the same strict
 encoding and `git diff --check` passes. No timeout or assertion was weakened.
@@ -113,7 +126,12 @@ is authorized or created.
 Round 1 completed at 2026-10-15T13:43:28Z on `e6ce912` with one P1 finding,
 review `PRR_kwDOTU-tqc8AAAABSdt_HQ`, thread `PRRT_kwDOTU-tqc6szFLY`.
 The compatibility fix and its failing-first/aggregate evidence are recorded above.
-A second and final authorized review will inspect the corrected implementation.
+Round 2 completed at 2026-10-15T13:56:59Z on `4f354d1`, review
+`PRR_kwDOTU-tqc8AAAABSd7vSA`, with one P2 finding in thread
+`PRRT_kwDOTU-tqc6szeES`. The empty-store publication correction and failing-first
+evidence are recorded above. Both authorized rounds are complete; no third round
+is requested. Final thread closure and hosted head checks follow publication of
+that verified correction.
 
 ## Limits
 

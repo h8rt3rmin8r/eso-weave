@@ -61,6 +61,12 @@ An identical fight returns the first retained identity as already present. A
 deliberately deleted native fight rejects that compatibility batch with a
 controlled suppression error and no partial writes. Source files remain unchanged.
 
+For a newly discovered source, the application prepares a complete empty store
+privately and publishes it without replacement through the same root cancellation
+and commit gate. An empty log therefore exposes either an absent store or valid
+empty history, never an uninitialized public database. Existing invalid databases
+remain rejected and unchanged.
+
 Store schema 7 retains the existing native run/fight tables, accepting canonical
 native schemas 1 and 2. Schema 1-6 migration preserves original rows, canonical
 bytes and hashes. Logical aliases, validated ingest checkpoints, explicit-deletion

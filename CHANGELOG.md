@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Publish a complete empty encounter store through the native commit gate so empty logs cannot expose an uninitialized public database.
 - Check logical aliases and deletion suppression before completed-file native compatibility imports, retaining first accepted identities and rejecting deleted evidence without partial writes.
 - Release bounded native candidate slots when a source pathname disappears during rotation, retaining its durable checkpoint for a later return.
 - Keep accepted documentation connections in blocking mode under the existing read/write deadlines, preventing premature Windows failures before request bytes arrive.

@@ -1,6 +1,6 @@
 //! Atomic incremental ingest, immutable logical aliases and rebuildable results.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{
@@ -143,11 +143,25 @@ pub struct NativeIngestWriter {
 /// Final commit is admitted while the application's cancellation gate is held.
 pub struct NativeCommit<'connection> {
     transaction: Option<Transaction<'connection>>,
+    publication: Option<PreparedStore>,
     committed: bool,
+}
+
+struct PreparedStore {
+    temporary: tempfile::TempPath,
+    destination: PathBuf,
 }
 
 impl NativeCommit<'_> {
     pub fn commit(&mut self) -> Result<(), EncounterError> {
+        if let Some(prepared) = self.publication.take() {
+            prepared
+                .temporary
+                .persist_noclobber(&prepared.destination)
+                .map_err(|error| error.error)?;
+            self.committed = true;
+            return Ok(());
+        }
         let transaction = self.transaction.take().ok_or_else(|| {
             EncounterError::Validation("native transaction already finalized".into())
         })?;
@@ -166,6 +180,19 @@ impl NativeIngestWriter {
         path: impl AsRef<Path>,
         cancellation: CancellationToken,
     ) -> Result<Self, EncounterError> {
+        Self::open_with_finalizer(path, cancellation, |commit| commit.commit())
+    }
+
+    /// Publish a fully initialized empty store only under the caller's commit
+    /// gate. Existing stores are opened strictly and are never replaced.
+    pub fn open_with_finalizer<F>(
+        path: impl AsRef<Path>,
+        cancellation: CancellationToken,
+        finalize: F,
+    ) -> Result<Self, EncounterError>
+    where
+        F: FnOnce(&mut NativeCommit<'_>) -> Result<(), EncounterError>,
+    {
         let path = path.as_ref();
         if cancellation.is_cancelled() {
             return invalid("native store opening cancelled");
@@ -176,28 +203,53 @@ impl NativeIngestWriter {
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)?;
+                let parent = path
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+                std::fs::create_dir_all(parent)?;
+                let temporary = tempfile::Builder::new()
+                    .prefix(".native-store-")
+                    .tempfile_in(parent)?
+                    .into_temp_path();
+                let mut prepared = Connection::open(&temporary)?;
+                let transaction =
+                    prepared.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                create_store(&transaction)?;
+                transaction.commit()?;
+                prepared.close().map_err(|(_, error)| error)?;
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&temporary)?
+                    .sync_all()?;
+                if cancellation.is_cancelled() {
+                    return invalid("native store opening cancelled");
+                }
+                let mut commit = NativeCommit {
+                    transaction: None,
+                    publication: Some(PreparedStore {
+                        temporary,
+                        destination: path.to_path_buf(),
+                    }),
+                    committed: false,
+                };
+                finalize(&mut commit)?;
+                if !commit.committed {
+                    return invalid("native store initialization was not admitted");
                 }
             }
             Err(error) => return Err(error.into()),
         }
-        let connection = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-        )?;
+        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         connection.busy_timeout(Duration::from_millis(100))?;
         let token = cancellation.clone();
         connection.progress_handler(1000, Some(move || token.is_cancelled()))?;
         let version: u32 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
         if version == 0 {
-            if !super::schema_is_empty(&connection)? {
-                return invalid("encounter store has an unrecognized schema");
-            }
-        } else {
-            super::validate_integrity(&connection)?;
-            super::validate_store_contents(&connection)?;
+            return invalid("encounter store has an unrecognized schema");
         }
+        super::validate_integrity(&connection)?;
+        super::validate_store_contents(&connection)?;
         if cancellation.is_cancelled() {
             return invalid("native store opening cancelled");
         }
@@ -270,12 +322,7 @@ impl NativeIngestWriter {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let version: u32 = transaction.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version == 0 {
-            create_store(&transaction)?;
-        } else {
-            super::migrate_for_write(&transaction)?;
-        }
+        super::migrate_for_write(&transaction)?;
         let previous = checkpoint_head(&transaction, &batch.source_key)?;
         if previous.as_ref().map(|c| c.revision) != batch.expected_revision {
             return invalid("native checkpoint revision conflict");
@@ -325,6 +372,7 @@ impl NativeIngestWriter {
         )?;
         let mut commit = NativeCommit {
             transaction: Some(transaction),
+            publication: None,
             committed: false,
         };
         finalize(&mut commit)?;
@@ -788,6 +836,7 @@ impl NativeIngestWriter {
         }
         let mut commit = NativeCommit {
             transaction: Some(transaction),
+            publication: None,
             committed: false,
         };
         finalize(&mut commit)?;

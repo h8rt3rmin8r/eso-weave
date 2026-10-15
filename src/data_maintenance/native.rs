@@ -468,13 +468,19 @@ fn run(
             && now >= store_retry
             && (!sources.is_empty() || history.store_path().is_file())
         {
-            let opening_token = scans
-                .values()
-                .next()
-                .expect("eligible scans checked above")
-                .token
-                .clone();
-            match NativeIngestWriter::open_with_cancellation(history.store_path(), opening_token) {
+            let opening_scan = scans.values().next().expect("eligible scans checked above");
+            let opening_token = opening_scan.token.clone();
+            match NativeIngestWriter::open_with_finalizer(
+                history.store_path(),
+                opening_token.clone(),
+                |commit| {
+                    control.with_native_commit(
+                        &opening_scan.context.addons_root,
+                        &opening_token,
+                        || commit.commit(),
+                    )
+                },
+            ) {
                 Ok(opened) => {
                     writer = Some(opened);
                     store_failures = 0;

@@ -45,6 +45,131 @@ fn install_fixture(
 }
 
 #[test]
+fn empty_native_source_keeps_retained_reads_coherent_through_disable_absence_and_append() {
+    use eso_weave::beacon::Environment;
+    use eso_weave::data_maintenance::{Context, NativeMaintenanceRuntime, NativeServicePhase};
+    use eso_weave::database_query::{DatabaseQueryService, QueryRequest};
+    use eso_weave::encounter::EncounterHistoryService;
+    let root = tempfile::tempdir().unwrap();
+    let addons = install_fixture(root.path(), Environment::Live);
+    let logs = addons.parent().unwrap().join("Logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let source = logs.join("Encounter.log");
+    std::fs::write(&source, []).unwrap();
+    let history = EncounterHistoryService::new(
+        root.path().join("application"),
+        root.path().join("absent-catalog.sqlite"),
+    );
+    let control = MaintenanceControl::new(DataMaintenancePrefs {
+        catalog_disabled: true,
+        native_processing_disabled: true,
+    });
+    control.set_presence(true);
+    let runtime = NativeMaintenanceRuntime::spawn_with_contexts(
+        history.clone(),
+        control.clone(),
+        vec![Context {
+            addons_root: addons.clone(),
+            environment: Environment::Live,
+        }],
+    );
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(history.snapshot().unwrap().is_empty());
+    assert!(!history.store_path().exists());
+    control.apply(
+        DataMaintenancePrefs {
+            catalog_disabled: true,
+            native_processing_disabled: false,
+        },
+        true,
+    );
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !history.store_path().exists()
+        || control.native_observation().phase != NativeServicePhase::Waiting
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "empty source was not observed"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(history.snapshot().unwrap().is_empty());
+    assert!(eso_weave::encounter::list_encounters(history.store_path())
+        .unwrap()
+        .is_empty());
+    let queries = DatabaseQueryService::new(
+        root.path().join("absent-catalog.sqlite"),
+        Some(history.store_path().to_path_buf()),
+    );
+    let tokio = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    tokio.block_on(async {
+        let inventory = queries
+            .inventory(tokio_util::sync::CancellationToken::new())
+            .await
+            .unwrap();
+        let encounters = inventory
+            .databases
+            .iter()
+            .find(|d| d.database_id == "encounters")
+            .unwrap();
+        assert!(encounters.available);
+        assert!(encounters
+            .objects
+            .iter()
+            .any(|o| o.name == "native_encounters"));
+        queries
+            .execute(
+                "encounters",
+                QueryRequest::new("SELECT count(*) FROM native_encounters"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+    });
+    control.apply(
+        DataMaintenancePrefs {
+            catalog_disabled: true,
+            native_processing_disabled: true,
+        },
+        true,
+    );
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(history.snapshot().unwrap().is_empty());
+    assert_eq!(std::fs::read(&source).unwrap(), Vec::<u8>::new());
+    eso_weave::beacon::uninstall(&addons, eso_weave::beacon::RunningState::NotRunning).unwrap();
+    control.set_presence(false);
+    assert!(history.snapshot().unwrap().is_empty());
+    tokio.block_on(async {
+        queries
+            .execute(
+                "encounters",
+                QueryRequest::new("SELECT count(*) FROM native_encounters"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+    });
+    let bytes = native_run(1_700_000_000_000);
+    std::fs::write(&source, &bytes).unwrap();
+    assert!(history.snapshot().unwrap().is_empty());
+    install_fixture(root.path(), Environment::Live);
+    control.apply(
+        DataMaintenancePrefs {
+            catalog_disabled: true,
+            native_processing_disabled: false,
+        },
+        true,
+    );
+    control.set_presence(true);
+    wait_count(history.store_path(), 1);
+    assert_eq!(std::fs::read(&source).unwrap(), bytes.as_bytes());
+    drop(runtime);
+}
+
+#[test]
 fn automatic_native_catchup_append_restart_copy_and_truncation_need_no_viewer_or_catalog() {
     use eso_weave::beacon::Environment;
     use eso_weave::data_maintenance::{Context, NativeMaintenanceRuntime};

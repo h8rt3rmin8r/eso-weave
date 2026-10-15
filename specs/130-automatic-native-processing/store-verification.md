@@ -125,3 +125,23 @@ the retained native suite. `target/s129-s130-review1-store-final.log` records th
 expanded focused rerun: 75 passed (14 ingest, 23 native, 27 import and 11 history),
 including mixed deleted/new batch rollback and duplicate logical runs. Formatting completed through the hidden foreground runner; final
 shared gates and PR review disposition remain with the primary workflow.
+
+## Codex review round 2, empty source initialization
+
+The real runtime empty-log journey reproduced StoreInvalid before the fix
+(`target/s129-s130-review2-empty-red.log`). New-store construction now commits a
+complete empty schema7 database privately, closes and syncs it, and publishes it
+without replacement through NativeCommit under the existing root/token gate.
+Public readers see an absent or valid store. Existing stores still use strict
+validation; zero-version and foreign-schema files are rejected unchanged.
+
+Omitted/rejected admission leaves the public path absent and removes only the
+owned private candidate. A destination created before publication is preserved.
+The valid empty store supports snapshot/list/load/native-load/backup and database
+queries through disable and addon absence; later native append ingests normally.
+Source bytes remain exact. Existing batch migration and raw/progress commit
+boundaries are unchanged.
+
+`target/s129-s130-review2-store-final.log` records 94 passing focused tests:
+10 database-query, 11 history, 27 import, 16 ingest, 23 native and 7 runtime tests.
+The primary receipt records final aggregate Rust/release gates and thread closure.
