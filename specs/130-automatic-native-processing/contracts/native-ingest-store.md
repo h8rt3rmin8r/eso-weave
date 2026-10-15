@@ -226,6 +226,12 @@ retains checkpoints, aliases needed for suppression, and tombstones. New genuine
 fight identities remain eligible. Legacy addon deletion keeps its existing source
 semantics. Removing a viewer does not invoke deletion.
 
+The retained completed-file native compatibility importer consults these same
+logical aliases before inserting schema1 rows. An existing logical fight returns
+the first retained identity as already present. A deleted logical fight rejects
+the compatibility batch with a controlled suppression error and rolls back the
+whole transaction; it cannot resurrect evidence or add partial run/order rows.
+
 Deleting raw observations also invalidates their rebuildable derivations. Backup
 validation includes all new tables so restored checkpoints and deletion intent
 remain coherent. SQLite read-only clients and backup see an old or new committed

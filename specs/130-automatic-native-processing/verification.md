@@ -65,31 +65,40 @@ rerunning. Final full-suite results are recorded below.
 
 ## Final local gates
 
-Post-publication inspection found permanently disappeared filenames could retain
-candidate slots indefinitely. The new disappeared_sources_release regression
-failed before the fix, then passed after NotFound retires only the in-memory
-candidate while retaining its checkpoint. Full formatting/Clippy/locked tests
-passed again: **1189 passed, zero failed/ignored**, including all local-service
-tests (`target/s130-review-{fmt,clippy,full}.log`). Red evidence is
-`target/s129-s130-disappearance-red.log`.
-The review-stage release executable, 10 embedded guide tests and one connection
-regression also passed (`target/s130-review-release.log`,
-`target/s130-review-embedded-guide-full.log`,
-`target/s130-review-embedded-connection.log`).
+Initial aggregate verification passed 1188 tests across 53 target/doc-test
+summaries with zero failures/ignored (`target/s130-initial-full.log`). Formatting,
+all-target/all-feature Clippy and release binary/documentation checks passed.
+The release guide passed 10 tests and the connection regression passed 1 test.
 
-The aggregate Rust gates passed: `cargo fmt --all -- --check`,
-`cargo clippy --all-targets --all-features --locked -- -D warnings`, and
-`cargo test --all --locked --no-fail-fast`. Across 53 target/doc-test summaries,
-**1188 tests passed, zero failed and zero ignored**. Evidence:
-`target/s130-initial-{fmt,clippy,full}.log`. The release executable build passed
-(`target/s130-initial-release.log`). Release-profile embedded guide tests passed
-10/10 and the accepted nonblocking-connection regression passed 1/1
-(`target/s130-initial-embedded-guide-full.log` and
-`target/s130-initial-embedded-connection.log`). Trust policy (13 unit tests,
-seven workflows and 54 local skills), exact brand policy, release-note generator
-and Debian validator regressions passed under the hidden foreground runner.
-The primary final text audit covered 104 changed/new text files and found no
-UTF-8, BOM, CRLF or mojibake errors. `git diff --check` passed.
+Post-publication inspection found permanently disappeared filenames could retain
+candidate slots indefinitely. The disappeared_sources_release regression failed
+before the fix, then passed after NotFound retired only the in-memory candidate
+while retaining its checkpoint. Full gates passed again with 1189 tests
+(`target/s130-review-{fmt,clippy,full}.log`), followed by release executable,
+10 guide tests and one connection regression. Red evidence is
+`target/s129-s130-disappearance-red.log`.
+
+Codex review round 1 found compatibility import could duplicate automatic native
+evidence or resurrect deleted native history. Both cases reproduced before the
+fix. Shared logical disposition now runs before any insertion, returns the first
+retained identity for a copy and rolls back a compatibility batch containing
+suppressed evidence. Same-batch duplicate/divergent and mixed new/deleted cases
+are covered. Focused tests passed 75/75; final full formatting, all-target/all-feature
+locked Clippy and locked tests passed **1192 tests, zero failed/ignored**
+(`target/s130-round1-fix-{fmt,clippy,full}.log`). The retained legacy deletion
+expectation now verifies deletion intent, unchanged database and source bytes.
+
+After clarifying that contributor contract, 184 combined documentation/render/
+brand/trust unit tests passed, as did exact brand policy, trust policy (seven
+workflows/54 skills), pinned spelling, book examples/build/link checks, generated
+site and all five browser pass sentinels (`target/s130-review-*.log`). Earlier
+release-note generator and Debian-validator regressions also passed. Final
+review-fix release executable, 10 embedded guide tests and one accepted-connection
+test passed (`target/s130-round1-fix-{release,embedded-guide-full,embedded-connection}.log`).
+
+The primary pre-publication text audit covered 104 changed/new text files with
+zero UTF-8, BOM, CRLF or mojibake errors. Final modified files use the same strict
+encoding and `git diff --check` passes. No timeout or assertion was weakened.
 
 ## Review and owner boundary
 
@@ -100,6 +109,11 @@ issue comment 6193435680; no review submission was present before requesting.
 Round accounting, final-head hosted checks and unresolved-thread state will be
 recorded here after completion. The agent stops before merge; no tag or release
 is authorized or created.
+
+Round 1 completed at 2026-10-15T13:43:28Z on `e6ce912` with one P1 finding,
+review `PRR_kwDOTU-tqc8AAAABSdt_HQ`, thread `PRRT_kwDOTU-tqc6szFLY`.
+The compatibility fix and its failing-first/aggregate evidence are recorded above.
+A second and final authorized review will inspect the corrected implementation.
 
 ## Limits
 

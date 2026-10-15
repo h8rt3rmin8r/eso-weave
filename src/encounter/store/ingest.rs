@@ -11,7 +11,7 @@ use super::{ensure_session_order, invalid, is_sha256, sha256, to_db, EncounterEr
 use crate::catalog_update::CancellationToken;
 use crate::encounter::{
     canonical_native_bytes, logical_native_identity, project_native_encounter, NativeCheckpoint,
-    NativeCompletedFight, NativeEncounter, MAX_NATIVE_CHECKPOINT_BYTES,
+    NativeCompletedFight, NativeEncounter, NativeLogicalIdentity, MAX_NATIVE_CHECKPOINT_BYTES,
 };
 
 const ALIASES: &str = r#"CREATE TABLE native_logical_aliases (
@@ -480,6 +480,53 @@ pub(super) fn remember_alias(
     Ok(())
 }
 
+pub(super) enum LogicalDisposition {
+    Missing,
+    Present {
+        session_id: String,
+        encounter_id: String,
+        content_sha256: String,
+    },
+    Suppressed,
+}
+
+/// All native intake shares deletion and logical identity authority before any
+/// raw run, encounter or first-import order is inserted.
+pub(super) fn logical_disposition(
+    connection: &Connection,
+    logical: &NativeLogicalIdentity,
+) -> Result<LogicalDisposition, EncounterError> {
+    let deleted: Option<String> = connection
+        .query_row(
+            "SELECT evidence_sha256 FROM native_deleted_encounters WHERE fight_key=?1",
+            [&logical.fight_key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(deleted) = deleted {
+        if deleted != logical.evidence_sha256 {
+            return invalid("deleted native encounter identity collision");
+        }
+        return Ok(LogicalDisposition::Suppressed);
+    }
+    let existing: Option<(String,String,String,String)> = connection.query_row("SELECT evidence_sha256,session_id,encounter_id,content_sha256 FROM native_logical_aliases WHERE fight_key=?1",[&logical.fight_key],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional()?;
+    if let Some((fingerprint, session, encounter, hash)) = existing {
+        if fingerprint != logical.evidence_sha256 {
+            return invalid("native logical encounter identity collision");
+        }
+        let present: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM native_encounters WHERE session_id=?1 AND encounter_id=?2 AND content_sha256=?3)",params![session,encounter,hash],|r|r.get(0))?;
+        if !present {
+            return invalid("native alias references unavailable evidence");
+        }
+        return Ok(LogicalDisposition::Present {
+            session_id: session,
+            encounter_id: encounter,
+            content_sha256: hash,
+        });
+    }
+    Ok(LogicalDisposition::Missing)
+}
+
 fn insert_completed(
     transaction: &Transaction<'_>,
     fight: &NativeCompletedFight,
@@ -492,31 +539,16 @@ fn insert_completed(
     }
     let canonical = canonical_native_bytes(capture)?;
     let hash = sha256(&canonical);
-    let deleted: Option<String> = transaction
-        .query_row(
-            "SELECT evidence_sha256 FROM native_deleted_encounters WHERE fight_key=?1",
-            [&logical.fight_key],
-            |r| r.get(0),
-        )
-        .optional()?;
-    if let Some(deleted) = deleted {
-        if deleted != logical.evidence_sha256 {
-            return invalid("deleted native encounter identity collision");
+    match logical_disposition(transaction, &logical)? {
+        LogicalDisposition::Suppressed => {
+            receipt.suppressed_count = 1;
+            return Ok(());
         }
-        receipt.suppressed_count = 1;
-        return Ok(());
-    }
-    let existing: Option<(String,String,String)> = transaction.query_row("SELECT evidence_sha256,session_id,encounter_id FROM native_logical_aliases WHERE fight_key=?1",[&logical.fight_key],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
-    if let Some((fingerprint, session, encounter)) = existing {
-        if fingerprint != logical.evidence_sha256 {
-            return invalid("native logical encounter identity collision");
+        LogicalDisposition::Present { .. } => {
+            receipt.already_present_count = 1;
+            return Ok(());
         }
-        let present: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM native_encounters WHERE session_id=?1 AND encounter_id=?2)",params![session,encounter],|r|r.get(0))?;
-        if !present {
-            return invalid("native alias references unavailable evidence");
-        }
-        receipt.already_present_count = 1;
-        return Ok(());
+        LogicalDisposition::Missing => {}
     }
     let run_bytes = crate::encounter::native::canonical_native_run_bytes(&capture.run)?;
     let existing_run: Option<Vec<u8>> = transaction

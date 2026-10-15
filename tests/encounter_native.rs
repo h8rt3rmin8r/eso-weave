@@ -193,12 +193,13 @@ fn native_atomic_import_copy_reimport_mixed_history_delete_and_backup() {
         list_encounters(&store).unwrap()[0].encounter_id,
         addon_receipt.encounter_id
     );
-    import_native_log(&ImportRequest::new(&native, &store, Channel::Live)).unwrap();
-    assert_eq!(
-        list_encounters(&store).unwrap()[1].encounter_id,
-        identity.encounter_id
-    );
-    assert_eq!(delete_all(&store).unwrap().deleted_records, 2);
+    let after_delete = std::fs::read(&store).unwrap();
+    let suppressed =
+        import_native_log(&ImportRequest::new(&native, &store, Channel::Live)).unwrap_err();
+    assert!(suppressed.to_string().contains("deliberately deleted"));
+    assert_eq!(std::fs::read(&store).unwrap(), after_delete);
+    assert_eq!(list_encounters(&store).unwrap().len(), 1);
+    assert_eq!(delete_all(&store).unwrap().deleted_records, 1);
     assert!(list_encounters(&store).unwrap().is_empty());
     assert_eq!(std::fs::read(&native).unwrap(), original);
 }

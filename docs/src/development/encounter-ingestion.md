@@ -55,6 +55,12 @@ progress and rebuildable derived results are separate from immutable source
 content. Retained deletion utilities do not cause automatic catchup to resurrect
 deleted fights. Unsupported/corrupt stores are preserved, never silently reset.
 
+The completed-file native compatibility importer checks logical aliases before
+insertion, including schema-1 copies of automatically ingested schema-2 evidence.
+An identical fight returns the first retained identity as already present. A
+deliberately deleted native fight rejects that compatibility batch with a
+controlled suppression error and no partial writes. Source files remain unchanged.
+
 Store schema 7 retains the existing native run/fight tables, accepting canonical
 native schemas 1 and 2. Schema 1-6 migration preserves original rows, canonical
 bytes and hashes. Logical aliases, validated ingest checkpoints, explicit-deletion

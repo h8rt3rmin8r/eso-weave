@@ -103,6 +103,129 @@ fn ingest_copy_alias_preserves_legacy_bytes_identity_and_order() {
 }
 
 #[test]
+fn compatibility_copy_reuses_automatic_identity_bytes_and_first_import_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("history.sqlite");
+    let addon = temp.path().join("addon.lua");
+    let source = temp.path().join("completed.log");
+    std::fs::write(
+        &addon,
+        include_str!("fixtures/encounter/valid-complete.lua"),
+    )
+    .unwrap();
+    std::fs::write(&source, SOURCE).unwrap();
+    import_encounter(&ImportRequest::new(&addon, &path, Channel::Live)).unwrap();
+    let mut writer = NativeIngestWriter::open(&path).unwrap();
+    writer
+        .commit_batch(batch(SOURCE, 'a', None), |c| c.commit())
+        .unwrap();
+    let before = list_encounters(&path).unwrap();
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    let raw: Vec<u8> = connection
+        .query_row("SELECT canonical_json FROM native_encounters", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    drop(connection);
+    let copied = import_native_log(&ImportRequest::new(&source, &path, Channel::Live)).unwrap();
+    assert_eq!(copied.imported_count, 0);
+    assert_eq!(copied.already_present_count, 1);
+    assert_eq!(copied.receipts[0].session_id, before[1].session_id);
+    assert_eq!(copied.receipts[0].encounter_id, before[1].encounter_id);
+    assert_eq!(copied.receipts[0].content_sha256, before[1].content_sha256);
+    assert_eq!(list_encounters(&path).unwrap(), before);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM native_runs", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM encounter_session_order", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT canonical_json FROM native_encounters", [], |r| r
+                .get::<_, Vec<u8>>(0))
+            .unwrap(),
+        raw
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), SOURCE.as_bytes());
+}
+
+#[test]
+fn compatibility_copy_cannot_resurrect_automatic_deletion() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("history.sqlite");
+    let source = temp.path().join("completed.log");
+    std::fs::write(&source, SOURCE).unwrap();
+    let mut writer = NativeIngestWriter::open(&path).unwrap();
+    writer
+        .commit_batch(batch(SOURCE, 'a', None), |c| c.commit())
+        .unwrap();
+    let retained = list_encounters(&path).unwrap().remove(0);
+    delete_encounter(&path, &retained.session_id, &retained.encounter_id).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    assert!(import_native_log(&ImportRequest::new(&source, &path, Channel::Live)).is_err());
+    assert!(list_encounters(&path).unwrap().is_empty());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(std::fs::read(&source).unwrap(), SOURCE.as_bytes());
+    let mixed = format!(
+        "{}{SOURCE}",
+        SOURCE.replace("1700000000000", "1700000100000")
+    );
+    std::fs::write(&source, &mixed).unwrap();
+    assert!(import_native_log(&ImportRequest::new(&source, &path, Channel::Live)).is_err());
+    assert!(list_encounters(&path).unwrap().is_empty());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(std::fs::read(&source).unwrap(), mixed.as_bytes());
+    assert_eq!(
+        writer
+            .commit_batch(batch(SOURCE, 'c', None), |c| c.commit())
+            .unwrap()
+            .suppressed_count,
+        1
+    );
+}
+
+#[test]
+fn compatibility_duplicate_runs_share_one_preflight_identity_and_divergence_rolls_back() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("completed.log");
+    let path = temp.path().join("history.sqlite");
+    let duplicated = format!("{SOURCE}{SOURCE}");
+    std::fs::write(&source, &duplicated).unwrap();
+    let report = import_native_log(&ImportRequest::new(&source, &path, Channel::Live)).unwrap();
+    assert_eq!(report.imported_count, 1);
+    assert_eq!(report.already_present_count, 1);
+    assert_eq!(report.receipts[0].session_id, report.receipts[1].session_id);
+    assert_eq!(
+        report.receipts[0].encounter_id,
+        report.receipts[1].encounter_id
+    );
+    assert_eq!(
+        report.receipts[0].content_sha256,
+        report.receipts[1].content_sha256
+    );
+    assert_eq!(list_encounters(&path).unwrap().len(), 1);
+    let before = std::fs::read(&path).unwrap();
+    let conflict = format!(
+        "{SOURCE}{}",
+        SOURCE.replace("30,END_COMBAT", "31,END_COMBAT")
+    );
+    std::fs::write(&source, &conflict).unwrap();
+    assert!(import_native_log(&ImportRequest::new(&source, &path, Channel::Live)).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(std::fs::read(&source).unwrap(), conflict.as_bytes());
+}
+
+#[test]
 fn ingest_deleted_native_history_does_not_return_from_a_copy_or_backup() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("history.sqlite");

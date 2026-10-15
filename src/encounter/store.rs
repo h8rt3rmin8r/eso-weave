@@ -1728,8 +1728,10 @@ pub(crate) fn append_native_set(
     let mut connection = open_store(store_path, true, true)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     migrate_for_write(&transaction)?;
-    let mut outcomes = Vec::new();
+    let mut receipts = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
+    let mut logical_seen =
+        std::collections::BTreeMap::<String, (String, NativeImportReceipt)>::new();
     let mut runs = std::collections::BTreeMap::new();
     for (capture, (canonical, hash)) in parsed.encounters.iter().zip(prepared) {
         if !seen.insert((&capture.run.session_id, &capture.encounter_id))
@@ -1738,29 +1740,70 @@ pub(crate) fn append_native_set(
         {
             return invalid("native prepared encounter is invalid");
         }
-        let run_bytes = canonical_native_run_bytes(&capture.run)?;
-        if let Some(existing) = runs.insert(
-            capture.run.session_id.clone(),
-            (capture.run.clone(), run_bytes.clone()),
-        ) {
-            if existing.1 != run_bytes {
-                return invalid("native run identity collision");
+        let logical = super::native::logical_native_identity(capture)?;
+        let receipt = if let Some((fingerprint, prior)) = logical_seen.get(&logical.fight_key) {
+            if *fingerprint != logical.evidence_sha256 {
+                return invalid("native logical encounter identity collision");
             }
-        }
-        let existing: Option<(String,Vec<u8>)> = transaction.query_row(
+            NativeImportReceipt {
+                outcome: ImportOutcome::AlreadyPresent,
+                ..prior.clone()
+            }
+        } else {
+            match ingest::logical_disposition(&transaction, &logical)? {
+                ingest::LogicalDisposition::Suppressed => return invalid(
+                    "native encounter was deliberately deleted; compatibility import suppressed",
+                ),
+                ingest::LogicalDisposition::Present {
+                    session_id,
+                    encounter_id,
+                    content_sha256,
+                } => NativeImportReceipt {
+                    outcome: ImportOutcome::AlreadyPresent,
+                    session_id,
+                    encounter_id,
+                    content_sha256,
+                },
+                ingest::LogicalDisposition::Missing => {
+                    let existing: Option<(String,Vec<u8>)> = transaction.query_row(
             "SELECT content_sha256,canonical_json FROM native_encounters WHERE session_id=?1 AND encounter_id=?2",
             params![capture.run.session_id,capture.encounter_id],
             |row|Ok((row.get(0)?,row.get(1)?))
         ).optional()?;
-        outcomes.push(match existing {
-            Some((existing_hash, existing_bytes))
-                if existing_hash == *hash && existing_bytes == *canonical =>
-            {
-                ImportOutcome::AlreadyPresent
+                    let outcome = match existing {
+                        Some((existing_hash, existing_bytes))
+                            if existing_hash == *hash && existing_bytes == *canonical =>
+                        {
+                            ImportOutcome::AlreadyPresent
+                        }
+                        Some(_) => return invalid("native encounter identity collision"),
+                        None => ImportOutcome::Imported,
+                    };
+                    NativeImportReceipt {
+                        outcome,
+                        session_id: capture.run.session_id.clone(),
+                        encounter_id: capture.encounter_id.clone(),
+                        content_sha256: hash.clone(),
+                    }
+                }
             }
-            Some(_) => return invalid("native encounter identity collision"),
-            None => ImportOutcome::Imported,
-        });
+        };
+        if receipt.outcome == ImportOutcome::Imported {
+            let run_bytes = canonical_native_run_bytes(&capture.run)?;
+            if let Some(existing) = runs.insert(
+                capture.run.session_id.clone(),
+                (capture.run.clone(), run_bytes.clone()),
+            ) {
+                if existing.1 != run_bytes {
+                    return invalid("native run identity collision");
+                }
+            }
+        }
+        logical_seen.insert(
+            logical.fight_key,
+            (logical.evidence_sha256, receipt.clone()),
+        );
+        receipts.push(receipt);
     }
     for (id, (_, canonical)) in &runs {
         let existing: Option<Vec<u8>> = transaction
@@ -1775,8 +1818,10 @@ pub(crate) fn append_native_set(
         }
     }
     // Allocation follows file order, not hash-key order.
-    for capture in &parsed.encounters {
-        ensure_session_order(&transaction, &capture.run.session_id)?;
+    for (capture, receipt) in parsed.encounters.iter().zip(&receipts) {
+        if receipt.outcome == ImportOutcome::Imported {
+            ensure_session_order(&transaction, &capture.run.session_id)?;
+        }
     }
     for (run, canonical) in runs.values() {
         transaction.execute(
@@ -1790,10 +1835,10 @@ pub(crate) fn append_native_set(
             ],
         )?;
     }
-    for ((capture, (canonical, hash)), outcome) in
-        parsed.encounters.iter().zip(prepared).zip(&outcomes)
+    for ((capture, (canonical, hash)), receipt) in
+        parsed.encounters.iter().zip(prepared).zip(&receipts)
     {
-        if *outcome == ImportOutcome::Imported {
+        if receipt.outcome == ImportOutcome::Imported {
             let (started, finished) = native_times(capture)?;
             transaction.execute(
                 "INSERT INTO native_encounters VALUES (?1,?2,?3,?4,?5,1,?6,?7,?8,?9,?10,?11,?12,?13)",
@@ -1804,30 +1849,23 @@ pub(crate) fn append_native_set(
                     to_db((capture.unknown_record_count+capture.unknown_context_count) as u64)?,canonical]
             )?;
         }
-        ingest::remember_alias(&transaction, capture, hash)?;
+        if receipt.session_id == capture.run.session_id
+            && receipt.encounter_id == capture.encounter_id
+            && receipt.content_sha256 == *hash
+        {
+            ingest::remember_alias(&transaction, capture, hash)?;
+        }
     }
     transaction.commit()?;
-    let receipts = parsed
-        .encounters
-        .iter()
-        .zip(prepared)
-        .zip(&outcomes)
-        .map(|((capture, (_, hash)), outcome)| NativeImportReceipt {
-            outcome: *outcome,
-            session_id: capture.run.session_id.clone(),
-            encounter_id: capture.encounter_id.clone(),
-            content_sha256: hash.clone(),
-        })
-        .collect();
     Ok(NativeImportReport {
         source_sha256,
-        imported_count: outcomes
+        imported_count: receipts
             .iter()
-            .filter(|o| **o == ImportOutcome::Imported)
+            .filter(|receipt| receipt.outcome == ImportOutcome::Imported)
             .count(),
-        already_present_count: outcomes
+        already_present_count: receipts
             .iter()
-            .filter(|o| **o == ImportOutcome::AlreadyPresent)
+            .filter(|receipt| receipt.outcome == ImportOutcome::AlreadyPresent)
             .count(),
         source: parsed.report.clone(),
         receipts,

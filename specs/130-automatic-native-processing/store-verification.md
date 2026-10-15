@@ -17,8 +17,9 @@ SQLite/service behavior. It is not installed-game or platform field evidence.
   generation checkpoints can be archived before shorter replacement generations.
 - Logical aliases preserve first accepted physical evidence for copies and reject
   divergent logical identities. Native deletion suppression survives catchup,
-  restart and backups. Existing explicit legacy compatibility reimport remains
-  compatible; automatic ingestion honors deletion intent.
+  restart and backups. Both automatic and contributor compatibility intake honor
+  deletion intent; contributor batches return a controlled error and roll back
+  when any logical fight was deliberately deleted.
 - Background EncounterProcessor owns existing typed addon projections and
   recommendations, uses actual historical Catalog receipts and records controlled
   unavailable results. Native supported facts remain independent of Catalog.
@@ -100,3 +101,27 @@ collection commands, manual selection or rollback instructions.
 `target/s129-s130-worker-service-final.log` records the final 20 passing Catalog
 service tests after that helper cleanup. `cargo fmt --all` completed successfully;
 final shared formatting/Clippy/full-test gates remain with the primary workflow.
+
+## Codex review round 1, compatibility intake identity
+
+The P1 finding reproduced in two failing-first regressions:
+`target/s129-s130-review1-store-red.log`. A schema-1 contributor import of already
+retained automatic schema-2 evidence inserted another raw row, and the same path
+could recreate deleted schema-2 history.
+
+Both intake paths now call one logical disposition check before inserting any
+run, raw fight or first-import order. A matching retained alias returns its actual
+session ID, encounter ID and canonical hash with AlreadyPresent; first canonical
+bytes and ordering remain authoritative. Tombstoned evidence produces a redacted
+deletion-suppressed error and rolls back the whole contributor batch, including
+otherwise-new fights. No suppression is misreported as stored or already present,
+and no report schema change was needed. Copies repeated within one contributor
+batch also share one logical preflight identity; divergent fingerprints fail
+atomically. The earlier legacy resurrection assertion now proves deletion intent,
+database non-mutation and exact source preservation.
+
+`target/s129-s130-review1-store-green.log` records both new regressions passing with
+the retained native suite. `target/s129-s130-review1-store-final.log` records the
+expanded focused rerun: 75 passed (14 ingest, 23 native, 27 import and 11 history),
+including mixed deleted/new batch rollback and duplicate logical runs. Formatting completed through the hidden foreground runner; final
+shared gates and PR review disposition remain with the primary workflow.
