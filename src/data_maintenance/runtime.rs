@@ -89,6 +89,7 @@ pub struct MaintenanceRuntime {
     latest: Arc<Mutex<Option<CatalogResolution>>>,
     coordinator: Option<JoinHandle<()>>,
     worker: Option<JoinHandle<()>>,
+    native: Option<super::NativeMaintenanceRuntime>,
 }
 
 impl MaintenanceRuntime {
@@ -151,6 +152,14 @@ impl MaintenanceRuntime {
         timing: RuntimeTiming,
     ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
+        let native = history.clone().map(|service| match contexts.clone() {
+            Some(contexts) => super::NativeMaintenanceRuntime::spawn_with_contexts(
+                service,
+                control.clone(),
+                contexts,
+            ),
+            None => super::NativeMaintenanceRuntime::spawn(service, control.clone()),
+        });
         let latest = Arc::new(Mutex::new(None));
         let (send, receive) = mpsc::sync_channel::<Job>(1);
         let worker_stop = stop.clone();
@@ -197,6 +206,7 @@ impl MaintenanceRuntime {
             latest,
             coordinator: Some(coordinator),
             worker: Some(worker),
+            native,
         }
     }
 
@@ -209,6 +219,7 @@ impl Drop for MaintenanceRuntime {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
         self.control.cancel_all_jobs();
+        drop(self.native.take());
         let deadline = Instant::now() + Duration::from_secs(2);
         for slot in [&mut self.coordinator, &mut self.worker] {
             if let Some(join) = slot.take() {

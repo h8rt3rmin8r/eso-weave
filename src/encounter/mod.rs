@@ -17,8 +17,8 @@ use crate::catalog::Channel;
 use crate::saved_variables::{self, EmptyTable, ParseLimits};
 
 pub use history::{
-    EncounterHistoryService, EncounterIdentity, HistoryDiagnostic, HistoryDiagnosticKind,
-    SavedRecordingReadiness, SavedSourceInspection,
+    EncounterHistoryService, EncounterIdentity, EncounterProcessor, HistoryDiagnostic,
+    HistoryDiagnosticKind, ProcessingReceipt, SavedRecordingReadiness, SavedSourceInspection,
 };
 pub use metrics::{
     calculate_projection, canonical_projection_bytes, project_encounter, AbilityDamageShare,
@@ -35,20 +35,25 @@ pub use model::{
     RawSourceKind, RawValue, RawValueType, SourceProvenance,
 };
 pub use native::{
-    canonical_native_bytes, import_native_log, inspect_native_log, parse_native_log,
-    project_native_encounter, read_native_source, validate_native_encounter, NativeEncounter,
-    NativeHeader, NativeImportReceipt, NativeImportReport, NativeProjection, NativeRecord,
-    NativeRun, NativeSourceInspection, NativeSourceReport, ParsedNativeLog, MAX_NATIVE_FILE_BYTES,
-    NATIVE_SCHEMA_VERSION,
+    canonical_native_bytes, import_native_log, inspect_native_log, logical_native_identity,
+    logical_native_identity_v1, parse_native_log, project_native_encounter, read_native_source,
+    validate_native_encounter, IncrementalNativeParser, NativeCheckpoint, NativeCompletedFight,
+    NativeDiagnostic, NativeDiagnosticCode, NativeEncounter, NativeFeed, NativeHeader,
+    NativeImportReceipt, NativeImportReport, NativeLogicalIdentity, NativeParserError,
+    NativeParserStatus, NativePosition, NativeProjection, NativeRecord, NativeRun,
+    NativeSourceInspection, NativeSourceReport, NativeTermination, NativeTerminationReason,
+    ParsedNativeLog, MAX_NATIVE_CHECKPOINT_BYTES, MAX_NATIVE_FEED_BYTES, MAX_NATIVE_FILE_BYTES,
+    NATIVE_CHECKPOINT_VERSION, NATIVE_INCREMENTAL_SCHEMA_VERSION, NATIVE_SCHEMA_VERSION,
 };
 pub use replay::{assess_replay, ReplayAssessment};
 pub use store::{
     backup_store, delete_all, delete_encounter, list_encounters, load_encounter,
-    load_native_encounter,
+    load_native_encounter, NativeCommit, NativeIngestBatch, NativeIngestCheckpoint,
+    NativeIngestReceipt, NativeIngestWriter,
 };
 
 pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
-pub const STORE_SCHEMA_VERSION: u32 = 6;
+pub const STORE_SCHEMA_VERSION: u32 = 7;
 pub const CANONICAL_FORMAT_VERSION: u32 = 2;
 pub const MAX_CAPTURE_BYTES: u64 = crate::data_addon::MAX_SAVED_VARIABLES_BYTES;
 pub const MAX_EVENTS: usize = 100_000;

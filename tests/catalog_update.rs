@@ -7,8 +7,7 @@ use eso_weave::catalog::{CatalogRelease, Channel};
 use eso_weave::catalog_pipeline::{build_candidate, inspect_candidate, PipelineRun};
 use eso_weave::catalog_update::{
     resolve_availability, AvailabilityInput, CancellationToken, CatalogSelection, CatalogTarget,
-    CatalogUpdateService, CatalogUpdateWorker, CheckFreshness, LiveUpdateState, UpdateError,
-    UpdateStage, WorkerEvent,
+    CatalogUpdateService, CheckFreshness, LiveUpdateState, UpdateError, UpdateStage,
 };
 use eso_weave::collector::{import_capture, ImportRequest};
 use eso_weave::database_query::{DatabaseQueryService, QueryRequest, ResultValue};
@@ -17,14 +16,6 @@ use sha2::{Digest, Sha256};
 
 const LIVE_BUNDLE: &str = "specs/070-catalog-compiler/fixtures/minimal-live.json";
 const CHANGED_LIVE_BUNDLE: &str = "specs/070-catalog-compiler/fixtures/minimal-live-changed.json";
-
-#[test]
-fn desktop_has_no_shared_saved_variables_deletion_command() {
-    let worker = include_str!("../src/catalog_update/worker.rs");
-    assert!(!worker.contains("DeleteCapture"));
-    assert!(!worker.contains("delete_capture"));
-    assert!(!worker.contains("remove_file(path)"));
-}
 
 struct Sandbox {
     root: tempfile::TempDir,
@@ -661,7 +652,9 @@ fn encounter_only_rewrites_do_not_advance_catalog_freshness_or_provenance() {
         .unwrap_err();
     assert!(error
         .to_string()
-        .contains("The saved addon data has not changed"));
+        .contains("The saved Catalog generation has not changed"));
+    assert!(!error.to_string().contains("/ewcollect"));
+    assert!(!error.to_string().contains("/reloadui"));
 }
 
 #[test]
@@ -745,35 +738,30 @@ fn startup_recovery_removes_only_private_staging() {
 }
 
 #[test]
-fn worker_failures_are_redacted_and_write_terminal_receipts() {
+fn missing_candidate_failure_is_redacted_and_never_claims_install_success() {
     let sandbox = Sandbox::new();
-    let worker = CatalogUpdateWorker::spawn(sandbox.service.clone());
-    assert!(worker.install("a".repeat(64), true));
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    let failure = loop {
-        match worker.try_recv() {
-            Ok(WorkerEvent::Failed(failure)) => break failure,
-            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => {
-                assert!(
-                    std::time::Instant::now() < deadline,
-                    "worker event timed out"
-                );
-                std::thread::yield_now();
-            }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                panic!("worker disconnected before its terminal event")
-            }
-        }
-    };
-    assert_eq!(failure.code, "update-invalid");
+    let before = sandbox.service.load_selection().unwrap();
+    let missing = sandbox
+        .service
+        .roots()
+        .import_root()
+        .join("live")
+        .join("a".repeat(64));
+    let failure = sandbox
+        .service
+        .install(missing, true, &CancellationToken::new(), |_| {})
+        .unwrap_err();
+    assert!(matches!(failure, UpdateError::Io(_)));
     assert!(!failure
-        .message
+        .to_string()
         .contains(sandbox.root.path().to_string_lossy().as_ref()));
-    drop(worker);
-    let receipt =
-        fs::read_to_string(sandbox.service.roots().root().join("receipts/event-1.json")).unwrap();
-    assert!(receipt.contains("\"result\": \"failed\""));
-    assert!(!receipt.contains(sandbox.root.path().to_string_lossy().as_ref()));
+    assert_eq!(sandbox.service.load_selection().unwrap(), before);
+    assert!(!sandbox
+        .service
+        .roots()
+        .root()
+        .join("receipts/1.json")
+        .exists());
 }
 
 #[test]
@@ -788,39 +776,17 @@ fn startup_applies_saved_selection_even_when_candidate_discovery_fails() {
     fs::remove_dir_all(&live_import).unwrap();
     fs::write(&live_import, b"not a directory").unwrap();
 
-    let worker = CatalogUpdateWorker::spawn(sandbox.service.clone());
-    assert!(worker.startup());
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    let (target, release, discovery_failed) = loop {
-        match worker.try_recv() {
-            Ok(WorkerEvent::StartupComplete {
-                resolution,
-                discovery_failure,
-                ..
-            }) => {
-                let release = resolution.access.release().unwrap().unwrap();
-                break (resolution.target, release, discovery_failure.is_some());
-            }
-            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => {
-                assert!(
-                    std::time::Instant::now() < deadline,
-                    "worker event timed out"
-                );
-                std::thread::yield_now();
-            }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                panic!("worker disconnected before startup resolution")
-            }
-        }
-    };
+    let resolution = sandbox.service.resolve_catalog();
+    let release = resolution.access.release().unwrap().unwrap();
+    assert!(sandbox.service.discover_candidates().is_err());
     assert_eq!(
-        target,
+        resolution.target,
         CatalogTarget::User {
             candidate_sha256: installed.candidate.candidate_sha256
         }
     );
     assert_eq!(release.catalog_version, "s074-live-2");
-    assert!(discovery_failed);
+    assert_eq!(sandbox.service.resolve_catalog().target, resolution.target);
 }
 
 fn request(bundle: &[u8], catalog_version: &str) -> Value {

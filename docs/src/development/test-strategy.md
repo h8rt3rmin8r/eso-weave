@@ -11,7 +11,7 @@ layer proves and what it does not prove.
 | Pure engines and controllers | `tests/input_engine.rs`, `tests/weave_engine.rs`, `tests/fishing.rs`, `tests/potion.rs` | Decisions, state transitions, ordering, deadlines, cancellation, and no replay without live ESO or device input |
 | Protocol codec and reader | `tests/pixelbus.rs`, `tests/pixelbus_display.rs` | Exact colors, markers, checksums, versions, geometry, freshness, aggregate events, corruption, and display reconciliation |
 | Embedded addon contract | `tests/beacon.rs` parses `addon/PixelBeacon/PixelBeacon.lua` and its manifest | Rust and Lua constants agree, required ESO APIs and events remain present, lifecycle invalidation is represented, embedded files stay managed and versioned |
-| Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, data-addon lifecycle and evidence facts remain separate, settings and state persist, retained HUD presentation expires and recovers deterministically, and visible states remain truthful |
+| Application routing and view | `tests/app_view_model.rs`, `tests/app_settings.rs`, `tests/app_session_state.rs` | One event reaches the correct consumers, intents converge, one combined-package lifecycle, independent data preferences and canonical evidence remain coherent, settings and state persist, retained HUD presentation expires and recovers deterministically, and visible states remain truthful |
 | Headless interface geometry | `tests/app_ui_sizing.rs` through `egui_kittest` | Responsive cards, uniquely named addon actions, row ordering, confirmations, meter geometry, disclosure, text allocation, scaling, and layout boundaries without a GPU |
 | Logging and startup | `tests/logging.rs`, `tests/app_log_view.rs`, unit tests in `src/startup/mod.rs` | Runtime filtering, ring eviction, file format, input suppression, log presentation, and pre-GUI notification gating |
 | Packaging and release scripts | `scripts/release-notes.test.sh`, `scripts/validate-debian-package.test.sh`, and release workflow verification | Release-note grammar, bounds, extraction, tag-version agreement, changelog presence, required Debian control fields, and asset gating |
@@ -20,14 +20,14 @@ layer proves and what it does not prove.
 | Bundled documentation | `tests/documentation.rs`, `build.rs`, and release-profile CI builds | Immutable lookup, content types, strict routing, HTTP bounds, reuse, concurrent reads, shutdown, browser seams, and production embedding |
 | Catalog compiler and runtime | `tests/catalog_compiler.rs`, `tests/catalog_runtime.rs` | Strict data-only input, provenance, constraints, deterministic hashes and bytes, atomic rollback, typed read-only queries, and graceful degradation |
 | Catalog packaging | `tests/catalog_packaging.rs` | MSI, Debian, AppImage, and tarball catalog paths plus baseline rights boundaries |
-| Shared data addon and discovery collector | `tests/data_addon.rs`, `tests/collector_addon.rs`, `tests/collector_import.rs` | Combined package identity, isolated catalog and encounter modules, explicit bounded collection, hostile non-executing parsing, truthful coverage, atomic package lifecycle, and marker-gated ownership |
-| Encounter capture addon | `tests/encounter_addon.rs` with vendored Lua 5.1 | Exact production Lua transitions for single and continuous modes, in-game consent, mid-combat activation, session and encounter ordering, selected callback and API values in exact tagged order, aggregate bounds, interruption and failure recovery, legacy preservation, teardown, and source confinement |
-| Encounter normalization replay | `tests/encounter_addon.rs`, `tests/encounter_import.rs` | Production Lua differential replay, normalization profile validation, strict API correlation, projection mutation rejection, loss and legacy outcomes, value-free diagnostics, and store-schema migration |
+| Shared data addon and discovery collector | `tests/data_addon.rs`, `tests/collector_addon.rs`, `tests/collector_import.rs` | Combined package identity, isolated catalog and encounter modules, automatic bounded collection, hostile non-executing parsing, truthful coverage, atomic package lifecycle, and marker-gated ownership |
+| Historical encounter recorder compatibility | `tests/encounter_addon.rs` with vendored Lua 5.1 | Retained historical Lua transitions for single and continuous modes, in-game consent, mid-combat activation, session and encounter ordering, selected callback and API values in exact tagged order, aggregate bounds, interruption and failure recovery, legacy preservation, teardown, and source confinement |
+| Encounter normalization replay | `tests/encounter_addon.rs`, `tests/encounter_import.rs` | Historical Lua differential replay, normalization profile validation, strict API correlation, projection mutation rejection, loss and legacy outcomes, value-free diagnostics, and store-schema migration |
 | Encounter import and raw store | `tests/encounter_import.rs` plus shared parser unit tests | Non-executing bounded legacy and session-spool parsing, whole-batch preflight and transactionality, terminal and raw-loss invariants, exact tagged scalar round trips, authoritative ordinals, growing-snapshot idempotency, byte-preserving store migration, collision preservation, explicit deletion, consistent backup, corruption handling, and production ceilings |
 | Encounter metrics | `tests/encounter_metrics.rs`, `tests/encounter_cli.rs` | Deterministic DPS, effective HPS, damage share, clipped effect uptime, cast order, explicit loss quality, player attribution, zero-duration behavior, catalog compatibility, later ID resolution, atomic no-clobber output, and CLI publication |
 | Local icon cache | `tests/icon_cache.rs` | Synthetic PNG/DDS decode, hostile paths and links, source preservation, deterministic objects, explicit fallback mappings, immutable publication, tamper rejection, and manifest privacy |
 | Catalog candidate pipeline | `tests/catalog_pipeline.rs`, `tests/catalog_pipeline_workflow.rs` | Exact channel and version identity, dual network gates, source-cache integrity, deterministic allowlisted reports, failed-publication preservation, and read-only automation authority |
-| User catalog updates | `tests/catalog_update.rs`, `tests/app_ui_sizing.rs` | Redacted inspection, Live/PTS availability, trusted-origin acknowledgement, immutable catalog install, cancellation, restart resolution, file locking, collector save boundary, receipts, recovery, rollback, and accessible modal controls without duplicate addon lifecycle mutation |
+| Automatic Catalog maintenance and retained contributor tools | `tests/catalog_update.rs`, `tests/app_ui_sizing.rs` | Redacted inspection, Live/PTS availability, trusted-origin acknowledgement, immutable catalog install, cancellation, restart resolution, file locking, collector save boundary, receipts, recovery, rollback, and accessible modal controls without duplicate addon lifecycle mutation |
 | Documentation capture sandbox | `tests/documentation_capture.rs` | Exact scene catalog, deterministic model truth, dark and light themes, narrow and wide viewports, production isolation, repository-contained output, and zero emitted input without live ESO or a native window |
 
 ## Deterministic seams
@@ -159,3 +159,15 @@ cargo build --release --locked --bin eso-weave
 The release-note and Debian package shell contracts also run in Linux CI. The
 Debian suite requires `dpkg-deb`. A missing local tool is a recorded limitation,
 not a substitute for its hosted check.
+
+## Automatic native processing and retired surfaces
+
+S130 adds pure incremental normal/separate version 15 parser partitions and
+checkpoint/resource tests, application ingest/consumer tests, restart/source
+generation and stop-boundary cases, retained read-only HTTP/MCP queries and
+viewer-free calculations. Native inline and verbose layouts remain separate
+followups #296 and #297. Historical readers/storage/metrics keep their domain
+integrity tests after presentation retirement. UI tests assert the removed
+destinations and dialogs are absent while package lifecycle, both disable
+preferences, keyboard/accessibility and unrelated layout behavior remain usable.
+Synthetic evidence does not prove installed game/platform behavior.

@@ -1,6 +1,6 @@
 # Plan 055: Unified PixelBeacon and Automatic Catalog Maintenance
 
-Status: In Progress, Active
+Status: Complete, Archived
 
 ## S129 (2026-10-15)
 
@@ -16,3 +16,9 @@ Owner-authorized [S129](../../../specs/129-automatic-catalog-maintenance/spec.md
 ## Subsequent Program Boundary
 
 Incremental native parser/watcher (#289/#290), full consumer transfer (#293), complete encounter UI retirement (#292) and final whole-program documentation/assets audit (#294) follow in a separately authorized slice. Historical data and local reads remain intact. No release/tag, owner field-testing work or automatic merge is included.
+
+## Completion (2026-10-15)
+
+The owner squash-merged [PR #295](https://github.com/h8rt3rmin8r/eso-weave/pull/295) at `9a2580d07238822a2952f488856a419cc63a8f14`, closing #285-#288 and #291. The merged tree matches reviewed head `139727b272e1da776d551dcf5fa21bca709033a2`. Both authorized reviews completed and all three findings were corrected, answered and resolved. S129 verification records repository/synthetic evidence separately from unperformed installed-game behavior.
+
+Post-merge housekeeping synchronized clean main, removed the merged branch, pruned refs and marked all five project items Done. Plan055 is archived during S130 setup. No release or game verification is claimed.

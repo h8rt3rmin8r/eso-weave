@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "as_of": "2026-10-13",
+  "as_of": "2026-10-15",
   "source_snapshots": [
     {
       "id": "eso-api-live",
@@ -321,7 +321,7 @@
     "issue": 272,
     "source_kind": "native-log",
     "schema_version": 1,
-    "store_schema_version": 6,
+    "store_schema_version": 7,
     "log_version": 15,
     "profile": "normal-separate",
     "environment": "user-selected",
@@ -339,5 +339,44 @@
     "catalog_required_for_facts": false,
     "context_work_records": 20000000,
     "context_work_bytes": 536870912
+  },
+  "operation_boundary": {
+    "current_package": "combined-PixelBeacon",
+    "legacy_addon_recorder": "historical-readers-only-not-loaded",
+    "desktop_viewer": "removed",
+    "historical_contracts": "retained schemas, source audits, parity research and pure recommendation domain, not current player workflows",
+    "native_import_policy": "retained contributor completed-file utility",
+    "current_native_processing": "native_processing_policy",
+    "owner_field_test_gate": false
+  },
+  "native_processing_policy": {
+    "slice": "S130",
+    "issues": [
+      289,
+      290,
+      292,
+      293,
+      294
+    ],
+    "profile": "normal-separate",
+    "log_version": 15,
+    "normal_inline_followup": 296,
+    "verbose_followup": 297,
+    "environment": "actual-source-context",
+    "mode": "automatic-incremental-catchup-and-tail",
+    "requires_viewer": false,
+    "requires_manual_import": false,
+    "game_logger_mutation": false,
+    "source_mutation": false,
+    "logging_activity": "unknown-without-current-proof",
+    "eligibility": "compatible-combined-package-and-independent-optout",
+    "source_generation": "validated-checkpoint-and-file-association",
+    "commit": "completed-fights-and-progress-consistent",
+    "retained_deletion": "suppression-prevents-automatic-resurrection",
+    "derived": "application-owned-generation-qualified-rebuildable",
+    "reads": "authenticated-fixed-database-read-only-independent-of-collection",
+    "native_catalog_required": false,
+    "missing_capability": "explicitly-unavailable",
+    "field_verification": "not-claimed-not-required"
   }
 }

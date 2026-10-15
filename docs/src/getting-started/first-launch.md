@@ -10,7 +10,7 @@ Live HUD, System and State, Skills, and an optional Application Log. **ESO Weave
 show **Active** unless you intentionally suspended it.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/first-launch.png" alt="ESO Weave at first launch with ESO inactive and one PixelBeacon Install action" width="1280" height="640">
+<img src="../assets/screenshots/first-launch.png" alt="ESO Weave at first launch with ESO inactive and one PixelBeacon Install action" width="1280" height="760">
 <figcaption>Deterministic first-launch state: ESO is inactive, ESO Weave is active, and the single absent PixelBeacon package has one Install action.</figcaption>
 </figure>
 
@@ -37,8 +37,7 @@ do not enable automation. Follow [Game discovery and runtime](troubleshooting.md
 
 PixelBeacon is the single bundled addon for the color-block telemetry overlay
 and automatic Catalog collection.
-In **System and State**, choose **Install** or **Update** beside **PixelBeacon
-Status**. New Lua takes effect at the next natural addon load or game session;
+In **System and State**, choose **Install** or **Update** beside **PixelBeacon**. New Lua takes effect at the next natural addon load or game session;
 ESO Weave does not force or prompt a reload.
 
 At ESO's character selection, enable the PixelBeacon addon if the game has not
@@ -52,7 +51,7 @@ buttons. Move or remove only that exact target manually before using **Install**
 ESO Weave does not overwrite an unproven target.
 
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/pixelbeacon-unmanaged.png" alt="ESO Weave showing an unmanaged PixelBeacon target that will not be modified" width="1280" height="640">
+<img src="../assets/screenshots/pixelbeacon-unmanaged.png" alt="ESO Weave showing an unmanaged PixelBeacon target that will not be modified" width="1280" height="760">
 <figcaption>Deterministic unmanaged state: ownership cannot be proven, so ESO Weave offers no install, update, or removal action for that target.</figcaption>
 </figure>
 
@@ -77,8 +76,11 @@ processing** controls persist independently. With no compatible combined addon,
 both services remain dormant and both controls are inactive, retaining their
 previous values. Disabling Catalog stops desktop maintenance immediately;
 already-loaded Lua receives the startup preference at the next natural addon
-load. No game reload is forced. Native-processing preferences supply the
-independent contract for the native log service.
+load. No game reload is forced. Native processing discovers supported logs automatically, catches up completed
+fights, and follows new records without a viewer or import step. ESO owns logging;
+normal/separate native log version 15 is supported. Other serialization layouts
+remain tracked in [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296) and
+[#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
 
 ## 5. Verify fresh telemetry
 
@@ -89,7 +91,7 @@ healthy baseline has:
 | --- | --- |
 | Game | **Active** with the detected provider |
 | World State | **Active** |
-| PixelBeacon Status | **Installed (current)** |
+| PixelBeacon | **Installed (current)** |
 | PixelBeacon Signal | **Signal detected** |
 | Game Context | **Gameplay** when no native menu or chat field is open |
 | Life State | **Alive** |
@@ -101,11 +103,11 @@ protocol fields are available. A zero resource is a valid numeric reading;
 
 <div class="docs-screenshot-grid">
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing an active game, one installed PixelBeacon package, and a detected signal" width="1280" height="640">
+<img src="../assets/screenshots/healthy-system-state.png" alt="ESO Weave showing an active game, one installed PixelBeacon package, and a detected signal" width="1280" height="760">
 <figcaption>Deterministic healthy baseline: the game and world are active, the combined PixelBeacon package is installed, and PixelBeacon Signal is detected.</figcaption>
 </figure>
 <figure class="docs-screenshot">
-<img src="../assets/screenshots/pixelbeacon-signal-lost.png" alt="ESO Weave showing PixelBeacon installed, a lost signal, and retained HUD observations" width="1280" height="640">
+<img src="../assets/screenshots/pixelbeacon-signal-lost.png" alt="ESO Weave showing PixelBeacon installed, a lost signal, and retained HUD observations" width="1280" height="760">
 <figcaption>Deterministic lost-signal state: PixelBeacon remains installed, current input authority is unavailable, and retained HUD observations remain visible until recovery or expiry.</figcaption>
 </figure>
 </div>

@@ -356,6 +356,52 @@ pub fn addons_dir_under_documents(documents: &Path, env: Environment) -> PathBuf
     documents.join(eso_addons_subpath(env))
 }
 
+/// Enumerate supported Steam libraries without selecting only the first installation.
+/// The supplied roots provide a deterministic seam for redirected/custom layouts.
+pub fn addons_dirs_in_steam_roots(roots: &[PathBuf], env: Environment) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for root in roots.iter().take(4) {
+        let Ok(canonical) = std::fs::canonicalize(root) else {
+            continue;
+        };
+        let Ok(bytes) = crate::bounded_file::read_bounded_stable(
+            &canonical,
+            &root.join("steamapps/libraryfolders.vdf"),
+            1024 * 1024,
+        ) else {
+            continue;
+        };
+        let Ok(vdf) = std::str::from_utf8(&bytes) else {
+            continue;
+        };
+        for library in steam::library_paths_for_app(vdf, ESO_APP_ID)
+            .into_iter()
+            .take(64)
+        {
+            let documents = library.join(format!(
+                "steamapps/compatdata/{ESO_APP_ID}/pfx/drive_c/users/steamuser/Documents"
+            ));
+            let path = addons_dir_under_documents(&documents, env);
+            if !found.contains(&path) {
+                found.push(path);
+            }
+        }
+    }
+    found
+}
+
+/// Inventory for background collection; UI selection does not discard other roots.
+pub fn discover_addons_dirs(env: Environment) -> Vec<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::addons_dirs(env)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        platform_addons_dir(env).into_iter().collect()
+    }
+}
+
 /// The game's stored settings file, derived from a resolved AddOns directory:
 /// it is that directory's sibling. Returns `None` for a path with no parent.
 ///

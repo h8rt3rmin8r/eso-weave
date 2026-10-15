@@ -65,6 +65,55 @@ fn embedded_manifest_has_required_sorted_assets_and_types() {
     assert_eq!(content_type("font.woff2"), "font/woff2");
 }
 
+#[cfg(not(debug_assertions))]
+#[test]
+fn release_guide_embeds_automatic_processing_and_no_retired_player_workflows() {
+    let capture = asset("features/encounter-capture.html").expect("production native guide");
+    let text = std::str::from_utf8(capture.bytes).unwrap();
+    let readable = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    for required in [
+        "Normal/separate log version 15",
+        "Disable Catalog maintenance",
+        "Disable native encounter log processing",
+        "gray/inactive",
+        "issues/296",
+        "issues/297",
+    ] {
+        assert!(
+            readable.contains(required),
+            "release guide missing {required}"
+        );
+    }
+    let search = EMBEDDED_ASSETS
+        .iter()
+        .find(|entry| entry.path.starts_with("searchindex-") && entry.path.ends_with(".js"))
+        .expect("production search index");
+    assert!(!search.bytes.is_empty());
+    for entry in EMBEDDED_ASSETS.iter().filter(|entry| {
+        entry.path.ends_with(".html") || entry.path.ends_with(".svg") || entry.path == search.path
+    }) {
+        let text = std::str::from_utf8(entry.bytes).unwrap();
+        for retired in [
+            "File &gt; Encounter History",
+            "Import Saved Capture",
+            "Inspect Native File",
+            "Import Native File",
+            "Refresh Saved Source",
+            "Refresh Imported History",
+            "Data Details",
+            "PixelBeacon Status",
+            "/ewencounter",
+            "/ewcollect",
+        ] {
+            assert!(
+                !text.contains(retired),
+                "release asset {} contains retired {retired}",
+                entry.path
+            );
+        }
+    }
+}
+
 #[test]
 fn service_binds_loopback_reuses_address_and_serves_get_and_head() {
     let mut service = DocumentationService::new();

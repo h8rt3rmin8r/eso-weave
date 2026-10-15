@@ -1743,11 +1743,19 @@
     },
     {
       "id": "055",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-055.md",
+      "specs": ["specs/129-automatic-catalog-maintenance"],
+      "evidence": "S129 completed issues #285-#288 and #291 when owner squash-merged PR #295 on 2026-10-15 at 9a2580d07238822a2952f488856a419cc63a8f14; repository evidence does not claim installed-game verification."
+    },
+    {
+      "id": "056",
       "completion": "In Progress",
       "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-055.md",
-      "specs": ["specs/129-automatic-catalog-maintenance"],
-      "evidence": "Owner kickoff on 2026-10-15 authorizes S129 for issue #285, issue #286, issue #287, issue #288 and issue #291, automatic push/PR, at most two Codex rounds and owner final review/merge. Implementation and verification receipts track progress; no merge or release is claimed."
+      "destination": "docs/project/build-plans/plan-056.md",
+      "specs": ["specs/130-automatic-native-processing"],
+      "evidence": "Owner kickoff on 2026-10-15 authorizes S130 for issue #289, issue #290 and issues #292-#294, automatic push/PR and at most two Codex rounds before owner final review/merge. Owner revision scopes native support to normal/separate v15; #296/#297 track other formats."
     }
   ],
   "safetyCrosswalk": [

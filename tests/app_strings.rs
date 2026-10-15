@@ -3,17 +3,30 @@
 use eso_weave::app::strings;
 
 #[test]
-fn s121_addon_and_log_help_explains_roles_saved_state_and_removal() {
-    assert!(strings::DATA_ADDON_TOOLTIP.contains("records encounters"));
-    assert!(strings::BEACON_TOOLTIP.contains("current game state"));
-    assert!(strings::DATA_ADDON_ENCOUNTER_TOOLTIP.contains("/ewencounter status"));
-    assert!(strings::DATA_ADDON_ENCOUNTER_TOOLTIP.contains("last save"));
-    assert!(strings::DATA_ADDON_CATALOG_TOOLTIP.contains("/ewcollect status"));
-    assert!(strings::DATA_ADDON_UNINSTALL_TOOLTIP.contains("saved recordings"));
-    assert!(strings::DATA_ADDON_UNINSTALL_TOOLTIP.contains("imported history"));
+fn combined_package_help_has_no_retired_data_workflow() {
+    assert_eq!(strings::BEACON_TITLE, "PixelBeacon");
+    assert!(strings::BEACON_TOOLTIP.contains("combined PixelBeacon"));
+    assert!(strings::BEACON_TOOLTIP.contains("automatic Catalog"));
     assert!(strings::LOG_TOOLTIP.contains("combat logs"));
     assert!(strings::SET_BEACON_ENV.help.contains("Public Test Server"));
-    assert!(strings::SET_BEACON_ENV.help.contains("saved capture"));
+    let current = strings::all_labels().join("\n") + &strings::all_tooltips().join("\n");
+    for retired in [
+        "PixelBeacon Status",
+        "ESO Weave Data",
+        "Data Details",
+        "Addon Next Step",
+        "Encounter History",
+        "Catalog Update",
+        "/ewencounter",
+        "/ewcollect",
+        "Import Saved Capture",
+        "Repair Data",
+    ] {
+        assert!(
+            !current.contains(retired),
+            "retired interface text: {retired}"
+        );
+    }
 }
 
 #[test]
@@ -118,7 +131,7 @@ fn dashboard_field_labels_use_the_required_concise_title_case() {
     assert_eq!(strings::ROLL_DODGE_TITLE, "Roll Dodge");
     assert_eq!(strings::WORLD_TITLE, "World State");
     assert_eq!(strings::AUTO_POTION_TITLE, "Auto Potion");
-    assert_eq!(strings::BEACON_TITLE, "PixelBeacon Status");
+    assert_eq!(strings::BEACON_TITLE, "PixelBeacon");
     assert_eq!(strings::BEACON_SIGNAL_TITLE, "PixelBeacon Signal");
 
     let superseded = [

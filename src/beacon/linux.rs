@@ -6,32 +6,22 @@
 
 use std::path::PathBuf;
 
-use super::{eso_addons_subpath, Environment, ESO_APP_ID};
-use crate::game::steam;
+use super::Environment;
 
 /// Resolves the AddOns directory under the ESO Proton prefix.
 pub fn addons_dir(env: Environment) -> Option<PathBuf> {
-    let steam_root = steam_root()?;
-    let vdf = std::fs::read_to_string(steam_root.join("steamapps/libraryfolders.vdf")).ok()?;
-    let library = steam::library_paths_for_app(&vdf, ESO_APP_ID)
-        .into_iter()
-        .next()?;
-    let documents = library.join(format!(
-        "steamapps/compatdata/{ESO_APP_ID}/pfx/drive_c/users/steamuser/Documents"
-    ));
-    Some(documents.join(eso_addons_subpath(env)))
+    addons_dirs(env).into_iter().next()
 }
 
-/// Locates a Steam root that contains a `libraryfolders.vdf`.
-fn steam_root() -> Option<PathBuf> {
-    let home = dirs::home_dir()?;
+pub fn addons_dirs(env: Environment) -> Vec<PathBuf> {
+    let Some(home) = dirs::home_dir() else {
+        return Vec::new();
+    };
     let candidates = [
         home.join(".steam/steam"),
         home.join(".local/share/Steam"),
         home.join(".steam/root"),
         home.join(".var/app/com.valvesoftware.Steam/data/Steam"),
     ];
-    candidates
-        .into_iter()
-        .find(|root| root.join("steamapps/libraryfolders.vdf").is_file())
+    super::addons_dirs_in_steam_roots(&candidates, env)
 }

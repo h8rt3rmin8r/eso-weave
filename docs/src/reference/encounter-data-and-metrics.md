@@ -1,97 +1,64 @@
 # Encounter Data and Metrics
 
-Encounter History contains **imported copies of saved-addon fights and completed native recordings** on this computer. It first shows observed results, then separately
-qualified review questions. It does not display a live fight or start recording.
-For retained-addon import and deletion, follow
-[Encounter Capture](../features/encounter-capture.md#import-retained-addon-captures).
-Its [historical addon recorder setup](../features/encounter-capture.md#historical-addon-recorder-setup)
-explains earlier modes and saved authority; the current combined PixelBeacon
-package does not load that recorder. For completed native files, follow
-[Encounter Ingestion](../development/encounter-ingestion.md#completed-native-files).
+The user-owned encounter database preserves historical addon and native evidence.
+Application services acquire supported native fights and calculate available
+results automatically. The optional authenticated read-only local API/MCP exposes
+stored data without a desktop encounter viewer. See [Encounter
+Capture](../features/encounter-capture.md) and [Encounter
+Ingestion](../development/encounter-ingestion.md).
 
-**Catalog** means game-data definitions for recorded IDs, such as abilities and
-effects. A catalog is separate from your fight recordings. **SavedVariables**
-means the game's saved addon data, which ESO writes on `/reloadui`, logout or
-exit. **Application Log** and **File Logging** contain application diagnostics.
-Completed native files have a separate supported profile and source-specific metrics.
+**Catalog** means game-data definitions for recorded IDs, separate from fights.
+**SavedVariables** means the game's saved addon data. Application Log and File
+Logging contain diagnostic events and never enable game logging.
 
 ## Encounter evidence lineage
 
 <figure class="docs-flow-diagram">
 
-![Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts](../assets/diagrams/encounter-evidence-lineage.svg)
+![Encounter evidence flows from native logging and retained addon observations through validation and immutable storage to source-specific metrics and qualified derived results](../assets/diagrams/encounter-evidence-lineage.svg)
 
 </figure>
 
 ### Encounter lineage text equivalent
 
-1. **Ordered addon observations** in retained historical captures began after an
-   explicit in-game recording request. Single mode records one fight; continuous mode records ordered fights
-   in one bounded session. The session's encounter ordinal orders fights, and
-   source sequence orders observations within each fight. Selected callback
-   values are retained exactly and locally, including names and identifiers when
-   ESO supplies them. Save the addon data in ESO, then explicitly import the
-   saved file on desktop. The disk snapshot can lag the current in-game state.
-2. **Validation and loss** check supported capture, controller and normalization
-   versions, session membership, identity, ordering, boundaries and declared
-   missing observations. Current complete addon-v3 schema-v2 recordings are
-   independently replayed from original observations and their normalization
-   profile before storage; their derived event stream must match. Legacy
-   recordings remain importable with replay unavailable. Partial recordings
-   (including mid-combat start or stop), declared loss or clock discontinuity
-   make replay indeterminate. Invalid batches preserve
-   prior history. Accepted incomplete recordings retain exact loss ranges and
-   interruption reasons; missing observations never become fabricated data.
-3. **Immutable original data** enters the user's `encounters.sqlite`, separate
-   from the game-data catalog. Original source-file bytes and canonical recording
-   content have separate SHA-256 identities. Session and encounter identity,
-   source versions and per-row canonical format stay attached to the recording.
-   An exact repeat is skipped; changed content under an existing identity is
-   rejected. Rebuilding results never changes original bytes. The user may
-   explicitly delete imported records; there is no automatic pruning.
-4. **Kind-specific catalog lookup** requires a schema-verified catalog with the
-   recording's exact Live or PTS channel and ESO API version. Ability IDs resolve
-   only as abilities and effect IDs only as effects, even if their numbers match.
-   Unknown IDs stay unresolved and visible. Catalog schema, version and semantic
-   SHA-256 identify the definitions used. A later compatible catalog can resolve
-   an unknown ID without rewriting a recording or changing observed values.
-   Missing, invalid or incompatible definitions leave original summaries
-   available while calculation remains unavailable.
-5. **Versioned observed metrics** use projection schema 1 and algorithm
-   `s069-v1` to calculate outgoing damage per second, effective healing per
-   second, ability damage share, effect uptime and cast order. Each result carries
-   its source sequence range, algorithm and quality. Loss means **Incomplete
-   observations**, not complete combat knowledge. Missing or zero duration makes
-   rates unavailable rather than zero; unresolved definitions remain qualified.
-   The original-data and catalog identities make the results reproducible.
-6. **Separate provisional recommendations** apply policy `s090-v1` only after
-   metrics. Supported projection and algorithm versions, consistent quality and
-   loss, at least ten seconds and three casts, and known targets gate the prompts.
-   Loss below ten percent qualifies prompts; loss at or above ten percent
-   suppresses them. Unknown IDs qualify known-target prompts and exclude unknown
-   targets; unknown abilities with at least 25 percent of observed damage
-   suppress the damage-concentration prompt only. The bounded result contains
-   at most two review questions about damage concentration and effect uptime.
-   **Review prompts available**, **Review prompts have limitations**, and
-   **Review prompts unavailable** describe the policy outcome. If analysis passes
-   its checks but produces no questions, **No review prompts for this recording**
-   avoids implying that an available or limited prompt is actually shown. The
-   adjacent reasons explain omitted targets or unmet thresholds. Prompts repeat
-   relevant qualifications and source/version identities. They do not establish
-   a cause, promise improvement, prove Combat Metrics parity or generate input.
+1. **Ordered source observations** come from automatic native logging discovery or
+   retained historical addon data. Source environment, run identity, ordering and
+   original values stay attached. The current combined package does not load the
+   former recorder. Native incomplete tails wait for more bytes.
+2. **Validation and loss** check supported versions, identity, context, boundaries,
+   ordering and declared gaps. Complete historical addon captures retain their
+   independent normalization/replay checks. Invalid input preserves committed
+   history; missing observations remain explicitly incomplete.
+3. **Immutable original data** remains in `encounters.sqlite`, separate from the
+   Catalog. Original and canonical content hashes retain their meanings. Automatic
+   progress and completed fights commit consistently; exact retries reuse data.
+   Rebuilding results never rewrites originals and no automatic pruning occurs.
+4. **Kind-specific catalog lookup** applies only to sources with compatible
+   definitions: Live / PTS and API must match. Ability IDs join abilities and
+   effect IDs join effects. Unknown IDs stay unresolved. Catalog version and
+   semantic hash identify the definitions used; native independent facts bypass
+   unavailable Catalog joins.
+5. **Versioned observed metrics** keep source, Catalog and algorithm identities.
+   Historical addon calculations use projection schema 1 and `s069-v1`. Native
+   results use source-specific capabilities. Missing duration leaves rates
+   unavailable, not zero. **Incomplete observations** retain exact qualifications.
+6. **Separate provisional recommendations** use `s090-v1` for supported addon
+   projections, with quality, loss and known-target gates. Native recommendations
+   remain unavailable. Background consumers own recomputation; stale generations
+   cannot replace newer results. No derived output authorizes gameplay input.
 
-**Native completed-file import is supported** through a separate source path.
-Completed normal/separate version 15 fights enter immutable history after native
-validation; source-specific observed facts bypass the addon catalog and prompt
-stages. The figure's final native card summarizes that branch. Live tailing
-and addon replay authority remain unavailable.
+**Automatic native processing is supported** for normal/separate log version 15.
+Completed fights can commit before the run ends; silence never completes a fight.
+The figure's native card distinguishes factual capabilities from historical
+addon replay and recommendations. Local API/MCP access remains independent of
+collection eligibility.
 
 ## Native observations
 
-**Native completed-file import is supported** for normal/separate native log
-version 15. Select Native Encounter Log, enter the file path, inspect, then import.
+**Automatic native processing is supported** for normal/separate native log
+version 15. Completed catchup and growing files use the application-owned service.
 The native header retains epoch, realm, language and game-version fields locally.
-Live/PTS is explicitly user-selected provenance; neither game API nor addon
+Live/PTS follows the actual discovered source environment; neither game API nor addon
 version is invented from native log version. See [Encounter Ingestion](../development/encounter-ingestion.md).
 
 Native projection algorithm 1 uses paired elapsed milliseconds, native record
@@ -111,11 +78,12 @@ death-recap snapshots, addon replay, catalog API joins and recommendations are
 explicitly unavailable for this profile. Factual native results remain available
 when addon catalog definitions are missing or incompatible. Original ordered
 native lines remain exact in local immutable rows; default details omit raw
-names, identifiers and field arrays. Live tailing remains unavailable.
+names, identifiers and field arrays. Native processing never changes the game logger.
 
-Earlier documentation used "Native combat-log ingestion remains provisional"
-for the whole route. S127 now supports the completed-file profile above; live
-tailing remains unavailable.
+Normal/inline support remains [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296);
+verbose layouts remain [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+Unsupported layouts are preserved without inventing producer grammar or requiring
+a player format-fix task.
 
 ## Implementation history and detailed contracts
 
@@ -151,7 +119,7 @@ planes distinct:
 
 Raw and derived rows do not belong in the bundled `catalog.sqlite`. The current
 Pixel Bus remains a small safety and action-observation channel and is not a bulk
-encounter transport. The [historical ESO Weave Data encounter module](../features/encounter-capture.md#historical-addon-recorder-setup)
+encounter transport. The [historical ESO Weave Data encounter module](../features/encounter-capture.md#historical-addon-recorder-compatibility)
 wrote a bounded SavedVariables session spool under its isolated subtree after
 the user explicitly enabled `single` or `continuous` inside ESO. The importer
 reads one explicitly selected file through a stable no-follow handle, accepts
@@ -161,8 +129,8 @@ terminal member, and never executes Lua.
 Accepted observations become deterministic compact JSON and receive separate
 source-byte and canonical-content SHA-256 hashes. The canonical bytes enter a
 caller-selected `encounters.sqlite`, not `catalog.sqlite` or the settings file.
-Store schema v6 holds addon capture schemas 1 and 2 plus source-specific native
-schema 1 evidence, immutable run metadata and shared first-import ordering.
+Store schema 7 holds addon capture schemas 1 and 2 plus source-specific native
+schemas 1 and 2, immutable run metadata and shared first-import ordering.
 Addon rows keep their per-row canonical format, session mode and encounter ordinal.
 Transactional migration copies legacy schema-v1 blobs and hashes byte-for-byte.
 Raw records cannot be updated, exact canonical reimports are idempotent, and
@@ -170,59 +138,30 @@ changed content under an existing session and encounter identity is rejected.
 The complete spool is preflighted before one immediate transaction, so a bad
 member, ordinal conflict, or changed prior prefix cannot leave a partial batch.
 
-S077 reads one validated raw record and one schema-verified catalog, then writes
-an explicit canonical schema-v1 JSON projection outside both SQLite authorities.
-The file is disposable, atomically replaceable, and rebuildable. Its provenance
-contains raw and catalog hashes and versions rather than a creation timestamp, so
-equal inputs produce byte-identical output. A future derived database remains a
-history-UI decision rather than an extension of the raw store.
+Application-owned consumers read validated canonical evidence and compatible
+immutable Catalog generations. Rebuildable derived rows retain raw, source,
+Catalog and algorithm identities. A Catalog change invalidates applicable work;
+unchanged inputs reuse results and stale completion cannot replace a newer
+generation. Supported recommendations are calculated alongside qualified addon
+metrics without opening a window or selecting an encounter.
 
-S078 gives the desktop one private Encounter History window. UI imports go to
-`encounters/encounters.sqlite` beneath the per-user application root. The Import
-Saved Capture action derives the fixed `SavedVariables/EsoWeaveData.lua`
-source and expected channel from the explicitly selected Live or PTS AddOns
-environment. It performs no arbitrary scan and uses the same bounded,
-non-executing S076 import contract.
+The application store is `encounters/encounters.sqlite` beneath the per-user root.
+Automatic native schema-2 source hashes cover retained literal header, context
+and fight lines joined with LF, independent of a growing whole file. Legacy
+whole-file hashes retain their meaning. Progress, logical aliases, deliberate
+deletion suppression and derived generation receipts occupy separate tables.
+Historical canonical bytes, source identities and first-import ordering remain
+readable. Normal native ingestion, durable progress and compatible migrations
+share transactional data-integrity boundaries. User-directed contributor backup
+and deletion utilities remain domain tools; automatic catchup does not resurrect
+supported deliberate deletions. There is no automatic pruning or upload.
 
-Opening history does not create a missing store. Raw summaries remain visible
-when the active catalog is missing, invalid, or incompatible. Selecting one
-summary rebuilds its S077 projection in memory against the current catalog path
-and displays algorithm and catalog versions, hashes, complete or incomplete
-observations, exact loss ranges, known coverage, and every unknown numeric ID. All
-values are labeled observed, and unavailable denominators remain unavailable
-rather than becoming zero. Import, listing, calculation, and deletion run on a
-serialized background worker so large captures do not block the GUI.
-
-**Last saved source** inspects validated metadata before import: selected
-environment, path, timestamp, readiness and finished/partial counts. Opening the
-workflow, source refresh, and successful and failed import attempts reread it;
-selection changes reject stale results. Matching per-session summaries and
-whole-file capacity are visible. An empty stopped session can start again
-without clearing; a stopped continuous session can resume. Import before
-confirmed discard only if a desktop copy is wanted. The desktop cannot select a mode, toggle capture, write live
-SavedVariables or acknowledge current addon state. Current requested and
-effective state is available through `/ewencounter status` inside ESO.
-
-There is no automatic upload. Schema-v2 raw observations retain exact scalar
-values from deliberately selected callbacks and normalization-dependent API
-reads, including names, tags, identifiers, and locations when ESO supplies them.
-Explicit in-game enablement warns about this local sensitivity. Logs, receipts,
-diagnostics, public fixtures, and default UI summaries remain value-free. Compatibility
-projections may use encounter-local actor IDs for current metrics, but they do
-not replace or redact the source-exact raw record.
-
-Export and import are always explicit user actions. Users control deletion by
-encounter or for the complete local store. The reusable encounter API and
-maintainer command expose deterministic listing, delete-one, delete-all, and a
-consistent atomically published SQLite backup with a final SHA-256 receipt.
-There is no automatic pruning. Corrupt, unrelated, and unsupported future stores
-remain in place for user-directed recovery. Gzip remains an optional future local
-storage form, not a transport or upload mechanism.
-
-The desktop provides separately confirmed Delete Encounter and Delete All
-actions. Canceling or closing a confirmation performs no mutation. These actions
-remove only raw encounter records and do not affect settings, catalogs, addons,
-or action automation.
+Raw scalar names, tags, identifiers and locations remain local when the source
+contains them. Controlled logs, diagnostics, receipts and public synthetic fixtures
+omit raw values. Read-only HTTP/MCP access remains opt-in and authenticated,
+independent of collection eligibility. See [Local API and MCP](local-api-and-mcp.md).
+Unsupported, unrelated and corrupt stores are left in place for user-directed
+recovery rather than silently reset.
 
 ## Ordering and incomplete captures
 
@@ -357,12 +296,12 @@ or metric values.
 
 S090 adds a separate local `s090-v1` recommendation policy after S077 metric
 projection. It consumes one immutable in-memory projection, reopens no catalog or
-raw file, performs no network or model call, and writes no recommendation file,
-database row, setting, log, or telemetry event. A catalog replacement discards the
-selected detail and rebuilds its facts and prompts together.
+raw file, and performs no network or model call. Application-owned processing
+persists rebuildable metrics and recommendations with their actual generation
+receipt; a Catalog replacement invalidates applicable results together.
 
-The Encounter History window always renders Observed Metrics before Provisional
-Recommendations. A prompt is a deterministic question for review, not a claim of
+Observed metrics and provisional recommendations remain separate data products.
+A prompt is a deterministic question for review, not a claim of
 cause, an optimal build or rotation, a guaranteed improvement, or Combat Metrics
 parity. The first policy has two bounded rules:
 
@@ -470,3 +409,5 @@ Implementation was delivered in this order: [addon capture](https://github.com/h
 documents a separate comparison contract. The implemented capture, import and
 calculation path does not depend on running a field comparison, and later
 presentation cannot weaken capture integrity or local-data boundaries.
+
+Background consumers preserve actual generation receipts for all supported results.

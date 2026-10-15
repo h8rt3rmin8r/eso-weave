@@ -20,6 +20,7 @@ import {
   validateEncounterFixture,
   validateEncounterModelContract,
   validateNativeImportPolicy,
+  validateAutomaticDataPolicy,
   validateContentCoverage,
   validateContentCoverageRepository,
   validateCorpusSnapshot,
@@ -208,8 +209,8 @@ const diagramRecords = [
   ["concepts/action-authorization.md", "action-authorization.svg", "Action authorization flow requires every positive gate or fails closed without generated input", "Authorization flow text equivalent", ["A physical event first reaches the focus-scoped decision", "Every generated action requires positive current evidence", "Unsafe or unavailable evidence fails closed"], 950],
   ["development/state-machines.md", "safety-recovery.svg", "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline", "Safety recovery text equivalent", ["Unsafe or unavailable evidence closes shared gates first", "Consumers synchronize while authorization remains closed", "A complete positive baseline reopens the gates"], 930],
   ["reference/pixel-bus-protocol.md", "pixel-bus-validation.svg", "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals", "Pixel Bus validation text equivalent", ["Capture the header from one displayed frame", "Header or layout corruption suppresses all payload sampling", "Each payload block then validates independently"], 1080],
-  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Retained encounter capture or import fails", "Startup failure", "Use the Application Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is encounter capture or import the first failing observation?", "inspect the feature-specific status and Application Log"]],
-  ["reference/encounter-data-and-metrics.md", "encounter-evidence-lineage.svg", "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts", "Encounter lineage text equivalent", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"], 1530],
+  ["getting-started/troubleshooting.md", "troubleshooting-decision-tree.svg", "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence", "Shared diagnostic flow text equivalent", ["The indented text is the complete decision tree", "Game discovery and runtime", "PixelBeacon Signal is missing or lost", "Native binding evidence is unavailable", "Automatic native processing is waiting or unavailable", "Startup failure", "Use the Application Log"], 1520, ["Does ESO Weave open?", "is ESO detected and Active?", "is the ESO window focused and Game Context Gameplay?", "is PixelBeacon Installed (current)?", "is PixelBeacon Signal detected?", "are the platform input path and native binding evidence valid?", "is native binding evidence Unavailable?", "update or reload PixelBeacon and restore the shared signal first", "use the platform input guidance and native binding state table", "is automatic encounter processing the first failing observation?", "inspect the feature-specific status and Application Log"]],
+  ["reference/encounter-data-and-metrics.md", "encounter-evidence-lineage.svg", "Encounter evidence flows from native logging and retained addon observations through validation and immutable storage to source-specific metrics and qualified derived results", "Encounter lineage text equivalent", ["Ordered source observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Automatic native processing is supported"], 1530],
 ];
 
 function diagramFixture() {
@@ -223,7 +224,7 @@ function diagramFixture() {
     ["safety-recovery.svg", ["Unsafe evidence", "Close gates", "Synchronize", "Republish baseline", "Reopen"]],
     ["pixel-bus-validation.svg", ["Capture one frame", "Validate header", "Require B0 heartbeat", "Decode blocks independently", "Signal-specific", "unavailable or hold", "Route consumers"]],
     ["troubleshooting-decision-tree.svg", ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status and Application Log"]],
-    ["encounter-evidence-lineage.svg", ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native files: completed import", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"]],
+    ["encounter-evidence-lineage.svg", ["Ordered source observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native files: automatic processing", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"]],
   ]);
   for (const [page, asset, alt, heading, anchors, height, rawAnchors = []] of diagramRecords) {
     pages.set(page, `# Page\n\n<figure class="docs-flow-diagram">\n\n![${alt}](../assets/diagrams/${asset})\n\n</figure>\n\n### ${heading}\n\n${anchors.join(". ")}.\n\n${rawAnchors.join("\n")}\n`);
@@ -279,63 +280,33 @@ test("S121 requires complete encounter lineage and visible version, channel and 
     incomplete.pages.set("reference/encounter-data-and-metrics.md", incomplete.pages.get("reference/encounter-data-and-metrics.md").replace(new RegExp(anchor, "giu"), "Omitted stage"));
     assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /encounter.*text equivalent/i);
   }
-  for (const anchor of ["s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved", "Native files: completed import"]) {
+  for (const anchor of ["s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved", "Native files: automatic processing"]) {
     const unqualified = diagramFixture();
     unqualified.svgs.set("encounter-evidence-lineage.svg", unqualified.svgs.get("encounter-evidence-lineage.svg").replace(anchor, "Unqualified"));
     assert.match(validateDocumentationDiagrams(unqualified).join("\n"), /encounter.*label/i);
   }
 });
 
-test("S125 keeps recording, saved-source, deletion and catalog recovery instructions at point of use", async () => {
-  const pages = new Map(await Promise.all([
-    "features/encounter-capture.md", "reference/logging.md", "features/interface.md",
-    "getting-started/troubleshooting.md", "development/discovery-collector.md", "reference/settings.md",
-    "reference/status-reference.md", "reference/encounter-data-and-metrics.md",
-    "getting-started/responsible-use.md", "reference/glossary.md", "SUMMARY.md", "development/README.md",
-  ].map(async (page) => [page, await readFile(path.join("docs", "src", page), "utf8")])));
+test("S130 requires automatic services, persistent disable controls and retired workflow absence", async () => {
+  const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateEncounterWorkflowDocs(pages), []);
-  const missing = new Map(pages);
-  missing.delete("features/encounter-capture.md");
-  assert.match(validateEncounterWorkflowDocs(missing).join("\n"), /encounter-capture.*workflow/i);
-  for (const [page, phrase, expected] of [
-    ["features/encounter-capture.md", "Refresh Saved Source", /encounter-capture/i],
-    ["features/encounter-capture.md", "Refresh Imported History", /encounter-capture/i],
-    ["features/encounter-capture.md", "unsupported saved-data version", /encounter-capture/i],
-    ["features/encounter-capture.md", "Import Saved Capture", /encounter-capture/i],
-    ["features/encounter-capture.md", "Historical addon recorder setup", /encounter-capture/i],
-    ["features/encounter-capture.md", "does not load or\nresume", /encounter-capture/i],
-    ["features/encounter-capture.md", "Inspect Native File", /encounter-capture/i],
-    ["features/encounter-capture.md", "Import Native File", /encounter-capture/i],
-    ["getting-started/troubleshooting.md", "current activity", /troubleshooting/i],
-    ["getting-started/troubleshooting.md", "single combined\nPixelBeacon package", /troubleshooting/i],
-    ["getting-started/troubleshooting.md", "last-known-good Catalog active", /troubleshooting/i],
-    ["getting-started/troubleshooting.md", "next natural\naddon load", /troubleshooting/i],
-    ["development/discovery-collector.md", "previous completed Catalog snapshot", /discovery-collector/i],
-    ["reference/logging.md", "native", /logging/i],
-    ["features/interface.md", "single PixelBeacon lifecycle", /interface/i],
-    ["features/interface.md", "Separate Data installation/remediation rows are retired", /interface/i],
-    ["features/interface.md", "Catalog maintenance runs automatically", /interface/i],
-    ["features/interface.md", "Disable Catalog maintenance", /interface/i],
-    ["features/interface.md", "Disable native encounter log processing", /interface/i],
-    ["features/interface.md", "gray/inactive", /interface/i],
-    ["features/interface.md", "next natural addon load", /interface/i],
-    ["features/interface.md", "Import\nSaved Capture", /interface/i],
-    ["features/interface.md", "Delete confirmations", /interface/i],
-    ["features/interface.md", "Refresh Imported History", /interface/i],
-    ["reference/status-reference.md", "Last saved source", /status-reference/i],
-    ["reference/status-reference.md", "empty session", /status-reference/i],
-    ["reference/encounter-data-and-metrics.md", "successful and failed import", /encounter-data/i],
-    ["reference/settings.md", "Application Logging", /settings/i],
-    ["reference/encounter-data-and-metrics.md", "does not load that recorder", /encounter-data/i],
-    ["getting-started/responsible-use.md", "starts and resumes without a chat", /responsible-use/i],
-    ["getting-started/responsible-use.md", "never uploads it", /responsible-use/i],
-    ["reference/glossary.md", "without loading the former encounter recorder", /glossary/i],
-    ["SUMMARY.md", "Automatic Catalog Maintenance", /SUMMARY/i],
-    ["development/README.md", "Automatic Catalog Collection", /README/i],
+  for (const [page, phrase] of [
+    ["features/encounter-capture.md", "gray/inactive"],
+    ["features/encounter-capture.md", "Normal/separate log version 15"],
+    ["features/encounter-capture.md", "issue #296"],
+    ["features/encounter-capture.md", "issue #297"],
+    ["features/interface.md", "background services"],
+    ["reference/status-reference.md", "actual service observations"],
+    ["getting-started/responsible-use.md", "never uploads it"],
   ]) {
     const incomplete = new Map(pages);
-    incomplete.set(page, incomplete.get(page).replaceAll(phrase, "Removed instruction"));
-    assert.match(validateEncounterWorkflowDocs(incomplete).join("\n"), expected);
+    incomplete.set(page, incomplete.get(page).replaceAll(phrase, "Removed requirement"));
+    assert.match(validateEncounterWorkflowDocs(incomplete).join("\n"), /workflow instruction is missing/i);
+  }
+  for (const phrase of ["File > Encounter History", "Import Saved Capture", "Data Details", "PixelBeacon Status", "/ewencounter", "/ewcollect"]) {
+    const stale = new Map(pages);
+    stale.set("features/interface.md", `${stale.get("features/interface.md")}\n${phrase}`);
+    assert.match(validateEncounterWorkflowDocs(stale).join("\n"), /removed current workflow/i);
   }
 });
 
@@ -347,7 +318,7 @@ test("S112 requires the troubleshooting decision tree and complete prose authori
   const incomplete = diagramFixture();
   incomplete.pages.set(
     "getting-started/troubleshooting.md",
-    incomplete.pages.get("getting-started/troubleshooting.md").replace("is encounter capture or import the first failing observation?", "Encounter help"),
+    incomplete.pages.get("getting-started/troubleshooting.md").replace("is automatic encounter processing the first failing observation?", "Encounter help"),
   );
   assert.match(validateDocumentationDiagrams(incomplete).join("\n"), /troubleshooting.*text equivalent/i);
 });
@@ -1216,7 +1187,7 @@ test("S087 binds deliberate plain blocks to exact content and rationale", () => 
   assert.match(validateDocumentationCodeFences(new Map([["guide.md", source]]), { complete: false, plainExceptions: [{ ...plainExceptions[0], rationale: "flow" }] }).join("\n"), /rationale/i);
 });
 
-test("S087 requires the complete canonical 21-fence repository inventory", async () => {
+test("S087 requires the complete canonical 20-fence repository inventory", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationCodeFences(pages), []);
 });
@@ -3026,7 +2997,7 @@ test("S088 requires discoverable controls, intrinsic modal sizing, caption hiera
   }
 });
 
-test("documentation policy inventories all 68 Markdown tables across 28 published pages", async () => {
+test("documentation policy inventories all 66 Markdown tables across 27 published pages", async () => {
   const pages = await markdownPageMap(path.resolve("docs", "src"));
   assert.deepEqual(validateDocumentationTableInventory(pages), []);
   assert.deepEqual(extractDocumentationTables("| Name | Value |\n| --- | --- |\n| one | two |\n"), [
@@ -3217,11 +3188,26 @@ test("S111 requires resolved clusters, seven forms, and unique issue handoffs", 
 });
 
 test("S127 native import policy preserves source, capabilities and atomic evidence boundaries", () => {
-  const contract = { native_import_policy: {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":6,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false,"context_work_records":20000000,"context_work_bytes":536870912} };
+  const contract = { native_import_policy: {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":7,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false,"context_work_records":20000000,"context_work_bytes":536870912} };
   assert.deepEqual(validateNativeImportPolicy(contract), []);
   for (const key of Object.keys(contract.native_import_policy)) {
     const missing = structuredClone(contract);
     delete missing.native_import_policy[key];
     assert.match(validateNativeImportPolicy(missing).join("\n"), /S127 native import requires/);
+  }
+});
+
+test("S130 current data contract requires actual automatic ownership and honest deferred formats", async () => {
+  const contract = JSON.parse(await readFile("docs/project/encounter-model.json", "utf8"));
+  assert.deepEqual(validateAutomaticDataPolicy(contract), []);
+  for (const key of Object.keys(contract.native_processing_policy).filter((key) => key !== "issues")) {
+    const missing = structuredClone(contract);
+    delete missing.native_processing_policy[key];
+    assert.match(validateAutomaticDataPolicy(missing).join("\n"), /S130 automatic data requires/);
+  }
+  for (const key of ["current_package", "desktop_viewer", "legacy_addon_recorder", "owner_field_test_gate"]) {
+    const missing = structuredClone(contract);
+    delete missing.operation_boundary[key];
+    assert.match(validateAutomaticDataPolicy(missing).join("\n"), /current operation boundary/);
   }
 });

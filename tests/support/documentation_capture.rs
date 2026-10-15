@@ -11,14 +11,17 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::TexturesDelta;
-use egui_kittest::{kittest::Queryable, Harness, TestRenderer};
+use egui_kittest::{
+    kittest::{NodeT, Queryable},
+    Harness, TestRenderer,
+};
 use egui_wgpu::{wgpu, RenderState, RendererOptions, ScreenDescriptor, WgpuSetup};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use eso_weave::app::ui::EsoWeaveApp;
-use eso_weave::app::{AppModel, AppView, BeaconCondition, ResourcePresentation, StatusRole};
+use eso_weave::app::{AppModel, AppView, BeaconCondition, ResourcePresentation};
 use eso_weave::beacon::{self, BeaconPrefs, Environment};
 use eso_weave::catalog::CatalogAccess;
 use eso_weave::config::{LoggingPrefs, Settings};
@@ -807,6 +810,13 @@ fn render_variant(
     if scene == Scene::AutoPotionReady {
         harness.state_mut().set_settings_open(true);
         harness.run_steps(SETTLE_FRAMES);
+        ensure(
+            !harness
+                .get_by_label("Disable native encounter log processing")
+                .accesskit_node()
+                .is_disabled(),
+            "eligible combined-package settings must show an active disable control",
+        )?;
         harness
             .get_by_label(eso_weave::app::strings::SET_POTION_HEALTH.label)
             .scroll_to_me();
@@ -915,6 +925,11 @@ fn build_scene(
     model.set_catalog(CatalogAccess::open_or_empty(
         repository_root().join("assets/catalog/catalog.sqlite"),
     ));
+    // The sandbox has no maintenance thread. Seed only the compatible presence
+    // established by its synthetic package fixture, without starting services.
+    model
+        .data_maintenance_control()
+        .set_presence(scene.needs_managed_beacon());
     seed_game_observations(&model, scene);
     if scene == Scene::PixelBeaconLost || scene == Scene::AutoPotionBlocked {
         // Retention requires a coherent presentation to have existed before the
@@ -1070,10 +1085,6 @@ fn validate_scene_view(scene: Scene, view: &AppView) -> Result<(), String> {
         view.status_line.state_text == "Active",
         "all capture scenes must show the companion running",
     )?;
-    ensure(
-        view.catalog_line.role == StatusRole::Healthy,
-        "capture scenes require the checked-in catalog",
-    )?;
     match scene {
         Scene::FirstLaunch => {
             ensure(
@@ -1083,10 +1094,6 @@ fn validate_scene_view(scene: Scene, view: &AppView) -> Result<(), String> {
             ensure(
                 view.beacon_condition == BeaconCondition::NotInstalled,
                 "first-launch beacon condition",
-            )?;
-            ensure(
-                view.data_addon.lifecycle_line.state_text == "Not installed",
-                "first-launch data-addon condition",
             )?;
         }
         Scene::HealthySystemState => {
@@ -1177,10 +1184,6 @@ fn validate_healthy_view(view: &AppView) -> Result<(), String> {
     ensure(
         view.beacon_condition == BeaconCondition::InstalledCurrent,
         "healthy addon status",
-    )?;
-    ensure(
-        view.data_addon.compatibility_line.state_text == "Current",
-        "healthy data-addon compatibility",
     )?;
     ensure(
         view.beacon_signal_line.state_text == "Signal detected",

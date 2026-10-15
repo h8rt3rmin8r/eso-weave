@@ -37,8 +37,8 @@ Does ESO Weave open?
             No -> is native binding evidence Unavailable?
               Yes -> update or reload PixelBeacon and restore the shared signal first.
               No -> use the platform input guidance and native binding state table.
-            Yes -> is encounter capture or import the first failing observation?
-              Yes -> inspect addon status, saved authority, receipt, loss, and validation.
+            Yes -> is automatic encounter processing the first failing observation?
+              Yes -> inspect package eligibility, source generation, progress, store, and loss.
               No -> inspect the feature-specific status and Application Log.
 ```
 
@@ -73,7 +73,7 @@ evidence. Dropped work is not replayed.
 
 Do not use recursive permission changes or world-writable device modes.
 
-## PixelBeacon Status is not current
+## PixelBeacon is not current
 
 | Visible state | Next action |
 | --- | --- |
@@ -162,78 +162,30 @@ If a newer game API is unsupported, use an ESO Weave release that declares suppo
 An unknown or failed API check cannot prove compatibility. Live and PTS keep
 separate API evidence, package roots, and Catalog generations.
 
-## Retained encounter capture or import fails
+## Automatic native processing is waiting or unavailable
 
-The current combined addon does not load or resume the historical encounter
-recorder. Its old commands and controller states are described in
-[Historical addon recorder setup](../features/encounter-capture.md#historical-addon-recorder-setup).
-Those procedures explain retained files; they are not current setup instructions.
+Native processing discovers actual Live/PTS sources and follows supported
+normal/separate version 15 records automatically. An absent file, quiet logger,
+incomplete line or unfinished fight can be an ordinary waiting state. A stale file
+does not prove current logging activity. ESO owns logging and serialization;
+the desktop does not toggle them.
 
-Desktop **Last saved source** is a read-only inspection of the selected
-environment's retained disk file, available before import. Check its path,
-last-save timestamp, saved state, and finished/partial counts. **Refresh Saved
-Source** rereads it; changing the environment or folder rejects older pending
-results. The file cannot prove current enablement, loading, or activity.
+Check the combined package eligibility and **Disable native encounter log
+processing** preference. A transient sharing, access or database failure retries
+with bounded backoff. Controlled Application Log categories distinguish source,
+format, checkpoint and store failures without exposing raw values. Existing
+completed fights remain readable through the local API/MCP regardless of service
+eligibility. No source inspection, manual import or replacement viewer is needed.
 
-Historical waiting, recording, interrupted, or failed states retain their original
-meaning. A malformed same-version controller is preserved and inactive rather than
-normalized by guessing. An unsupported saved-data version is also preserved; do not
-change version fields to bypass validation. Historical single mode started during
-combat marks the unseen prefix as partial. Continuous encounters share one session
-identity with distinct contiguous ordinals, raw sequences, and replay outcomes.
-
-No retained encounter is automatically removed for storage pressure. A missing
-ordinal, changed earlier member, malformed spool, or identity collision rejects
-the complete import batch without changing existing history. An ESO or operating-
-system crash before a historical flush cannot be reconstructed from the disk file.
-
-For **Native Encounter Log**, inspect a stable completed normal/separate version 15
-file before importing it. Choose the intended Live or PTS provenance explicitly.
-A changed file needs a fresh inspection. Unknown records remain declared; unfinished
-combats are not imported as complete fights. See
-[Encounter Ingestion](../development/encounter-ingestion.md#completed-native-files).
-
-For desktop history, distinguish these outcomes:
-
-- **Recording OFF with no retained session**: the historical addon initialized but
-  no recording was saved. Repeated import cannot create a fight. Use a supported
-  completed native file when no retained addon capture exists.
-- **Saved Source Inaccessible**: check the selected folder and read permissions.
-- **Saved Source Version Unsupported**: keep the file unchanged and use a
-  compatible ESO Weave version.
-- **Saved Source Environment Differs**: select the saved file's Live or PTS
-  environment, then refresh the saved source.
-- **Saved Source Invalid**: preserve the retained source for troubleshooting; do
-  not edit it to defeat validation. Refresh after selecting a valid saved file.
-- **Local History Unavailable**: the imported-history store is damaged or
-  inaccessible; this is distinct from a saved-source failure.
-
-- **No imported encounters**: choose **Import Saved Capture** for retained addon
-  recordings, or inspect and import a completed native file. **Refresh Imported
-  History** rereads desktop history only.
-- Import unavailable: check the selected Live or PTS environment, AddOns folder,
-  supported source type, and file readability. The current addon does not create
-  new recordings through the former ESO Weave Data recorder.
-- An operation is in progress: wait for import, refresh, detail calculation or
-  deletion to finish before requesting another operation.
-- No new fights or duplicates: exact repeated recordings are skipped. A currently active fight
-  in historical saved evidence is not a completed member and may be omitted from
-  a growing saved session. Import a stable file with new completed fights.
-- Missing, unstable, invalid or incompatible saved data: check the correct
-  environment, stable source file, and supported format, then retry. A malformed
-  member, changed earlier record or identity conflict rejects the whole batch
-  and preserves existing history. Preserve the source for diagnosis; do not
-  edit it to defeat validation.
-- Calculation unavailable: a missing or incompatible catalog can leave imported
-  summaries visible while metrics are unavailable. Review the catalog's exact
-  channel/API match; a known ID of another entity kind cannot supply a definition.
-- **Incomplete observations** or unknown definitions: keep the declared missing
-  sequence ranges and unresolved IDs in view. Missing duration produces an
-  unavailable rate, not zero. Review prompts may be qualified or unavailable.
-- Delete failed: imported records remain available unless the operation reports
-  successful removal. Check application-data permissions and retry the named
-  action. **Delete Encounter** and **Delete All** preserve ESO's saved file, so
-  importing that unchanged file can restore deleted fights.
+Normal/inline remains [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296),
+and verbose remains [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
+Unsupported saved-data version, malformed same-version data, source identity
+conflicts and corrupt stores are preserved. Do not edit version fields or hashes
+to bypass validation. Missing compatible definitions leave qualified historical
+calculations unavailable; native independent facts do not require a Catalog.
+**Incomplete observations** and unknown evidence retain their declared limits,
+and missing duration remains an unavailable rate rather than zero. Restart and
+retry reuse committed progress without duplicates or source mutation.
 
 ## Automatic Catalog collection is deferred or fails
 

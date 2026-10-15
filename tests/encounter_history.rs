@@ -12,7 +12,7 @@ const LIVE_CATALOG: &str = "specs/070-catalog-compiler/fixtures/minimal-live.jso
 const PTS_CATALOG: &str = "specs/070-catalog-compiler/fixtures/minimal-pts.json";
 
 #[test]
-fn s121_missing_capture_diagnostic_explains_selected_source_and_save_action() {
+fn missing_retained_capture_diagnostic_preserves_history_without_retired_actions() {
     let root = tempfile::tempdir().unwrap();
     let service = EncounterHistoryService::new(root.path(), root.path().join("catalog.sqlite"));
     let error = service
@@ -20,8 +20,9 @@ fn s121_missing_capture_diagnostic_explains_selected_source_and_save_action() {
         .unwrap_err();
     assert_eq!(error.kind, HistoryDiagnosticKind::SourceUnavailable);
     assert!(error.message.contains("saved addon data"));
-    assert!(error.message.contains("/reloadui"));
-    assert!(error.message.contains("Settings"));
+    assert!(error.message.contains("unchanged"));
+    assert!(!error.message.contains("/reloadui"));
+    assert!(!error.message.contains("Settings"));
     assert!(!error.message.contains("terminal"));
 }
 

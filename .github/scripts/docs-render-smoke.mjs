@@ -17,7 +17,7 @@ const DIAGRAMS = [
   { id: "S082-D03", page: "development/state-machines.html", asset: "safety-recovery.svg", alt: "Safety recovery flow closes gates before synchronization and reopens only after a coherent baseline" },
   { id: "S082-D04", page: "reference/pixel-bus-protocol.html", asset: "pixel-bus-validation.svg", alt: "Pixel Bus validation flow rejects invalid headers and layouts before independently decoding and publishing payload signals" },
   { id: "S112-D01", page: "getting-started/troubleshooting.html", asset: "troubleshooting-decision-tree.svg", alt: "Troubleshooting decision tree routes the first failing observation to startup, game, PixelBeacon, input, encounter, or feature evidence" },
-  { id: "S121-D01", page: "reference/encounter-data-and-metrics.html", asset: "encounter-evidence-lineage.svg", alt: "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts" },
+  { id: "S121-D01", page: "reference/encounter-data-and-metrics.html", asset: "encounter-evidence-lineage.svg", alt: "Encounter evidence flows from native logging and retained addon observations through validation and immutable storage to source-specific metrics and qualified derived results" },
   { id: "S122-D01", page: "development/catalog-candidate-pipeline.html", asset: "catalog-evidence-lifecycle.svg", alt: "Automatic Catalog evidence flows through compatible accumulation and verification to atomic activation, with independent Live and PTS contexts and retained recovery", equivalentId: "catalog-lifecycle-text-equivalent", phrases: ["Alternative evidence inputs", "Compatible accumulation", "Verified generation", "Automatic activation", "Atomic selection", "Retry and recovery", "Independent Live / PTS", "Reports are redacted", "Collector values remain local-only"] },
   { id: "S122-D02", page: "reference/local-api-and-mcp.html", asset: "local-extension-authority-map.svg", alt: "HTTP and MCP share bearer authentication, one loopback generation, canonical player state and bounded read-only queries over fixed catalog and encounter databases", equivalentId: "local-authority-text-equivalent", phrases: ["Discovery is not authentication", "One loopback service generation", "HTTP and MCP framing", "Shared canonical authorities", "Canonical player state", "Shared bounded query executor", "Fixed catalog and encounters", "No gameplay-action authority"] },
 ];
@@ -1064,6 +1064,8 @@ return {
   sourceCaptionFontSize: Number.parseFloat(sourceStyle.fontSize),
   modalCaptionWrapped: modalCaption.scrollWidth <= modalCaption.clientWidth + 1 && modalCaption.scrollHeight > Number.parseFloat(modalStyle.lineHeight),
   modalCaptionContained: withinViewport(modalRectangle),
+  modalCaptionBounds: { top: modalRectangle.top, bottom: modalRectangle.bottom, left: modalRectangle.left, right: modalRectangle.right },
+  visualViewportBounds: { top: viewport.offsetTop, left: viewport.offsetLeft, width: viewport.width, height: viewport.height },
   modalCaptionFontSize: Number.parseFloat(modalStyle.fontSize),
   modalImageContained: withinViewport(imageRectangle),
   captionAssociated: dialog.getAttribute("aria-describedby") === modalCaption.id && modalCaption.textContent === sourceCaption.textContent,
@@ -1096,7 +1098,7 @@ return {
 })()`;
 }
 
-function lineageZoomExpression(minimumTextFontSize, equivalentId = "encounter-lineage-text-equivalent", phrases = ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"]) {
+function lineageZoomExpression(minimumTextFontSize, equivalentId = "encounter-lineage-text-equivalent", phrases = ["Ordered source observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Automatic native processing is supported"]) {
   return `(async () => {
 const minimumTextFontSize = ${JSON.stringify(minimumTextFontSize)};
 const trigger = document.querySelector('figure.docs-flow-diagram .docs-figure-trigger');

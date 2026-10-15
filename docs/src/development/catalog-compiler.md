@@ -1,8 +1,10 @@
 # Catalog Compiler and Runtime
 
-ESO Weave ships a minimal immutable SQLite catalog and provides a deliberate
-maintainer command for producing later versions. Catalog construction never runs
-from `build.rs`, ordinary compilation, application startup, or a network source.
+ESO Weave ships a minimal immutable SQLite catalog. Automatic maintenance uses
+the existing in-process compiler to produce verified user-data generations.
+The commands below are contributor tools for isolated preparation and diagnosis,
+not a required player workflow. Compilation is never a `build.rs` side effect
+and never executes source-provided code.
 
 The repository baseline proves the schema, verification, runtime, and package
 path. It contains project-authored metadata, 15 explicit Unknown coverage rows,

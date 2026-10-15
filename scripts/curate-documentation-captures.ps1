@@ -32,13 +32,13 @@ New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Add-Type -AssemblyName System.Drawing
 
 $captures = @(
-    @{ Scene = 'first-launch'; Destination = 'first-launch.png'; Height = 640 },
-    @{ Scene = 'healthy-system-state'; Destination = 'healthy-system-state.png'; Height = 640 },
-    @{ Scene = 'pixelbeacon-lost'; Destination = 'pixelbeacon-signal-lost.png'; Height = 640 },
-    @{ Scene = 'pixelbeacon-unmanaged'; Destination = 'pixelbeacon-unmanaged.png'; Height = 640 },
-    @{ Scene = 'weaving-configuration'; Destination = 'weaving-configuration.png'; Height = 640 },
+    @{ Scene = 'first-launch'; Destination = 'first-launch.png'; Height = 760 },
+    @{ Scene = 'healthy-system-state'; Destination = 'healthy-system-state.png'; Height = 760 },
+    @{ Scene = 'pixelbeacon-lost'; Destination = 'pixelbeacon-signal-lost.png'; Height = 760 },
+    @{ Scene = 'pixelbeacon-unmanaged'; Destination = 'pixelbeacon-unmanaged.png'; Height = 760 },
+    @{ Scene = 'weaving-configuration'; Destination = 'weaving-configuration.png'; Height = 760 },
     @{ Scene = 'auto-potion-ready'; Destination = 'auto-potion-ready.png'; Height = 900 },
-    @{ Scene = 'auto-potion-blocked'; Destination = 'auto-potion-blocked.png'; Height = 640 }
+    @{ Scene = 'auto-potion-blocked'; Destination = 'auto-potion-blocked.png'; Height = 760 }
 )
 
 foreach ($entry in $captures) {

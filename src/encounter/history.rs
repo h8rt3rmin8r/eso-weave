@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::catalog::{CatalogAccess, CatalogDiagnosticKind, Channel};
 
@@ -66,7 +67,7 @@ impl HistoryDiagnostic {
     pub fn source_unavailable() -> Self {
         Self::new(
             HistoryDiagnosticKind::SourceUnavailable,
-            "The saved addon data location is unavailable. Choose Live or PTS and the AddOns folder in Settings, then record with ESO Weave Data and save using /reloadui, logout, or exit.",
+            "The retained saved addon data location is unavailable. Existing local history remains unchanged.",
         )
     }
 }
@@ -77,6 +78,8 @@ pub struct EncounterHistoryService {
     catalog_path: Arc<RwLock<PathBuf>>,
     catalog_registry_root: Option<PathBuf>,
     catalog_registry_paths: Arc<RwLock<BTreeMap<PathBuf, PathBuf>>>,
+    catalog_generation: Arc<AtomicU64>,
+    catalog_commit: Arc<Mutex<()>>,
 }
 
 impl EncounterHistoryService {
@@ -98,6 +101,8 @@ impl EncounterHistoryService {
             catalog_path: Arc::new(RwLock::new(catalog_path.into())),
             catalog_registry_root: None,
             catalog_registry_paths: Arc::new(RwLock::new(BTreeMap::new())),
+            catalog_generation: Arc::new(AtomicU64::new(1)),
+            catalog_commit: Arc::new(Mutex::new(())),
         }
     }
 
@@ -108,10 +113,18 @@ impl EncounterHistoryService {
     pub fn set_catalog_path(&self, catalog_path: impl Into<PathBuf>) {
         let catalog_path = catalog_path.into();
         self.register_catalog_path(catalog_path.clone());
-        *self
+        let _admission = self
+            .catalog_commit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut current = self
             .catalog_path
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = catalog_path;
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *current != catalog_path {
+            *current = catalog_path;
+            self.catalog_generation.fetch_add(1, Ordering::AcqRel);
+        }
     }
 
     /// Historical registries are shared by every service clone. Registration does
@@ -139,12 +152,17 @@ impl EncounterHistoryService {
         if crate::catalog_pipeline::inspect_candidate(directory).is_err() {
             return;
         }
+        let _admission = self
+            .catalog_commit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut paths = self
             .catalog_registry_paths
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if paths.contains_key(&root) || paths.len() < 16 {
             paths.insert(root, path);
+            self.catalog_generation.fetch_add(1, Ordering::AcqRel);
         }
     }
 
@@ -281,7 +299,7 @@ impl EncounterHistoryService {
         let (hash, parsed, _) = super::native::read_native_source(source_path, expected_channel)
             .map_err(native_source_diagnostic)?;
         if expected_hash.is_some_and(|expected| expected != hash) {
-            return Err(HistoryDiagnostic::new(HistoryDiagnosticKind::SourceInvalid, "The native file changed since inspection. Inspect the selected file again before importing."));
+            return Err(HistoryDiagnostic::new(HistoryDiagnosticKind::SourceInvalid, "The native source changed during observation. Existing local history remains unchanged."));
         }
         if parsed.encounters.is_empty() {
             return Ok(super::native::NativeImportReport {
@@ -318,10 +336,17 @@ impl EncounterHistoryService {
         .ok_or_else(|| {
             HistoryDiagnostic::new(
                 HistoryDiagnosticKind::EncounterMissing,
-                "The selected encounter is no longer present. Refresh history.",
+                "The requested encounter is no longer present.",
             )
         })?;
 
+        self.project_capture(&capture)
+    }
+
+    fn project_capture(
+        &self,
+        capture: &super::EncounterCapture,
+    ) -> Result<EncounterProjection, HistoryDiagnostic> {
         let catalog_path = self
             .catalog_path
             .read()
@@ -402,7 +427,7 @@ impl EncounterHistoryService {
             .ok_or_else(|| {
                 HistoryDiagnostic::new(
                     HistoryDiagnosticKind::CatalogUnavailable,
-                    "Game-data definitions are unavailable, so encounter metrics cannot be calculated. Your imported recordings remain stored. Open Catalog Update to select a compatible catalog when one is available.",
+                    "Game-data definitions are unavailable, so catalog-dependent encounter metrics are unavailable. Retained recordings remain stored.",
                 )
             })?;
         if release.channel != capture.channel || release.api_version != capture.source.api_version {
@@ -412,10 +437,10 @@ impl EncounterHistoryService {
             ));
         }
 
-        calculate_projection(&capture, &catalog).map_err(|_| {
+        calculate_projection(capture, &catalog).map_err(|_| {
             HistoryDiagnostic::new(
                 HistoryDiagnosticKind::OperationFailed,
-                "Metrics could not be calculated from this recording. The imported original remains stored. Try Refresh and select it again; if the failure persists, use the application log for troubleshooting.",
+                "Metrics could not be calculated from this recording. The retained original remains stored; a controlled diagnostic is available in the application log.",
             )
         })
     }
@@ -434,6 +459,179 @@ impl EncounterHistoryService {
 
     pub fn delete_all(&self) -> Result<DeleteReceipt, HistoryDiagnostic> {
         delete_all(&self.store_path).map_err(store_diagnostic)
+    }
+
+    /// A persistent domain processor, independent of selection and presentation.
+    pub fn processor(&self) -> Result<EncounterProcessor, HistoryDiagnostic> {
+        self.processor_with_cancellation(crate::catalog_update::CancellationToken::new())
+    }
+
+    pub fn processor_with_cancellation(
+        &self,
+        token: crate::catalog_update::CancellationToken,
+    ) -> Result<EncounterProcessor, HistoryDiagnostic> {
+        let writer = super::NativeIngestWriter::open_with_cancellation(&self.store_path, token)
+            .map_err(store_diagnostic)?;
+        Ok(EncounterProcessor {
+            service: self.clone(),
+            writer,
+            context: None,
+            cursor: super::store::PendingCursor::default(),
+        })
+    }
+
+    fn processing_context(&self) -> String {
+        let active = self
+            .catalog_path
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let mut paths = self
+            .catalog_registry_paths
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        paths.push(active);
+        paths.sort();
+        paths.dedup();
+        // Stable immutable Catalog paths and actual release receipts survive
+        // restart. Only this digest enters derived bookkeeping, never private paths.
+        let identities = paths
+            .iter()
+            .map(|path| {
+                let access = CatalogAccess::open_or_empty(path);
+                (
+                    path.to_string_lossy().into_owned(),
+                    access.release().ok().flatten(),
+                )
+            })
+            .collect::<Vec<_>>();
+        super::sha256(&serde_json::to_vec(&identities).unwrap_or_default())
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ProcessingReceipt {
+    pub processed_count: usize,
+    pub deferred_count: usize,
+    pub skipped_count: usize,
+}
+
+pub struct EncounterProcessor {
+    service: EncounterHistoryService,
+    writer: super::NativeIngestWriter,
+    context: Option<(u64, String)>,
+    cursor: super::store::PendingCursor,
+}
+
+impl EncounterProcessor {
+    pub fn process_pending<F>(
+        &mut self,
+        limit: usize,
+        finalize: F,
+    ) -> Result<ProcessingReceipt, HistoryDiagnostic>
+    where
+        F: FnOnce(&mut super::NativeCommit<'_>) -> Result<(), EncounterError>,
+    {
+        let generation = self.service.catalog_generation.load(Ordering::Acquire);
+        if self
+            .context
+            .as_ref()
+            .is_none_or(|(epoch, _)| *epoch != generation)
+        {
+            self.context = Some((generation, self.service.processing_context()));
+            self.cursor = super::store::PendingCursor::default();
+        }
+        let context = self
+            .context
+            .as_ref()
+            .map(|(_, context)| context.clone())
+            .unwrap_or_default();
+        let mut cursor = self.cursor.clone();
+        let pending = self
+            .writer
+            .pending(limit, &context, &mut cursor)
+            .map_err(store_diagnostic)?;
+        if pending.is_empty() {
+            self.cursor = cursor;
+            return Ok(ProcessingReceipt::default());
+        }
+        let mut receipt = ProcessingReceipt::default();
+        let mut results = Vec::new();
+        for record in pending {
+            let (algorithm, catalog, result) = if record.source_kind == "native-log" {
+                let capture: super::NativeEncounter = serde_json::from_slice(&record.canonical)
+                    .map_err(|_| invalid_store_diagnostic())?;
+                let projection =
+                    super::project_native_encounter(&capture).map_err(store_diagnostic)?;
+                (
+                    format!("native-v{}", projection.algorithm_version),
+                    String::new(),
+                    serde_json::to_vec(&projection).map_err(|_| invalid_store_diagnostic())?,
+                )
+            } else {
+                let capture: super::EncounterCapture = serde_json::from_slice(&record.canonical)
+                    .map_err(|_| invalid_store_diagnostic())?;
+                super::validate::validate(&capture).map_err(store_diagnostic)?;
+                let (catalog, value) = match self.service.project_capture(&capture) {
+                    Ok(projection) => {
+                        let recommendations =
+                            crate::recommendation::generate_recommendations(&projection);
+                        let catalog = projection.catalog_join.catalog_semantic_sha256.clone();
+                        (
+                            catalog,
+                            serde_json::json!({"availability":"available","projection":projection,"recommendations":recommendations}),
+                        )
+                    }
+                    Err(diagnostic) => {
+                        receipt.deferred_count += 1;
+                        (
+                            String::new(),
+                            serde_json::json!({"availability":"unavailable","reason":format!("{:?}",diagnostic.kind),"raw_content_sha256":record.hash}),
+                        )
+                    }
+                };
+                (
+                    format!(
+                        "{}+{}",
+                        super::ALGORITHM_VERSION,
+                        crate::recommendation::RECOMMENDATION_POLICY_VERSION
+                    ),
+                    catalog,
+                    serde_json::to_vec(&value).map_err(|_| invalid_store_diagnostic())?,
+                )
+            };
+            results.push(super::store::PreparedDerivation {
+                content_sha256: record.hash,
+                source_kind: record.source_kind,
+                algorithm_version: algorithm,
+                catalog_sha256: catalog,
+                context_sha256: context.clone(),
+                generation,
+                result,
+            });
+        }
+        let prepared = results.len();
+        let service = &self.service;
+        let stored = self
+            .writer
+            .commit_derivations(results, |commit| {
+                let _admission = service
+                    .catalog_commit
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if service.catalog_generation.load(Ordering::Acquire) != generation {
+                    return super::invalid("catalog changed during encounter processing");
+                }
+                finalize(commit)
+            })
+            .map_err(store_diagnostic)?;
+        receipt.processed_count = stored;
+        receipt.skipped_count = prepared - stored;
+        self.cursor = cursor;
+        Ok(receipt)
     }
 }
 
@@ -501,14 +699,16 @@ impl SavedRecordingReadiness {
 
     pub fn description(self) -> &'static str {
         match self {
-            Self::NeverStarted => "Recording was OFF with no retained session. Start one fight in ESO.",
-            Self::Waiting => "The saved recorder was WAITING FOR COMBAT. Fight, then save new data.",
-            Self::Recording => "The saved recorder was RECORDING. Finish or stop, then save new data.",
-            Self::Stopped => "The saved recorder was OFF. Import retained encounters or start a new session; earlier recordings stay retained.",
-            Self::StoppedEmpty => "The saved recorder was OFF with an empty session. Start a new fight; no clear is required.",
-            Self::Interrupted => "The saved recording was interrupted. Import retained encounters; some observations may be missing.",
-            Self::Failed => "The saved recorder stopped after a failure. Import usable retained encounters before recovery.",
-            Self::LegacyFinished => "A finished recording is saved and ready to import.",
+            Self::NeverStarted => "Historical recorder metadata contains no retained session.",
+            Self::Waiting => "Historical recorder metadata was waiting for combat.",
+            Self::Recording => "Historical recorder metadata contains an unfinished recording.",
+            Self::Stopped => "Historical recorder metadata contains a stopped session.",
+            Self::StoppedEmpty => "Historical recorder metadata contains an empty stopped session.",
+            Self::Interrupted => {
+                "The historical recording was interrupted; some observations may be missing."
+            }
+            Self::Failed => "Historical recorder metadata contains a failure.",
+            Self::LegacyFinished => "Historical saved data contains a finished recording.",
         }
     }
 }
@@ -531,11 +731,11 @@ fn source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
     let (kind, message) = match error {
         EncounterError::Io(error) if error.kind() == ErrorKind::NotFound => (
             HistoryDiagnosticKind::SourceUnavailable,
-            "No saved addon data file was found. Check Live or PTS and the AddOns folder in Settings. Enable ESO Weave Data, record, then /reloadui, logout or exit to save.",
+            "No retained saved addon data file was found. Existing local history remains unchanged.",
         ),
         EncounterError::Io(_) => (
             HistoryDiagnosticKind::SourceInaccessible,
-            "The saved addon data file could not be read. Check the selected folder and read permissions, then refresh the saved source. Existing history was preserved.",
+            "The retained saved addon data could not be read. Existing local history remains unchanged.",
         ),
         EncounterError::UnsupportedVersion => (
             HistoryDiagnosticKind::SourceVersionUnsupported,
@@ -543,11 +743,11 @@ fn source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
         ),
         EncounterError::EnvironmentMismatch => (
             HistoryDiagnosticKind::SourceEnvironmentMismatch,
-            "The saved recording belongs to a different environment. Select its Live or PTS environment in Settings, then refresh the saved source.",
+            "The retained saved recording belongs to a different source environment. Existing local history remains unchanged.",
         ),
         EncounterError::Validation(_) | EncounterError::Database(_) | EncounterError::NativeWorkLimit => (
             HistoryDiagnosticKind::SourceInvalid,
-            "The saved addon data is malformed, incomplete or changed during reading. Keep it unchanged for troubleshooting; finish or stop recording in ESO, save again, then refresh the saved source.",
+            "The retained saved addon data is malformed, incomplete or changed during reading. Existing local history remains unchanged.",
         ),
     };
     HistoryDiagnostic::new(kind, message)
@@ -557,23 +757,23 @@ fn native_source_diagnostic(error: EncounterError) -> HistoryDiagnostic {
     match error {
         EncounterError::NativeWorkLimit => HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceInvalid,
-            "This native file exceeds the cumulative context-work limit (20 million record visits or 512 MiB of inspected context). Choose a smaller completed recording. No source or history data was changed.",
+            "This completed native source exceeds the compatibility reader's cumulative context-work limit (20 million record visits or 512 MiB). No source or history data was changed.",
         ),
         EncounterError::UnsupportedVersion=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceVersionUnsupported,
-            "This native recording version is unsupported. Native import supports normal version15 completed files; inline and verbose layouts remain unsupported. The source and history were kept."
+            "This native recording version is unsupported. Processing supports normal/separate version15; inline and verbose layouts remain unsupported. The source and history were kept."
         ),
         EncounterError::Io(ref error) if error.kind()==ErrorKind::NotFound=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceUnavailable,
-            "The selected native recording file is missing. Choose its completed local file path and inspect again."
+            "The native recording source is unavailable. Existing local history remains unchanged."
         ),
         EncounterError::Io(_)=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceInaccessible,
-            "The native recording could not be read. Check file access or use a completed copy, then inspect again. No source or history data was changed."
+            "The native recording could not be read. No source or history data was changed."
         ),
         _=>HistoryDiagnostic::new(
             HistoryDiagnosticKind::SourceInvalid,
-            "The native recording is malformed, changed during reading, exceeds a declared limit, or does not match supported normal version15 layouts. Choose a stable completed file and inspect again. No source or history data was changed."
+            "The native recording is malformed, changed during reading, exceeds a declared limit, or does not match supported normal/separate version15. No source or history data was changed."
         ),
     }
 }

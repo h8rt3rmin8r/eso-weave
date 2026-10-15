@@ -31,16 +31,14 @@ Observed numeric zero is different from all four states.
 | World State: **Transitioning** or **Not detected** | Loading or no complete baseline | Generated input is blocked; wait for Active |
 | ESO Weave: **Active** | Application is not suspended | Features may still have other blockers |
 | ESO Weave: **Suspended** | New weave interception and Auto Potion input stop; queued or running weave is invalidated; Fishing deadlines cancel while its request is retained | Resume with `F1` or Running toggle; Fishing then requires a fresh manual cast or off-on recovery |
-| PixelBeacon Status: **Not installed** | Neither a PixelBeacon target nor a recognized managed legacy Data package exists | The ordinary PixelBeacon lifecycle installs the complete package |
-| PixelBeacon Status: **Unmanaged (not modified)** | A target exists but ownership cannot be proven | No lifecycle action is offered; move or remove only that exact target manually |
-| PixelBeacon Status: **Installed (current)** | Complete managed inventory, version, configured geometry, and startup configuration match | No action |
-| PixelBeacon Status: **Installed (outdated)** | A recognized managed package needs update, completion, or migration | Automatic legacy migration or the ordinary Update lifecycle stages a complete replacement |
-| PixelBeacon Status: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
+| PixelBeacon: **Not installed** | Neither a PixelBeacon target nor a recognized managed legacy Data package exists | The ordinary PixelBeacon lifecycle installs the complete package |
+| PixelBeacon: **Unmanaged (not modified)** | A target exists but ownership cannot be proven | No lifecycle action is offered; move or remove only that exact target manually |
+| PixelBeacon: **Installed (current)** | Complete managed inventory, version, configured geometry, and startup configuration match | No action |
+| PixelBeacon: **Installed (outdated)** | A recognized managed package needs update, completion, or migration | Automatic legacy migration or the ordinary Update lifecycle stages a complete replacement |
+| PixelBeacon: **AddOns folder not found** | No usable directory was resolved | Correct environment or AddOns override |
 | PixelBeacon Signal: **Signal detected** | Fresh heartbeat is present | Field-specific telemetry may now authorize behavior |
 | PixelBeacon Signal: **Signal lost** | A previously fresh heartbeat timed out | Telemetry clears and automation stops until recovery |
 | PixelBeacon Signal: **Not detected** | Active game, no heartbeat seen | Enable/reload addon and expose overlay |
-| Catalog: **VERSION (live/pts, API N)** | A compatible catalog passed read-only schema, integrity, foreign-key, and semantic checksum verification | Typed catalog queries are available for this process |
-| Catalog: **Catalog unavailable: REASON** | The package file is missing, corrupt, incompatible, or checksum-invalid | Catalog queries return empty; unrelated application features continue working |
 
 Completed Catalog snapshots enter desktop maintenance after ESO naturally saves
 them. Background work verifies, opens, and atomically selects a compatible
@@ -51,8 +49,7 @@ usable Catalog.
 Startup recovery checks retained verified selections before the separately
 verified packaged fallback. Live and PTS retain independent selections. Disabling
 Catalog maintenance retains existing usable data and prevents stale work from
-activating a candidate; re-enabling resumes automatically when eligible. The
-current Catalog row reports the selected data. No source-selection, review,
+activating a candidate; re-enabling resumes automatically when eligible. Canonical local state reports the selected data. No source-selection, review,
 import-ready notice, or refresh action is part of this automatic path.
 
 The historical Data lifecycle API is a compatibility alias for the complete
@@ -71,80 +68,27 @@ maintained packages can be eligible without granting overwrite or removal
 permission. Actual Live and PTS roots are independent.
 
 Both persistent disable preferences are retained through absence. No compatible
-combined installation makes both background services dormant and both controls
-inactive. Desktop Catalog disable stops reads and activation immediately; the
+combined installation makes both background services dormant and both controls inactive. Desktop Catalog disable stops reads and activation immediately; the
 package startup preference applies to Lua at the next natural addon load. An
 unavailable inspection does not reset preferences or fabricate package presence.
 
-## Legacy encounter observations
+## Background data observations
 
-The following states describe retained legacy encounter data exposed by existing
-readers and desktop history. The combined PixelBeacon package does not ship or
-automatically resume the old addon recorder. Previously saved states do not
-provide authority to begin a recording.
+The optional local API/MCP exposes canonical maintenance preferences, package
+eligibility and actual service observations. Catalog and native processing are
+independent. No file's existence establishes that ESO is actively logging.
+Stored raw data and supported results remain available while services are
+disabled or dormant. Missing native observations remain unavailable, not zero.
+The desktop dashboard reserves no Catalog, separate Data or encounter viewer row.
 
-The following source/history observations concern retained legacy data. They
-do not describe current Catalog collection or new addon recording.
-
-**Last saved source** inspects the selected environment's file before import,
-showing path, timestamp, saved state and counts. **Refresh Saved Source** rereads
-that file; **Refresh Imported History** rereads desktop copies. Successful and
-failed import attempts clear and refresh the source summary. Environment/folder
-changes reject stale results. These facts do not establish current game activity.
-An **empty session** stopped before combat has no encounters to import.
-Last saved source also reports matching session provenance and whole-file
-retained capacity; import before deliberate discard only if you want a desktop copy.
-Historical `/ewencounter discard SESSION_ID confirm` and `/ewencounter clear
-confirm` operations removed inactive or all addon sessions while preserving
-Catalog data and desktop history. These commands are not supplied by the
-combined package.
-
-The historical encounter controller exposed two selected modes. `single` records
-one combat period and stops; `continuous` retains one bounded session across
-combat gaps until explicit disablement or hard failure. Existing saved states retain their original meaning:
-
-- `stopped` means no capture request is effective. Mode/channel changes select
-  the next session and preserve earlier provenance. Start creates a new retained
-  session; resume continues only the latest stopped continuous session. Sessions
-  lists capacity and IDs; confirmed discard removes one inactive session.
-- `waiting` means single or continuous is enabled outside combat. Detailed
-  handlers stay dormant until combat begins; use `/ewencounter stop` to disable.
-- `capturing` means one encounter is active. A combat exit completes it;
-  explicit stop makes it a user-stopped partial record.
-- `interrupted` means reload, relog, or recovery opened an explicit observation
-  gap. Single stops; valid durably saved continuous authority can return to
-  waiting under the same session.
-- `failed` means a controlled integrity or storage failure stopped capture.
-  Retained evidence stays in place and no automatic retry occurs.
-
-Mode, requested enablement, effective state, active channel, session identity,
-current encounter, last interruption, and failure are independent facts. The
-desktop displays validated, bounded saved facts under **Last saved source**,
-including its selected environment/path, last-save timestamp and finished or
-partial/interrupted counts. It distinguishes initialized/no retained session,
-waiting, recording, stopped, interrupted and failed states. Refresh Saved
-Source rereads the file; Refresh Imported History rereads imported copies.
-Older inspection generations or a changed path/channel cannot replace the
-current result. A saved snapshot has no current capture authority.
-
-The local icon cache exposes library lookup states for future interface work:
-
-| Icon value | Meaning | Recovery or effect |
-| --- | --- | --- |
-| `Ready` | A verified user-local PNG or DDS source produced the mapped immutable PNG object | Render the local object |
-| `Placeholder` | A manifest explicitly selected the project placeholder without a more specific reason | Render the placeholder |
-| `Missing` | The requested mapping or local source file is absent | Render the placeholder; supply the exact local path if desired |
-| `Unsupported` | The selected source has an unsupported file type | Render the placeholder; use bounded PNG or DDS input |
-| `Failed` | A path, permission, decode, limit, I/O, link, or integrity check failed | Render the placeholder and correct the local source or cache |
-
-These states do not authorize input and do not imply that a cache is active in
-the application.
+See [Encounter Data and Metrics](encounter-data-and-metrics.md) for source-specific
+capabilities and [Local API and MCP](local-api-and-mcp.md) for client access.
 
 ## Game Context and player state
 
-The existing PixelBeacon status summarizes API support, uncertainty, or an
-application-update action for the combined companion package. Data Details reports the
-numeric API and client evidence separately from installed package compatibility.
+The existing PixelBeacon field summarizes API support, uncertainty, or an
+application-update action for the combined companion package. API and client
+evidence remain distinct from installed package compatibility in canonical state.
 
 | Field and text | Meaning | Automation impact or next action |
 | --- | --- | --- |
@@ -220,3 +164,5 @@ Each Skill 1 through Skill 5 and Ultimate row shows **Ready**, a remaining
 duration, or a dash when unavailable. Synergy always uses the dash because ESO
 does not expose its cooldown. These values are display-only and do not control
 weave execution.
+
+Stored-data access remains independent of collection eligibility.

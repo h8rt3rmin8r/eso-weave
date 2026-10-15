@@ -1,5 +1,13 @@
 //! Source-specific completed native log evidence.
+mod incremental;
+
 use crate::catalog::Channel;
+pub use incremental::{
+    IncrementalNativeParser, NativeCheckpoint, NativeCompletedFight, NativeDiagnostic,
+    NativeDiagnosticCode, NativeFeed, NativeParserError, NativeParserStatus, NativePosition,
+    NativeTermination, NativeTerminationReason, MAX_NATIVE_CHECKPOINT_BYTES, MAX_NATIVE_FEED_BYTES,
+    NATIVE_CHECKPOINT_VERSION, NATIVE_INCREMENTAL_SCHEMA_VERSION,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -532,6 +540,20 @@ fn validate_layout(values: &[&str]) -> Result<bool, EncounterError> {
     Ok(true)
 }
 
+fn validate_layout_for(values: &[&str], schema: u32) -> Result<bool, EncounterError> {
+    if schema == NATIVE_INCREMENTAL_SCHEMA_VERSION
+        && values.get(1) == Some(&"ABILITY_INFO")
+        && values.len() == 10
+    {
+        validate_layout(&values[..7])?;
+        for value in &values[7..] {
+            quoted_value(value)?;
+        }
+        return Ok(true);
+    }
+    validate_layout(values)
+}
+
 fn run_id(header: &NativeHeader, ordinal: u64, channel: Channel) -> Result<String, EncounterError> {
     let bytes = serde_json::to_vec(&(NATIVE_SCHEMA_VERSION, ordinal, channel, &header.record.line))
         .map_err(|_| EncounterError::Validation("native header identity is invalid".into()))?;
@@ -542,6 +564,113 @@ fn encounter_id(run: &str, ordinal: u64) -> String {
         "native-encounter-{}",
         super::sha256(format!("{run}:{ordinal}").as_bytes())
     )
+}
+
+fn logical_run_key(header: &NativeHeader, channel: Channel) -> Result<String, EncounterError> {
+    let bytes = serde_json::to_vec(&(
+        "eso-weave/native-logical-run/v1",
+        channel,
+        header.epoch_ms,
+        header.log_version,
+        &header.realm,
+        &header.language,
+        &header.game_version,
+    ))
+    .map_err(|_| EncounterError::Validation("native logical header is invalid".into()))?;
+    Ok(super::sha256(&bytes))
+}
+
+fn logical_fight_key(run_key: &str, ordinal: u64) -> Result<String, EncounterError> {
+    let bytes = serde_json::to_vec(&("eso-weave/native-logical-fight/v1", run_key, ordinal))
+        .map_err(|_| EncounterError::Validation("native logical identity is invalid".into()))?;
+    Ok(super::sha256(&bytes))
+}
+
+fn run_id_for(
+    header: &NativeHeader,
+    ordinal: u64,
+    channel: Channel,
+    schema: u32,
+) -> Result<String, EncounterError> {
+    if schema == NATIVE_INCREMENTAL_SCHEMA_VERSION {
+        Ok(format!(
+            "native-session-v2-{}",
+            logical_run_key(header, channel)?
+        ))
+    } else {
+        run_id(header, ordinal, channel)
+    }
+}
+
+fn encounter_id_for(run: &NativeRun, ordinal: u64) -> Result<String, EncounterError> {
+    if run.schema_version == NATIVE_INCREMENTAL_SCHEMA_VERSION {
+        let key = logical_run_key(&run.header, run.channel)?;
+        Ok(format!(
+            "native-encounter-v2-{}",
+            logical_fight_key(&key, ordinal)?
+        ))
+    } else {
+        Ok(encounter_id(&run.session_id, ordinal))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeLogicalIdentity {
+    pub run_key: String,
+    pub fight_key: String,
+    pub evidence_sha256: String,
+}
+
+pub fn logical_native_identity_v1(
+    capture: &NativeEncounter,
+) -> Result<NativeLogicalIdentity, EncounterError> {
+    if capture.schema_version != NATIVE_SCHEMA_VERSION {
+        return rejected();
+    }
+    logical_native_identity(capture)
+}
+
+/// Compares logical evidence without changing retained canonical provenance.
+pub fn logical_native_identity(
+    capture: &NativeEncounter,
+) -> Result<NativeLogicalIdentity, EncounterError> {
+    validate_native_encounter(capture)?;
+    let run_key = logical_run_key(&capture.run.header, capture.run.channel)?;
+    let fight_key = logical_fight_key(&run_key, capture.encounter_ordinal)?;
+    let mut normalized = capture.clone();
+    normalized.schema_version = NATIVE_INCREMENTAL_SCHEMA_VERSION;
+    normalized.run.schema_version = NATIVE_INCREMENTAL_SCHEMA_VERSION;
+    normalized.run.run_ordinal = 1;
+    normalized.run.session_id = format!("native-session-v2-{run_key}");
+    normalized.encounter_id = format!("native-encounter-v2-{fight_key}");
+    let origin = &capture.run.header.record;
+    let normalize_ordinal = |ordinal: u64| {
+        ordinal
+            .checked_sub(origin.ordinal)
+            .and_then(|value| value.checked_add(1))
+            .ok_or_else(|| EncounterError::Validation("native relative ordinal is invalid".into()))
+    };
+    normalized.first_ordinal = normalize_ordinal(capture.first_ordinal)?;
+    normalized.last_ordinal = normalize_ordinal(capture.last_ordinal)?;
+    normalized.run.header.record.ordinal = 1;
+    normalized.run.header.record.byte_offset = 0;
+    for record in normalized.context.iter_mut().chain(&mut normalized.records) {
+        record.ordinal = normalize_ordinal(record.ordinal)?;
+        record.byte_offset = record
+            .byte_offset
+            .checked_sub(origin.byte_offset)
+            .ok_or_else(|| {
+                EncounterError::Validation("native relative offset is invalid".into())
+            })?;
+    }
+    let bytes = serde_json::to_vec(&("eso-weave/native-logical-evidence/v1", &normalized))
+        .map_err(|_| EncounterError::Validation("native logical evidence is invalid".into()))?;
+    Ok(NativeLogicalIdentity {
+        run_key,
+        fight_key,
+        evidence_sha256: super::sha256(&bytes),
+    })
 }
 
 #[derive(Default)]
@@ -568,7 +697,7 @@ impl ContextWork {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Context {
     metadata: BTreeMap<(String, u64), Arc<NativeRecord>>,
     unknown: Vec<Arc<NativeRecord>>,
@@ -634,6 +763,7 @@ impl Context {
     }
 }
 
+#[derive(Clone)]
 struct Pending {
     ordinal: u64,
     start_ms: u64,
@@ -716,7 +846,7 @@ impl Pending {
         let mut context_bytes = 0_usize;
         for record in self.context {
             let values = fields(&record.line)?;
-            let known = validate_layout(&values)?;
+            let known = validate_layout_for(&values, run.schema_version)?;
             let relevant = match values[1] {
                 "UNIT_ADDED" => self.units.contains(&uint(values[2])?) || values[4] == "T",
                 "UNIT_CHANGED" | "PLAYER_INFO" => self.units.contains(&uint(values[2])?),
@@ -747,8 +877,8 @@ impl Pending {
             })?
             .ordinal;
         Ok(NativeEncounter {
-            schema_version: NATIVE_SCHEMA_VERSION,
-            encounter_id: encounter_id(&run.session_id, self.ordinal),
+            schema_version: run.schema_version,
+            encounter_id: encounter_id_for(&run, self.ordinal)?,
             run,
             encounter_ordinal: self.ordinal,
             started_ms: self.start_ms,
@@ -995,14 +1125,16 @@ pub fn inspect_native_log(
 }
 
 pub(crate) fn validate_native_run(run: &NativeRun) -> Result<(), EncounterError> {
-    if run.schema_version != NATIVE_SCHEMA_VERSION
-        || run.run_ordinal == 0
-        || run.run_ordinal > MAX_NATIVE_RUNS as u64
+    if !matches!(
+        run.schema_version,
+        NATIVE_SCHEMA_VERSION | NATIVE_INCREMENTAL_SCHEMA_VERSION
+    ) || run.run_ordinal == 0
+        || (run.schema_version == NATIVE_SCHEMA_VERSION && run.run_ordinal > MAX_NATIVE_RUNS as u64)
         || run.header.log_version != 15
     {
         return rejected();
     }
-    validate_native_record(&run.header.record)?;
+    validate_native_record(&run.header.record, run.schema_version)?;
     let values = fields(&run.header.record.line)?;
     validate_layout(&values)?;
     if values[1] != "BEGIN_LOG"
@@ -1010,30 +1142,38 @@ pub(crate) fn validate_native_run(run: &NativeRun) -> Result<(), EncounterError>
         || quoted_value(values[4])? != run.header.realm
         || quoted_value(values[5])? != run.header.language
         || quoted_value(values[6])? != run.header.game_version
-        || run.session_id != run_id(&run.header, run.run_ordinal, run.channel)?
+        || run.session_id
+            != run_id_for(
+                &run.header,
+                run.run_ordinal,
+                run.channel,
+                run.schema_version,
+            )?
     {
         return rejected();
     }
     Ok(())
 }
 
-fn validate_native_record(record: &NativeRecord) -> Result<(), EncounterError> {
+fn validate_native_record(record: &NativeRecord, schema: u32) -> Result<(), EncounterError> {
     if record.ordinal == 0
-        || record.ordinal > MAX_NATIVE_RECORDS as u64
-        || record.byte_offset > MAX_NATIVE_FILE_BYTES
+        || (schema == NATIVE_SCHEMA_VERSION
+            && (record.ordinal > MAX_NATIVE_RECORDS as u64
+                || record.byte_offset > MAX_NATIVE_FILE_BYTES))
     {
         return rejected();
     }
-    validate_layout(&fields(&record.line)?)?;
+    validate_layout_for(&fields(&record.line)?, schema)?;
     Ok(())
 }
 
 pub fn validate_native_encounter(capture: &NativeEncounter) -> Result<(), EncounterError> {
     validate_native_run(&capture.run)?;
-    if capture.schema_version != NATIVE_SCHEMA_VERSION
+    if capture.schema_version != capture.run.schema_version
         || capture.encounter_ordinal == 0
-        || capture.encounter_ordinal > MAX_NATIVE_RECORDS as u64
-        || capture.encounter_id != encounter_id(&capture.run.session_id, capture.encounter_ordinal)
+        || (capture.schema_version == NATIVE_SCHEMA_VERSION
+            && capture.encounter_ordinal > MAX_NATIVE_RECORDS as u64)
+        || capture.encounter_id != encounter_id_for(&capture.run, capture.encounter_ordinal)?
         || capture.records.len() < 2
         || capture.records.len() > MAX_NATIVE_COMBAT_RECORDS
         || capture.context.len() > MAX_NATIVE_METADATA
@@ -1055,10 +1195,10 @@ pub fn validate_native_encounter(capture: &NativeEncounter) -> Result<(), Encoun
     let mut reversals = 0;
     let mut previous_offset = 0;
     for (i, record) in capture.records.iter().enumerate() {
-        validate_native_record(record)?;
+        validate_native_record(record, capture.schema_version)?;
         let values = fields(&record.line)?;
-        let known = validate_layout(&values)?;
-        if record.ordinal != capture.first_ordinal + i as u64
+        let known = validate_layout_for(&values, capture.schema_version)?;
+        if Some(record.ordinal) != capture.first_ordinal.checked_add(i as u64)
             || (i > 0 && record.byte_offset <= previous_offset)
         {
             return rejected();
@@ -1101,13 +1241,13 @@ pub fn validate_native_encounter(capture: &NativeEncounter) -> Result<(), Encoun
     let mut unknown_context = 0;
     bytes = 0;
     for record in &capture.context {
-        validate_native_record(record)?;
+        validate_native_record(record, capture.schema_version)?;
         if record.ordinal <= prior || record.ordinal >= capture.first_ordinal {
             return rejected();
         }
         prior = record.ordinal;
         let values = fields(&record.line)?;
-        let known = validate_layout(&values)?;
+        let known = validate_layout_for(&values, capture.schema_version)?;
         if known
             && !matches!(
                 values[1],

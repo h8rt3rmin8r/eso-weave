@@ -12,7 +12,7 @@ region, and optional application log panel.
 | --- | --- |
 | Menu bar | Settings, Exit, Application Log, and the offline Documentation action |
 | Live HUD | Health, Stamina, Magicka, Ultimate, Game Context, Combat, Movement, Roll Dodge, Life State, Weapon Bar, and one composed Quickslot classification, availability, and cooldown row |
-| System and State | Game/provider state, World State, ESO Weave state, one PixelBeacon lifecycle and Signal, current Catalog identity, Fishing, and Auto Potion |
+| System and State | Game/provider state, World State, ESO Weave state, one PixelBeacon lifecycle and Signal, Fishing, and Auto Potion |
 | Skills | Slot label, enablement, weave type, timing override, effective delay, and cooldown |
 | Application Log | Recent structured events with a local level filter |
 
@@ -45,15 +45,16 @@ and keyboard focus, with identical text for both access paths. A fixed trailing
 region is reserved only for System and State interactions. PixelBeacon actions
 use equal compact sizes and share a right-aligned column with toggles. The single PixelBeacon lifecycle manages the combined package with exact ownership, inventory and transactional recovery checks. Separate Data installation/remediation rows are retired. At most two lifecycle actions share a primary-then-secondary horizontal row. Uninstall retains its managed-ownership guard and confirmation.
 
-Catalog maintenance runs automatically. File no longer exposes Catalog Update, and the dashboard no longer asks for Review or Dismiss. File > Settings contains two direct controls: **Disable Catalog maintenance** and **Disable native encounter log processing**. They retain independent choices and are gray/inactive without a compatible combined addon. Neither changes gameplay automation or ESO's native logger. Desktop disable stops scheduling directly; loaded Lua observes its startup preference at the next natural addon load. Native watcher implementation and the complete encounter-viewer retirement remain subsequent program work.
-
-**File > Encounter History** imports saved fights for later analysis. **Import
-Saved Capture** reads ESO's saved addon file for the selected environment;
-**Refresh Imported History** rereads imported desktop history. **Observed Metrics** precedes
-**Provisional Recommendations**, whose review prompts retain missing-data and
-unknown-definition qualifications. Delete confirmations identify the imported
-records removed and the ESO saved file, addon files, catalog and settings
-preserved. See [Encounter Capture](encounter-capture.md) for the full workflow.
+Catalog maintenance runs automatically, independently from native encounter log
+processing. File > Settings contains two direct controls: **Disable Catalog
+maintenance** and **Disable native encounter log processing**. They retain
+independent choices and are gray/inactive without a compatible combined addon.
+Neither changes gameplay automation or ESO's native logger. Desktop disable stops
+scheduling directly; loaded Lua observes its startup preference at the next
+natural addon load. Data processing and supported calculations belong to
+background services and continue without opening a window. The optional
+authenticated read-only [Local API and MCP](../reference/local-api-and-mcp.md)
+retains access to stored data. See [Automatic Native Processing](encounter-capture.md).
 
 System and State defaults expanded. Its full header is accessible by pointer,
 keyboard, and assistive technology. Activating the header hides or restores the

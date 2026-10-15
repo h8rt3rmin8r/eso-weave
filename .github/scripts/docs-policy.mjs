@@ -122,8 +122,8 @@ const CONTENT_OBLIGATION_IDS = new Set([
 const DEFERRED_ISSUES = new Set();
 const COVERAGE_LABELS = new Set(["Guarantee", "Implementation", "Diagnostic", "VersionSensitive"]);
 const DIAGRAM_IDS = new Set(["DIA-001", "DIA-002", "DIA-003", "DIA-004", "DIA-005", "DIA-006", "DIA-007", "DIA-008", "DIA-009"]);
-// S129 updates two lifecycle test references, LOG-024, DEF-004 and DIA-008 only.
-const CONTENT_CONTRACT_SHA256 = "9548b967c7ae6d8bdeef24c1c44f2e9368a008f0c027b7ea1f341b4facd46c9f";
+// S130 replaces the removed field search term and updates the encounter lineage only; source obligations stay pinned.
+const CONTENT_CONTRACT_SHA256 = "a57b9b48292481c1672569a5cac4867e7da266d4c83f6d00343c16e202cab044";
 const CONTENT_PAGE_PATHS = new Set([
   "docs/src/README.md",
   "docs/src/getting-started/installation.md",
@@ -165,7 +165,7 @@ const SEARCH_TARGETS = new Map([
   ["Invalid Configuration", "docs/src/reference/configuration.md"], ["Application Log", "docs/src/reference/logging.md"],
   ["File Logging", "docs/src/reference/logging.md"], ["Windows Input", "docs/src/concepts/scope-and-platform.md"],
   ["Linux Input", "docs/src/concepts/scope-and-platform.md"], ["XWayland", "docs/src/concepts/scope-and-platform.md"],
-  ["PixelBeacon Status", "docs/src/features/pixelbeacon.md"], ["API Version", "docs/src/features/pixelbeacon.md"],
+  ["Package Installation", "docs/src/features/pixelbeacon.md"], ["API Version", "docs/src/features/pixelbeacon.md"],
   ["Release Package", "docs/src/getting-started/installation.md"], ["Checksum", "docs/src/getting-started/installation.md"],
   ["Troubleshooting", "docs/src/getting-started/troubleshooting.md"], ["Startup Failure", "docs/src/getting-started/troubleshooting.md"],
   ["Test Strategy", "docs/src/development/test-strategy.md"], ["Release Pipeline", "docs/src/development/release-and-packaging.md"],
@@ -382,13 +382,12 @@ function markdownContainerContent(line) {
 }
 
 const DOCUMENTATION_FENCE_LANGUAGES = new Set(["bash", "json", "powershell", "text"]);
-const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 10], ["json", 1], ["powershell", 4], ["text", 6]]);
+const DOCUMENTATION_FENCE_COUNTS = new Map([["bash", 10], ["json", 1], ["powershell", 4], ["text", 5]]);
 const PLAIN_CODE_BLOCKS = [
   { page: "development/repository-conventions.md", sha256: "ba72b7779b972c573ded96d80a6d6d21e9416720419c1ddc287adbe3bab0e227", rationale: "A repository directory map, not executable syntax." },
-  { page: "features/encounter-capture.md", sha256: "7670ddaeb06a92493c7156e32a8eb3bf286fb146597d34530d28b7486ec1eb94", rationale: "ESO slash commands shown as an in-game sequence, not shell syntax." },
   { page: "features/weaving.md", sha256: "74576ddc34a330808aa09f8bbc76348f573f3686a2eec2555060dc5651c3bee5", rationale: "A mathematical formula, not executable syntax." },
   { page: "features/weaving.md", sha256: "4fa825b4a104e43a5c6c4fff848dfd7f8192486b146e1ce02ee9f551694e62b1", rationale: "An authorization process flow, not executable syntax." },
-  { page: "getting-started/troubleshooting.md", sha256: "1050ad5bedb0a28540c41596d97b179287cf98c8cb61422bcf45da7615635ac2", rationale: "A diagnostic decision tree, not executable syntax." },
+  { page: "getting-started/troubleshooting.md", sha256: "77b0ee29efb9e41b8ab87fa2b9fd44b9107a901e5edbb3f1d9f1f830a33c13d3", rationale: "A diagnostic decision tree, not executable syntax." },
   { page: "reference/pixel-bus-protocol.md", sha256: "e159118f0007ffa610a1afedeb56051affb6758336b096c99e6456a0b828e3e4", rationale: "Protocol geometry formulas, not executable syntax." },
 ];
 
@@ -1545,10 +1544,10 @@ const DOCUMENTATION_DIAGRAMS = [
     asset: "encounter-evidence-lineage.svg",
     width: 400,
     height: 1530,
-    alt: "Encounter data flows from ordered addon observations through validation and original storage to catalog lookup, observed metrics, and qualified review prompts",
+    alt: "Encounter evidence flows from native logging and retained addon observations through validation and immutable storage to source-specific metrics and qualified derived results",
     heading: "Encounter lineage text equivalent",
-    anchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native completed-file import is supported"],
-    svgAnchors: ["Ordered addon observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native files: completed import", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"],
+    anchors: ["Ordered source observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Automatic native processing is supported"],
+    svgAnchors: ["Ordered source observations", "Validation and loss", "Immutable original data", "Kind-specific catalog lookup", "Versioned observed metrics", "Separate provisional recommendations", "Native files: automatic processing", "s069-v1", "s090-v1", "Live / PTS and API must match", "Unknown IDs stay unresolved"],
   },
   {
     id: "S082-D01",
@@ -1633,7 +1632,7 @@ const DOCUMENTATION_DIAGRAMS = [
       "Game discovery and runtime",
       "PixelBeacon Signal is missing or lost",
       "Native binding evidence is unavailable",
-      "Retained encounter capture or import fails",
+      "Automatic native processing is waiting or unavailable",
       "Startup failure",
       "Use the Application Log",
     ],
@@ -1647,7 +1646,7 @@ const DOCUMENTATION_DIAGRAMS = [
       "is native binding evidence Unavailable?",
       "update or reload PixelBeacon and restore the shared signal first",
       "use the platform input guidance and native binding state table",
-      "is encounter capture or import the first failing observation?",
+      "is automatic encounter processing the first failing observation?",
       "inspect the feature-specific status and Application Log",
     ],
     svgAnchors: ["First failing observation", "Startup evidence", "Game observation", "PixelBeacon evidence", "Input and bindings", "Encounter evidence", "Feature status"],
@@ -1657,33 +1656,156 @@ const DOCUMENTATION_DIAGRAMS = [
 export function validateEncounterWorkflowDocs(pages) {
   if (!(pages instanceof Map)) return ["S121 encounter workflow requires a page map"];
   const required = new Map([
-    ["features/encounter-capture.md", [
-      "single managed PixelBeacon", "does not load or resume", "Historical addon recorder setup",
-      "normal/separate log version 15", "Inspect Native File", "Import Native File",
-      "/ewencounter mode single", "/ewencounter channel live",
-      "/ewencounter toggle", "/ewencounter status", "continuous", "Public Test Server",
-      "SavedVariables", "Import Saved Capture", "Refresh Saved Source", "Refresh Imported History", "desktop history",
-      "/ewencounter clear confirm", "Delete Encounter", "Delete All", "/ewcollect clear confirm",
-      "unsupported saved-data version", "Importing the unchanged ESO file", "preserving the shared saved file",
-    ]],
-    ["reference/logging.md", ["Application Log", "File Logging", "native", "completed-file import", "Neither records fights", "Application Logging"]],
-    ["features/interface.md", ["single PixelBeacon lifecycle", "Separate Data installation/remediation rows are retired", "Catalog maintenance runs automatically", "Disable Catalog maintenance", "Disable native encounter log processing", "gray/inactive", "next natural addon load", "Import Saved Capture", "Refresh Imported History", "Observed Metrics", "Provisional Recommendations", "Delete confirmations"]],
-    ["getting-started/troubleshooting.md", ["current activity", "unsupported saved-data version", "same-version", "Incomplete observations", "duplicates", "currently active fight", "whole batch", "Delete All", "single combined PixelBeacon package", "Disable Catalog maintenance", "next natural addon load", "previous completed Catalog snapshot", "last-known-good Catalog active", "Historical addon recorder setup", "stable completed normal/separate version 15"]],
-    ["development/discovery-collector.md", ["starts and resumes automatically", "Disable Catalog maintenance", "next natural addon load", "previous completed Catalog snapshot", "incremental merge sort", "4,096 serialized-byte budget", "not acknowledge a disk write", "Unsupported saved roots"]],
-    ["reference/status-reference.md", ["Last saved source", "before import", "Refresh Saved Source", "Refresh Imported History", "empty session", "/ewencounter clear confirm"]],
-    ["reference/encounter-data-and-metrics.md", ["Last saved source", "before import", "successful and failed import", "stale results", "empty stopped session", "historical addon recorder setup", "does not load that recorder", "completed native files"]],
-    ["getting-started/responsible-use.md", ["single managed PixelBeacon package", "starts and resumes without a chat command", "next natural addon load", "does not load or resume", "never uploads it", "hostile data"]],
-    ["reference/glossary.md", ["single combined PixelBeacon addon", "single managed companion addon", "collects bounded Catalog definitions automatically", "without loading the former encounter recorder"]],
-    ["SUMMARY.md", ["Catalog Evidence and Candidate Pipeline", "Automatic Catalog Maintenance", "Automatic Catalog Collection", "Companion-to-Addon Configuration"]],
-    ["development/README.md", ["Catalog Evidence and Candidate Pipeline", "Automatic Catalog Maintenance", "Automatic Catalog Collection"]],
-    ["reference/settings.md", ["Addons and Game Readings", "Game Environment", "Live", "PTS", "Application Logging", "Write Log to File", "They do not turn on encounter recording"]],
-  ]);
+  [
+    "features/encounter-capture.md",
+    [
+      "single managed PixelBeacon",
+      "does not load or resume",
+      "Normal/separate log version 15",
+      "independent services",
+      "Disable Catalog maintenance",
+      "Disable native encounter log processing",
+      "gray/inactive",
+      "next natural addon load",
+      "authenticated read-only",
+      "Historical addon recorder compatibility",
+      "issue #296",
+      "issue #297"
+    ]
+  ],
+  [
+    "reference/logging.md",
+    [
+      "Application Log",
+      "File Logging",
+      "Neither records fights",
+      "automatically processes supported native logs",
+      "Application Logging"
+    ]
+  ],
+  [
+    "features/interface.md",
+    [
+      "single PixelBeacon lifecycle",
+      "Catalog maintenance runs automatically",
+      "Disable Catalog maintenance",
+      "Disable native encounter log processing",
+      "gray/inactive",
+      "next natural addon load",
+      "background services"
+    ]
+  ],
+  [
+    "getting-started/troubleshooting.md",
+    [
+      "current activity",
+      "unsupported saved-data version",
+      "same-version",
+      "Incomplete observations",
+      "duplicates",
+      "single combined PixelBeacon package",
+      "next natural addon load",
+      "previous completed Catalog snapshot",
+      "last-known-good Catalog active",
+      "normal/separate version 15"
+    ]
+  ],
+  [
+    "development/discovery-collector.md",
+    [
+      "starts and resumes automatically",
+      "Disable Catalog maintenance",
+      "next natural addon load",
+      "previous completed Catalog snapshot",
+      "incremental merge sort",
+      "4,096 serialized-byte budget",
+      "not acknowledge a disk write",
+      "Unsupported saved roots"
+    ]
+  ],
+  [
+    "reference/status-reference.md",
+    [
+      "Background data observations",
+      "collection eligibility",
+      "actual service observations",
+      "both controls inactive"
+    ]
+  ],
+  [
+    "reference/encounter-data-and-metrics.md",
+    [
+      "Automatic native processing is supported",
+      "normal/separate native log version 15",
+      "Background consumers",
+      "source-specific capabilities",
+      "#296",
+      "#297"
+    ]
+  ],
+  [
+    "getting-started/responsible-use.md",
+    [
+      "single managed PixelBeacon package",
+      "starts and resumes without a chat command",
+      "next natural addon load",
+      "does not load or resume",
+      "never uploads it",
+      "hostile data"
+    ]
+  ],
+  [
+    "reference/glossary.md",
+    [
+      "single combined PixelBeacon addon",
+      "single managed companion addon",
+      "collects bounded Catalog definitions automatically",
+      "without loading the former encounter recorder"
+    ]
+  ],
+  [
+    "SUMMARY.md",
+    [
+      "Catalog Evidence and Candidate Pipeline",
+      "Automatic Catalog Maintenance",
+      "Automatic Catalog Collection",
+      "Companion-to-Addon Configuration"
+    ]
+  ],
+  [
+    "development/README.md",
+    [
+      "Catalog Evidence and Candidate Pipeline",
+      "Automatic Catalog Maintenance",
+      "Automatic Catalog Collection"
+    ]
+  ],
+  [
+    "reference/settings.md",
+    [
+      "Addons and Game Readings",
+      "Game Environment",
+      "Live",
+      "PTS",
+      "Application Logging",
+      "Write Log to File",
+      "They do not turn on encounter recording"
+    ]
+  ]
+]);
   const errors = [];
   for (const [page, anchors] of required) {
     const markdown = pages.get(page) ?? "";
     const readable = normalizedText(markdown.replace(/<!--[\s\S]*?-->/gu, "").replace(/[`*]/gu, ""));
     for (const anchor of anchors) {
       if (!readable.includes(normalizedText(anchor))) errors.push(`S121 ${page} workflow instruction is missing: ${anchor}`);
+    }
+  }
+  const retired = ["File > Encounter History", "Import Saved Capture", "Inspect Native File", "Import Native File", "Refresh Saved Source", "Refresh Imported History", "Delete Encounter", "Delete All", "Data Details", "PixelBeacon Status", "/ewencounter", "/ewcollect"];
+  for (const [page, markdown] of pages) {
+    const readable = normalizedText(markdown.replace(/[`*]/gu, ""));
+    for (const phrase of retired) {
+      if (readable.includes(normalizedText(phrase))) errors.push(`S130 ${page} retains removed current workflow: ${phrase}`);
     }
   }
   return errors;
@@ -2091,7 +2213,7 @@ const DOCUMENTATION_TABLE_COUNTS = new Map([
   ["development/state-machines.md", 4],
   ["development/test-strategy.md", 2],
   ["features/auto-potion.md", 1],
-  ["features/encounter-capture.md", 1],
+  ["features/encounter-capture.md", 0],
   ["features/fishing.md", 1],
   ["features/interface.md", 1],
   ["features/pixelbeacon.md", 1],
@@ -2106,7 +2228,7 @@ const DOCUMENTATION_TABLE_COUNTS = new Map([
   ["reference/local-api-and-mcp.md", 8],
   ["reference/pixel-bus-protocol.md", 2],
   ["reference/settings.md", 8],
-  ["reference/status-reference.md", 7],
+  ["reference/status-reference.md", 6],
   ["reference/weave-delay-defaults.md", 1],
 ]);
 
@@ -2140,8 +2262,8 @@ export function validateDocumentationTableInventory(pages) {
   for (const [page, expected] of DOCUMENTATION_TABLE_COUNTS) {
     if (!pages.has(page)) errors.push(`S089 table inventory is missing ${page} with ${expected} expected table(s)`);
   }
-  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 68) {
-    errors.push(`documentation table inventory requires 68 tables across 28 pages; found ${total} across ${pages.size} pages`);
+  if (pages.size < DOCUMENTATION_TABLE_COUNTS.size || total !== 66) {
+    errors.push(`documentation table inventory requires 66 tables across 27 pages; found ${total} across ${pages.size} pages`);
   }
   return [...new Set(errors)];
 }
@@ -2908,9 +3030,39 @@ function canonicalEncounterEvents(events) {
 export function validateNativeImportPolicy(contract) {
   const errors = [];
   const native = contract?.native_import_policy ?? {};
-  const expected = {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":6,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false,"context_work_records":20000000,"context_work_bytes":536870912};
+  const expected = {"slice":"S127","issue":272,"source_kind":"native-log","schema_version":1,"store_schema_version":7,"log_version":15,"profile":"normal-separate","environment":"user-selected","api_version":"unavailable","addon_replay":false,"live_tailing":false,"unknown_records":"retain-and-count","incomplete_combats":"count-and-omit","unterminated_lines":"unconsumed-and-counted","original_fields":"ordered-exact-local","diagnostics":"value-free","atomic_migration_and_import":true,"copied_file_reimport":"deterministic","hit_overflow":"separate","catalog_required_for_facts":false,"context_work_records":20000000,"context_work_bytes":536870912};
   for (const [key, value] of Object.entries(expected)) {
     if (native[key] !== value) errors.push("S127 native import requires " + key + "=" + JSON.stringify(value));
+  }
+  return errors;
+}
+
+export function validateAutomaticDataPolicy(contract) {
+  const errors = [];
+  const native = contract?.native_processing_policy ?? {};
+  const required = {
+    slice: "S130", profile: "normal-separate", log_version: 15,
+    normal_inline_followup: 296, verbose_followup: 297,
+    environment: "actual-source-context", mode: "automatic-incremental-catchup-and-tail",
+    requires_viewer: false, requires_manual_import: false,
+    game_logger_mutation: false, source_mutation: false,
+    logging_activity: "unknown-without-current-proof",
+    eligibility: "compatible-combined-package-and-independent-optout",
+    source_generation: "validated-checkpoint-and-file-association",
+    commit: "completed-fights-and-progress-consistent",
+    retained_deletion: "suppression-prevents-automatic-resurrection",
+    derived: "application-owned-generation-qualified-rebuildable",
+    reads: "authenticated-fixed-database-read-only-independent-of-collection",
+    native_catalog_required: false, missing_capability: "explicitly-unavailable",
+    field_verification: "not-claimed-not-required",
+  };
+  for (const [key, value] of Object.entries(required)) {
+    if (native[key] !== value) errors.push(`S130 automatic data requires ${key}=${JSON.stringify(value)}`);
+  }
+  const boundary = contract?.operation_boundary ?? {};
+  if (boundary.current_package !== "combined-PixelBeacon" || boundary.desktop_viewer !== "removed" ||
+      boundary.legacy_addon_recorder !== "historical-readers-only-not-loaded" || boundary.owner_field_test_gate !== false) {
+    errors.push("S130 current operation boundary must retain one package, removed viewer and historical readers without an owner field-test gate");
   }
   return errors;
 }
@@ -4277,6 +4429,7 @@ async function run() {
     ...validateCatalogSourceContract(catalog),
     ...validateEncounterModelContract(encounterModel),
     ...validateNativeImportPolicy(encounterModel),
+    ...validateAutomaticDataPolicy(encounterModel),
     ...validateEncounterEvidence(encounterFixture, encounterProjection, encounterFixtureBytes),
     ...validateVisualizationAudit(visualizationAudit, summaryMarkdown, { existingAuthorityPaths: visualizationAuthorityPaths }),
   ];

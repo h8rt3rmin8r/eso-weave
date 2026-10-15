@@ -23,12 +23,11 @@ test seams. Platform modules contain operating-system calls.
 | Catalog Compiler and Runtime | Explicit normalized ingestion, provenance, coverage, semantic checksums, atomic publication, rollback evidence, and typed read-only queries | Startup generation, network discovery, user encounter storage, or UI-owned SQL |
 | Catalog Candidate Pipeline | Maintainer-request validation, verified source acquisition, exact version tuples, compiler and icon-cache composition, thresholds, redacted reports, and immutable review candidates | Active selection, authenticated origin, releases, or source redistribution |
 | Catalog Maintenance | Actual-root eligibility and independent optouts, stable complete input, compatible accumulation, verified immutable automatic activation, recovery and bounded retries | Source execution, arbitrary-file activation, PTS relabeling, game input or package-data mutation |
-| Data Addon Manager | Exact marker-owned deployment of the `EsoWeaveData` manifest, bootstrap, catalog module, and encounter module | PixelBeacon files, user SavedVariables deletion, parsing, or capture policy |
-| Discovery Collector | Explicit bounded public-API enumeration, deterministic `EsoWeaveDataSaved.catalog` records, and restricted staging | Package lifecycle, encounter state, PixelBeacon, input generation, network transfer, direct SQLite publication, or distributable game art |
-| Encounter Capture Module | Explicit in-game control of exactly single and continuous modes, a bounded ordered spool in `EsoWeaveDataSaved.encounter`, source-exact callbacks and API reads, linked compatibility projections, interruptions, and declared loss | Desktop command ingress, package lifecycle, catalog state, Pixel Bus transport, upload, telemetry, input generation, or gameplay mutation |
-| Encounter Import and Raw Store | Stable bounded SavedVariables reads, non-executing legacy and session-spool parsing, atomic batch validation and storage, terminal and loss validation, canonical content identity, byte-preserving migration, immutable user-owned SQLite records, explicit backup, listing, and deletion | Configuration, catalog mutation, metric projection, automatic discovery, upload, input generation, or gameplay mutation |
+| Discovery Collector | Bounded automatic public-API enumeration, deterministic compatible Catalog records and natural save lifecycle | Package lifecycle, encounter state, input, networking or game art redistribution |
+| Historical Encounter Readers | Compatible retained addon schemas, original evidence, normalization replay and declared loss | Loading or resuming the former recorder, desktop command ingress or gameplay authority |
+| Encounter Ingest and Raw Store | Incremental normal/separate v15 parsing, actual-root discovery, durable source progress, transactional completed fights, historical readers, immutable evidence and explicit contributor backup/deletion | Source mutation, game logger configuration, upload, input generation or gameplay authority |
 | Encounter Metrics | Read-only raw and catalog joins, algorithm-versioned descriptive metrics, explicit loss quality, deterministic receipts, and atomic rebuildable JSON projections | Raw or catalog mutation, history UI, recommendations, live parity claims, upload, telemetry, or gameplay authority |
-| Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog reads and mutation, persistence, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
+| Encounter Recommendations | Pure `s090-v1` evidence gates, bounded provisional review prompts, complete per-item provenance, and deterministic fact-to-advice separation | Raw or catalog mutation, network or model calls, telemetry, live parity claims, UI actions, or gameplay authority |
 
 ## Thread model
 
@@ -130,69 +129,31 @@ User-local API discovery precedes that path when explicitly requested:
 
 `one combined PixelBeacon -> bounded automatic Catalog collection -> natural game save -> restricted importer -> compatible accumulated definitions`
 
-Encounter observation and import follow the isolated encounter-module path:
+Encounter ingestion has application-owned background authority:
 
-The separately opt-in [Local API and MCP](../reference/local-api-and-mcp.md)
-surface projects canonical application state and read-only database results to
-trusted local clients. Its HTTP and MCP adapters share the same snapshot and
-query authorities rather than maintaining transport-specific state.
+`actual Live/PTS root -> bounded native discovery/read -> incremental parser -> completed fights and durable progress -> immutable encounter store -> background derived processing -> authenticated read-only local queries`
 
-`explicit in-game mode and channel selection -> one in-game toggle -> single encounter OR bounded continuous session -> independently terminal ordered encounters -> SavedVariables flush -> explicit stable read -> restricted spool parser -> full batch validation and deterministic replay -> one SQLite transaction`
+Normal/separate log version 15 supports catchup and growing files. Partial tails
+and unfinished fights wait; silence does not complete them. Source generations,
+validated checkpoints and transactional commit admission prevent restart,
+rotation, truncation or cancellation from mixing evidence. Native independent
+facts require no Catalog; missing capabilities remain unavailable. Normal/inline
+and verbose followups are [#296](https://github.com/h8rt3rmin8r/eso-weave/issues/296)
+and [#297](https://github.com/h8rt3rmin8r/eso-weave/issues/297).
 
-The desktop importer consumes terminal schema-v1 legacy and schema-v2 lossless
-handoffs plus the versioned S096 session spool. It requires the caller to name
-both the file and its expected Live or PTS channel. Every terminal spool member
-is structurally validated and replayed before one immediate transaction stores
-the batch. Session identity and contiguous ordinal provide authoritative
-cross-encounter order; raw and compatibility sequences remain encounter-local.
-Repeated and growing snapshots are idempotent, while a changed prefix, malformed
-member, ordinal conflict, or identity collision rejects the whole batch. SQLite
-transactions make migration, append, and explicit deletion atomic; an
-update-blocking trigger keeps raw records immutable. Consistent snapshot backup
-is separate from derived metric projection. Logs, receipts, diagnostics, and
-default UI summaries do not reproduce raw payload values.
+Historical addon readers preserve raw schemas, normalization replay, ordinals,
+loss, canonical bytes and hashes. The combined package does not load the old
+recorder. These readers and contributor utilities are compatibility boundaries,
+not a current player recording/import workflow.
 
-Only explicit user commands inside ESO change encounter authority. The desktop
-has no binding, generated-input, clipboard, Pixel Bus, or SavedVariables command
-path. The existing history worker also performs bounded read-only saved-source
-inspection. It returns controlled state/counts, selected environment/path and
-the modified timestamp from the same stable file handle. Results are accepted
-only for the current path, channel and request generation. Source read/parse
-diagnostics are typed separately from store append failures; neither exposes
-raw input values. **Last saved source** is available before the first import
-and never asserts current in-game activity.
+Application-owned processing binds derived results to actual source, Catalog and
+algorithm identities. Compatible Catalog changes invalidate applicable results;
+unchanged inputs reuse results and stale work cannot replace a newer generation.
+The pure recommendation domain consumes an immutable qualified projection; the
+background service persists rebuildable results and receipts without selecting
+an encounter or opening a window. No result authorizes gameplay input.
 
-Current addon-v3 schema-v2 captures include normalization profile version 1.
-The pure replay verifier derives only from that bounded profile and raw
-observations. Compatibility events cannot seed replay. A complete mismatch
-fails before canonicalization or storage, partial loss is indeterminate, and
-schema-v1 or addon-v2 replay is unavailable without changing legacy import.
-
-Derived encounter calculation continues through an explicit local path:
-
-`immutable raw record + verified compatible catalog -> s069-v1 metrics and loss quality -> canonical projection JSON`
-
-The lowercase algorithm value in this sequence is a persisted runtime
-identifier, not a work-slice reference.
-
-The projection command identifies local-player contributions by recorded combat
-source type rather than opaque actor allocation order. It requires an exact
-channel and API match, keeps unknown positive IDs visible, and can rebuild a new
-catalog receipt without rewriting raw data. The output is outside both SQLite
-authorities and contains no wall-clock creation time, so equal inputs reproduce
-equal bytes.
-
-Selected encounter advice continues through one downstream display-only path:
-
-`immutable in-memory S077 projection -> s090-v1 evidence gates -> bounded provisional report -> encounter-history presentation`
-
-The recommendation domain reopens no catalog or raw store. The history worker
-builds the report from the exact projection placed in the selected detail, so a
-catalog replacement cannot mix versions. Observed metrics render first and remain
-the independent fact authority. Recommendation output has no UI intent, action,
-sink, callback, persistence, logging, network, telemetry, or automation consumer.
-
-Optional icon transformation follows a separate user-local path:
+Icon lookup follows a separate local path:
 
 `catalog virtual paths -> explicit user-owned directory -> bounded PNG/DDS decode -> immutable local manifest and objects`
 
@@ -203,7 +164,7 @@ download, archive extraction, upload, or application activation.
 
 One managed PixelBeacon package owns independent beacon and automatic Catalog modules. Transactional migration validates exact owned inventory and preserves neighboring addons, SavedVariables and retained history. Capability recognition remains separate from mutation ownership. Its startup configuration carries the Catalog optout and actual installation channel; loaded Lua applies changes at the next natural load, without a live inbound command.
 
-Catalog work and finalization yield within bounded ticks, automatically defer/resume around unsuitable game states and retain the last completed snapshot during failures. Both desktop data preferences persist independently, and both services are dormant without recognized compatible combined presence. Native processing consumes the preference contract in its separately scoped implementation. Legacy addon encounter capture is not loaded or automatically resumed; its historical readers, exact evidence and loss semantics remain supported. Completed native-file import remains available until the subsequent automatic native watcher and interface retirement slice.
+Catalog work and finalization yield within bounded ticks, automatically defer/resume around unsuitable game states and retain the last completed snapshot during failures. Both desktop data preferences persist independently, and both services are dormant without recognized compatible combined presence. Native processing consumes the same preference and actual-root eligibility contract through its independent bounded scheduler. Legacy addon encounter capture is not loaded or automatically resumed; its historical readers, exact evidence and loss semantics remain supported. Automatic native processing and downstream calculations continue with the former encounter viewer permanently removed.
 
 Both importers parse the shared outer root through one crate-private restricted
 table grammar, validate its schema and addon version, and then select only their
@@ -214,7 +175,7 @@ The compiler is a second binary in the existing Cargo package, not a `build.rs`
 side effect or workspace. It builds a sibling candidate in one transaction,
 validates and syncs it, preserves rollback evidence, then publishes atomically.
 The application holds the opened version until a controlled reopen and degrades
-to an empty typed catalog with a visible diagnostic on any verification failure.
+to an empty typed catalog with a controlled diagnostic on verification failure.
 
 Release-profile `build.rs` runs the pinned mdBook and link-check renderer, then
 emits a sorted Rust manifest into Cargo's output directory. The executable

@@ -617,9 +617,6 @@ fn main() {
             if let Some(runtime) = maintenance_runtime {
                 app = app.with_data_maintenance(runtime);
             }
-            if let Some(service) = encounter_history {
-                app = app.with_encounter_history(service);
-            }
             Ok(Box::new(app))
         }),
     ) {

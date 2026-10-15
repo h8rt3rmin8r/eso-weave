@@ -16,19 +16,9 @@ pub const SYSTEM_STATE_TOOLTIP: &str =
     "Expand or collapse application, addon, and automation state. This layout preference is saved.";
 pub const STATUS_TITLE: &str = "ESO Weave";
 pub const FISHING_TITLE: &str = "Fishing";
-pub const BEACON_TITLE: &str = "PixelBeacon Status";
+pub const BEACON_TITLE: &str = "PixelBeacon";
 pub const BEACON_SIGNAL_TITLE: &str = "PixelBeacon Signal";
-pub const DATA_ADDON_TITLE: &str = "ESO Weave Data";
-pub const DATA_ADDON_OWNERSHIP_TITLE: &str = "Addon Management";
-pub const DATA_ADDON_COMPATIBILITY_TITLE: &str = "Addon Package Version";
-pub const DATA_ADDON_ENABLED_TITLE: &str = "Enabled in ESO";
-pub const DATA_ADDON_LOADED_TITLE: &str = "Loaded in ESO";
-pub const DATA_ADDON_RELOAD_TITLE: &str = "Reload Reminder";
-pub const DATA_ADDON_RUNTIME_TITLE: &str = "ESO Client";
-pub const DATA_ADDON_CATALOG_TITLE: &str = "Catalog Collection";
-pub const DATA_ADDON_ENCOUNTER_TITLE: &str = "Encounter Recording";
-pub const DATA_ADDON_REMEDIATION_TITLE: &str = "Addon Next Step";
-pub const CATALOG_TITLE: &str = "Catalog";
+
 pub const GAME_TITLE: &str = "Game";
 pub const GAME_INSTALLATION_TITLE: &str = "Game Installation";
 pub const GAME_RUNTIME_TITLE: &str = "Game State";
@@ -43,35 +33,13 @@ pub const STATUS_TOOLTIP: &str =
 pub const FISHING_TOOLTIP: &str =
     "Whether the fishing routine is active. It reads the Pixel Beacon signal to detect bites.";
 pub const BEACON_TOOLTIP: &str =
-    "PixelBeacon sends current game state to ESO Weave for weaving and fishing. This row shows installation and game API support, not whether ESO loaded the addon. Open Data Details for both addons' game-version support and next steps.";
+    "The combined PixelBeacon package supplies current gameplay signals and automatic Catalog collection. This row shows managed installation and game API support; PixelBeacon Signal independently reports current observations.";
 pub const BEACON_UNMANAGED_TOOLTIP: &str =
     "This PixelBeacon folder is not a verified ESO Weave-managed copy. Back it up and move it out of AddOns before using Install; ESO Weave will not change it.";
-pub const DATA_ADDON_TOOLTIP: &str =
-    "ESO Weave Data records encounters and collects catalog game-data definitions. Installed means its files are present; enable it in ESO's Add-Ons menu and reload before using it. PixelBeacon supplies current gameplay readings separately.";
-pub const DATA_ADDON_OWNERSHIP_TOOLTIP: &str =
-    "Managed means ESO Weave recognizes and can update this installed copy. Unmanaged means the folder could not be verified as an ESO Weave-managed copy and will not be changed.";
-pub const DATA_ADDON_COMPATIBILITY_TOOLTIP: &str =
-    "Whether the installed files match the addon bundled with this ESO Weave version. Game API support is listed separately; matching files do not prove the addon is loaded.";
-pub const DATA_ADDON_ENABLED_TOOLTIP: &str =
-    "The desktop cannot read this account's current enablement setting. Check that ESO Weave Data is enabled in ESO's Add-Ons menu.";
-pub const DATA_ADDON_LOADED_TOOLTIP: &str =
-    "The desktop cannot confirm that ESO loaded this addon. Enable ESO Weave Data, run /reloadui, then use /ewencounter status or /ewcollect status inside ESO.";
-pub const DATA_ADDON_RELOAD_TOOLTIP: &str =
-    "Required means the addon files changed while ESO may still be running old code. Run /reloadui or log out and back in. No reminder does not confirm that the addon is enabled or loaded.";
-pub const DATA_ADDON_RUNTIME_TOOLTIP: &str =
-    "Whether the ESO game client is running. This does not tell the desktop whether ESO Weave Data is enabled, loaded, or recording.";
-pub const DATA_ADDON_CATALOG_TOOLTIP: &str =
-    "Catalog collection gathers game-data definitions, not combat recordings. Use /ewcollect status inside ESO for current activity. The desktop sees only the last save of ESO's addon data (SavedVariables), written after /reloadui, logout, or exit.";
-pub const DATA_ADDON_ENCOUNTER_TOOLTIP: &str =
-    "Use /ewencounter status inside ESO for current recording activity. The desktop sees only the last save of ESO's addon data (SavedVariables), written after /reloadui, logout, or exit. Import that saved capture through File > Encounter History.";
-pub const DATA_ADDON_REMEDIATION_TOOLTIP: &str =
-    "The next installation or setup action supported by the information available. Recording controls are commands entered inside ESO.";
-pub const DATA_ADDON_DETAILS_TOOLTIP: &str =
-    "Explain ESO Weave Data setup, game-version support, and which status can be checked only inside ESO.";
+
 pub const BEACON_SIGNAL_TOOLTIP: &str =
     "Whether a fresh PixelBeacon signal is currently available from the active ESO client.";
-pub const CATALOG_TOOLTIP: &str =
-    "The local catalog contains game-data definitions used to interpret recorded ability and effect IDs. It is separate from your recordings and application logs. If unavailable, encounter results may be unavailable while unrelated features keep working.";
+
 pub const GAME_INSTALLATION_TOOLTIP: &str =
     "Whether ESO is installed and which distribution platform supplied the authoritative evidence.";
 pub const GAME_RUNTIME_TOOLTIP: &str =
@@ -107,19 +75,11 @@ pub const SUSPEND_TOOLTIP: &str = "Suspend or resume the weave engine.";
 pub const FISHING_TOGGLE_LABEL: &str = "Fishing";
 pub const FISHING_TOGGLE_TOOLTIP: &str = "Start or stop the fishing routine.";
 pub const BEACON_INSTALL_TOOLTIP: &str =
-    "Install PixelBeacon in the selected ESO AddOns folder to provide current gameplay readings. Enable it in ESO's Add-Ons menu and run /reloadui if ESO is open.";
+    "Install the combined PixelBeacon package in the selected ESO AddOns folder. Enable it in ESO's Add-Ons menu; new Lua applies at the next natural addon load.";
 pub const BEACON_UPDATE_TOOLTIP: &str =
-    "Replace the ESO Weave-managed PixelBeacon copy with the bundled version. Enable it in ESO's Add-Ons menu and run /reloadui if ESO is open. Saved recordings and imported history are retained.";
+    "Replace the managed combined PixelBeacon package with the bundled version. New Lua applies at the next natural addon load; SavedVariables and retained encounter history are kept.";
 pub const BEACON_UNINSTALL_TOOLTIP: &str =
-    "Remove only the ESO Weave-managed PixelBeacon addon files. Current gameplay readings stop after ESO reloads; ESO Weave Data, saved recordings, and imported history are retained.";
-pub const DATA_ADDON_INSTALL_TOOLTIP: &str =
-    "Install ESO Weave Data in the selected Live or PTS AddOns folder. Enable it in ESO's Add-Ons menu, then run /reloadui if ESO is already open.";
-pub const DATA_ADDON_UPDATE_TOOLTIP: &str =
-    "Replace an outdated ESO Weave-managed addon with this version's bundled copy. Existing saved recordings and imported history are retained. Reload ESO afterward if it is open.";
-pub const DATA_ADDON_REPAIR_TOOLTIP: &str =
-    "Reinstall this version's ESO Weave Data files when the managed copy needs repair. Existing saved recordings and imported history are retained. Reload ESO afterward if it is open.";
-pub const DATA_ADDON_UNINSTALL_TOOLTIP: &str =
-    "Remove the ESO Weave-managed addon files. ESO's saved recordings, collected catalog data, and imported history on this computer are retained. Reload ESO afterward if it is open.";
+    "Remove the managed combined PixelBeacon package. SavedVariables, retained encounter history and neighboring addons are kept. Loaded Lua changes at the next natural addon load.";
 
 // Weapon-bar section.
 pub const WEAPON_BAR_TITLE: &str = "Weapon Bar";
@@ -258,12 +218,7 @@ pub const MENU_HELP: &str = "Help";
 pub const MENU_DOCUMENTATION: &str = "Documentation";
 pub const MENU_DOCUMENTATION_TOOLTIP: &str = "Open the complete offline guide in your browser.";
 pub const MENU_SETTINGS: &str = "Settings";
-pub const MENU_CATALOG_UPDATE: &str = "Catalog Update...";
-pub const MENU_ENCOUNTER_HISTORY: &str = "Encounter History...";
-pub const MENU_CATALOG_UPDATE_TOOLTIP: &str =
-    "Review imported Live catalog candidates, install one explicitly, or roll back.";
-pub const MENU_ENCOUNTER_HISTORY_TOOLTIP: &str =
-    "Import saved ESO Weave Data recordings, view their results, and delete imported copies stored on this computer.";
+
 pub const MENU_SETTINGS_TOOLTIP: &str = "Open settings.";
 pub const MENU_EXIT: &str = "Exit";
 pub const MENU_LOG_TOGGLE: &str = "Application Log";
@@ -366,11 +321,11 @@ pub const SET_FISHING_INTERACT_KEY: Setting = Setting {
 };
 pub const SET_BEACON_PATH: Setting = Setting {
     label: "AddOns Folder Override",
-    help: "Use this ESO AddOns folder for both companion addons and the saved capture source in its neighboring SavedVariables folder. Leave blank to auto-detect the selected game environment.",
+    help: "Use this ESO AddOns folder for the combined PixelBeacon package and neighboring automatic data sources. Leave blank to discover supported game environments.",
 };
 pub const SET_BEACON_ENV: Setting = Setting {
     label: "Game Environment",
-    help: "Choose Live (the regular game) or PTS (Public Test Server) for addon installation and the saved capture source. Use the same channel in ESO's recording commands; Live and PTS data are kept distinct.",
+    help: "Choose Live (the regular game) or PTS (Public Test Server) for the combined package. Automatic processing preserves the actual Live or PTS source environment.",
 };
 pub const SET_BLOCK_PX: Setting = Setting {
     label: "Block Size (px)",
@@ -443,16 +398,6 @@ pub fn field_labels() -> Vec<&'static str> {
         FISHING_TITLE,
         BEACON_TITLE,
         BEACON_SIGNAL_TITLE,
-        DATA_ADDON_TITLE,
-        DATA_ADDON_OWNERSHIP_TITLE,
-        DATA_ADDON_COMPATIBILITY_TITLE,
-        DATA_ADDON_ENABLED_TITLE,
-        DATA_ADDON_LOADED_TITLE,
-        DATA_ADDON_RELOAD_TITLE,
-        DATA_ADDON_RUNTIME_TITLE,
-        DATA_ADDON_CATALOG_TITLE,
-        DATA_ADDON_ENCOUNTER_TITLE,
-        DATA_ADDON_REMEDIATION_TITLE,
         GAME_TITLE,
         GAME_INSTALLATION_TITLE,
         GAME_RUNTIME_TITLE,
@@ -502,16 +447,6 @@ pub fn all_labels() -> Vec<&'static str> {
         STATUS_TITLE,
         FISHING_TITLE,
         BEACON_TITLE,
-        DATA_ADDON_TITLE,
-        DATA_ADDON_OWNERSHIP_TITLE,
-        DATA_ADDON_COMPATIBILITY_TITLE,
-        DATA_ADDON_ENABLED_TITLE,
-        DATA_ADDON_LOADED_TITLE,
-        DATA_ADDON_RELOAD_TITLE,
-        DATA_ADDON_RUNTIME_TITLE,
-        DATA_ADDON_CATALOG_TITLE,
-        DATA_ADDON_ENCOUNTER_TITLE,
-        DATA_ADDON_REMEDIATION_TITLE,
         GAME_INSTALLATION_TITLE,
         GAME_RUNTIME_TITLE,
         FISHING_CASTING,
@@ -559,7 +494,6 @@ pub fn all_labels() -> Vec<&'static str> {
         MENU_FILE,
         MENU_VIEW,
         MENU_SETTINGS,
-        MENU_ENCOUNTER_HISTORY,
         MENU_EXIT,
         MENU_LOG_TOGGLE,
         SAVED_TOAST,
@@ -587,17 +521,6 @@ pub fn all_tooltips() -> Vec<&'static str> {
         FISHING_TOOLTIP,
         BEACON_TOOLTIP,
         BEACON_UNMANAGED_TOOLTIP,
-        DATA_ADDON_TOOLTIP,
-        DATA_ADDON_OWNERSHIP_TOOLTIP,
-        DATA_ADDON_COMPATIBILITY_TOOLTIP,
-        DATA_ADDON_ENABLED_TOOLTIP,
-        DATA_ADDON_LOADED_TOOLTIP,
-        DATA_ADDON_RELOAD_TOOLTIP,
-        DATA_ADDON_RUNTIME_TOOLTIP,
-        DATA_ADDON_CATALOG_TOOLTIP,
-        DATA_ADDON_ENCOUNTER_TOOLTIP,
-        DATA_ADDON_REMEDIATION_TOOLTIP,
-        DATA_ADDON_DETAILS_TOOLTIP,
         GAME_INSTALLATION_TOOLTIP,
         GAME_RUNTIME_TOOLTIP,
         SUSPEND_TOOLTIP,
@@ -605,10 +528,6 @@ pub fn all_tooltips() -> Vec<&'static str> {
         BEACON_INSTALL_TOOLTIP,
         BEACON_UPDATE_TOOLTIP,
         BEACON_UNINSTALL_TOOLTIP,
-        DATA_ADDON_INSTALL_TOOLTIP,
-        DATA_ADDON_UPDATE_TOOLTIP,
-        DATA_ADDON_REPAIR_TOOLTIP,
-        DATA_ADDON_UNINSTALL_TOOLTIP,
         WEAPON_BAR_TOOLTIP,
         COMBAT_TOOLTIP,
         MOVEMENT_TOOLTIP,
@@ -623,7 +542,6 @@ pub fn all_tooltips() -> Vec<&'static str> {
         LOG_TOOLTIP,
         LOG_FILTER_TOOLTIP,
         MENU_SETTINGS_TOOLTIP,
-        MENU_ENCOUNTER_HISTORY_TOOLTIP,
         MENU_LOG_TOGGLE_TOOLTIP,
         FISHING_SETTINGS_APPLICATION_HELP,
         READER_SETTINGS_APPLICATION_HELP,

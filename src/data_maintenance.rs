@@ -108,11 +108,7 @@ pub fn discover_contexts(prefs: &BeaconPrefs) -> Vec<Context> {
         }
     }
     for environment in [Environment::Live, Environment::Pts] {
-        let automatic = BeaconPrefs {
-            path_override: None,
-            environment,
-        };
-        if let Ok(root) = beacon::resolve_addons_dir(&automatic) {
+        for root in beacon::discover_addons_dirs(environment) {
             add(root, environment);
         }
     }
@@ -129,6 +125,42 @@ struct ControlState {
     controls_enabled: bool,
     startup_config_persisted: Option<bool>,
     jobs: Vec<(PathBuf, CancellationToken)>,
+    native_jobs: Vec<(PathBuf, CancellationToken)>,
+    native_observation: NativeServiceSnapshot,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeServicePhase {
+    #[default]
+    Dormant,
+    Waiting,
+    Processing,
+    RecoverableFailure,
+}
+
+/// Controlled aggregate facts. Source paths, records and checkpoint bytes never enter this view.
+#[derive(Debug, Clone, Serialize)]
+pub struct NativeServiceSnapshot {
+    pub worker_running: bool,
+    pub phase: NativeServicePhase,
+    pub source_count: usize,
+    pub committed_fights: u64,
+    pub logging_activity: &'static str,
+    pub diagnostic: Option<&'static str>,
+}
+
+impl Default for NativeServiceSnapshot {
+    fn default() -> Self {
+        Self {
+            worker_running: false,
+            phase: NativeServicePhase::Dormant,
+            source_count: 0,
+            committed_fights: 0,
+            logging_activity: "unknown",
+            diagnostic: None,
+        }
+    }
 }
 
 /// Shared immediate cancellation boundary, independent of UI frame/worker queues.
@@ -150,6 +182,8 @@ impl MaintenanceControl {
             controls_enabled: false,
             startup_config_persisted: None,
             jobs: Vec::new(),
+            native_jobs: Vec::new(),
+            native_observation: NativeServiceSnapshot::default(),
         })))
     }
 
@@ -174,6 +208,9 @@ impl MaintenanceControl {
             state.catalog = CancellationToken::new();
         }
         if preferences.native_processing_disabled != state.preferences.native_processing_disabled {
+            for (_, token) in &state.native_jobs {
+                token.cancel();
+            }
             state.native.cancel();
             state.native = CancellationToken::new();
         }
@@ -228,6 +265,9 @@ impl MaintenanceControl {
             for (_, token) in &state.jobs {
                 token.cancel();
             }
+            for (_, token) in &state.native_jobs {
+                token.cancel();
+            }
             state.catalog.cancel();
             state.native.cancel();
             state.catalog = CancellationToken::new();
@@ -262,6 +302,9 @@ impl MaintenanceControl {
         let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
         if !available {
             for (_, token) in &state.jobs {
+                token.cancel();
+            }
+            for (_, token) in &state.native_jobs {
                 token.cancel();
             }
             state.startup_config_persisted = None;
@@ -326,10 +369,105 @@ impl MaintenanceControl {
         for (_, token) in &state.jobs {
             token.cancel();
         }
+        for (_, token) in &state.native_jobs {
+            token.cancel();
+        }
         state.catalog.cancel();
         state.native.cancel();
+    }
+
+    pub fn register_native_job(&self, root: &std::path::Path) -> CancellationToken {
+        let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        state.native_jobs.retain(|(_, token)| !token.is_cancelled());
+        if let Some((_, token)) = state.native_jobs.iter().find(|(path, _)| path == root) {
+            return token.clone();
+        }
+        let token = CancellationToken::new();
+        if !state.controls_enabled
+            || state.preferences.native_processing_disabled
+            || state.native_jobs.len() >= 16
+        {
+            token.cancel();
+        } else {
+            state.native_jobs.push((root.to_path_buf(), token.clone()));
+        }
+        token
+    }
+
+    pub fn cancel_native_root(&self, root: &std::path::Path) {
+        let state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        for (path, token) in &state.native_jobs {
+            if path == root {
+                token.cancel();
+            }
+        }
+    }
+
+    pub fn cancel_native_jobs(&self) {
+        let state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        for (_, token) in &state.native_jobs {
+            token.cancel();
+        }
+    }
+
+    /// The writer already owns its SQLite write transaction before entering this gate.
+    /// Disable/removal and commit admission share this mutex, closing the check/commit race.
+    pub fn with_native_commit<T>(
+        &self,
+        root: &std::path::Path,
+        token: &CancellationToken,
+        commit: impl FnOnce() -> Result<T, crate::encounter::EncounterError>,
+    ) -> Result<T, crate::encounter::EncounterError> {
+        let state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !state.controls_enabled
+            || state.preferences.native_processing_disabled
+            || token.is_cancelled()
+            || !state.native_jobs.iter().any(|(path, current)| {
+                path == root && current.same_generation(token) && !current.is_cancelled()
+            })
+        {
+            return Err(crate::encounter::EncounterError::Validation(
+                "native processing generation stopped".into(),
+            ));
+        }
+        commit()
+    }
+
+    pub fn native_observation(&self) -> NativeServiceSnapshot {
+        let state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let mut observation = state.native_observation.clone();
+        if !state.controls_enabled || state.preferences.native_processing_disabled {
+            observation.phase = NativeServicePhase::Dormant;
+        }
+        observation
+    }
+
+    pub(crate) fn report_native(
+        &self,
+        phase: NativeServicePhase,
+        sources: usize,
+        committed: u64,
+        diagnostic: Option<&'static str>,
+    ) {
+        let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        state.native_observation.worker_running = true;
+        state.native_observation.phase = phase;
+        state.native_observation.source_count = sources;
+        state.native_observation.committed_fights = state
+            .native_observation
+            .committed_fights
+            .saturating_add(committed);
+        state.native_observation.diagnostic = diagnostic;
+    }
+
+    pub(crate) fn native_worker_stopped(&self) {
+        let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        state.native_observation.worker_running = false;
+        state.native_observation.phase = NativeServicePhase::Dormant;
     }
 }
 
 mod runtime;
 pub use runtime::MaintenanceRuntime;
+mod native;
+pub use native::NativeMaintenanceRuntime;

@@ -35,6 +35,11 @@ This manual explains the shipped application, its safety boundaries, and the
 PixelBeacon screen-telemetry addon. Start with a task below, or use search for a
 visible label, status, hotkey, addon, overlay, or failure message.
 
+The single combined PixelBeacon package also collects Catalog definitions
+automatically. Supported native encounter logs are processed in the background
+with independent persistent disable preferences. Retained data is available
+through the optional authenticated local API/MCP without an encounter viewer.
+
 ## Choose a path
 
 - [Getting Started](getting-started/) covers installation, first launch,

@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - S129: One combined PixelBeacon package with automatic managed migration, bounded automatic Catalog collection, useful accumulated definitions, and verified background Catalog activation/recovery (issues #285-#288).
 - Independent persistent Catalog/native-processing disable preferences and accessible direct controls; absent combined addon leaves both dormant/inactive (issue #291).
+- S130: Automatic incremental normal/separate v15 native-log processing with bounded discovery/catchup, durable checkpoints, preserved history and background consumer calculations (issues #289, #290 and #293).
 
 ### Changed
 
+- Retire the complete Encounter History viewer and remaining manual Catalog/Data workflows; retain one PixelBeacon lifecycle and two independent disable controls, with current guidance/assets/contracts updated to actual supported behavior (issues #292 and #294).
 - Scope PixelBeacon protocol constants privately so the complete addon stays within Lua 5.1 chunk-local limits, preserving wire values and all supported beacon observations.
 
 - Make the documentation render smoke test discover Chrome's debugging endpoint
@@ -29,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Decisions
 
 - 2026-10-15: S129 consolidates managed modules under PixelBeacon and replaces manual Catalog authority with bounded automatic maintenance and two independent persisted optouts. Preserve verified ownership, all beacon contracts, saved/history data, immutable publication and local read access. ESO names the current saved file PixelBeacon.lua; read it alongside preserved legacy EsoWeaveData.lua without rewriting either file. Serialize package inspection, mutation and recovery per installation root. Retire obsolete exact-two-package/manual-Catalog policy clauses; update affected pinned documentation checks for this scope. Native watcher and complete viewer retirement remain subsequent issues.
+
+- 2026-10-15: S130 follows the owner's explicit normal/separate v15 scope revision; normal/inline (#296) and verbose (#297) remain separately tracked. Reuse native models/projectors with schema-aware immutable evidence and logical identity aliases. Atomically persist schema7 native fights, checkpoints, suppression and derivations under root-specific commit/cancellation admission. Independent bounded polling owns processing outside UI paint; game files/logging/settings remain untouched. Archive completed Plan055 and establish Plan056. Update pinned documentation policy/render/curation contracts and final screenshot/diagram inventories to remove obsolete player workflows while preserving historical baseline identities, six safety invariants and meaningful accessibility/render gates. No release/tag, field-testing task or automatic merge is included.
 
 - 2026-10-13: Keep the browser rendering gate for Pages builds while making
   headless Chrome startup tolerant of runner delays and silent stderr. A failed

@@ -67,5 +67,7 @@ in [`docs/project/build-plans`](../../project/build-plans/README.md).
 | [053](plan-053.md) | Complete, Archived | [S127](../../../specs/127-native-completed-import/spec.md) completed native import for #272 in [PR #276](https://github.com/h8rt3rmin8r/eso-weave/pull/276), owner-squash-merged on 2026-10-13 at 05c9704 |
 | [054](plan-054.md) | Complete, Archived | [S128](../../../specs/128-v0180-release/spec.md) candidate #279 merged in [PR #278](https://github.com/h8rt3rmin8r/eso-weave/pull/278) on 2026-10-13 at d88151c; separately authorized [v0.18.0](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.18.0) publication completed #277 that day |
 
+| [055](plan-055.md) | Complete, Archived | [S129](../../../specs/129-automatic-catalog-maintenance/spec.md) combined PixelBeacon and automatic Catalog maintenance for #285-#288/#291, owner-squash-merged in [PR #295](https://github.com/h8rt3rmin8r/eso-weave/pull/295) on 2026-10-15 at 9a2580d |
+
 Later corrections do not make an earlier plan active again. The plans remain here
 to preserve chronology, decisions, and traceability to their spec packages.
