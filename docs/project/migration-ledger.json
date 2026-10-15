@@ -1759,11 +1759,11 @@
     },
     {
       "id": "057",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-057.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-057.md",
       "specs": ["specs/131-native-v15-format-coverage"],
-      "evidence": "Owner kickoff on 2026-10-15 authorizes S131 for issue #296 and issue #297, establishing producer grammar first, with automatic push/PR and at most two Codex review rounds before owner final review and merge."
+      "evidence": "S131 completed issue #296 and issue #297 when the owner squash-merged PR #299 on 2026-10-15 at b28d34e686933297e2aaf4f4dadac88ace979370. Pinned producer grammar preceded implementation; all four v15 profiles are supported. Both issues are closed and Done, milestone 21 is complete, and no active issue or next feature slice remains."
     }
   ],
   "safetyCrosswalk": [

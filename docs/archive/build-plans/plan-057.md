@@ -1,6 +1,6 @@
 # Plan 057: Native v15 Format Coverage
 
-Status: In Progress, Active
+Status: Complete, Archived
 
 ## S131 (2026-10-15)
 
@@ -23,4 +23,16 @@ All 1207 local Rust tests, documentation/browser and release gates passed.
 Codex round 1 completed without findings; no second round was needed. Windows,
 Linux, documentation, trust, dependency and CodeQL gates passed on implementation
 head `376b0e6`. The PR conversation records final delivery-head checks. The plan
-remains active pending owner final review and merge.
+completed when the owner merged PR #299.
+
+## Owner merge and post-merge housekeeping (2026-10-15)
+
+The owner squash-merged PR #299 at 16:33:46 UTC as
+`b28d34e686933297e2aaf4f4dadac88ace979370`. Its tree exactly matches reviewed
+delivery head `0dd0f4ec3e23b1ec54304fc947df2b8246120aaa`. Issues #296 and #297
+closed with all fifteen acceptance items checked and their Project Stage set to
+Done. Milestone 21 completed all twelve implementation issues. Local main was
+synchronized and the merged feature branch was removed locally and remotely.
+No active GitHub issue remains; Dependabot PR #284 is separate maintenance.
+Plan057 is archived and no next spec-kit slice is assigned. No release, tag or
+installed-game verification is implied by the merge.

@@ -42,7 +42,7 @@ atomic progress, cancellation and fixed read-only HTTP/MCP services are reused.
 - Final staged text pass: 54 files passed UTF-8/no-BOM/LF, punctuation/mojibake
   and JSON checks; git diff whitespace checks passed before publication.
 
-## Publication and review boundary
+## Publication and review boundary (before owner merge)
 
 Published [PR #299](https://github.com/h8rt3rmin8r/eso-weave/pull/299) from
 implementation commit `376b0e658e225bd61fae3dc98851de324054d8cf` under the
@@ -67,3 +67,19 @@ No game or uploader code was executed, no source settings or logs were changed,
 and no binary/raw private source log is committed. Static producer inspection,
 synthetic tests and hosted checks do not establish installed-game behavior.
 No owner field-testing task, automatic merge, tag or release is included.
+
+## Owner merge and housekeeping (2026-10-15)
+
+The owner merged PR #299 at 16:33:46 UTC as
+`b28d34e686933297e2aaf4f4dadac88ace979370`. The merged tree equals final reviewed
+delivery head `0dd0f4ec3e23b1ec54304fc947df2b8246120aaa`. Issues #296/#297 are
+closed and Project Stage Done; milestone 21 has twelve closed and zero open
+issues and is closed. Main was synchronized, the feature branch removed, and
+Plan057 archived with its indexes and migration ledger. The refreshed repository
+has no open issue; Dependabot PR #284 is separate maintenance. No new slice,
+release, tag or field-verification claim is introduced by this housekeeping.
+
+Documentation-only housekeeping passed 184 policy/render/brand/trust tests,
+the repository trust scan, corpus/generated-site policy, nine-file UTF-8/no-BOM/LF
+and JSON checks, and git diff whitespace checks. Rust and product sources are
+unchanged by this administration.
