@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/s129-automatic-catalog-maintenance`
 **Created**: 2026-10-15
-**Status**: Specified
+**Status**: Implemented, owner final review and merge pending
 **Input**: Owner kickoff for S129, issues #285, #286, #287, #288 and #291, automatic push and official PR, at most two Codex review rounds, owner final review and merge.
 
 ## User Scenarios & Testing

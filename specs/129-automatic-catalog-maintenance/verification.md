@@ -212,6 +212,33 @@ it adds no documentation endpoint or product workflow.
 After both Windows package corrections and the documentation socket correction,
 the final local gates above pass. The accepted-socket regression also passes in
 release profile, followed by all nine original release-guide integration tests.
-Hosted checks on the next published correction remain required.
+All hosted checks pass on implementation correction
+bf4c3758aa697a6bc49e42d16c81112fa6960418. The additional bounded four-thread
+diagnostic also passes all 1,182 tests without changes
+(target/s129-four-thread-diagnostic.log); it did not reproduce a stall. The
+Windows job ultimately completed successfully, including its release build and
+cache publication. Its extended duration did not justify weakening any gate.
 The two authorized Codex rounds are complete. No third review, merge, tag or
 release is authorized.
+
+## Completed delivery and owner boundary
+
+[PR #295](https://github.com/h8rt3rmin8r/eso-weave/pull/295) is published,
+attached, ready for owner review and unmerged. It closes #285-#288 and #291 on
+merge. Direct review/thread reads confirm exactly two Codex submissions,
+responses to all three findings and zero unresolved review threads.
+
+Hosted implementation evidence on bf4c375:
+
+- [Windows and Linux CI, dependency review](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38727238880): PASS.
+- [Documentation build, policy and actual browser gates](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38727238881): PASS; Pages deployment correctly skipped for the PR.
+- [Rust analysis and CodeQL](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38727238979): PASS.
+- [Protected trust policy](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/38727235675) and closing-issue/proposed-policy checks: PASS.
+
+The receipt-only follow-up records completed tasks and this owner handoff; it
+changes no implementation, published guide, test or gate. Its exact-head checks
+must also finish successfully in the [PR checks](https://github.com/h8rt3rmin8r/eso-weave/pull/295/checks)
+before the final chat handoff. Stop with the PR open for owner final review and
+merge. No tag, release, installed-game verification or owner field-testing
+requirement is included. The program boundaries and evidence limits above
+remain in force.

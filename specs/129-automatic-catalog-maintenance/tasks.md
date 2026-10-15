@@ -40,8 +40,8 @@ Input: spec.md, plan.md, research.md, data-model.md, contracts/automatic-data.md
 
 - [x] T020 Update directly affected docs/src guidance, CLAUDE.md, build-autopilot, policy fixtures and create Plan055 with synchronized indexes/ledger/CHANGELOG.md (FR-014-FR-015).
 - [x] T021 Run all foreground Rust/release-profile/docs/render/repository gates and text encoding/mojibake checks; record actual red/green and acceptance audit in verification.md (FR-001-FR-015).
-- [ ] T022 Commit/push and publish/attach official PR closing #285-#288/#291; complete at most two Codex review rounds, fix/respond/resolve every finding and verify exact final-head CI (FR-015).
-- [ ] T023 Deliver owner final review/merge handoff with no merge/tag/release and explicit evidence limitations in verification.md (FR-015).
+- [x] T022 Commit/push and publish/attach official PR closing #285-#288/#291; complete at most two Codex review rounds, fix/respond/resolve every finding and verify exact final-head CI (FR-015).
+- [x] T023 Deliver owner final review/merge handoff with no merge/tag/release and explicit evidence limitations in verification.md (FR-015).
 
 ## Dependencies and implementation strategy
 
