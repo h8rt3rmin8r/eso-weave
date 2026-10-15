@@ -1,8 +1,10 @@
 local ADDON_NAME = "PixelBeacon"
 local NAMESPACE = ADDON_NAME .. "DataBootstrap"
 
--- Keep the historical shared SavedVariables identity. Unknown roots remain
--- untouched, and Catalog owns only its completed snapshot and bounded metadata.
+-- Keep the historical global table/schema, not the legacy disk filename.
+-- PixelBeacon.txt owns SavedVariables/PixelBeacon.lua. The desktop separately
+-- reads retained EsoWeaveData.lua; this addon neither loads nor rewrites it.
+-- Unknown loaded roots remain untouched. Catalog owns only its snapshot/metadata.
 local function onLoaded(_, addonName)
     if addonName ~= ADDON_NAME then return end
     EVENT_MANAGER:UnregisterForEvent(NAMESPACE, EVENT_ADD_ON_LOADED)

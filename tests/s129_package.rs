@@ -1,4 +1,5 @@
 use eso_weave::beacon::{self, BeaconStatus, Environment, RunningState};
+use eso_weave::data_addon;
 use std::fs;
 
 #[test]
@@ -24,6 +25,13 @@ fn managed_legacy_data_migrates_without_touching_saved_variables_or_neighbors() 
     )
     .unwrap();
     let before = fs::read(&saved).unwrap();
+    let current_saved = saved.with_file_name("PixelBeacon.lua");
+    fs::write(
+        &current_saved,
+        "EsoWeaveDataSaved = { catalog = { schema_version = 2, sentinel = 2 } }\n",
+    )
+    .unwrap();
+    let current_before = fs::read(&current_saved).unwrap();
     let neighbor = addons.join("Neighbor");
     fs::create_dir(&neighbor).unwrap();
     fs::write(neighbor.join("keep"), b"untouched").unwrap();
@@ -42,8 +50,19 @@ fn managed_legacy_data_migrates_without_touching_saved_variables_or_neighbors() 
     assert!(presence.eligible());
     assert!(presence.startup_config.unwrap().catalog_disabled);
     assert_eq!(fs::read(&saved).unwrap(), before);
+    assert_eq!(fs::read(&current_saved).unwrap(), current_before);
+    assert_eq!(
+        data_addon::catalog_saved_variables_paths(&addons).unwrap(),
+        [saved.clone(), current_saved.clone()]
+    );
     assert_eq!(fs::read(neighbor.join("keep")).unwrap(), b"untouched");
     assert!(!addons.join("PixelBeacon/Encounter.lua").exists());
+    beacon::write_startup_config(&addons, false, Environment::Live).unwrap();
+    beacon::recover(&addons).unwrap();
+    beacon::uninstall(&addons, RunningState::Running).unwrap();
+    assert_eq!(fs::read(&saved).unwrap(), before);
+    assert_eq!(fs::read(&current_saved).unwrap(), current_before);
+    assert_eq!(fs::read_dir(saved.parent().unwrap()).unwrap().count(), 2);
 }
 
 #[test]

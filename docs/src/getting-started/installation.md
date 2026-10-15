@@ -101,7 +101,10 @@ inside ESO Weave supplies the complete single companion package, including
 automatic Catalog collection. Recognized managed legacy PixelBeacon and ESO
 Weave Data packages migrate automatically when their actual Live or PTS context
 is discovered. Existing SavedVariables and desktop history remain intact; no
-second addon installation is required. New Lua and startup preferences take
+second addon installation is required. Current PixelBeacon.txt saves use
+SavedVariables/PixelBeacon.lua. The retained legacy EsoWeaveData.lua is read
+separately by desktop Catalog and encounter compatibility paths, not loaded by
+the new addon or copied into its current save. New Lua and startup preferences take
 effect at the next natural addon load or game session.
 
 Linux releases include a `.deb`, AppImage, and tarball. Release assets include a

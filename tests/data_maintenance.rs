@@ -143,6 +143,55 @@ fn completed_fixture() -> String {
     )
 }
 
+#[test]
+fn addon_identity_saved_filename_is_consumed_without_a_legacy_file() {
+    use eso_weave::beacon::{self, RunningState};
+    use eso_weave::data_maintenance::MaintenanceRuntime;
+    let root = tempfile::tempdir().unwrap();
+    let addons = root.path().join("live/AddOns");
+    std::fs::create_dir_all(&addons).unwrap();
+    beacon::install_configured(
+        &addons,
+        RunningState::NotRunning,
+        101050,
+        3,
+        false,
+        Environment::Live,
+    )
+    .unwrap();
+    let deployed_manifest = addons.join("PixelBeacon/PixelBeacon.txt");
+    assert!(deployed_manifest.is_file());
+    let legacy = eso_weave::data_addon::saved_variables_path(&addons).unwrap();
+    let current = legacy
+        .parent()
+        .unwrap()
+        .join(deployed_manifest.file_stem().unwrap())
+        .with_extension("lua");
+    assert_eq!(current.file_name().unwrap(), "PixelBeacon.lua");
+    std::fs::create_dir_all(current.parent().unwrap()).unwrap();
+    let input = completed_fixture();
+    std::fs::write(&current, &input).unwrap();
+    let bundled = std::path::PathBuf::from("assets/catalog/catalog.sqlite");
+    let queries = eso_weave::database_query::DatabaseQueryService::new(bundled.clone(), None);
+    let runtime = MaintenanceRuntime::spawn_with_contexts(
+        root.path().join("config"),
+        bundled,
+        MaintenanceControl::new(DataMaintenancePrefs::default()),
+        queries,
+        vec![Context {
+            addons_root: addons,
+            environment: Environment::Live,
+        }],
+    );
+    let selected = wait_activation(&runtime);
+    assert!(selected.access.ability(100).unwrap().is_some());
+    assert!(
+        !legacy.exists(),
+        "compatibility must not create a legacy SavedVariables copy"
+    );
+    assert_eq!(std::fs::read_to_string(current).unwrap(), input);
+}
+
 fn wait_activation(
     runtime: &eso_weave::data_maintenance::MaintenanceRuntime,
 ) -> eso_weave::catalog_update::CatalogResolution {

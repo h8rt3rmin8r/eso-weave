@@ -4,7 +4,7 @@ Date: 2026-10-15. Baseline: 43d8c557c0b3e346fea0cbc9fc1a288af854234a.
 
 ## Package
 
-Decision: central exact-inventory transactional PixelBeacon lifecycle with legacy Data facade. Rationale: beacon currently writes in place/removes recursively, while data_addon has bounded inventory/race/quarantine/rollback seams. Preserve legacy SavedVariables identity and unrelated files. Alternative of moving Lua alone leaves duplicate lifecycle and unsafe migration. Research agent: package.
+Decision: central exact-inventory transactional PixelBeacon lifecycle with legacy Data facade. Rationale: beacon currently writes in place/removes recursively, while data_addon has bounded inventory/race/quarantine/rollback seams. Preserve the legacy saved table contract, legacy file bytes and unrelated files. Alternative of moving Lua alone leaves duplicate lifecycle and unsafe migration. Research agent: package.
 
 ## Collection
 
@@ -21,3 +21,17 @@ Decision: typed independent settings with shared pure per-root eligibility/cance
 ## Evidence limits
 
 Temporary filesystem, Lua doubles and SQLite fixtures establish their tested scope only. No account/game experiment, source log mutation, forced reload, release or field-testing gate is included.
+
+## Review corrections, 2026-10-15
+
+The second Codex round identified that ESO derives the SavedVariables filename
+from the addon manifest, not the declared global table. The current manifest
+therefore uses PixelBeacon.lua; the old EsoWeaveData.lua remains untouched.
+Automatic Catalog ingestion reads both in bounded legacy-first/current-second
+order with independent stable-input and retry state. The historical encounter
+reader retains the old input. No manifest filename override is assumed. See the
+primary addon-developer explanation linked from lua-verification.md.
+
+Windows CI also exposed in-process package recovery racing a lifecycle mutation.
+The correction serializes mutation and recovery per canonical AddOns root,
+retaining the existing checks for external filesystem changes.

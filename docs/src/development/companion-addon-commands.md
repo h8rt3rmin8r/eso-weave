@@ -42,10 +42,13 @@ for bounded scanning, completed generations and restart behavior.
 
 The combined package does not load the old Encounter.lua recorder or register
 its /ewencounter control workflow. It also does not register /ewcollect.
-Previously saved Catalog and encounter evidence retain the historical
-EsoWeaveDataSaved root and SavedVariables/EsoWeaveData.lua disk identity. Legacy
-parsers and local encounter history access remain available, while source
-fixtures preserve regression coverage for old recorder data formats.
+Previously saved Catalog and encounter evidence remain in the legacy
+SavedVariables/EsoWeaveData.lua file with its EsoWeaveDataSaved root. Current
+PixelBeacon.txt reads and saves that global table in SavedVariables/PixelBeacon.lua;
+the global name cannot override the manifest-derived filename. New Lua does not
+load the legacy file. The desktop reconciles both Catalog sources into its own
+accumulation and keeps legacy encounter import/history access. Neither source
+file is copied or rewritten, and source fixtures preserve old recorder formats.
 
 The retained /pbquickslot diagnostic belongs to the existing beacon signal
 feature. It does not start maintenance or supply a desktop-to-addon transport.

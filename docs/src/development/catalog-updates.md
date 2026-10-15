@@ -8,7 +8,9 @@ The only maintenance control is **Disable Catalog maintenance** in File > Settin
 
 <a id="collector-assisted-candidate"></a>
 
-The package owns separate beacon, startup-configuration and Catalog modules. It preserves `EsoWeaveDataSaved` and the legacy `SavedVariables/EsoWeaveData.lua` disk identity so existing data remains readable. The old addon encounter recorder is not loaded or automatically mirrored.
+The package owns separate beacon, startup-configuration and Catalog modules. It retains the `EsoWeaveDataSaved` global table/schema, while its `PixelBeacon.txt` manifest makes current ESO saves use `SavedVariables/PixelBeacon.lua`. The legacy `SavedVariables/EsoWeaveData.lua` remains untouched and separately readable. A shared global name does not load that older manifest's file into the new addon. The old encounter recorder is not loaded or automatically mirrored.
+
+For each actual environment, the desktop observes the legacy Catalog file and the current manifest-derived file independently through the same strict stable-file parser. Compatible accepted facts accumulate in application-owned storage; previous verified facts remain available while the new Lua collector starts its generation. Different API/version domains retain their own provenance. Neither game save is copied, rewritten, or used as an inbound command transport.
 
 Catalog starts when required game APIs are ready. Relevant changes are coalesced; combat and unsuitable transitions defer work, followed by automatic resumption or bounded restart. The last completed snapshot remains usable while the next generation is unfinished. Scan, sort, serialization, checksums and retained generations all have bounded work/resource limits. See [Discovery Collector](discovery-collector.md) for actual sources, coverage and gaps.
 

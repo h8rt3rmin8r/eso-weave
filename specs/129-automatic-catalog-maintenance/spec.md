@@ -100,6 +100,8 @@ Combined installation (root, identity/capabilities, ownership); independent pers
 - Empty valid builds do not count as useful population; independent captures must add queryable supported facts.
 - Owner-selected topology supersedes old two-package/manual-Catalog product rules; amend those while preserving ownership/data integrity.
 - A recognized manual combined package permits only an exact, separately validated startup-configuration update. That configuration contract does not grant ownership to replace/delete its manifest, modules or extra files. Transactional configuration recovery precedes eligibility inspection.
+- ESO names saved-data files after the addon manifest, independently of the saved table name. Preserve legacy EsoWeaveData.lua in place and automatically ingest both it and the unified package's PixelBeacon.lua, with independent partial-write handling and compatible accumulation. Existing encounter/history readers retain their legacy input; no game-owned saved-data file is rewritten or moved.
+- Package/configuration mutation and recovery share a per-root serialization boundary. Background reconciliation must not clean another in-process lifecycle transaction's journal; external ownership and race checks remain required.
 
 ## Assumptions
 

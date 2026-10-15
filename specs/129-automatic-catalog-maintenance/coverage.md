@@ -35,7 +35,13 @@ needed to enumerate these independent sources.
 
 ## Generation and relationship contract
 
-The completed version-1 envelope remains under EsoWeaveDataSaved.catalog. New
+The completed version-1 envelope remains under EsoWeaveDataSaved.catalog.
+Its global name does not choose the disk filename: PixelBeacon.txt reads/saves
+SavedVariables/PixelBeacon.lua, while legacy SavedVariables/EsoWeaveData.lua stays
+unchanged for separate desktop Catalog and encounter readers. The new Lua addon
+does not load the legacy file. Compatible legacy/current facts reconcile in
+application-owned accumulation, preserving old usable definitions while a fresh
+current-file generation runs. No game save is copied, moved, or rewritten. New
 captures retain the first parent field for compatibility and provide the full
 deduplicated parents array. Import validates each referenced typed entity and
 preserves every edge. Source positions are version-scoped ordering facts, not
@@ -54,7 +60,10 @@ activation are verified separately from Lua execution.
 ## Verification evidence
 
 The automatic Lua harness feeds actual emitted SavedVariables into the strict
-Rust parser, checks populated records in all twelve source groups, validates a
+Rust parser. Its manifest-named file model derives the output filename from the
+actual deployed manifest stem, checks both desktop input paths, preserves the
+legacy file bytes, and roundtrips the current envelope/reload. It is a contract
+model, not evidence that a game save ran. Other cases check populated records in all twelve source groups, validates a
 shared script's two parents, and exercises base/morph/passive ranks, crafted
 skill separation, readiness, combat/loading, fresh load order, restart/retry,
 quiet operation, natural-load optout, Live/PTS identity, repeated source noise,

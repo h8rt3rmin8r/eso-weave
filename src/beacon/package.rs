@@ -1,6 +1,7 @@
 //! One exact companion inventory and its recoverable on-disk transactions.
 
 mod configuration;
+mod mutation;
 
 use std::fs;
 use std::io::Write;
@@ -503,19 +504,14 @@ fn retained_config(addons_root: &Path) -> StartupConfig {
 
 pub fn install_sized(
     addons_root: &Path,
-    running: RunningState,
-    api_version: u32,
+    _running: RunningState,
+    _api_version: u32,
     block_px: u32,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    let config = retained_config(addons_root);
-    install_configured(
-        addons_root,
-        running,
-        api_version,
-        block_px,
-        config.catalog_disabled,
-        config.environment,
-    )
+    mutation::with_root(addons_root, |root| {
+        recover_locked(root)?;
+        install_locked(root, block_px, retained_config(root))
+    })
 }
 
 pub fn install_configured(
@@ -526,16 +522,28 @@ pub fn install_configured(
     catalog_disabled: bool,
     environment: Environment,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    let root = canonical_root(addons_root)?;
-    recover(&root)?;
-    let replacement = expected_snapshot(
-        block_px,
-        StartupConfig {
-            catalog_disabled,
-            environment,
-        },
-    );
-    transact(&root, Some(replacement), |_, _| Ok(()))?;
+    mutation::with_root(addons_root, |root| {
+        recover_locked(root)?;
+        install_locked(
+            root,
+            block_px,
+            StartupConfig {
+                catalog_disabled,
+                environment,
+            },
+        )
+    })
+}
+
+// Internal helpers run under mutation::with_root. They never call public
+// mutation entry points, which would attempt to acquire the same mutex twice.
+fn install_locked(
+    root: &Path,
+    block_px: u32,
+    config: StartupConfig,
+) -> Result<LifecycleOutcome, LifecycleError> {
+    let replacement = expected_snapshot(block_px, config);
+    transact(root, Some(replacement), |_, _| Ok(()))?;
     Ok(LifecycleOutcome {
         status: BeaconStatus::ManagedUpToDate,
         reload_required: false,
@@ -547,15 +555,16 @@ pub fn write_startup_config(
     catalog_disabled: bool,
     environment: Environment,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    let root = canonical_root(addons_root)?;
-    recover(&root)?;
-    configuration::update(
-        &root,
-        StartupConfig {
-            catalog_disabled,
-            environment,
-        },
-    )
+    mutation::with_root(addons_root, |root| {
+        recover_locked(root)?;
+        configuration::update(
+            root,
+            StartupConfig {
+                catalog_disabled,
+                environment,
+            },
+        )
+    })
 }
 
 /// Startup reconciliation upgrades recognized owned packages without treating
@@ -565,15 +574,24 @@ pub fn migrate_legacy_if_needed(
     catalog_disabled: bool,
     environment: Environment,
 ) -> Result<bool, LifecycleError> {
-    let root = canonical_root(addons_root)?;
-    recover(&root)?;
-    let pixel = match snapshot(&root, &root.join(super::SUBFOLDER), Kind::Pixel, false) {
+    mutation::with_root(addons_root, |root| {
+        migrate_legacy_locked(root, catalog_disabled, environment)
+    })
+}
+
+fn migrate_legacy_locked(
+    root: &Path,
+    catalog_disabled: bool,
+    environment: Environment,
+) -> Result<bool, LifecycleError> {
+    recover_locked(root)?;
+    let pixel = match snapshot(root, &root.join(super::SUBFOLDER), Kind::Pixel, false) {
         Ok(value) => value,
         Err(LifecycleError::Unmanaged) => return Ok(false),
         Err(error) => return Err(error),
     };
     let data = match snapshot(
-        &root,
+        root,
         &root.join(LEGACY_DATA_SUBFOLDER),
         Kind::LegacyData,
         false,
@@ -585,31 +603,40 @@ pub fn migrate_legacy_if_needed(
     if pixel.is_none() && data.is_none() {
         return Ok(false);
     }
-    if data.is_none() && inspect(&root)? == BeaconStatus::ManagedUpToDate {
+    if data.is_none() && inspect(root)? == BeaconStatus::ManagedUpToDate {
         return Ok(false);
     }
-    let block_px = installed_block_px(&root).unwrap_or(crate::pixelbus::DEFAULT_BLOCK_PX);
-    install_configured(
-        &root,
-        RunningState::Unknown,
-        super::DEFAULT_API_VERSION,
+    let block_px = installed_block_px(root).unwrap_or(crate::pixelbus::DEFAULT_BLOCK_PX);
+    install_locked(
+        root,
         block_px,
-        catalog_disabled,
-        environment,
+        StartupConfig {
+            catalog_disabled,
+            environment,
+        },
     )?;
     Ok(true)
 }
 
 pub fn uninstall(
     addons_root: &Path,
-    _running: RunningState,
+    running: RunningState,
 ) -> Result<LifecycleOutcome, LifecycleError> {
-    let root = canonical_root(addons_root)?;
-    recover(&root)?;
-    transact(&root, None, |_, _| Ok(()))?;
-    Ok(LifecycleOutcome {
-        status: BeaconStatus::NotInstalled,
-        reload_required: false,
+    uninstall_with(addons_root, running, |_, _| Ok(()))
+}
+
+fn uninstall_with(
+    addons_root: &Path,
+    _running: RunningState,
+    boundary: impl FnMut(&str, &Path) -> std::io::Result<()>,
+) -> Result<LifecycleOutcome, LifecycleError> {
+    mutation::with_root(addons_root, |root| {
+        recover_locked(root)?;
+        transact(root, None, boundary)?;
+        Ok(LifecycleOutcome {
+            status: BeaconStatus::NotInstalled,
+            reload_required: false,
+        })
     })
 }
 
@@ -786,9 +813,12 @@ fn transact(
 
 /// Recover only bounded journals written by this lifecycle; unrelated files stay intact.
 pub fn recover(addons_root: &Path) -> Result<(), LifecycleError> {
-    let root = canonical_root(addons_root)?;
+    mutation::with_root(addons_root, recover_locked)
+}
+
+fn recover_locked(root: &Path) -> Result<(), LifecycleError> {
     let mut candidates = Vec::new();
-    for entry in fs::read_dir(&root)? {
+    for entry in fs::read_dir(root)? {
         let entry = entry?;
         if entry
             .file_name()
@@ -806,9 +836,9 @@ pub fn recover(addons_root: &Path) -> Result<(), LifecycleError> {
     }
     candidates.sort();
     for transaction in candidates {
-        recover_transaction(&root, &transaction)?;
+        recover_transaction(root, &transaction)?;
     }
-    configuration::recover_all(&root)?;
+    configuration::recover_all(root)?;
     Ok(())
 }
 
@@ -1066,6 +1096,61 @@ fn rename_no_replace(_source: &Path, _destination: &Path) -> std::io::Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn background_recovery_waits_for_active_uninstall_cleanup() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let sandbox = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(sandbox.path()).unwrap();
+        install_configured(
+            &root,
+            RunningState::Unknown,
+            101051,
+            5,
+            false,
+            Environment::Live,
+        )
+        .unwrap();
+        let (cleanup_entered, cleanup_wait) = mpsc::channel();
+        let (release_cleanup, cleanup_release) = mpsc::channel();
+        let uninstall_root = root.clone();
+        let uninstall = std::thread::spawn(move || {
+            uninstall_with(&uninstall_root, RunningState::Unknown, |boundary, _| {
+                if boundary == "before-cleanup" {
+                    cleanup_entered.send(()).unwrap();
+                    cleanup_release.recv().unwrap();
+                }
+                Ok(())
+            })
+        });
+        cleanup_wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (attempted, attempt_wait) = mpsc::channel();
+        let (completed, completion_wait) = mpsc::channel();
+        // A different path spelling must share the same canonical root lock.
+        let recovery_root = root.join(".");
+        let recovery = std::thread::spawn(move || {
+            attempted.send(()).unwrap();
+            let result = recover(&recovery_root);
+            completed.send(()).unwrap();
+            result
+        });
+        attempt_wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        let recovered_during_uninstall = completion_wait
+            .recv_timeout(Duration::from_millis(150))
+            .is_ok();
+        release_cleanup.send(()).unwrap();
+        let uninstall_result = uninstall.join().unwrap();
+        let recovery_result = recovery.join().unwrap();
+        assert!(
+            !recovered_during_uninstall,
+            "background recovery entered an active uninstall journal: {uninstall_result:?}"
+        );
+        assert_eq!(uninstall_result.unwrap().status, BeaconStatus::NotInstalled);
+        recovery_result.unwrap();
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+    }
 
     fn legacy(root: &Path, kind: Kind) -> Snapshot {
         let directory = root.join(kind.directory());

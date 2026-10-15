@@ -179,6 +179,81 @@ fn source(lua: &Lua) -> String {
 }
 
 #[test]
+fn manifest_named_save_roundtrips_current_catalog_without_loading_legacy_disk_data() {
+    use eso_weave::{beacon, data_addon};
+    use std::path::Path;
+
+    // This is a manifest-based file model, not an assertion that a game save ran.
+    // ESO names the file after the manifest, while SavedVariables names its global.
+    let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("addon")
+        .join(beacon::SUBFOLDER)
+        .join(beacon::MANIFEST_FILE);
+    let manifest = std::fs::read_to_string(&manifest_path).unwrap();
+    assert_eq!(manifest, beacon::MANIFEST);
+    let stem = manifest_path.file_stem().unwrap().to_str().unwrap();
+    assert_eq!(manifest_path.parent().unwrap().file_name().unwrap(), stem);
+    let global = manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("## SavedVariables: "))
+        .unwrap();
+    assert_eq!(global, "EsoWeaveDataSaved");
+    let modeled_filename = format!("{stem}.lua");
+    assert_ne!(modeled_filename, format!("{global}.lua"));
+
+    let sandbox = tempfile::tempdir().unwrap();
+    let environment = sandbox.path().join("live");
+    let addons = environment.join("AddOns");
+    let saves = environment.join("SavedVariables");
+    std::fs::create_dir_all(&addons).unwrap();
+    std::fs::create_dir_all(&saves).unwrap();
+    let legacy_path = data_addon::saved_variables_path(&addons).unwrap();
+    let legacy = include_bytes!("../specs/092-data-addon-foundation/fixtures/catalog-live.lua");
+    std::fs::write(&legacy_path, legacy).unwrap();
+    parse_capture(legacy).unwrap();
+
+    // A new addon identity has no old-file contents in memory. The old global
+    // spelling alone cannot make ESO load that other manifest's saved file.
+    let lua = harness("EsoWeaveDataSaved=nil");
+    run(
+        &lua,
+        "__fire(EVENT_PLAYER_ACTIVATED); __finish(); assert(EsoWeaveDataSaved.encounter==nil)",
+    );
+    let current = format!(
+        "{global} = {}",
+        serialize_table(lua.globals().get(global).unwrap())
+    );
+    let current_path = saves.join(&modeled_filename);
+    std::fs::write(&current_path, &current).unwrap();
+    let expected = parse_capture(current.as_bytes()).unwrap();
+
+    let paths = data_addon::catalog_saved_variables_paths(&addons).unwrap();
+    assert_eq!(paths[0], legacy_path);
+    assert_eq!(paths[1], current_path);
+    assert_eq!(
+        paths[1].file_name().unwrap(),
+        data_addon::CURRENT_SAVED_VARIABLES_FILE
+    );
+    let current_from_disk = parse_capture(&std::fs::read(&paths[1]).unwrap()).unwrap();
+    assert_eq!(current_from_disk.records, expected.records);
+    assert_eq!(current_from_disk.scope_key, "character-123");
+    assert_eq!(std::fs::read(&paths[0]).unwrap(), legacy);
+    parse_capture(&std::fs::read(&paths[0]).unwrap()).unwrap();
+
+    let restarted = harness(&current);
+    run(
+        &restarted,
+        "__fire(EVENT_PLAYER_ACTIVATED); __finish(); assert(EsoWeaveDataSaved.encounter==nil)",
+    );
+    assert_eq!(
+        parse_capture(source(&restarted).as_bytes())
+            .unwrap()
+            .records,
+        expected.records
+    );
+}
+
+#[test]
 fn automatic_load_collects_real_double_facts_and_all_shared_relationships_quietly() {
     let lua = harness("");
     run(&lua,"assert(SLASH_COMMANDS['/ewcollect']==nil); __fire(EVENT_PLAYER_ACTIVATED); __finish(); assert(#__messages==0); assert(__saves==1); assert(EsoWeaveDataSaved.encounter.sentinel=='preserved')");

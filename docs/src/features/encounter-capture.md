@@ -30,8 +30,9 @@ for supported records, stable-file validation, and incomplete-fight handling.
 ## Import retained addon captures
 
 Open **File > Encounter History** and choose **Import Saved Capture** to read the
-selected environment's existing `SavedVariables/EsoWeaveData.lua`. This preserved
-identity contains old encounter evidence alongside Catalog data. The desktop
+selected environment's legacy `SavedVariables/EsoWeaveData.lua`. It retains old
+encounter evidence alongside the historical Catalog data. Current Catalog saves
+use `SavedVariables/PixelBeacon.lua`; they are not copied into this legacy file. The desktop
 copies accepted fights into local history without executing or changing the
 source. **Refresh Saved Source** inspects the disk file; **Refresh Imported History** rereads desktop copies. Neither starts a recorder or imports new data.
 The import and deletion contracts below remain supported for retained recordings.
@@ -51,7 +52,9 @@ recordings; clearing is a separate deliberate deletion choice.
 
 The historical Catalog collector and encounter recorder shared the
 `EsoWeaveData` package and the game's `SavedVariables/EsoWeaveData.lua` file, with
-separate module data. The current combined addon preserves that saved identity.
+separate module data. The current combined addon retains the global table/schema
+name, but its manifest uses SavedVariables/PixelBeacon.lua. The desktop keeps
+reading the historical recorder file separately.
 **SavedVariables** means ESO's saved addon data. The desktop reads the last
 file ESO wrote and does not control the in-game recording toggle.
 
@@ -180,7 +183,8 @@ current package preserves its SavedVariables and does not register these command
   can bring deleted fights back.
 - The former `/ewcollect clear confirm` command cleared only old Catalog data.
   Current PixelBeacon **Uninstall** removes the combined managed package while
-  preserving the shared saved file, imported history and Catalog generations.
+  preserving the shared saved file from the historical addon, the current
+  PixelBeacon.lua save, imported history and Catalog generations.
 
 A historical recorder reporting an unsupported saved-data version preserved that
 data and refused to clear it. The current importer also preserves unsupported

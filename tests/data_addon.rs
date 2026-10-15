@@ -79,6 +79,43 @@ fn saved_data_identity_and_reviewed_api_support_remain_compatible() {
 }
 
 #[test]
+fn catalog_paths_follow_manifest_identity_and_keep_legacy_read_order() {
+    let current_stem = std::path::Path::new(beacon::MANIFEST_FILE)
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_eq!(
+        data_addon::CURRENT_SAVED_VARIABLES_FILE,
+        format!("{current_stem}.lua")
+    );
+    assert_eq!(data_addon::LEGACY_SAVED_VARIABLES_FILE, "EsoWeaveData.lua");
+    assert_eq!(
+        data_addon::SAVED_VARIABLES_FILE,
+        data_addon::LEGACY_SAVED_VARIABLES_FILE
+    );
+    for environment in ["live", "pts"] {
+        let root = std::path::Path::new("example")
+            .join(environment)
+            .join("AddOns");
+        let saved = root.parent().unwrap().join("SavedVariables");
+        let candidates = data_addon::catalog_saved_variables_paths(&root).unwrap();
+        assert_eq!(
+            candidates,
+            [
+                saved.join("EsoWeaveData.lua"),
+                saved.join("PixelBeacon.lua")
+            ]
+        );
+        assert_eq!(
+            data_addon::saved_variables_path(&root),
+            Some(candidates[0].clone())
+        );
+    }
+    assert!(data_addon::catalog_saved_variables_paths(std::path::Path::new("")).is_none());
+}
+
+#[test]
 fn facade_cannot_overwrite_or_remove_foreign_files() {
     let sandbox = tempfile::tempdir().unwrap();
     data_addon::install(sandbox.path(), data_addon::RunningState::NotRunning, 101051).unwrap();

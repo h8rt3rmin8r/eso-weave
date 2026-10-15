@@ -60,9 +60,11 @@ ESO Weave does not overwrite an unproven target.
 
 A recognized managed legacy PixelBeacon or ESO Weave Data package migrates
 automatically to the combined PixelBeacon package. No second addon installation
-or manual file movement is required. Existing shared SavedVariables, legacy
-encounter recordings, and imported desktop history remain readable. The combined
-package does not resume the legacy addon encounter recorder.
+or manual file movement is required. The legacy SavedVariables/EsoWeaveData.lua
+and imported desktop history remain readable. Current saves use
+SavedVariables/PixelBeacon.lua from the new manifest. Desktop Catalog accumulation
+reads both files; the new addon does not load the legacy save or resume its
+encounter recorder.
 
 Catalog collection and desktop maintenance request automatic operation by
 default. No collector command, source selection, build, import, or refresh action

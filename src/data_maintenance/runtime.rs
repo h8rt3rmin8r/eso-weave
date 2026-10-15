@@ -52,10 +52,23 @@ struct Schedule {
     epoch: u64,
     busy: bool,
     next: Option<Instant>,
-    signature: Option<(u64, Option<SystemTime>, Option<SystemTime>)>,
+    sources: BTreeMap<PathBuf, SourceSchedule>,
     last_reconcile: Option<Instant>,
     failures: u32,
     selected_path: Option<PathBuf>,
+}
+
+type SourceSignature = (u64, Option<SystemTime>, Option<SystemTime>);
+
+#[derive(Clone, Default)]
+struct SourceSchedule {
+    // Accepted bytes and failed attempts have separate hints. New saves can
+    // bypass a failed attempt's delay without changing the healthy peer's clock.
+    signature: Option<SourceSignature>,
+    attempted_signature: Option<SourceSignature>,
+    last_reconcile: Option<Instant>,
+    failures: u32,
+    next: Option<Instant>,
 }
 
 struct Job {
@@ -347,7 +360,7 @@ fn reconcile_schedule(
         schedule.eligible = eligible;
         schedule.environment = environment;
         schedule.publish = publish;
-        schedule.signature = None;
+        schedule.sources.clear();
         schedule.last_reconcile = None;
         schedule.next = None;
         schedule.failures = 0;
@@ -589,6 +602,35 @@ fn publish_resolution(
     }
 }
 
+fn remember_source(job: &Job, path: PathBuf, source: Option<SourceSchedule>) {
+    let mut state = job.state.lock().unwrap_or_else(|e| e.into_inner());
+    if state.epoch != job.epoch {
+        return;
+    }
+    if let Some(source) = source {
+        state.sources.insert(path, source);
+    } else {
+        state.sources.remove(&path);
+    }
+}
+
+fn source_failed(
+    job: &Job,
+    path: PathBuf,
+    mut source: SourceSchedule,
+    signature: Option<SourceSignature>,
+) {
+    source.failures = source.failures.saturating_add(1).min(6);
+    source.attempted_signature = signature;
+    source.next = Some(
+        Instant::now() + Duration::from_secs(1_u64 << source.failures).min(job.timing.retry_max),
+    );
+    if source.failures == 1 {
+        tracing::warn!(target:"eso_weave::data_maintenance","completed Catalog source unavailable or rejected; other source and last verified generation retained, retry bounded");
+    }
+    remember_source(job, path, Some(source));
+}
+
 fn run_job_with_progress(
     job: Job,
     queries: &DatabaseQueryService,
@@ -597,9 +639,7 @@ fn run_job_with_progress(
     mut observe: impl FnMut(crate::catalog_update::UpdateProgress),
 ) {
     let started = Instant::now();
-    let path = crate::data_addon::saved_variables_path(&job.context.addons_root);
     let mut reconciled = false;
-    let mut signature = None;
     let outcome = (|| {
         if job.token.is_cancelled() {
             return Ok(());
@@ -611,8 +651,6 @@ fn run_job_with_progress(
                 .is_none_or(|last| started.duration_since(last) >= job.timing.reconcile)
         };
         if validate_selection {
-            // Retained reads remain available when game-owned source data is
-            // missing, partial, or locked. Every context registers its history.
             let resolution = job.service.resolve_catalog();
             if !job.token.is_cancelled() {
                 publish_resolution(&job, resolution, queries, latest, history, false);
@@ -628,51 +666,102 @@ fn run_job_with_progress(
                 job.service.recover_staging()?;
             }
         }
-        let Some(path) = path else {
-            return Ok(());
-        };
-        let metadata = match fs::metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(crate::catalog_update::UpdateError::Io(error)),
-        };
-        let observed = (
-            metadata.len(),
-            metadata.modified().ok(),
-            metadata.created().ok(),
-        );
+        // ESO names the file after the addon identity, independently of the
+        // retained Lua global. Read legacy first, then current; never migrate or
+        // rewrite either game-owned source. A bad source cannot block its peer.
+        for path in crate::data_addon::catalog_saved_variables_paths(&job.context.addons_root)
+            .into_iter()
+            .flatten()
         {
-            let state = job.state.lock().unwrap_or_else(|e| e.into_inner());
-            if state.signature == Some(observed)
-                && state
-                    .last_reconcile
-                    .is_some_and(|last| started.duration_since(last) < job.timing.reconcile)
+            if job.token.is_cancelled() {
+                break;
+            }
+            let source = job
+                .state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .sources
+                .get(&path)
+                .cloned()
+                .unwrap_or_default();
+            let now = Instant::now();
+            let metadata = match fs::metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    remember_source(&job, path, None);
+                    continue;
+                }
+                Err(_) => {
+                    if source.next.is_none_or(|next| next <= now) {
+                        source_failed(&job, path, source, None);
+                    }
+                    continue;
+                }
+            };
+            let observed = (
+                metadata.len(),
+                metadata.modified().ok(),
+                metadata.created().ok(),
+            );
+            if source.attempted_signature == Some(observed)
+                && source.next.is_some_and(|next| next > now)
             {
-                return Ok(());
+                continue;
+            }
+            if source.signature == Some(observed)
+                && source
+                    .last_reconcile
+                    .is_some_and(|last| now.duration_since(last) < job.timing.reconcile)
+            {
+                continue;
+            }
+            let token = job.token.clone();
+            let root = job.context.addons_root.clone();
+            let result = job
+                .service
+                .maintain_collector_capture(&path, &token, |progress| {
+                    if !beacon::inspect_presence(&root)
+                        .ok()
+                        .is_some_and(|facts| facts.eligible())
+                    {
+                        token.cancel();
+                    }
+                    observe(progress);
+                });
+            match result {
+                Ok(outcome) => {
+                    let committed = matches!(outcome, AutomaticCatalogOutcome::Activated(_));
+                    // Activation proves the short selection boundary completed.
+                    // A later stop still receives its coherent reader update.
+                    if committed || !token.is_cancelled() {
+                        publish_resolution(
+                            &job,
+                            job.service.resolve_catalog(),
+                            queries,
+                            latest,
+                            history,
+                            committed,
+                        );
+                    }
+                    if !token.is_cancelled() {
+                        remember_source(
+                            &job,
+                            path,
+                            Some(SourceSchedule {
+                                signature: Some(observed),
+                                attempted_signature: Some(observed),
+                                last_reconcile: Some(Instant::now()),
+                                failures: 0,
+                                next: None,
+                            }),
+                        );
+                    }
+                    reconciled = true;
+                }
+                Err(_) if token.is_cancelled() => break,
+                Err(_) => source_failed(&job, path, source, Some(observed)),
             }
         }
-        let token = job.token.clone();
-        let root = job.context.addons_root.clone();
-        let outcome = job
-            .service
-            .maintain_collector_capture(&path, &token, |progress| {
-                if !beacon::inspect_presence(&root)
-                    .ok()
-                    .is_some_and(|facts| facts.eligible())
-                {
-                    token.cancel();
-                }
-                observe(progress);
-            })?;
-        let committed = matches!(outcome, AutomaticCatalogOutcome::Activated(_));
-        // An Activated result proves that the short atomic selection boundary
-        // completed. A later stop must not strand readers on the older path.
-        if committed || !token.is_cancelled() {
-            let resolution = job.service.resolve_catalog();
-            publish_resolution(&job, resolution, queries, latest, history, committed);
-        }
-        signature = Some(observed);
-        reconciled = true;
         Ok::<(), crate::catalog_update::UpdateError>(())
     })();
     let finished = Instant::now();
@@ -683,21 +772,23 @@ fn run_job_with_progress(
     }
     if outcome.is_err() && !job.token.is_cancelled() {
         state.failures = state.failures.saturating_add(1).min(6);
-        let delay = Duration::from_secs(1_u64 << state.failures).min(job.timing.retry_max);
-        state.next = Some(finished + delay);
+        state.next =
+            Some(finished + Duration::from_secs(1_u64 << state.failures).min(job.timing.retry_max));
         if state.failures == 1 {
-            tracing::warn!(target: "eso_weave::data_maintenance", "completed Catalog input unavailable or rejected; last verified generation retained, retry bounded");
+            tracing::warn!(target:"eso_weave::data_maintenance","Catalog reconciliation unavailable; last verified generation retained, retry bounded");
         }
     } else {
-        if !job.token.is_cancelled() {
-            if let Some(signature) = signature {
-                state.signature = Some(signature);
-            }
-            if reconciled {
-                state.last_reconcile = Some(finished);
-            }
+        if !job.token.is_cancelled() && reconciled {
+            state.last_reconcile = Some(finished);
         }
-        state.failures = 0;
+        state.failures = state
+            .sources
+            .values()
+            .map(|source| source.failures)
+            .max()
+            .unwrap_or(0);
+        // Poll both metadata hints even while one source backs off. Only the
+        // failing source observes its retry deadline.
         state.next = Some(finished + job.timing.discovery);
     }
 }
@@ -756,6 +847,9 @@ mod tests {
     #[test]
     fn committed_generation_publishes_even_when_stop_arrives_after_commit() {
         let (_root, job, queries) = job_fixture();
+        let current = current_capture_path(&job);
+        let unconsumed = completed_capture(200, "2026-10-15T12:00:01Z", Channel::Live);
+        fs::write(&current, &unconsumed).unwrap();
         let service = job.service.clone();
         let token = job.token.clone();
         let latest = Mutex::new(None);
@@ -776,6 +870,9 @@ mod tests {
             latest.lock().unwrap().as_ref().unwrap().path,
             committed.path
         );
+        assert!(committed.access.ability(100).unwrap().is_some());
+        assert!(committed.access.ability(200).unwrap().is_none());
+        assert_eq!(fs::read_to_string(current).unwrap(), unconsumed);
     }
 
     fn timing() -> RuntimeTiming {
@@ -860,6 +957,121 @@ mod tests {
         }
     }
 
+    fn force_reconcile(job: &Job) {
+        let due = Instant::now() - job.timing.reconcile;
+        let mut state = job.state.lock().unwrap();
+        state.last_reconcile = Some(due);
+        for source in state.sources.values_mut() {
+            source.last_reconcile = Some(due);
+        }
+    }
+
+    fn current_capture_path(job: &Job) -> PathBuf {
+        let manifest = job.context.addons_root.join("PixelBeacon/PixelBeacon.txt");
+        assert!(manifest.is_file());
+        crate::data_addon::saved_variables_path(&job.context.addons_root)
+            .unwrap()
+            .with_file_name(manifest.file_stem().unwrap())
+            .with_extension("lua")
+    }
+
+    #[test]
+    fn legacy_then_current_sources_accumulate_and_restart_without_new_generation() {
+        let (root, job, queries) = job_fixture();
+        let legacy = crate::data_addon::saved_variables_path(&job.context.addons_root).unwrap();
+        let current = current_capture_path(&job);
+        let old_input = completed_capture(100, "2026-09-09T12:00:01Z", Channel::Live);
+        let new_input = completed_capture(200, "2026-10-15T12:00:01Z", Channel::Live);
+        fs::write(&legacy, &old_input).unwrap();
+        fs::write(&current, &new_input).unwrap();
+        let latest = Mutex::new(None);
+        let mut committed = Vec::new();
+        run_job_with_progress(repeat(&job), &queries, &latest, None, |progress| {
+            if progress.stage == UpdateStage::Complete {
+                let selected = job.service.resolve_catalog();
+                committed.push((
+                    selected.access.ability(100).unwrap().is_some(),
+                    selected.access.ability(200).unwrap().is_some(),
+                ));
+            }
+        });
+        assert_eq!(committed, vec![(true, false), (true, true)]);
+        let accepted = job.service.load_selection().unwrap();
+        assert_eq!(job.state.lock().unwrap().sources.len(), 2);
+        let mut restarted = repeat(&job);
+        restarted.service = CatalogUpdateService::new(
+            root.path().join("config"),
+            root.path().join("bundled.sqlite"),
+        );
+        restarted.state = Arc::new(Mutex::new(Schedule::default()));
+        run_job(restarted, &queries, &latest, None);
+        assert_eq!(job.service.load_selection().unwrap(), accepted);
+        assert_eq!(fs::read_to_string(legacy).unwrap(), old_input);
+        assert_eq!(fs::read_to_string(current).unwrap(), new_input);
+    }
+
+    #[test]
+    fn partial_legacy_or_current_does_not_starve_peer_and_later_save_merges() {
+        for partial_current in [false, true] {
+            let (_root, mut job, queries) = job_fixture();
+            job.timing = timing();
+            let legacy = crate::data_addon::saved_variables_path(&job.context.addons_root).unwrap();
+            let current = current_capture_path(&job);
+            let (partial, healthy) = if partial_current {
+                (current, legacy)
+            } else {
+                (legacy, current)
+            };
+            let healthy_input = completed_capture(100, "2026-09-09T12:00:01Z", Channel::Live);
+            fs::write(&healthy, &healthy_input).unwrap();
+            fs::write(&partial, b"EsoWeaveDataSaved={").unwrap();
+            let latest = Mutex::new(None);
+            run_job(repeat(&job), &queries, &latest, None);
+            assert!(job
+                .service
+                .resolve_catalog()
+                .access
+                .ability(100)
+                .unwrap()
+                .is_some());
+            {
+                let state = job.state.lock().unwrap();
+                assert_eq!(state.sources[&partial].failures, 1);
+                assert_eq!(state.sources[&healthy].failures, 0);
+                assert!(state.sources[&partial].next.is_some());
+            }
+            // Keep the failed source deliberately inside its backoff. A changed
+            // natural-save signature must be retried immediately, independently
+            // of how long processing the healthy peer took.
+            job.state
+                .lock()
+                .unwrap()
+                .sources
+                .get_mut(&partial)
+                .unwrap()
+                .next = Some(Instant::now() + Duration::from_secs(3600));
+            let completed = completed_capture(200, "2026-10-15T12:00:01Z", Channel::Live);
+            fs::write(&partial, &completed).unwrap();
+            run_job(repeat(&job), &queries, &latest, None);
+            let selected = job.service.resolve_catalog();
+            for ability in [100, 200] {
+                assert!(selected.access.ability(ability).unwrap().is_some());
+            }
+            assert_eq!(job.state.lock().unwrap().failures, 0);
+            assert_eq!(fs::read_to_string(&partial).unwrap(), completed);
+            assert_eq!(fs::read_to_string(&healthy).unwrap(), healthy_input);
+            let later = completed_capture(300, "2026-10-16T12:00:01Z", Channel::Live);
+            fs::write(&partial, &later).unwrap();
+            run_job(repeat(&job), &queries, &latest, None);
+            let selected = job.service.resolve_catalog();
+            for ability in [100, 200, 300] {
+                assert!(selected.access.ability(ability).unwrap().is_some());
+            }
+            assert_eq!(fs::read_to_string(partial).unwrap(), later);
+            assert_eq!(fs::read_to_string(healthy).unwrap(), healthy_input);
+        }
+    }
+
     #[test]
     fn partial_source_retries_from_completion_and_repair_clears_backoff() {
         let (_root, mut job, queries) = job_fixture();
@@ -868,12 +1080,17 @@ mod tests {
         fs::write(&source, b"EsoWeaveDataSaved={").unwrap();
         let latest = Mutex::new(None);
         for expected in 1..=7 {
+            if let Some(source_state) = job.state.lock().unwrap().sources.get_mut(&source) {
+                source_state.next = Some(Instant::now());
+            }
             run_job(repeat(&job), &queries, &latest, None);
             let now = Instant::now();
             let state = job.state.lock().unwrap();
             assert_eq!(state.failures, expected.min(6));
-            assert!(state.next.unwrap() > now);
-            assert!(state.next.unwrap().duration_since(now) <= job.timing.retry_max);
+            let source_state = &state.sources[&source];
+            assert_eq!(source_state.failures, expected.min(6));
+            assert!(source_state.next.unwrap() > now);
+            assert!(source_state.next.unwrap().duration_since(now) <= job.timing.retry_max);
         }
         assert!(matches!(
             job.service.load_selection().unwrap().active,
@@ -924,7 +1141,7 @@ mod tests {
             first,
             "metadata fast path must defer until its bounded full reconcile"
         );
-        job.state.lock().unwrap().last_reconcile = Some(Instant::now() - job.timing.reconcile);
+        force_reconcile(&job);
         run_job(repeat(&job), &queries, &latest, None);
         assert!(job
             .service
@@ -934,13 +1151,67 @@ mod tests {
             .unwrap()
             .is_some());
         let accepted = job.service.load_selection().unwrap();
-        job.state.lock().unwrap().last_reconcile = Some(Instant::now() - job.timing.reconcile);
+        force_reconcile(&job);
         run_job(repeat(&job), &queries, &latest, None);
         assert_eq!(
             job.service.load_selection().unwrap(),
             accepted,
             "semantic replay must not select another generation"
         );
+    }
+
+    #[test]
+    fn one_sources_new_saves_do_not_delay_its_peers_periodic_reconcile() {
+        let (_root, job, queries) = job_fixture();
+        let legacy = crate::data_addon::saved_variables_path(&job.context.addons_root).unwrap();
+        let current = current_capture_path(&job);
+        fs::write(
+            &legacy,
+            completed_capture(100, "2026-09-09T12:00:01Z", Channel::Live),
+        )
+        .unwrap();
+        fs::write(
+            &current,
+            completed_capture(200, "2026-10-15T12:00:01Z", Channel::Live),
+        )
+        .unwrap();
+        let latest = Mutex::new(None);
+        run_job(repeat(&job), &queries, &latest, None);
+        let metadata = fs::metadata(&legacy).unwrap();
+        let missed = completed_capture(300, "2026-10-16T12:00:01Z", Channel::Live);
+        assert_eq!(missed.len() as u64, metadata.len());
+        fs::write(&legacy, missed).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&legacy)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(metadata.modified().unwrap()))
+            .unwrap();
+        fs::write(
+            &current,
+            completed_capture(400, "2026-10-17T12:00:01Z", Channel::Live),
+        )
+        .unwrap();
+        run_job(repeat(&job), &queries, &latest, None);
+        let selected = job.service.resolve_catalog();
+        assert!(selected.access.ability(400).unwrap().is_some());
+        assert!(selected.access.ability(300).unwrap().is_none());
+        {
+            let mut state = job.state.lock().unwrap();
+            assert!(state
+                .last_reconcile
+                .is_some_and(|last| last.elapsed() < job.timing.reconcile));
+            assert!(state.sources[&current]
+                .last_reconcile
+                .is_some_and(|last| last.elapsed() < job.timing.reconcile));
+            state.sources.get_mut(&legacy).unwrap().last_reconcile =
+                Some(Instant::now() - job.timing.reconcile);
+        }
+        run_job(repeat(&job), &queries, &latest, None);
+        let selected = job.service.resolve_catalog();
+        for ability in [100, 200, 300, 400] {
+            assert!(selected.access.ability(ability).unwrap().is_some());
+        }
     }
 
     #[test]
@@ -979,7 +1250,7 @@ mod tests {
         });
         let state = state.lock().unwrap();
         assert!(!state.busy);
-        assert!(state.signature.is_none());
+        assert!(state.sources.is_empty());
         assert!(state.last_reconcile.is_none());
         assert!(state.next.is_none());
     }

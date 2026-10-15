@@ -10,7 +10,11 @@ pub const DATA_ADDON_SUBFOLDER: &str = crate::beacon::SUBFOLDER;
 pub const MANIFEST_FILE: &str = crate::beacon::MANIFEST_FILE;
 pub const BOOTSTRAP_FILE: &str = crate::beacon::BOOTSTRAP_FILE;
 pub const CATALOG_FILE: &str = crate::beacon::CATALOG_FILE;
-pub const SAVED_VARIABLES_FILE: &str = "EsoWeaveData.lua";
+/// Disk identity of the former EsoWeaveData.txt addon, retained for history readers.
+pub const LEGACY_SAVED_VARIABLES_FILE: &str = "EsoWeaveData.lua";
+/// ESO chooses this filename from the current PixelBeacon.txt manifest stem.
+pub const CURRENT_SAVED_VARIABLES_FILE: &str = "PixelBeacon.lua";
+pub const SAVED_VARIABLES_FILE: &str = LEGACY_SAVED_VARIABLES_FILE;
 pub const MAX_SAVED_VARIABLES_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_SAVED_VARIABLES_TOKENS: usize = 4_000_000;
 pub const MAX_SAVED_VARIABLES_ENTRIES: usize = 2_600_000;
@@ -165,6 +169,19 @@ pub fn saved_variables_path(addons_root: &Path) -> Option<PathBuf> {
         environment
             .join("SavedVariables")
             .join(SAVED_VARIABLES_FILE)
+    })
+}
+
+/// Read legacy observations before the current addon's output, without moving or
+/// rewriting either ESO-owned file. The bounded order lets current data supersede
+/// legacy Catalog data while keeping historical encounter readers unchanged.
+pub fn catalog_saved_variables_paths(addons_root: &Path) -> Option<[PathBuf; 2]> {
+    addons_root.parent().map(|environment| {
+        let saved = environment.join("SavedVariables");
+        [
+            saved.join(LEGACY_SAVED_VARIABLES_FILE),
+            saved.join(CURRENT_SAVED_VARIABLES_FILE),
+        ]
     })
 }
 

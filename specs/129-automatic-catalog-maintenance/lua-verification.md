@@ -28,6 +28,44 @@ must not be read as closing those independent desktop criteria.
   (target/s129-render-policy-unit.log). These are source/policy tests, not a
   rendered installed-game check.
 
+## Round 2 saved-file identity correction
+
+The manifest identity and the declared global table are distinct. The firsthand
+[ESOUI developer explanation](https://www.esoui.com/forums/showthread.php?page=2&t=8411)
+states that the manifest filename determines the SavedVariables filename; the
+[ESO forum guide](https://forums.elderscrollsonline.com/en-gb/discussion/comment/1038882/)
+separately identifies the manifest-declared global. The linked ESOUI wiki could
+not be retrieved (HTTP 403); no filename override is assumed or introduced.
+
+PixelBeacon.txt therefore reads/saves SavedVariables/PixelBeacon.lua with global
+EsoWeaveDataSaved and the existing root schema. The new addon does not load old
+SavedVariables/EsoWeaveData.lua merely because that global has the same spelling.
+On the first current-file load, Lua starts a fresh bounded Catalog generation.
+The legacy file remains untouched and independently consumable by desktop Catalog
+and historical encounter readers. Compatible facts are retained/merged in
+application-owned accumulation. Previously active verified data stays usable
+while collection proceeds. Neither game file is copied, rewritten, or used to
+deliver commands. Preservation of the prior in-memory Lua snapshot applies to
+the loaded current file; preservation across the manifest change uses the retained
+legacy file and desktop accumulation. No old recorder is loaded or resumed.
+
+The manifest_named_save_roundtrips_current_catalog_without_loading_legacy_disk_data
+regression derives its modeled output filename from the actual deployed manifest
+stem, reads its declared global, writes the actual emitted current envelope at
+that derived path, checks the production legacy/current path pair, parses both
+through the strict parser, checks unchanged legacy bytes, and roundtrips a modeled
+current reload. This is an explicit file model, not installed-game save evidence.
+The focused collector suite passed 17/17, including this new regression, in
+target/s129-review2-package-green.log. The same combined invocation passed 88
+package/library cases, six data-addon cases and five package integration cases.
+The separate runtime regression first failed because automatic maintenance ignored the
+manifest-named current file (target/s129-runtime-filename-red.log); dual-read
+runtime integration subsequently passed 13/13 in
+target/s129-review2-maintenance-integration-green.log. Runtime/module cases cover
+current-only startup, legacy/current union, independent malformed-source retry,
+later saves and restart/no-op without source mutation. Package/source preservation
+verification remains independently owned and is summarized in package-verification.md.
+
 ## Acceptance mapping
 
 | Criterion | Actual behavior and evidence |
@@ -82,8 +120,10 @@ new generation without deleting the prior one.
 
 ## Limits and remaining scope
 
-No known Lua acceptance criterion remains intentionally unimplemented after the
-audit repairs. The current sixteen collector tests passed as recorded above.
+The original sixteen collector tests passed as recorded above; all seventeen
+including the Round 2 manifest-derived save/load case now pass. Independent
+automatic dual-read and package-preservation verification remains separately
+owned before overall closure.
 Full combined-beacon, settings persistence/accessibility, absent-addon eligibility,
 desktop stale-work cancellation and stable-file-to-active-Catalog tests remain
 separately owned and are summarized in verification.md.

@@ -47,7 +47,7 @@ Combat and player deactivation defer work. A supported reactivation resumes the
 same in-memory generation when its identity is unchanged. Character, locale or
 version changes restart the bounded scan with the new identity. A natural addon
 reload starts a new bounded scan automatically, preserving the last completed
-snapshot throughout. Relevant source changes coalesce; repeated known-item
+snapshot loaded from the current manifest's file throughout. Relevant source changes coalesce; repeated known-item
 stack/durability and known-effect duration/stack events do not continuously
 rescan unchanged definitions.
 
@@ -71,10 +71,18 @@ new player-facing maintenance controls.
 
 ## Game-managed save and desktop handoff
 
-The historical file and table identity stay unchanged:
-SavedVariables/EsoWeaveData.lua and EsoWeaveDataSaved. Catalog and retained legacy
-encounter subtrees remain separate. The combined addon does not load the legacy
-Encounter.lua recorder or automatically resume an old recording.
+The PixelBeacon.txt manifest retains the global table EsoWeaveDataSaved and its
+root schema. ESO names the current disk file SavedVariables/PixelBeacon.lua after
+the manifest, independently of that global name. This follows the
+[addon developer's filename explanation](https://www.esoui.com/forums/showthread.php?page=2&t=8411)
+and [SavedVariables guide](https://esoui.com/forums/showthread.php?p=49082).
+
+The legacy SavedVariables/EsoWeaveData.lua stays on disk and remains readable by
+the desktop Catalog and encounter importers. The new addon does not load that
+other manifest's file or its Encounter.lua recorder. When no current save exists,
+Lua starts a new bounded generation. Desktop accumulation separately reconciles
+compatible old and current facts and keeps previously verified data. It never
+copies, rewrites, or merges the game's SavedVariables files.
 
 A changed completed generation can request priority through the documented
 AddOnManager:RequestAddOnSavedVariablesPrioritySave API. Requests are coalesced

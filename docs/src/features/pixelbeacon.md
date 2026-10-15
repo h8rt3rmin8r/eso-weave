@@ -95,10 +95,17 @@ recovery files are preserved.
 Management requires the ownership marker, declared inventory, regular files, and
 bounded stable reads. Links, reparse points, unexpected files, and unproven
 targets cannot grant permission to replace or delete files. Unrelated addons and
-the other game's environment remain untouched. Removal preserves
-`SavedVariables/EsoWeaveData.lua`, completed Catalog data, legacy addon encounter
-data, and desktop history. The legacy Encounter recorder is not shipped or
+the other game's environment remain untouched. Removal preserves both the current
+`SavedVariables/PixelBeacon.lua` and legacy `SavedVariables/EsoWeaveData.lua`,
+completed Catalog data, legacy addon encounter data, and desktop history. The legacy Encounter recorder is not shipped or
 automatically resumed by the combined package.
+
+ESO derives the current saved filename from PixelBeacon.txt, not from the
+EsoWeaveDataSaved global name. The new addon reads and saves PixelBeacon.lua; it
+does not load the old EsoWeaveData.lua file. The desktop reads both Catalog files
+independently and preserves compatible facts in its own accumulation. Legacy
+encounter readers continue to use the old file. No game save is copied, rewritten,
+or turned into an inbound command channel.
 
 Package presence and mutation ownership are separate facts. A compatible manually
 maintained combined package can make data controls available even when ESO Weave

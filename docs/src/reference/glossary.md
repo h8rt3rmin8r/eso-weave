@@ -121,7 +121,9 @@ The local desktop companion that coordinates configured weaving, fishing, and
 resource-watch features while enforcing focus and observed game-state safety.
 Its single managed PixelBeacon package publishes screen signals and collects
 Catalog definitions automatically. The former ESO Weave Data name remains useful
-for retained encounter evidence and the preserved SavedVariables identity.
+for retained encounter evidence. The global SavedVariables table/schema stays
+compatible; current PixelBeacon.lua and retained legacy EsoWeaveData.lua files
+are separate disk identities.
 
 **Related:** [ESO Weave documentation home](../), [companion addon configuration](../development/companion-addon-commands.md)
 
@@ -320,7 +322,8 @@ carry minimal local game observations through on-screen colors.
 
 The single managed companion addon that publishes game observations as on-screen
 color blocks and collects bounded Catalog definitions automatically. It preserves
-the existing SavedVariables identity without loading the former encounter recorder.
+the existing SavedVariables global/schema, saves to PixelBeacon.lua, and leaves
+the legacy EsoWeaveData.lua readable without loading the former encounter recorder.
 
 **Related:** [PixelBeacon feature guide](../features/pixelbeacon.md)
 
