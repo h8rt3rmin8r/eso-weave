@@ -4,7 +4,7 @@
 
 Owner-selected #306-#310, implemented on codex/133-ui-maintenance-regressions from main cf0d66e87277a31eca9f2f843b1f695be1fa5928.
 
-The initial test-first regressions failed for window growth, missing visibility, inline confirmation, verbose status and absent PTS reconciliation. Read-only installed diagnostics confirmed recurring once-per-minute warnings and an absent discovered PTS AddOns directory alongside an existing Live root. No installed package content was modified.
+Before repairs, the behavioral regressions reproduced window growth, missing visibility, inline confirmation and absent PTS reconciliation. Source review identified the unconditional API suffix. The initial status fixture hit a restricted temporary-directory access error before its presentation assertion; that fixture and the full suite passed after temporary test state moved under ignored target/. Read-only installed diagnostics confirmed recurring once-per-minute warnings and an absent discovered PTS AddOns directory alongside an existing Live root. No installed package content was modified.
 
 ## Completed local checks
 
