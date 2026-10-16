@@ -246,3 +246,28 @@ fn legacy_partial_unknown_api_and_corrupt_capabilities_cannot_claim_combined_pre
     assert!(beacon::migrate_legacy_if_needed(sandbox.path(), false, Environment::Live).unwrap());
     assert!(beacon::inspect_presence(sandbox.path()).unwrap().eligible());
 }
+
+#[test]
+fn s133_absent_pts_root_is_idle_and_later_discovery_can_migrate() {
+    let tree = tempfile::tempdir().unwrap();
+    let absent = tree.path().join("pts/AddOns");
+    assert!(!beacon::migrate_legacy_if_needed(&absent, false, Environment::Pts).unwrap());
+    assert!(!absent.exists());
+    assert!(beacon::install(
+        &absent,
+        RunningState::NotRunning,
+        beacon::DEFAULT_API_VERSION
+    )
+    .is_err());
+    fs::create_dir_all(&absent).unwrap();
+    assert!(!beacon::migrate_legacy_if_needed(&absent, false, Environment::Pts).unwrap());
+    beacon::install(
+        &absent,
+        RunningState::NotRunning,
+        beacon::DEFAULT_API_VERSION,
+    )
+    .unwrap();
+    assert!(!beacon::migrate_legacy_if_needed(&absent, false, Environment::Pts).unwrap());
+    fs::remove_dir_all(&absent).unwrap();
+    assert!(!beacon::migrate_legacy_if_needed(&absent, false, Environment::Pts).unwrap());
+}

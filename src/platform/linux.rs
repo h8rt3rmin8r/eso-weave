@@ -63,3 +63,12 @@ pub fn active_window_title() -> Option<String> {
         .ok()?;
     Some(String::from_utf8_lossy(&wm_name.value).into_owned())
 }
+
+pub fn window_work_area_points(
+    _outer: (f32, f32, f32, f32),
+    _pixels_per_point: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    // Wayland does not expose absolute monitor work areas. Do not guess from
+    // monitor resolution or grow beyond the compositor's current client area.
+    None
+}

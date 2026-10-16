@@ -1,5 +1,7 @@
 # Feature Specification: Application Interface Sizing Correctness
 
+> S133 update (2026-10-15): [the current interface contract](../133-ui-maintenance-regressions/contracts/interface.md) supersedes unconditional log-toggle grow/shrink, the log width bonus, and inline uninstall-confirmation minimum growth. Historical requirements below describe their original delivery.
+
 **Feature Branch**: `030-ui-sizing-correctness`
 
 **Created**: 2026-07-25

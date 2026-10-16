@@ -36,7 +36,9 @@ captured level, so it affects both the Application Log ring and optional file si
 Use INFO for ordinary lifecycle diagnosis, DEBUG for a bounded reproduction, and
 TRACE only when detailed observations are necessary. OFF prevents subsequent
 events from entering either sink. The panel autoscrolls while it is at the bottom
-and can be resized without covering controls.
+and can be resized without covering controls. Its open/closed choice is retained across application restarts until changed. Opening it uses existing window space. On constrained displays, the main controls scroll within the window.
+
+Automatic package reconciliation treats nonexistent Live/PTS AddOns roots as idle. Actual failures identify the package operation, categorical reason, outcome, and next action without exposing private paths or payloads. Unchanged failures are logged once per root/failure episode while automatic retries continue; changed failures and recovery are reported. A committed transaction with cleanup pending is distinguished from incomplete restoration.
 
 ## File paths
 

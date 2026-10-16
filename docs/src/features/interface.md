@@ -34,8 +34,8 @@ The intrinsic minimum width never follows an expanding dashboard container, so a
 continuous drag can cross the responsive breakpoint without ratcheting the
 minimum width upward. The minimum follows content down when a row disappears,
 grows the window when content no longer fits without shrinking an operator-chosen
-size, and is capped at the display work area. With Application Log open, the minimum adds
-the required width bonus and open-log reserve. Width-driven and collapse-driven
+size, and is capped at the display work area, using the client space available at the window's current position and accounting for desktop reservations and window decorations on Windows. With Application Log open, the minimum adds
+only the required open-log height reserve. Width-driven and collapse-driven
 transitions reserve pending content height before the log renders, preventing
 overlap.
 
@@ -43,7 +43,7 @@ Dashboard rows reserve stable label and interaction regions. Dynamic values use
 the remaining width, and full constrained text is available through pointer hover
 and keyboard focus, with identical text for both access paths. A fixed trailing
 region is reserved only for System and State interactions. PixelBeacon actions
-use equal compact sizes and share a right-aligned column with toggles. The single PixelBeacon lifecycle manages the combined package with exact ownership, inventory and transactional recovery checks. Separate Data installation/remediation rows are retired. At most two lifecycle actions share a primary-then-secondary horizontal row. Uninstall retains its managed-ownership guard and confirmation.
+use equal compact sizes and share a right-aligned column with toggles. The single PixelBeacon lifecycle manages the combined package with exact ownership, inventory and transactional recovery checks. Separate Data installation/remediation rows are retired. At most two lifecycle actions share a primary-then-secondary horizontal row. Uninstall retains its managed-ownership guard and confirmation, using a titled in-application modal with explicit Confirm Uninstall and Cancel actions. Escape or dismissal keeps the addon installed. The overlay never inserts a dashboard row or moves the controls.
 
 Catalog maintenance runs automatically, independently from native encounter log
 processing. File > Settings contains two direct controls: **Disable Catalog
@@ -135,9 +135,9 @@ sink. Its panel is resizable between a six-line readable minimum and the space
 above it, and never covers interactive controls. On every rendered frame,
 including simultaneous splitter drag and window resize, the pane's top edge
 remains at or below the central content's bottom edge. Dragged and restored
-heights are clamped before display or persistence. When a window cannot fit both
-controls and six log lines, controls take priority and the pane gives up its
-readable floor.
+heights are clamped before display or persistence. Opening or closing the log uses existing room and never unconditionally grows or shrinks the chosen window. When a display cannot fit both controls and the log, the main content scrolls vertically and the Skills grid can scroll horizontally so controls remain reachable. Maximized/fullscreen windows keep their geometry. Where usable desktop bounds are unavailable, including Wayland, the current client area is retained instead of guessing a larger size.
+
+Log visibility and panel height persist across restarts independently of capture level. A normal exit also saves a final-moment toggle.
 
 The Settings modal grows sub-linearly with the window on both axes, so its
 absolute size increases while it occupies a progressively smaller fraction of a

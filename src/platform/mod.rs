@@ -47,3 +47,12 @@ pub fn virtual_screen_bounds_points() -> Option<(i32, i32, i32, i32)> {
 pub fn active_window_title() -> Option<String> {
     backend::active_window_title()
 }
+
+/// Usable monitor bounds in egui points for the current outer window rectangle.
+/// Unknown desktop geometry leaves sizing to the window manager.
+pub fn window_work_area_points(
+    outer: (f32, f32, f32, f32),
+    pixels_per_point: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    backend::window_work_area_points(outer, pixels_per_point)
+}

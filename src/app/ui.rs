@@ -123,10 +123,6 @@ const DELAY_FIELD_WIDTH: f32 = 56.0;
 /// measured content extent (issue #4) raises the real minimum above this floor.
 const BOOT_MIN_SIZE: egui::Vec2 = egui::vec2(480.0, 420.0);
 
-/// Extra minimum width (points) enforced while the live log viewer is open, so log
-/// lines wrap less than at the base content width (issue #5, FR-006).
-const LOG_WIDTH_BONUS: f32 = 100.0;
-
 /// The settings modal frame's inner margin (points) on each edge. Set explicitly
 /// rather than inherited, so the modal's outer rendered rectangle can be made to
 /// equal its computed extent exactly (issue #14, FR-014).
@@ -303,7 +299,7 @@ impl EsoWeaveApp {
             ui_prefs,
             applied_prefs: None,
             log_height,
-            log_panel_open: false,
+            log_panel_open: ui_prefs.log_panel_open,
             system_state_expanded: ui_prefs.system_state_expanded,
             settings_open: false,
             settings_draft: None,
@@ -315,7 +311,7 @@ impl EsoWeaveApp {
             content_extent: BOOT_MIN_SIZE,
             prev_measured: None,
             prev_window_h: None,
-            log_reseed: false,
+            log_reseed: ui_prefs.log_panel_open,
             last_min_sent: None,
             content_width: 0.0,
             last_log_top: None,
@@ -569,10 +565,7 @@ impl EsoWeaveApp {
         self.log_reseed = true;
     }
 
-    /// Shows or hides the uninstall confirmation row, which is the app's one
-    /// transient control row. Exposed so the rendered-frame sizing tests can prove
-    /// the enforced minimum grows for a new row and shrinks again when it goes
-    /// (FR-004).
+    /// Shows or hides the uninstall confirmation overlay for interaction tests.
     pub fn set_confirm_uninstall(&mut self, confirm: bool) {
         self.confirm_uninstall = confirm;
     }
@@ -602,6 +595,23 @@ impl EsoWeaveApp {
     }
 
     pub fn frame_ui(&mut self, ui: &mut egui::Ui) {
+        let work = ui
+            .ctx()
+            .input(|i| i.viewport().outer_rect)
+            .and_then(|outer| {
+                crate::platform::window_work_area_points(
+                    (outer.min.x, outer.min.y, outer.max.x, outer.max.y),
+                    ui.ctx().pixels_per_point(),
+                )
+            })
+            .map(|(x, y, right, bottom)| {
+                egui::Rect::from_min_max(egui::pos2(x, y), egui::pos2(right, bottom))
+            });
+        self.frame_ui_with_work_area(ui, work);
+    }
+
+    /// Platform seam for deterministic usable-display geometry tests.
+    pub fn frame_ui_with_work_area(&mut self, ui: &mut egui::Ui, work: Option<egui::Rect>) {
         let ctx = ui.ctx().clone();
         if let Some(resolution) = self
             .data_maintenance
@@ -649,16 +659,25 @@ impl EsoWeaveApp {
             .pending_responsive_content_height
             .unwrap_or(projected_content_h)
             .max(projected_content_h);
-        // If a responsive transition makes the content taller than the current
-        // frame, preserve the open preference but defer the log for this frame.
-        // The minimum-size update below grows the window before the pane returns;
-        // drawing it now would cover the newly stacked dashboard or Skills.
+        // Constrained windows scroll the main content instead of pushing controls
+        // off screen. A pending disclosure reflow waits for its new measurement.
+        let scroll_main = window_h
+            < projected_content_h
+                + if self.log_panel_open {
+                    crate::app::open_log_reserve(log_row_height(&ctx)) + frame_overhead
+                } else {
+                    0.0
+                };
         let render_log_panel = self.log_panel_open
             && !state_reflow_pending
-            && window_h + 0.5 >= projected_content_h + frame_overhead;
+            && (scroll_main || window_h + 0.5 >= projected_content_h + frame_overhead);
         if render_log_panel {
             let row_h = log_row_height(&ctx);
-            let content_h = projected_content_h;
+            let content_h = if scroll_main {
+                (window_h - crate::app::open_log_reserve(row_h) - frame_overhead).max(0.0)
+            } else {
+                projected_content_h
+            };
             // Minimum shows six lines of log; maximum stops before the interactive
             // (Skills) area, computed against the true measured content height so no
             // phantom band is reserved (issue #8). Both bounds are shared helpers.
@@ -780,116 +799,103 @@ impl EsoWeaveApp {
         let mut measured = self.content_extent;
         self.content_width = 0.0;
         egui::CentralPanel::default().show(ui, |ui| {
-            let scope = ui.scope(|ui| {
-                // Menu bar.
-                let menu_bar = egui::MenuBar::new().ui(ui, |ui| {
-                    egui::containers::menu::MenuButton::from_button(
-                        egui::Button::new(strings::MENU_FILE).min_size(egui::vec2(44.0, 44.0)),
-                    )
-                    .ui(ui, |ui| {
-                        if ui
-                            .button(strings::MENU_SETTINGS)
-                            .on_hover_text(strings::MENU_SETTINGS_TOOLTIP)
-                            .clickable()
-                            .clicked()
-                        {
-                            let form = self.model.settings_form();
-                            self.settings_applied = Some(form.clone());
-                            self.settings_draft = Some(form);
-                            self.settings_open = true;
-                        }
-                        if ui.button(strings::MENU_EXIT).clickable().clicked() {
-                            exit = true;
-                        }
-                    })
-                    .0
-                    .clickable();
-                    egui::containers::menu::MenuButton::from_button(
-                        egui::Button::new(strings::MENU_VIEW).min_size(egui::vec2(44.0, 44.0)),
-                    )
-                    .ui(ui, |ui| {
-                        if ui
-                            .checkbox(&mut self.log_panel_open, strings::MENU_LOG_TOGGLE)
-                            .on_hover_text(strings::MENU_LOG_TOGGLE_TOOLTIP)
-                            .clickable()
-                            .changed()
-                        {
-                            intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
-                            // Height-neutral toggle (issue #8, FR-009): on open, grow the
-                            // window by the log height actually about to show (the
-                            // persisted height, clamped) and seed the pane to it; on
-                            // close, shrink by the pane's actual current height, not a
-                            // fixed minimum, so a user-enlarged log leaves no residual
-                            // band.
-                            if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
-                                let cur = inner.size();
-                                let row_h = log_row_height(&ctx);
-                                let window_h = ctx.content_rect().height();
-                                let new_h = if self.log_panel_open {
-                                    self.log_reseed = true;
-                                    let shown = crate::app::clamp_log_height(
-                                        self.log_height,
-                                        window_h,
-                                        row_h,
-                                        self.content_extent.y,
-                                    );
-                                    cur.y + shown
-                                } else {
-                                    (cur.y - self.log_height).max(self.content_extent.y)
-                                };
-                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                                    egui::vec2(cur.x, new_h),
-                                ));
-                            }
-                        }
-                    })
-                    .0
-                    .clickable();
-                    egui::containers::menu::MenuButton::from_button(
-                        egui::Button::new(strings::MENU_HELP).min_size(egui::vec2(44.0, 44.0)),
-                    )
-                    .ui(ui, |ui| {
-                        if ui
-                            .button(strings::MENU_DOCUMENTATION)
-                            .on_hover_text(strings::MENU_DOCUMENTATION_TOOLTIP)
-                            .clickable()
-                            .clicked()
-                        {
-                            ui.close();
-                            match self
-                                .documentation
-                                .open_with(self.documentation_opener.as_ref())
+            let mut draw = |ui: &mut egui::Ui| {
+                ui.scope(|ui| {
+                    // Menu bar.
+                    let menu_bar = egui::MenuBar::new().ui(ui, |ui| {
+                        egui::containers::menu::MenuButton::from_button(
+                            egui::Button::new(strings::MENU_FILE).min_size(egui::vec2(44.0, 44.0)),
+                        )
+                        .ui(ui, |ui| {
+                            if ui
+                                .button(strings::MENU_SETTINGS)
+                                .on_hover_text(strings::MENU_SETTINGS_TOOLTIP)
+                                .clickable()
+                                .clicked()
                             {
-                                Ok(_) => self.documentation_error = None,
-                                Err(err) => {
-                                    tracing::warn!(target: "eso_weave::documentation", "{err}");
-                                    self.documentation_error = Some(format!(
-                                        "ESO Weave could not open the offline guide. {err}"
-                                    ));
+                                let form = self.model.settings_form();
+                                self.settings_applied = Some(form.clone());
+                                self.settings_draft = Some(form);
+                                self.settings_open = true;
+                            }
+                            if ui.button(strings::MENU_EXIT).clickable().clicked() {
+                                exit = true;
+                            }
+                        })
+                        .0
+                        .clickable();
+                        egui::containers::menu::MenuButton::from_button(
+                            egui::Button::new(strings::MENU_VIEW).min_size(egui::vec2(44.0, 44.0)),
+                        )
+                        .ui(ui, |ui| {
+                            if ui
+                                .checkbox(&mut self.log_panel_open, strings::MENU_LOG_TOGGLE)
+                                .on_hover_text(strings::MENU_LOG_TOGGLE_TOOLTIP)
+                                .clickable()
+                                .changed()
+                            {
+                                intents.push(UiIntent::ToggleLogPanel(self.log_panel_open));
+                                self.log_reseed = self.log_panel_open;
+                            }
+                        })
+                        .0
+                        .clickable();
+                        egui::containers::menu::MenuButton::from_button(
+                            egui::Button::new(strings::MENU_HELP).min_size(egui::vec2(44.0, 44.0)),
+                        )
+                        .ui(ui, |ui| {
+                            if ui
+                                .button(strings::MENU_DOCUMENTATION)
+                                .on_hover_text(strings::MENU_DOCUMENTATION_TOOLTIP)
+                                .clickable()
+                                .clicked()
+                            {
+                                ui.close();
+                                match self
+                                    .documentation
+                                    .open_with(self.documentation_opener.as_ref())
+                                {
+                                    Ok(_) => self.documentation_error = None,
+                                    Err(err) => {
+                                        tracing::warn!(target: "eso_weave::documentation", "{err}");
+                                        self.documentation_error = Some(format!(
+                                            "ESO Weave could not open the offline guide. {err}"
+                                        ));
+                                    }
                                 }
                             }
-                        }
-                    })
-                    .0
-                    .clickable();
-                });
-                // The menu bar spans the available width (measured, not assumed: it
-                // reports 1168 in a 1200 point window), so like the separator it is
-                // full-width chrome and contributes height only. Its buttons need far
-                // less width than the grids below, so nothing is clipped by excluding
-                // it (FR-007).
-                let _ = menu_bar;
-                ui.separator();
+                        })
+                        .0
+                        .clickable();
+                    });
+                    // The menu bar spans the available width (measured, not assumed: it
+                    // reports 1168 in a 1200 point window), so like the separator it is
+                    // full-width chrome and contributes height only. Its buttons need far
+                    // less width than the grids below, so nothing is clipped by excluding
+                    // it (FR-007).
+                    let _ = menu_bar;
+                    ui.separator();
 
-                self.main_view(ui, &mut intents);
-            });
+                    self.main_view(ui, &mut intents);
+                })
+            };
+            let viewport_bottom = ui.max_rect().bottom();
+            let scope = if scroll_main {
+                egui::ScrollArea::vertical()
+                    .id_salt("main_content_scroll")
+                    .auto_shrink([false, true])
+                    .show(ui, &mut draw)
+                    .inner
+            } else {
+                draw(ui)
+            };
             // The scope's rect grows only to what the content allocated, so its
             // height is the content height rather than the panel height.
             let extent =
                 crate::app::intrinsic_extent(self.content_width, scope.response.rect.height());
             measured = egui::vec2(extent.0, extent.1);
             if render_log_panel {
-                self.last_content_bottom = Some(scope.response.rect.bottom());
+                self.last_content_bottom = Some(scope.response.rect.bottom().min(viewport_bottom));
             }
         });
 
@@ -897,7 +903,7 @@ impl EsoWeaveApp {
         // is stable (two consecutive close frames), then the measured extent, which
         // may shrink, so the minimum hugs the real content with no permanent dead
         // band (issue #8). Then push it as the window minimum inner size. While the
-        // log viewer is open the minimum is widened and grown by the open log
+        // log viewer is open the minimum includes the open log
         // reserve (six lines plus one row of drag room) so the controls and a
         // resizable log always fit.
         let measured_tuple = (measured.x, measured.y);
@@ -941,27 +947,29 @@ impl EsoWeaveApp {
             .max(self.content_extent.y);
         let target_min = if self.log_panel_open {
             egui::vec2(
-                self.content_extent.x + LOG_WIDTH_BONUS,
+                self.content_extent.x,
                 responsive_content_height + crate::app::open_log_reserve(log_row_height(&ctx)),
             )
         } else {
             self.content_extent
         };
-        // Cap at the display work area so a small display at a high scale factor
-        // cannot produce a window that is unpositionable or unresizable (FR-008).
-        // Making the central content scroll instead was rejected: a filling scroll
-        // area would reintroduce the window-tracking measurement this slice removes.
-        let target_min = ctx
-            .input(|i| i.viewport().monitor_size)
-            .map(|work| {
-                let capped =
-                    crate::app::cap_to_work_area((target_min.x, target_min.y), (work.x, work.y));
-                egui::vec2(capped.0, capped.1)
-            })
+        let viewport = ctx.input(|i| i.viewport().clone());
+        let capacity = viewport.inner_rect.map(|inner| {
+            if viewport.maximized.unwrap_or(false) || viewport.fullscreen.unwrap_or(false) {
+                inner.size()
+            } else {
+                viewport
+                    .outer_rect
+                    .zip(work)
+                    .map(|(outer, work)| viewport_client_capacity(inner, outer, work))
+                    .unwrap_or(inner.size())
+            }
+        });
+        let target_min = capacity
+            .map(|cap| target_min.min(cap))
             .unwrap_or(target_min);
-        // Sent only when the value itself changes, never in response to a window
-        // geometry change (FR-005). This is what makes a mid-gesture relaxation of
-        // the minimum impossible, which is the mechanism the ratchet depended on.
+        // Only intrinsic content or a changed usable-area constraint changes this
+        // minimum. It must not track a freely expanding dashboard container.
         if self.last_min_sent != Some(target_min) {
             ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(target_min));
             self.last_min_sent = Some(target_min);
@@ -970,10 +978,12 @@ impl EsoWeaveApp {
         // back: taking away a size the user chose would be its own defect (FR-009).
         if let Some(inner) = ctx.input(|i| i.viewport().inner_rect) {
             let cur = inner.size();
-            if let Some((w, h)) =
-                crate::app::window_growth_request((target_min.x, target_min.y), (cur.x, cur.y))
-            {
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+            if !viewport.maximized.unwrap_or(false) && !viewport.fullscreen.unwrap_or(false) {
+                if let Some((w, h)) = capacity.and_then(|_| {
+                    crate::app::window_growth_request((target_min.x, target_min.y), (cur.x, cur.y))
+                }) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+                }
             }
         }
         // Record this frame's window height for the next frame's proportional split.
@@ -982,6 +992,9 @@ impl EsoWeaveApp {
 
         if self.settings_open {
             self.settings_modal(&ctx, &mut intents);
+        }
+        if self.confirm_uninstall {
+            self.uninstall_modal(&ctx, &mut intents);
         }
 
         if let Some(message) = self.documentation_error.clone() {
@@ -1037,35 +1050,37 @@ impl EsoWeaveApp {
         ctx.request_repaint_after(Duration::from_millis(250));
     }
 
+    fn uninstall_modal(&mut self, ctx: &egui::Context, intents: &mut Vec<UiIntent>) {
+        let mut cancel = false;
+        let mut confirm = false;
+        let modal = egui::Modal::new(egui::Id::new("eso_weave_uninstall")).show(ctx, |ui| {
+            ui.set_width((ctx.content_rect().width() - 64.0).clamp(120.0, 480.0));
+            widgets::heading(ui, "Uninstall PixelBeacon?");
+            ui.separator();
+            ui.label(COMBINED_UNINSTALL_CONFIRMATION);
+            ui.separator();
+            ui.horizontal(|ui| {
+                let cancel_button = ui.button("Cancel").clickable();
+                cancel = cancel_button.clicked();
+                confirm = ui
+                    .button("Confirm Uninstall")
+                    .on_hover_text(COMBINED_UNINSTALL_TOOLTIP)
+                    .clickable()
+                    .clicked();
+            });
+        });
+        if confirm {
+            intents.push(UiIntent::UninstallBeacon);
+        }
+        if confirm || cancel || modal.should_close() {
+            self.confirm_uninstall = false;
+        }
+    }
+
     fn main_view(&mut self, ui: &mut egui::Ui, intents: &mut Vec<UiIntent>) {
         let view = self.model.view();
 
         let palette = crate::app::theme::palette(self.ui_prefs.theme);
-
-        if self.confirm_uninstall {
-            let row = ui.horizontal_wrapped(|ui| {
-                ui.label(COMBINED_UNINSTALL_CONFIRMATION);
-                if ui
-                    .button("Confirm Uninstall")
-                    .on_hover_text(COMBINED_UNINSTALL_TOOLTIP)
-                    .clickable()
-                    .clicked()
-                {
-                    intents.push(UiIntent::UninstallBeacon);
-                    self.confirm_uninstall = false;
-                }
-                if ui
-                    .button("Cancel")
-                    .on_hover_text("Keep the combined PixelBeacon addon installed.")
-                    .clickable()
-                    .clicked()
-                {
-                    self.confirm_uninstall = false;
-                }
-            });
-            self.note_content_width(row.response.rect.width());
-            ui.separator();
-        }
 
         let dashboard_width = ui.available_width();
         self.last_dashboard_available_width = Some(dashboard_width);
@@ -1147,117 +1162,128 @@ impl EsoWeaveApp {
         // toggle, and delay align in labeled columns across every row. When a row
         // has no override, the Delay cell shows the inherited default (muted) so a
         // row never displays a meaningless zero.
-        let skills = egui::Grid::new("skills")
-            .num_columns(5)
-            .spacing([12.0, 6.0])
+        let skills = egui::ScrollArea::horizontal()
+            .id_salt("skills_overflow")
+            .auto_shrink([true, true])
             .show(ui, |ui| {
-                for (header, tip) in strings::SKILL_COLUMNS {
-                    widgets::label_strong(ui, &palette, header).on_hover_text(tip);
-                }
-                ui.end_row();
+                egui::Grid::new("skills")
+                    .num_columns(5)
+                    .spacing([12.0, 6.0])
+                    .show(ui, |ui| {
+                        for (header, tip) in strings::SKILL_COLUMNS {
+                            widgets::label_strong(ui, &palette, header).on_hover_text(tip);
+                        }
+                        ui.end_row();
 
-                for row in &view.skills {
-                    ui.label(&row.label);
+                        for row in &view.skills {
+                            ui.label(&row.label);
 
-                    let mut active = row.active;
-                    if widgets::toggle_switch(ui, &mut active, &palette)
-                        .on_hover_text(strings::SKILL_COLUMNS[1].1)
-                        .clickable()
-                        .changed()
-                    {
-                        intents.push(UiIntent::EditSkill(row.index, SkillEdit::Active(active)));
-                    }
-
-                    let mut weave_type = row.weave_type;
-                    combo(("weave", row.index), weave_type_name(weave_type))
-                        .show_ui(ui, |ui| {
-                            for candidate in WEAVE_TYPES {
-                                ui.selectable_value(
-                                    &mut weave_type,
-                                    candidate,
-                                    weave_type_name(candidate),
-                                );
+                            let mut active = row.active;
+                            if widgets::toggle_switch(ui, &mut active, &palette)
+                                .on_hover_text(strings::SKILL_COLUMNS[1].1)
+                                .clickable()
+                                .changed()
+                            {
+                                intents.push(UiIntent::EditSkill(
+                                    row.index,
+                                    SkillEdit::Active(active),
+                                ));
                             }
-                        })
-                        .response
-                        .on_hover_text(strings::SKILL_COLUMNS[2].1)
-                        .clickable();
-                    if weave_type != row.weave_type {
-                        intents.push(UiIntent::EditSkill(
-                            row.index,
-                            SkillEdit::WeaveType(weave_type),
-                        ));
-                    }
 
-                    let mut has_override = row.is_override;
-                    if widgets::toggle_switch(ui, &mut has_override, &palette)
-                        .on_hover_text(strings::SKILL_COLUMNS[3].1)
-                        .clickable()
-                        .changed()
-                    {
-                        let value = if has_override {
-                            Some(row.effective_delay)
-                        } else {
-                            None
-                        };
-                        intents.push(UiIntent::EditSkill(
-                            row.index,
-                            override_edit_for(row.weave_type, value),
-                        ));
-                    }
+                            let mut weave_type = row.weave_type;
+                            combo(("weave", row.index), weave_type_name(weave_type))
+                                .show_ui(ui, |ui| {
+                                    for candidate in WEAVE_TYPES {
+                                        ui.selectable_value(
+                                            &mut weave_type,
+                                            candidate,
+                                            weave_type_name(candidate),
+                                        );
+                                    }
+                                })
+                                .response
+                                .on_hover_text(strings::SKILL_COLUMNS[2].1)
+                                .clickable();
+                            if weave_type != row.weave_type {
+                                intents.push(UiIntent::EditSkill(
+                                    row.index,
+                                    SkillEdit::WeaveType(weave_type),
+                                ));
+                            }
 
-                    // Delay (ms): a right-aligned, four-digit field in both states so
-                    // the column keeps one width when Override is toggled. Editable
-                    // when overriding (buffered so typing is not clobbered by the
-                    // model value), greyed and read-only otherwise.
-                    let tip = strings::SKILL_COLUMNS[4].1;
-                    if row.is_override {
-                        let mut buf = match &self.delay_edit {
-                            Some((idx, s)) if *idx == row.index => s.clone(),
-                            _ => row.effective_delay.to_string(),
-                        };
-                        let resp = ui
-                            .add(
-                                egui::TextEdit::singleline(&mut buf)
-                                    .desired_width(DELAY_FIELD_WIDTH)
-                                    .horizontal_align(egui::Align::RIGHT),
-                            )
-                            .on_hover_text(tip);
-                        if resp.changed() {
-                            let filtered: String =
-                                buf.chars().filter(|c| c.is_ascii_digit()).take(4).collect();
-                            let value: u32 = filtered.parse().unwrap_or(0);
-                            self.delay_edit = Some((row.index, filtered));
-                            intents.push(UiIntent::EditSkill(
-                                row.index,
-                                override_edit_for(row.weave_type, Some(value)),
-                            ));
+                            let mut has_override = row.is_override;
+                            if widgets::toggle_switch(ui, &mut has_override, &palette)
+                                .on_hover_text(strings::SKILL_COLUMNS[3].1)
+                                .clickable()
+                                .changed()
+                            {
+                                let value = if has_override {
+                                    Some(row.effective_delay)
+                                } else {
+                                    None
+                                };
+                                intents.push(UiIntent::EditSkill(
+                                    row.index,
+                                    override_edit_for(row.weave_type, value),
+                                ));
+                            }
+
+                            // Delay (ms): a right-aligned, four-digit field in both states so
+                            // the column keeps one width when Override is toggled. Editable
+                            // when overriding (buffered so typing is not clobbered by the
+                            // model value), greyed and read-only otherwise.
+                            let tip = strings::SKILL_COLUMNS[4].1;
+                            if row.is_override {
+                                let mut buf = match &self.delay_edit {
+                                    Some((idx, s)) if *idx == row.index => s.clone(),
+                                    _ => row.effective_delay.to_string(),
+                                };
+                                let resp = ui
+                                    .add(
+                                        egui::TextEdit::singleline(&mut buf)
+                                            .desired_width(DELAY_FIELD_WIDTH)
+                                            .horizontal_align(egui::Align::RIGHT),
+                                    )
+                                    .on_hover_text(tip);
+                                if resp.changed() {
+                                    let filtered: String = buf
+                                        .chars()
+                                        .filter(|c| c.is_ascii_digit())
+                                        .take(4)
+                                        .collect();
+                                    let value: u32 = filtered.parse().unwrap_or(0);
+                                    self.delay_edit = Some((row.index, filtered));
+                                    intents.push(UiIntent::EditSkill(
+                                        row.index,
+                                        override_edit_for(row.weave_type, Some(value)),
+                                    ));
+                                }
+                                if resp.lost_focus() {
+                                    self.delay_edit = None;
+                                }
+                            } else {
+                                let mut buf = row.effective_delay.to_string();
+                                ui.add_enabled(
+                                    false,
+                                    egui::TextEdit::singleline(&mut buf)
+                                        .desired_width(DELAY_FIELD_WIDTH)
+                                        .horizontal_align(egui::Align::RIGHT),
+                                )
+                                .on_hover_text(tip);
+                            }
+
+                            // Cooldown: read-only, from the beacon. The Synergy row always
+                            // shows the muted placeholder, because the game exposes no
+                            // cooldown for a contextual prompt and it has no block.
+                            let cd = &row.cooldown;
+                            let cd_color = crate::app::theme::status_color(&palette, cd.role);
+                            ui.label(egui::RichText::new(&cd.text).color(cd_color))
+                                .on_hover_text(strings::SKILL_COLUMNS[5].1);
+                            ui.end_row();
                         }
-                        if resp.lost_focus() {
-                            self.delay_edit = None;
-                        }
-                    } else {
-                        let mut buf = row.effective_delay.to_string();
-                        ui.add_enabled(
-                            false,
-                            egui::TextEdit::singleline(&mut buf)
-                                .desired_width(DELAY_FIELD_WIDTH)
-                                .horizontal_align(egui::Align::RIGHT),
-                        )
-                        .on_hover_text(tip);
-                    }
-
-                    // Cooldown: read-only, from the beacon. The Synergy row always
-                    // shows the muted placeholder, because the game exposes no
-                    // cooldown for a contextual prompt and it has no block.
-                    let cd = &row.cooldown;
-                    let cd_color = crate::app::theme::status_color(&palette, cd.role);
-                    ui.label(egui::RichText::new(&cd.text).color(cd_color))
-                        .on_hover_text(strings::SKILL_COLUMNS[5].1);
-                    ui.end_row();
-                }
+                    })
             });
-        self.note_content_width(skills.response.rect.width());
+        self.note_content_width(skills.inner.response.rect.width());
     }
 
     fn live_hud(
@@ -2351,4 +2377,18 @@ fn level_name(level: LevelName) -> &'static str {
         LevelName::Debug => "DEBUG",
         LevelName::Trace => "TRACE",
     }
+}
+
+/// Client room available without moving the user's outer window or covering
+/// reserved desktop chrome. All rectangles use the same logical point space.
+pub fn viewport_client_capacity(
+    inner: egui::Rect,
+    outer: egui::Rect,
+    work: egui::Rect,
+) -> egui::Vec2 {
+    if !work.is_positive() || !work.contains(outer.min) {
+        return inner.size();
+    }
+    let decoration = (outer.size() - inner.size()).max(egui::Vec2::ZERO);
+    (work.max - outer.min - decoration).max(egui::Vec2::ZERO)
 }

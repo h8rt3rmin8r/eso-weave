@@ -10,10 +10,10 @@
 pub mod api_check;
 mod package;
 pub use package::{
-    inspect, inspect_presence, install_configured, installed_block_px, migrate_legacy_if_needed,
-    recover, render_startup_config, write_startup_config, PackagePresence, StartupConfig,
-    BOOTSTRAP, BOOTSTRAP_FILE, CAPABILITIES, CATALOG, CATALOG_FILE, INVENTORY,
-    LEGACY_DATA_SUBFOLDER, PACKAGE_IDENTITY, STARTUP_CONFIG_FILE,
+    inspect, inspect_presence, install_configured, installed_api_support, installed_block_px,
+    migrate_legacy_if_needed, recover, render_startup_config, write_startup_config,
+    PackagePresence, StartupConfig, BOOTSTRAP, BOOTSTRAP_FILE, CAPABILITIES, CATALOG, CATALOG_FILE,
+    INVENTORY, LEGACY_DATA_SUBFOLDER, PACKAGE_IDENTITY, STARTUP_CONFIG_FILE,
 };
 mod version_source;
 pub use crate::game::steam;

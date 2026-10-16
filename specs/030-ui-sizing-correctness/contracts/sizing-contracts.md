@@ -1,5 +1,7 @@
 # Contract: Rendered Sizing Behavior
 
+> S133 update (2026-10-15): [the current interface contract](../../133-ui-maintenance-regressions/contracts/interface.md) supersedes unconditional log-toggle grow/shrink, the log width bonus, and inline uninstall-confirmation minimum growth. Historical requirements below describe their original delivery.
+
 Slice 029 contracted the pure sizing helpers in `src/app/mod.rs`
 (`specs/029-window-sizing-rebuild/contracts/sizing.md`). Those contracts are
 unchanged and still hold. This document contracts the layer above them, which has

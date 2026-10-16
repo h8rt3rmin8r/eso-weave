@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- S133: Keep Application Log within available window space and usable desktop bounds, retain visibility across restarts, and keep controls reachable on constrained displays (#306, #307).
+- Present PixelBeacon removal as a modal without shifting the dashboard, retaining existing package/data protections (#308).
+- Keep ordinary PixelBeacon status concise and show API warnings from installed declarations and current environment evidence (#309).
+- Treat absent discovered AddOns roots as idle; report real migration failures once per unchanged failure episode with accurate recovery/cleanup outcomes and bounded automatic retries (#310).
+
+### Decisions
+
+- 2026-10-15: S133 supersedes unconditional log-toggle grow/shrink and width-bonus rules, plus inline uninstall confirmation. Use existing UI preference storage, native Windows usable-area facts and existing transactional package authority; no new dependency or release identity change.
+
 ## [0.19.0] - 2026-10-15
 
 ### Highlights

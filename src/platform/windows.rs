@@ -34,3 +34,46 @@ pub fn virtual_screen_bounds_points() -> Option<(i32, i32, i32, i32)> {
     let to_points = |v: i32| (v as f32 / scale).round() as i32;
     Some((to_points(px), to_points(py), to_points(pw), to_points(ph)))
 }
+
+pub fn window_work_area_points(
+    outer: (f32, f32, f32, f32),
+    pixels_per_point: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromRect, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    if !pixels_per_point.is_finite()
+        || pixels_per_point <= 0.0
+        || ![outer.0, outer.1, outer.2, outer.3]
+            .iter()
+            .all(|v| v.is_finite())
+    {
+        return None;
+    }
+    let physical = RECT {
+        left: (outer.0 * pixels_per_point).floor() as i32,
+        top: (outer.1 * pixels_per_point).floor() as i32,
+        right: (outer.2 * pixels_per_point).ceil() as i32,
+        bottom: (outer.3 * pixels_per_point).ceil() as i32,
+    };
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: both structures are initialized, correctly sized, and valid for
+    // these read-only calls. No window or monitor ownership is transferred.
+    unsafe {
+        let monitor = MonitorFromRect(&physical, MONITOR_DEFAULTTONEAREST);
+        if monitor.is_null() || GetMonitorInfoW(monitor, &mut info) == 0 {
+            return None;
+        }
+    }
+    let work = info.rcWork;
+    (work.right > work.left && work.bottom > work.top).then_some((
+        work.left as f32 / pixels_per_point,
+        work.top as f32 / pixels_per_point,
+        work.right as f32 / pixels_per_point,
+        work.bottom as f32 / pixels_per_point,
+    ))
+}
