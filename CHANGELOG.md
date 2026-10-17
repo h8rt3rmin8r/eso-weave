@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- S135: Date historical governance audits and reconcile retired verification, planning and release lifecycle references without promoting unperformed evidence (issue #319).
 - Archive completed S134 Plan060 and synchronize owner-merge and separately authorized release records (issue #317).
+
+### Decisions
+
+- 2026-10-17: S135 updates constitution 5.1.0 to 5.1.1 for retired follow-up metadata only, preserving every principle and test gate. No runtime, packaging, release identity or workflow change.
 
 ## [0.19.1] - 2026-10-17
 

@@ -1,6 +1,31 @@
 {
   "schema_version": 2,
   "as_of": "2026-10-15",
+  "lifecycle_context": {
+    "as_of": "2026-10-17",
+    "slice": "S135",
+    "tracking_issue": 319,
+    "meaning": "Issue lifecycle is separate from retained evidence classifications. Closed work does not establish missing installed or game observations.",
+    "historical_issue_references": true,
+    "closed_verification_issues": [
+      {
+        "issue": 131,
+        "state": "CLOSED",
+        "reason": "NOT_PLANNED",
+        "closed_on": "2026-09-23",
+        "evidence": "https://github.com/h8rt3rmin8r/eso-weave/issues/131#issuecomment-5794933763"
+      },
+      {
+        "issue": 190,
+        "state": "CLOSED",
+        "reason": "NOT_PLANNED",
+        "closed_on": "2026-09-23",
+        "evidence": "https://github.com/h8rt3rmin8r/eso-weave/issues/190#issuecomment-5794933743"
+      }
+    ],
+    "evidence_limits": "Existing verification-required, provisional, completeness and parity labels retain their technical meaning. No field-verification task is scheduled by these references.",
+    "follow_up_issues_meaning": "Historical delivery attribution for completed issues #132-#136, plus retired #131 evidence tracking; not an open-work queue."
+  },
   "source_snapshots": [
     {
       "id": "eso-api-live",

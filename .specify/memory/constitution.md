@@ -1,5 +1,17 @@
 <!--
 Sync Impact Report
+- S135 / issue #319: 5.1.0 -> 5.1.1 on 2026-10-17. Metadata-only clarification
+  of retired verification follow-ups; no principle, authority or gate changes.
+- Modified principles: none. Added sections: none. Removed sections: none.
+- Templates: plan/spec/tasks and installed command skills remain aligned; no
+  template changes. CLAUDE.md and build-autopilot.md retain existing authority.
+- Follow-up TODOs: none. #131 and #190 are Closed/Not planned, with unperformed
+  evidence still unverified. See the S135 audit and their closure comments.
+- The earlier Sync Impact Report below is retained as historical metadata.
+-->
+
+<!--
+Historical Sync Impact Report (through 5.1.0)
 - S129 owner-selected #285-#288/#291: 5.0.1 -> 5.1.0 on 2026-10-15. One combined PixelBeacon package, automatic bounded Catalog collection and independent optouts supersede two-package/manual authority; ownership, data integrity and historical evidence remain mandatory.
 - S120 wording amendment: 5.0.0 -> 5.0.1 on 2026-10-05. Principle V
   reconciles established S100-S102 native-control/player-state evidence with
@@ -26,8 +38,9 @@ Sync Impact Report
   CLAUDE.md ................................... aligned
   docs/src/getting-started/responsible-use.md . aligned
   docs/project/build-autopilot.md ............. aligned
-- Follow-up TODOs: issue #131 verifies live Combat Metrics parity; issue #190
-  verifies native-log platforms independently.
+- Historical follow-up entries: issue #131 for live Combat Metrics parity and
+  issue #190 for native-log platforms. Both closed Not planned on 2026-09-23;
+  neither closure supplies live-parity or platform qualification evidence.
 -->
 
 # ESO Weave Constitution
@@ -185,4 +198,4 @@ Check that MUST pass before implementation, and the `/speckit.analyze` gate
 verifies ongoing compliance. Complexity that violates a principle MUST be
 justified in writing against the principle it strains, or be removed.
 
-**Version**: 5.1.0 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-10-15
+**Version**: 5.1.1 | **Ratified**: 2026-07-11 | **Last Amended**: 2026-10-17

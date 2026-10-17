@@ -54,7 +54,9 @@ complete adjacent equivalents, exact source/update authorities and two-theme
 narrow 200 percent/no-script coverage. S122 delivered both in merged PR #254
 on 2026-10-06. Plan048 is complete and
 [archived](../archive/build-plans/plan-048.md); its original S113-S115 numbers
-remain unused reservations. Plan049 now directs S123 candidate preparation.
+remain unused reservations. Plan049 subsequently completed S123 and is
+[archived](../archive/build-plans/plan-049.md). Selected work is identified by
+the [current build-plan index](build-plans/README.md).
 
 ## Cluster resolution
 
