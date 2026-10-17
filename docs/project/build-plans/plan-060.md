@@ -21,3 +21,17 @@ After S133 owner merge #311 and documentary merge #313, prepare
 
 No dependency, runtime, package-matrix, workflow or field-testing change is planned.
 The latest published release remains v0.19.0 until separately authorized publication.
+
+## Candidate Review (2026-10-17)
+
+[PR #316](https://github.com/h8rt3rmin8r/eso-weave/pull/316) contains the governed
+v0.19.1 candidate. All 1,219 local Rust tests, 13 S133 cases, ten release-profile
+documentation tests, 184 policy tests, notes/packaging-policy, production-build,
+render and text gates pass. Automatic Codex review completed without findings on
+reviewed head 659c78b, and all nine hosted checks pass on that candidate.
+The final documentary commit changes delivery records only; its exact head and
+check results are recorded in the PR conversation before owner handoff.
+
+This plan completes only after owner merge of the candidate. #315 is still open;
+#314 and milestone v0.19.1 remain open through later publication and asset audit.
+No merge, tag, package publication or field-testing task is authorized in this run.

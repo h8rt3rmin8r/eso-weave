@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Specified
+**Status**: Implemented, PR #316 under review
 
 **Input**: Implement S134 for v0.19.1, observe established conventions, open a PR for review, and stop before merging, tagging or publishing. Candidate issue #315 is under release coordinator #314 and Plan060.
 

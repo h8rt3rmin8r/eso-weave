@@ -19,7 +19,9 @@ All eight functional requirements and five measurable outcomes have task coverag
 | FR-008 | T001, T004, T012 |
 
 Coverage is 100 percent. SC-001 through SC-005 map respectively to notes, identity,
-validation/review, owner boundary and Project tasks. Both requirements checklists
-pass all 15 items. No extension hook applies to analyze or implement; the optional
+validation/review, owner boundary and Project tasks. The initial grouped requirements checklists
+passed 15 items. Closeout expands the same specification-quality criteria to the
+full 16-item template; with eight release items, all 24 pass. No requirement,
+plan decision or task dependency changes. No extension hook applies to analyze or implement; the optional
 after-specify/after-plan context update is satisfied by the plan-reference update
 in CLAUDE.md. Proceed to implementation without a constitution exception.
