@@ -11,13 +11,11 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plans
 
-| Plan | Status | Scope |
-| --- | --- | --- |
-| [060](plan-060.md) | Active | S134 prepares candidate #315 for v0.19.1 under #314; owner merge, tag and publication remain separate |
+No build plan is active. A later slice requires owner selection.
 
 The latest completed plan is
-[059](../../archive/build-plans/plan-059.md), covering S133 UI and maintenance fixes
-for #306-#310 in owner-merged PR #311 on 2026-10-16 at `be1a054`.
+[060](../../archive/build-plans/plan-060.md), covering S134 v0.19.1 candidate #315
+in owner-merged PR #316 on 2026-10-17 at `6a3c952`.
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -44,5 +42,7 @@ profiles after pinned producer-grammar research in owner-merged PR #299. The
 v0.19.0 release completed #301. Dependabot PR #284's three updates are included
 on merged main and that redundant PR is closed. #304 is documentary housekeeping;
 Plan059 completed S133 in owner-merged PR #311. #312 records its documentary
-archive, merged in owner PR #313 on 2026-10-17 at b7e264c. Plan060 now directs
-owner-selected S134 v0.19.1 candidate preparation; later publication stays in #314.
+archive, merged in owner PR #313 on 2026-10-17 at b7e264c. Plan060 completed S134 in owner-merged PR #316 on 2026-10-17 at 6a3c952.
+Candidate #315 and publication coordinator #314 are closed and Done. Separately
+authorized v0.19.1 published at 06:25:02 UTC, passed the five-asset integrity audit
+and closed its milestone. #317 records documentary closeout without another slice.

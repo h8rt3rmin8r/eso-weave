@@ -1783,13 +1783,13 @@
     },
     {
       "id": "060",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-060.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-060.md",
       "specs": [
         "specs/134-v0191-release"
       ],
-      "evidence": "Owner selected S134 and candidate issue #315 under release coordinator issue #314 on 2026-10-17 after owner-merged PR #313 at b7e264cbaeffde9039fe8f5655c84f1de60e6142. Prepare v0.19.1 through the governed local rollover, required validation and review PR. Owner merge, tag and publication remain separate."
+      "evidence": "S134 completed candidate issue #315 when the owner merged PR #316 on 2026-10-17 at 6a3c95220120978a6decc87bc8e1ce7a63de5742. The merged tree exactly matches reviewed delivery head 760d41ee1cde9c1fb15c4b7f94187b94578552a4. Exact-main CI, documentation and CodeQL passed before the separately authorized annotated v0.19.1 tag. Release workflow 39008830108 passed and published v0.19.1 at 06:25:02 UTC; all five downloaded sizes/digests and all four SHA256SUMS package hashes passed audit. #314 and #315 are Closed/Done and milestone v0.19.1 is closed. #317 records documentary closeout."
     }
   ],
   "safetyCrosswalk": [
