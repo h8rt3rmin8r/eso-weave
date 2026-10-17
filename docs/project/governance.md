@@ -70,7 +70,11 @@ Stage rules are conservative:
 - Other open work remains Backlog unless an active epic accurately represents
   ongoing child progress.
 
-## Historical metadata audit
+## Historical metadata audit (2026-09-03)
+
+This section and the following atomic-scope inventory describe the state observed
+on 2026-09-03. Present-tense statements below apply only to that audit date,
+not to today's backlog or verification queue. They preserve historical decisions.
 
 Audit date: 2026-09-03. Scope: every repository issue through #47, comprising 38
 issues because numbers #31 through #39 are pull requests.
@@ -114,9 +118,10 @@ separate verification lifecycles.
 The audit therefore covered all 38 issues and produced one evidence-backed label
 correction with no milestone changes.
 
-## Current atomic-scope audit
+## Historical atomic-scope audit (2026-09-03)
 
-Every open issue has one lifecycle after the earlier runtime work was split:
+At that audit date, the open issues had one lifecycle after the earlier runtime
+work was split:
 
 - #17 owns the deferred sprint observable.
 - #21, #26, #27, and #30 are coordinators whose native children own the work.
@@ -127,3 +132,20 @@ Every open issue has one lifecycle after the earlier runtime work was split:
 - #45, #46, and #47 separately own history, enforcement, and Project state.
 
 No open implementation issue combines a later release-verification lifecycle.
+
+## Current lifecycle authority
+
+Use [open repository issues](https://github.com/h8rt3rmin8r/eso-weave/issues?q=is%3Aissue+is%3Aopen),
+linked pull requests, native issue relationships and the delivery Project for
+current work. The [current build-plan index](build-plans/README.md) identifies
+the selected slice. This guide does not maintain a second copied backlog.
+
+The [S135 audit](../../specs/135-governance-status-cleanup/audit.md) observed
+all named issues closed on 2026-10-17. This is a dated disposition, not a live
+backlog assertion.
+Later verification-only issues #110, #129, #131 and #190 were closed as not
+planned on 2026-09-23 under the owner's no-field-verification direction. Their
+closure does not establish installed behavior, completeness, safety or parity.
+Current evidence labels may therefore remain unverified even when their former
+tracking issue is closed. Concrete changes or observed defects enter through a
+new atomic GitHub issue. Historical dates and observations stay intact.

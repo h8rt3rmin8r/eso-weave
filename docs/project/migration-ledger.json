@@ -1408,7 +1408,7 @@
         "specs/055-ultimate-resource-meter"
       ],
       "evidence": "The listed spec package merged in PR #78.",
-      "notes": "Ultimate field verification remains separately tracked by issue #77 and does not reopen this plan."
+      "notes": "Issue #77 tracked separate Ultimate field verification and closed Completed on 2026-09-09 with an operator observation recorded in its closure comment. This historical record does not repeat or broaden that observation; this plan remains archived."
     },
     {
       "id": "026",
@@ -1419,7 +1419,7 @@
         "specs/056-v014-release-prep"
       ],
       "evidence": "The listed spec package merged in PR #86 and shipped in the v0.14.0 release.",
-      "notes": "Ultimate field verification remains separately tracked by issue #77 and does not reopen this plan."
+      "notes": "Issue #77 tracked separate Ultimate field verification and closed Completed on 2026-09-09 with an operator observation recorded in its closure comment. This historical record does not repeat or broaden that observation; this plan remains archived."
     },
     {
       "id": "027",
@@ -1532,7 +1532,7 @@
       "specs": [
         "specs/067-death-recovery-safety"
       ],
-      "evidence": "Issue #109 closed when S067 merged in PR #128 and shipped in v0.15.1; issue #110 keeps installed field verification separate."
+      "evidence": "Issue #109 closed when S067 merged in PR #128 and shipped in v0.15.1. Issue #110 tracked separate installed field verification at delivery; it later closed Not planned on 2026-09-23 without that field matrix being run."
     },
     {
       "id": "038",
@@ -1552,7 +1552,7 @@
         "specs/077-encounter-metrics",
         "specs/078-encounter-history-ui"
       ],
-      "evidence": "S068 merged in PR #130 and closed issue #112; S069 merged in PR #137 and closed issue #113; S070 merged in PR #138 and closed issue #114; S071 merged in PR #139 and closed issue #115; S072 merged in PR #140 and closed issue #116; S073 merged in PR #141 and closed issue #117; S074 merged in PR #142 and closed issue #118; S075 merged in PR #143 and closed issue #132; S076 merged in PR #144 and closed issue #133; S077 merged in PR #145 and closed issue #134; S078 merged in PR #146 and closed issue #135; issues #110, #129, and #131 remain independent non-blocking verification."
+      "evidence": "S068 merged in PR #130 and closed issue #112; S069 merged in PR #137 and closed issue #113; S070 merged in PR #138 and closed issue #114; S071 merged in PR #139 and closed issue #115; S072 merged in PR #140 and closed issue #116; S073 merged in PR #141 and closed issue #117; S074 merged in PR #142 and closed issue #118; S075 merged in PR #143 and closed issue #132; S076 merged in PR #144 and closed issue #133; S077 merged in PR #145 and closed issue #134; S078 merged in PR #146 and closed issue #135; issues #110, #129, and #131 tracked separate non-blocking verification at delivery and later closed Not planned on 2026-09-23 without the field matrices or live comparison being run."
     },
     {
       "id": "039",
@@ -1582,7 +1582,7 @@
       "specs": [
         "specs/090-evidence-scoped-recommendations"
       ],
-      "evidence": "S090 merged in PR #162 and closed issue #136; issues #110, #129, and #131 remain independent non-blocking verification."
+      "evidence": "S090 merged in PR #162 and closed issue #136. Issues #110, #129, and #131 tracked separate non-blocking verification at delivery and later closed Not planned on 2026-09-23 without the field matrices or live comparison being run."
     },
     {
       "id": "041",
@@ -1606,7 +1606,7 @@
         "specs/095-deterministic-encounter-replay",
         "specs/096-encounter-capture-modes"
       ],
-      "evidence": "S092 through S096 completed the persistent data-addon subsystem when PR #202 merged and closed issue #183, enabling epic #182 to close; issue #190 remains independent native-log verification."
+      "evidence": "S092 through S096 completed the persistent data-addon subsystem when PR #202 merged and closed issue #183, enabling epic #182 to close; issue #190 tracked separate native-log verification at delivery and later closed Not planned on 2026-09-23 without Windows or Linux/Proton field qualification."
     },
     {
       "id": "043",
@@ -1709,7 +1709,7 @@
       "specs": [
         "specs/125-data-addon-workflow-recovery"
       ],
-      "evidence": "S125 completed issues #265 through #271 when owner squash-merged PR #274 on 2026-10-12 at 7939729f302611f911c39216aea0c00f5dfe3ef1. Tag and release publication remain separate."
+      "evidence": "S125 completed issues #265 through #271 when owner squash-merged PR #274 on 2026-10-12 at 7939729f302611f911c39216aea0c00f5dfe3ef1. Tag/publication required later separate authority; v0.18.0 subsequently published on 2026-10-13 as recorded in Plan054."
     },
     {
       "id": "052",
@@ -1719,7 +1719,7 @@
       "specs": [
         "specs/126-retained-recording-sessions"
       ],
-      "evidence": "S126 completed retained recording sessions for issue #273 when owner squash-merged PR #275 on 2026-10-13 at 9bfe9e07644d4611cd29bec3293e33457e4c4d69. Tag and release publication remain separate."
+      "evidence": "S126 completed retained recording sessions for issue #273 when owner squash-merged PR #275 on 2026-10-13 at 9bfe9e07644d4611cd29bec3293e33457e4c4d69. Tag/publication required later separate authority; v0.18.0 subsequently published on 2026-10-13 as recorded in Plan054."
     },
     {
       "id": "053",
@@ -1729,7 +1729,7 @@
       "specs": [
         "specs/127-native-completed-import"
       ],
-      "evidence": "S127 completed native Encounter.log import for issue #272 when owner squash-merged PR #276 on 2026-10-13 at 05c97041b9d12f5e5c10fae14ba1b80511c5974d. Tag and release publication remain separate."
+      "evidence": "S127 completed native Encounter.log import for issue #272 when owner squash-merged PR #276 on 2026-10-13 at 05c97041b9d12f5e5c10fae14ba1b80511c5974d. Tag/publication required later separate authority; v0.18.0 subsequently published on 2026-10-13 as recorded in Plan054."
     },
     {
       "id": "054",
@@ -1779,7 +1779,7 @@
       "lifecycle": "Archived",
       "destination": "docs/archive/build-plans/plan-059.md",
       "specs": ["specs/133-ui-maintenance-regressions"],
-      "evidence": "S133 completed issue #306, issue #307, issue #308, issue #309 and issue #310 when the owner squash-merged PR #311 on 2026-10-16 at be1a054a45d18a74dfaa3e9b7947e902e3d6b18b. The merged tree exactly matches reviewed delivery head 5e96148bf4599a59d155b173d6dd5c73ba96faf4. All five issues are closed and Done. Issue #312 records documentary closeout; S133 remains unreleased and no successor slice is assigned."
+      "evidence": "S133 completed issue #306, issue #307, issue #308, issue #309 and issue #310 when the owner squash-merged PR #311 on 2026-10-16 at be1a054a45d18a74dfaa3e9b7947e902e3d6b18b. The merged tree exactly matches reviewed delivery head 5e96148bf4599a59d155b173d6dd5c73ba96faf4. All five issues are closed and Done. Issue #312 documentary closeout merged in PR #313 on 2026-10-17 at b7e264c. S134 succeeded S133 and published these fixes in v0.19.1 at 06:25:02 UTC on 2026-10-17; see Plan060 for publication and asset evidence."
     },
     {
       "id": "060",
@@ -1789,7 +1789,17 @@
       "specs": [
         "specs/134-v0191-release"
       ],
-      "evidence": "S134 completed candidate issue #315 when the owner merged PR #316 on 2026-10-17 at 6a3c95220120978a6decc87bc8e1ce7a63de5742. The merged tree exactly matches reviewed delivery head 760d41ee1cde9c1fb15c4b7f94187b94578552a4. Exact-main CI, documentation and CodeQL passed before the separately authorized annotated v0.19.1 tag. Release workflow 39008830108 passed and published v0.19.1 at 06:25:02 UTC; all five downloaded sizes/digests and all four SHA256SUMS package hashes passed audit. #314 and #315 are Closed/Done and milestone v0.19.1 is closed. #317 records documentary closeout."
+      "evidence": "S134 completed candidate issue #315 when the owner merged PR #316 on 2026-10-17 at 6a3c95220120978a6decc87bc8e1ce7a63de5742. The merged tree exactly matches reviewed delivery head 760d41ee1cde9c1fb15c4b7f94187b94578552a4. Exact-main CI, documentation and CodeQL passed before the separately authorized annotated v0.19.1 tag. Release workflow 39008830108 passed and published v0.19.1 at 06:25:02 UTC; all five downloaded sizes/digests and all four SHA256SUMS package hashes passed audit. #314 and #315 are Closed/Done and milestone v0.19.1 is closed. #317 documentary closeout merged in owner PR #318 on 2026-10-17 at f230aa8fb8e83f37719860473e63929d69970473."
+    },
+    {
+      "id": "061",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-061.md",
+      "specs": [
+        "specs/135-governance-status-cleanup"
+      ],
+      "evidence": "Owner selected S135 documentation consistency for issue #319 on 2026-10-17 after PR #318 merged at f230aa8. Reconcile historical governance and current lifecycle references while preserving evidence limits; publish an unmerged review PR. This plan completes only after owner merge."
     }
   ],
   "safetyCrosswalk": [
