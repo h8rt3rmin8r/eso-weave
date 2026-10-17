@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Archive completed S134 Plan060 and synchronize owner-merge and separately authorized release records (issue #317).
+
 ## [0.19.1] - 2026-10-17
 
 ### Highlights

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Implemented, PR #316 under review
+**Status**: Complete, owner-merged PR #316 on 2026-10-17
 
 **Input**: Implement S134 for v0.19.1, observe established conventions, open a PR for review, and stop before merging, tagging or publishing. Candidate issue #315 is under release coordinator #314 and Plan060.
 
@@ -108,3 +108,14 @@ The owner receives a reviewable PR with evidence and retains final control of me
 Coverage scan: functional scope, identity/lifecycle, review flow, quality, external
 release dependencies, failure/recovery, constraints, terminology and completion
 signals are clear. No user question or deferred ambiguity remains.
+
+## Delivery
+
+The owner merged PR #316 as `6a3c95220120978a6decc87bc8e1ce7a63de5742`,
+closing candidate #315. Plan060 is [archived](../../docs/archive/build-plans/plan-060.md).
+The owner then separately authorized tag/publication and asset verification under
+#314. [v0.19.1](https://github.com/h8rt3rmin8r/eso-weave/releases/tag/v0.19.1)
+published on 2026-10-17 at 06:25:02 UTC, and its five-asset integrity audit passed.
+#314 is Closed/Done and milestone v0.19.1 is closed. See the
+[verification receipt](verification.md) for candidate, source and artifact evidence.
+No installed/game behavior is established.
