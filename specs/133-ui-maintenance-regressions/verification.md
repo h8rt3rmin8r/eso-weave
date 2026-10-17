@@ -20,8 +20,31 @@ Before repairs, the behavioral regressions reproduced window growth, missing vis
 
 All console checks used a hidden, noninteractive launcher and redirected I/O. The initial restricted run could not bind a loopback socket; the complete suite passed under normal socket permissions. Temporary test state stays below ignored target/.
 
-## Limits and handoff
+## Original implementation limits and handoff
 
 Repository, synthetic UI, package fixtures and build evidence do not establish installed-game behavior. No application/game session or owner field-testing task was used. Linux lacks a trustworthy compositor work-area rectangle through the existing seam, so it preserves current client geometry and scrolls constrained content rather than guessing a larger window. Windows uses the selected monitor's native usable rectangle with the viewport's actual scale.
 
-Publication is a source PR for review only. Merge, tag, release and installed-addon deployment remain outside this run. Hosted exact-head CI and review state are recorded in the PR; this receipt does not predeclare their outcome.
+At the original implementation handoff, publication was a source PR for review
+only, with merge, tag, release and installed-addon deployment outside that run.
+Hosted exact-head CI and review state are recorded in PR #311; the original
+receipt did not predeclare their outcome.
+
+## Owner merge and closeout
+
+PR #311 was owner-squash-merged on 2026-10-16 at 00:38:25 UTC as
+`be1a054a45d18a74dfaa3e9b7947e902e3d6b18b`. Its tree exactly matches final
+delivery head `5e96148bf4599a59d155b173d6dd5c73ba96faf4`. GitHub closed
+#306-#310 on merge.
+
+On 2026-10-17, local main was synchronized, the already-deleted remote branch
+reference was pruned and the local implementation branch was deleted after tree
+comparison. Each of the five closed issues appears exactly once in the delivery
+Project with Stage Done and Slice S133. None has a parent epic or milestone.
+Issue #312 records the documentary archive of Plan059. Ongoing hosted CI was not
+awaited under the owner's instruction; this closeout adds no runtime or installed
+validation. The published release remains v0.19.0 and S133 remains unreleased.
+
+Documentary closeout validation passed all 184 documentation/render/brand/trust
+policy tests, the full source documentation policy, Git whitespace validation
+and strict UTF-8 without BOM, LF and text-corruption checks. No Rust source
+changed, so the constitution's documentation-only exception applies.

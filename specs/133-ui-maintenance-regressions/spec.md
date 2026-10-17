@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-15
 
-**Status**: Specified
+**Status**: Complete, owner-merged in PR #311 on 2026-10-16
 
 **Input**: Implement #306-#310 with regression coverage and a reviewed PR, stopping before merge.
 
@@ -106,3 +106,10 @@ Restored open panes; rapid open/close; DPI and display changes; nonzero/negative
 ## Assumptions and Clarifications
 
 The owner's current issues supersede unconditional grow/shrink and inline-confirmation rules in S029/S030. A missing visibility field retains the existing closed fresh-install default. Package maintenance remains independent of game process presence. No dependency changes, release, tag, merge, or owner field-testing task is included. Exact installed failure details are sought read-only; fixtures and newly retained error categories must distinguish evidence gaps from proven causes.
+
+## Delivery
+
+The owner merged PR #311 as `be1a054a45d18a74dfaa3e9b7947e902e3d6b18b`;
+issues #306-#310 are closed and Done. See the [verification receipt](verification.md)
+for original validation and later merge evidence. Plan059 is
+[archived](../../docs/archive/build-plans/plan-059.md). S133 remains unreleased.

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Archive completed S133 Plan059 and synchronize planning and merge records after owner-merged PR #311; no active build plan remains (issue #312).
+
 ### Fixed
 
 - S133: Keep Application Log within available window space and usable desktop bounds, retain visibility across restarts, and keep controls reachable on constrained displays (#306, #307).

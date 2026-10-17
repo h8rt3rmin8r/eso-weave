@@ -11,12 +11,11 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plans
 
-| Plan | Status | Scope |
-| --- | --- | --- |
-| [059](plan-059.md) | Active | S133 fixes #306-#310 with regression coverage and PR review; owner merge remains separate |
+No build plan is active. A later slice requires owner selection.
 
 The latest completed plan is
-[058](../../archive/build-plans/plan-058.md), covering S132 v0.19.0 candidate preparation in owner-merged PR #303.
+[059](../../archive/build-plans/plan-059.md), covering S133 UI and maintenance fixes
+for #306-#310 in owner-merged PR #311 on 2026-10-16 at `be1a054`.
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -42,4 +41,5 @@ is implemented in S130 for normal/separate v15. S131/#296/#297 adds the remainin
 profiles after pinned producer-grammar research in owner-merged PR #299. The
 v0.19.0 release completed #301. Dependabot PR #284's three updates are included
 on merged main and that redundant PR is closed. #304 is documentary housekeeping;
-Plan059 assigns the next owner-selected fixes to S133.
+Plan059 completed S133 in owner-merged PR #311. #312 records its documentary
+archive; no subsequent feature slice or release is assigned.
