@@ -1780,6 +1780,16 @@
       "destination": "docs/archive/build-plans/plan-059.md",
       "specs": ["specs/133-ui-maintenance-regressions"],
       "evidence": "S133 completed issue #306, issue #307, issue #308, issue #309 and issue #310 when the owner squash-merged PR #311 on 2026-10-16 at be1a054a45d18a74dfaa3e9b7947e902e3d6b18b. The merged tree exactly matches reviewed delivery head 5e96148bf4599a59d155b173d6dd5c73ba96faf4. All five issues are closed and Done. Issue #312 records documentary closeout; S133 remains unreleased and no successor slice is assigned."
+    },
+    {
+      "id": "060",
+      "completion": "In Progress",
+      "lifecycle": "Active",
+      "destination": "docs/project/build-plans/plan-060.md",
+      "specs": [
+        "specs/134-v0191-release"
+      ],
+      "evidence": "Owner selected S134 and candidate issue #315 under release coordinator issue #314 on 2026-10-17 after owner-merged PR #313 at b7e264cbaeffde9039fe8f5655c84f1de60e6142. Prepare v0.19.1 through the governed local rollover, required validation and review PR. Owner merge, tag and publication remain separate."
     }
   ],
   "safetyCrosswalk": [
