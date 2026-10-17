@@ -1775,11 +1775,11 @@
     },
     {
       "id": "059",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-059.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-059.md",
       "specs": ["specs/133-ui-maintenance-regressions"],
-      "evidence": "Owner selected issue #306, issue #307, issue #308, issue #309 and issue #310 on 2026-10-15 for S133 implementation, regression coverage, and PR review. No merge, tag, or release is authorized."
+      "evidence": "S133 completed issue #306, issue #307, issue #308, issue #309 and issue #310 when the owner squash-merged PR #311 on 2026-10-16 at be1a054a45d18a74dfaa3e9b7947e902e3d6b18b. The merged tree exactly matches reviewed delivery head 5e96148bf4599a59d155b173d6dd5c73ba96faf4. All five issues are closed and Done. Issue #312 records documentary closeout; S133 remains unreleased and no successor slice is assigned."
     }
   ],
   "safetyCrosswalk": [
