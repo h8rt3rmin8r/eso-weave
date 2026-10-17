@@ -76,3 +76,29 @@ The review thread is resolved only after this correction is committed/pushed and
 its observed checks are recorded. Final-head hosted results and the review
 resolution are retained in the PR conversation, without predeclaring a second
 automated review.
+
+## Hosted Completion and Owner Merge (2026-10-17)
+
+The original review boundary above describes the implementation run. All nine
+checks passed on final head `e09bea2ba3b119548fdfc2465e35839b738e564b`:
+[Windows/Linux CI and dependency review](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/39012501263),
+[documentation/browser validation](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/39012501311),
+[CodeQL](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/39012501266),
+protected trust policy and
+[issue linkage/proposed policy](https://github.com/h8rt3rmin8r/eso-weave/actions/runs/39013233132).
+Deployment was correctly skipped and the PR-ref code-scanning query had no open
+alerts. The single automatic review examined e1db6ae, found the one P2 guide
+issue, and the e09bea2 correction was verified and its native thread resolved.
+No second automated round was requested. The
+[final handoff](https://github.com/h8rt3rmin8r/eso-weave/pull/320#issuecomment-6231165531)
+records these observed results and the then-unmerged boundary.
+
+The owner subsequently merged PR #320 at 09:50:42 UTC as
+`e3542815cfa9afd9df4066a1ecd9d9c765ab6bce`. The merge tree exactly matches
+reviewed delivery head e09bea2. #319 is Closed/Done, main was synchronized and
+the merged local branch and stale remote ref were removed. Plan061 is archived
+and both indexes/ledgers record completion with no active build plan. #321 owns
+the separate documentary archive and remains open until its owner-reviewed PR
+merges. Runtime, published-guide, technical-contract, constitutional and release
+evidence is retained; no installation or game behavior is established by this
+closeout.
