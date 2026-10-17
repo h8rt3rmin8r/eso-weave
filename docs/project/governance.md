@@ -140,8 +140,9 @@ linked pull requests, native issue relationships and the delivery Project for
 current work. The [current build-plan index](build-plans/README.md) identifies
 the selected slice. This guide does not maintain a second copied backlog.
 
-The old inventory above is historical: all named issues are now closed, as
-recorded in the [S135 audit](../../specs/135-governance-status-cleanup/audit.md).
+The [S135 audit](../../specs/135-governance-status-cleanup/audit.md) observed
+all named issues closed on 2026-10-17. This is a dated disposition, not a live
+backlog assertion.
 Later verification-only issues #110, #129, #131 and #190 were closed as not
 planned on 2026-09-23 under the owner's no-field-verification direction. Their
 closure does not establish installed behavior, completeness, safety or parity.

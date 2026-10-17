@@ -1,11 +1,15 @@
 # S135 Validation Guide
 
+Prerequisites: Node.js, mdBook 0.5.4 and mdbook-linkcheck2 0.13.0 on PATH.
+Run these commands from the repository root.
+
 1. Read [audit.md](audit.md) and follow the cited issue closure evidence. Historical audit prose must be dated; not-planned closures must not imply passed field checks.
 2. Run the existing policy fixture suites:
 
 ```text
 node --test .github/scripts/docs-policy.test.mjs .github/scripts/docs-render-smoke.test.mjs .github/scripts/brand-kit-policy.test.mjs .github/scripts/trust-policy.test.mjs
-node .github/scripts/docs-policy.mjs docs
+mdbook build docs
+node .github/scripts/docs-policy.mjs docs target/docs-site/html
 node .github/scripts/trust-policy.mjs
 ```
 

@@ -57,3 +57,22 @@ hosted results. Local task checkboxes cover implementation/preparation only.
 The PR remains unmerged with auto-merge disabled. Issue #319 stays open, and
 Plan061 remains Active until owner merge. No tag or release operation is part
 of this slice.
+
+## Review correction
+
+The single automatic review of e1db6ae found that quickstart.md invoked the
+generated-site policy without building the site first. A fresh, absent output
+directory reproduced ENOENT before any build. The guide now declares the pinned
+mdBook/linkcheck2 prerequisites, runs mdbook build docs first, and passes the
+explicit generated output path to the policy command.
+
+mdBook 0.5.4 then built the unchanged guide source into a fresh isolated output
+directory, and the full source/generated-site policy passed against that output.
+The link checker does not resolve Markdown fragments; the generated-site policy
+supplies that coverage. The governance disposition is also explicitly dated
+2026-10-17 so it cannot be mistaken for a copied live backlog.
+
+The review thread is resolved only after this correction is committed/pushed and
+its observed checks are recorded. Final-head hosted results and the review
+resolution are retained in the PR conversation, without predeclaring a second
+automated review.
