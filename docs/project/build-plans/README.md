@@ -11,7 +11,9 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plans
 
-No build plan is active. A later slice requires owner selection.
+| Plan | Status | Scope |
+| --- | --- | --- |
+| [060](plan-060.md) | Active | S134 prepares candidate #315 for v0.19.1 under #314; owner merge, tag and publication remain separate |
 
 The latest completed plan is
 [059](../../archive/build-plans/plan-059.md), covering S133 UI and maintenance fixes
@@ -42,4 +44,5 @@ profiles after pinned producer-grammar research in owner-merged PR #299. The
 v0.19.0 release completed #301. Dependabot PR #284's three updates are included
 on merged main and that redundant PR is closed. #304 is documentary housekeeping;
 Plan059 completed S133 in owner-merged PR #311. #312 records its documentary
-archive; no subsequent feature slice or release is assigned.
+archive, merged in owner PR #313 on 2026-10-17 at b7e264c. Plan060 now directs
+owner-selected S134 v0.19.1 candidate preparation; later publication stays in #314.
