@@ -23,11 +23,11 @@ Independent test: valid generated notes represent all five S133 outcomes and ret
 
 Independent test: all six identity surfaces agree and existing candidate gates pass.
 
-- [ ] T007 [US2] Pass preparation documentation/policy/text gates, commit the prepared CHANGELOG.md and S134 records, and verify a clean tree (FR-002, FR-004).
-- [ ] T008 [US2] Inspect the configured local cargo-release dry run and execute the v0.19.1 rollover governed by release.toml (FR-002).
-- [ ] T009 [US2] Audit six-file identity/date agreement, unchanged historical changelog, dependencies and independent addon contracts in Cargo.toml, Cargo.lock and rollover references (FR-002, FR-003).
-- [ ] T010 [US2] Run fmt, Clippy, all locked tests, production binary build and release-profile tests/documentation.rs; record actual results in verification.md (FR-003, FR-005).
-- [ ] T011 [US2] Run existing notes/Debian, policy/brand/trust, spelling, mdBook/generated-site and headless render checks; record limits in verification.md (FR-005).
+- [x] T007 [US2] Pass preparation documentation/policy/text gates, commit the prepared CHANGELOG.md and S134 records, and verify a clean tree (FR-002, FR-004).
+- [x] T008 [US2] Inspect the configured local cargo-release dry run and execute the v0.19.1 rollover governed by release.toml (FR-002).
+- [x] T009 [US2] Audit six-file identity/date agreement, unchanged historical changelog, dependencies and independent addon contracts in Cargo.toml, Cargo.lock and rollover references (FR-002, FR-003).
+- [x] T010 [US2] Run fmt, Clippy, all locked tests, production binary build and release-profile tests/documentation.rs; record actual results in verification.md (FR-003, FR-005).
+- [x] T011 [US2] Run existing notes/Debian, policy/brand/trust, spelling, mdBook/generated-site and headless render checks; record limits in verification.md (FR-005).
 
 ## Phase 5: US3 - Owner release control
 

@@ -37,6 +37,40 @@ punctuation checks. Target v0.19.1 is absent locally and remotely. Issue #315 is
 natively linked under #314, both appear once in the delivery Project, and #312
 was read back Closed/Done. No candidate or hosted outcome is claimed yet.
 
+## Candidate checks
+
+Preparation commit 64a5233 passed the clean-tree dry run. The governed execute
+created exactly six identity-file changes; local identity commit c737f53 includes
+the standard agent attribution trailer. No tag, push or publication occurred
+inside the rollover; configuration remains unchanged with all three disabled.
+
+Observed candidate validation passed:
+
+- Formatting and locked all-target/all-feature Clippy with warnings denied.
+- All 1,219 Rust tests across 54 summaries, zero failed or ignored, including all
+  13 named S133 regression cases. Required input, ownership/race, transactional
+  recovery and retained-data tests remain enabled.
+- All ten release-profile documentation contracts and the production Windows
+  binary with freshly generated bundled documentation.
+- All 184 documentation/render/brand/trust policy tests, exact brand and trust
+  scans, spelling, mdBook examples/build and generated-site policy.
+- Headless diagram/layout/syntax/figure/table smoke checks, with all five pass
+  sentinels and no failures.
+- Release-note generator contracts, the four-bullet/46-word candidate excerpt,
+  and Debian validator contracts. Linux package-specific evidence belongs to
+  hosted Linux CI; local Windows results do not establish Linux installation.
+
+The identity audit confirms 0.19.1 / 2026-10-17 across all six governed surfaces.
+Cargo.lock changes only the root application package version; dependency versions
+are unchanged. Historical changelog from v0.19.0 onward is byte-identical, and
+runtime/tests/assets/addon contracts, pinned scripts/config/workflows and package
+matrix are unchanged. All 23 changed text files pass strict encoding/LF/corruption
+checks and Git whitespace validation. Logs/audit data stay ignored under target/.
+
+The published release remains v0.19.0; local and remote v0.19.1 tags were absent
+at intake. Hosted final-head CI and review results remain pending publication of
+the source PR and are not predeclared by these local results.
+
 ## Boundary
 
 Owner merge, v0.19.1 tag and publication remain outside this run. #315 closes only
