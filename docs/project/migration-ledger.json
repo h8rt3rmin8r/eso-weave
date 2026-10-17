@@ -1793,13 +1793,13 @@
     },
     {
       "id": "061",
-      "completion": "In Progress",
-      "lifecycle": "Active",
-      "destination": "docs/project/build-plans/plan-061.md",
+      "completion": "Complete",
+      "lifecycle": "Archived",
+      "destination": "docs/archive/build-plans/plan-061.md",
       "specs": [
         "specs/135-governance-status-cleanup"
       ],
-      "evidence": "Owner selected S135 documentation consistency for issue #319 on 2026-10-17 after PR #318 merged at f230aa8. Reconcile historical governance and current lifecycle references while preserving evidence limits; publish an unmerged review PR. This plan completes only after owner merge."
+      "evidence": "S135 completed issue #319 when the owner merged PR #320 on 2026-10-17 at 09:50:42 UTC as e3542815cfa9afd9df4066a1ecd9d9c765ab6bce. The merged tree exactly matches reviewed delivery head e09bea2ba3b119548fdfc2465e35839b738e564b. All nine final-head checks passed and the single review finding was fixed and resolved. Issue #319 is Closed/Done; main is synchronized and the merged branch is removed. #321 records the separate documentary archive."
     }
   ],
   "safetyCrosswalk": [

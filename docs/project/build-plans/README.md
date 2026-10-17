@@ -11,13 +11,11 @@ Two documents use the word "plan" and serve different purposes:
 
 ## Active Plans
 
-| Plan | Status | Scope |
-| --- | --- | --- |
-| [061](plan-061.md) | Active | S135 reconciles historical governance and current lifecycle references for #319; owner merge remains separate |
+No build plan is active. A later slice requires owner selection.
 
 The latest completed plan is
-[060](../../archive/build-plans/plan-060.md), covering S134 v0.19.1 candidate #315
-in owner-merged PR #316 on 2026-10-17 at `6a3c952`.
+[061](../../archive/build-plans/plan-061.md), covering S135 governance status
+cleanup for #319 in owner-merged PR #320 on 2026-10-17 at `e354281`.
 
 Plans 039-047 completed their documentation, release, data-addon, input and
 extension programs. Plan048 completed its four approved figures through S112,
@@ -48,5 +46,6 @@ archive, merged in owner PR #313 on 2026-10-17 at b7e264c. Plan060 completed S13
 Candidate #315 and publication coordinator #314 are closed and Done. Separately
 authorized v0.19.1 published at 06:25:02 UTC, passed the five-asset integrity audit
 and closed its milestone. #317 documentary closeout merged in owner PR #318
-on 2026-10-17 at f230aa8. Plan061 now directs owner-selected S135 documentation
-consistency for #319.
+on 2026-10-17 at f230aa8. Plan061 completed S135/#319 in owner-merged PR #320
+on 2026-10-17 at e354281 and is archived. #321 records documentary closeout
+without introducing another slice.

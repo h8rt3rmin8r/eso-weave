@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Implemented, ready for review
+**Status**: Complete, owner-merged PR #320 on 2026-10-17
 
 **Input**: Implement the recommended S135 documentation consistency slice for issue #319, reconcile stale governance and lifecycle references, validate and publish a review PR, and stop before merge.
 
@@ -83,3 +83,13 @@ A contributor can recognize closed, not-planned verification work while understa
 ### Session 2026-10-17
 
 No critical ambiguities remain. Functional scope, entities/lifecycle, reader journeys, quality, external evidence, error handling, constraints, terminology and completion signals are clear. No user questions were necessary; all 16 specification-quality items remain passing. The owner selected documentation consistency, not new product behavior or field testing.
+
+## Delivery
+
+The owner merged [PR #320](https://github.com/h8rt3rmin8r/eso-weave/pull/320)
+as `e3542815cfa9afd9df4066a1ecd9d9c765ab6bce`, closing #319. The reviewed
+tree matches final head e09bea2. Plan061 is
+[archived](../../docs/archive/build-plans/plan-061.md), with no active build plan
+or successor slice. #321 records documentary closeout. The original unmerged-PR
+boundary describes the implementation run; subsequent owner merge is recorded
+separately in [verification.md](verification.md).

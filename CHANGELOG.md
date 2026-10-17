@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Archive completed S135 Plan061 and record owner-merged PR #320, closing the active planning lifecycle (issue #321).
 - S135: Date historical governance audits and reconcile retired verification, planning and release lifecycle references without promoting unperformed evidence (issue #319).
 - Archive completed S134 Plan060 and synchronize owner-merge and separately authorized release records (issue #317).
 
