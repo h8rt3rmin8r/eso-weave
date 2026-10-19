@@ -38,7 +38,7 @@ ureq = "3"
 # keep the external transport contract stable across feature slices.
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 rmcp = { version = "=3.5.1", default-features = false, features = ["server", "transport-streamable-http-server"] }
-tokio = { version = "=1.53.2", features = ["net", "rt", "sync", "time"] }
+tokio = { version = "=1.53.3", features = ["net", "rt", "sync", "time"] }
 tokio-util = { version = "=0.7.20", features = ["rt"] }
 getrandom = "0.4"
 
