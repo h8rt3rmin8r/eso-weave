@@ -77,7 +77,7 @@ rmcp = { version = "=3.5.1", default-features = false, features = ["client", "tr
 egui_kittest = { version = "0.36.1", default-features = false }
 # Headless documentation capture uses egui's own renderer directly so GPU setup
 # remains explicit. These dependencies remain test-only and never enter release builds.
-egui-wgpu = { version = "0.36.1", default-features = false }
+egui-wgpu = { version = "0.37.0", default-features = false }
 wgpu = { version = "30", default-features = false, features = ["std", "dx12", "vulkan", "gles"] }
 pollster = "1.0"
 # Executes the exact encounter addon under ESO-compatible Lua 5.1 semantics.
