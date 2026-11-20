@@ -74,7 +74,7 @@ rmcp = { version = "=3.5.1", default-features = false, features = ["client", "tr
 # features are enabled by default, so no GPU, windowing, or image stack enters the
 # test build; the version tracks the eframe/egui release. Recorded as a dated
 # decision in CHANGELOG.md.
-egui_kittest = { version = "0.36.1", default-features = false }
+egui_kittest = { version = "0.37.0", default-features = false }
 # Headless documentation capture uses egui's own renderer directly so GPU setup
 # remains explicit. These dependencies remain test-only and never enter release builds.
 egui-wgpu = { version = "0.36.1", default-features = false }
