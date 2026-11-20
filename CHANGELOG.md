@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-11-20
+
+### Highlights
+
+- Add repository-local Workflowy support for contributors using Codex.
+
+### Added
+
+- S136: Install Workflowy 1.0.1, including the project backfill and Desktop MCP guides, and opt ESO Weave into the skill through AGENTS.md (issue #332).
+
 ### Changed
 
 - Archive completed S135 Plan061 and record owner-merged PR #320, closing the active planning lifecycle (issue #321).
